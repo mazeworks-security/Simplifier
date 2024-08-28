@@ -1,0 +1,13 @@
+[package]
+name = "egraph"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+path = "src/main.rs"
+
+[dependencies]
+egg = { git = "https://github.com/egraphs-good/egg.git" }
+libc = "0.2.149"
+rand = "0.8.5"

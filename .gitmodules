@@ -1,0 +1,3 @@
+[submodule "MSiMBA"]
+	path = MSiMBA
+	url = https://github.com/mazeworks-security/MSiMBA.git

@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Minimization\TruthTables\1variable_truthtable.bc" />
+    <None Remove="Minimization\TruthTables\2variable_truthtable.bc" />
+    <None Remove="Minimization\TruthTables\3variable_truthtable.bc" />
+    <None Remove="Minimization\TruthTables\4variable_truthtable.bc" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Minimization\TruthTables\1variable_truthtable.bc">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Minimization\TruthTables\2variable_truthtable.bc">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Minimization\TruthTables\3variable_truthtable.bc">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Minimization\TruthTables\4variable_truthtable.bc">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MSiMBA\Mba.Common\Mba.Common.csproj" />
+    <ProjectReference Include="..\MSiMBA\Mba.FFI\Mba.FFI.vcxproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Minimization\TruthTables\1variable_truthtable.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Minimization\TruthTables\2variable_truthtable.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Minimization\TruthTables\3variable_truthtable.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Minimization\TruthTables\4variable_truthtable.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,1243 @@
+(type u64 (primitive u64))
+(type u32 (primitive u32))
+(type u8 (primitive u8))
+(type str (primitive String))
+(type index (primitive AstIdx))
+(type adata (primitive AstData))
+
+(type SimpleAst extern
+  (enum 
+  ;; Arithmetic operators
+  (Add (a index) (b index) (data adata))
+  (Mul (a index) (b index) (data adata))
+  (Pow (a index) (b index) (data adata))
+  ;; Bitwise operators
+  (And (a index) (b index) (data adata))
+  (Or (a index) (b index) (data adata))
+  (Xor (a index) (b index) (data adata))
+  (Neg (a index) (data adata))
+  ;; Special types
+  (Constant (c u64) (data adata))
+  (Symbol (id u32) (data adata))
+  (Zext (a index) (data adata))
+  ))
+
+;; Below are wrappers for constructing instances of the AST types.
+;; Arithmetic
+(decl Add (index index) SimpleAst)
+(extern constructor Add add)
+(decl Mul (index index) SimpleAst)
+(extern constructor Mul mul)
+(decl Pow (index index) SimpleAst)
+(extern constructor Pow pow)
+;; Bitwise
+(decl And (index index) SimpleAst)
+(extern constructor And and)
+(decl Or (index index) SimpleAst)
+(extern constructor Or or)
+(decl Xor (index index) SimpleAst)
+(extern constructor Xor xor)
+(decl Neg (index) SimpleAst)
+(extern constructor Neg neg)
+(decl Any (index) SimpleAst)
+(extern constructor Any any)
+
+(decl lookup_value (SimpleAst) index)
+(extern extractor lookup_value lookup_value)
+(extern constructor lookup_value lookup_id)
+
+;; Special types
+(decl Constant (u64 adata) SimpleAst)
+(extern constructor Constant constant)
+(decl Symbol (u32 adata) SimpleAst)
+(extern constructor Symbol symbol)
+(decl Zext (index adata) SimpleAst)
+(extern constructor Zext zext)
+
+;; Constant folding utilities
+(decl FoldAdd (index index) SimpleAst)
+(extern constructor FoldAdd fold_add)
+
+
+;; Declare our top-level lowering function. We will attach rules to this
+;; declaration for lowering various patterns of `SimpleAst` inputs.
+(decl partial lower (SimpleAst) SimpleAst)
+
+;; (a*c1) => (c1*a)
+;; mul-constant-to-left-1
+(rule 0(lower (SimpleAst.Mul a (SimpleAst.Constant c1 data0) data1))
+    (Mul (Constant c1 data1) (Any a))
+)
+
+
+
+;; ((c1*a)*b) => (c1*(a*b))
+;; mul-constant-to-left-2
+(rule 1(lower (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant c1 data0) a data1) b data2))
+    (Mul (Constant c1 data1) (Mul (Any a) (Any b)))
+)
+
+
+
+;; (c1*(c2*a)) => ((c1*c2)*a)
+;; mul-constant-to-left-3
+(rule 2(lower (SimpleAst.Mul (SimpleAst.Constant c1 data0) (SimpleAst.Mul (SimpleAst.Constant c2 data1) a data2) data3))
+    (Mul (Mul (Constant c1 data2) (Constant c2 data2)) (Any a))
+)
+
+
+
+;; (c1*c2) => (c1*c2)
+;; mul-constant-to-left-4
+(rule 3(lower (SimpleAst.Mul (SimpleAst.Constant c1 data0) (SimpleAst.Constant c2 data1) data2))
+    (Mul (Constant c1 data2) (Constant c2 data2))
+)
+
+
+
+;; (a+c1) => (c1+a)
+;; add-constant-to-left-1
+(rule 4(lower (SimpleAst.Add a (SimpleAst.Constant c1 data0) data1))
+    (Add (Constant c1 data1) (Any a))
+)
+
+
+
+;; ((c1+a)+b) => (c1+(a+b))
+;; add-constant-to-left-2
+(rule 5(lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Constant c1 data0) a data1) b data2))
+    (Add (Constant c1 data1) (Add (Any a) (Any b)))
+)
+
+
+
+;; (c1+(c2+a)) => ((c1+c2)+a)
+;; add-constant-to-left-3
+(rule 6(lower (SimpleAst.Add (SimpleAst.Constant c1 data0) (SimpleAst.Add (SimpleAst.Constant c2 data1) a data2) data3))
+    (Add (Add (Constant c1 data2) (Constant c2 data2)) (Any a))
+)
+
+
+
+;; (c1+c2) => (c1+c2)
+;; add-constant-to-left-4
+(rule 7(lower (SimpleAst.Add (SimpleAst.Constant c1 data0) (SimpleAst.Constant c2 data1) data2))
+    (Add (Constant c1 data2) (Constant c2 data2))
+)
+
+
+
+;; (a&c1) => (c1&a)
+;; and-constant-to-left-1
+(rule 8(lower (SimpleAst.And a (SimpleAst.Constant c1 data0) data1))
+    (And (Constant c1 data1) (Any a))
+)
+
+
+
+;; ((c1&a)&b) => (c1&(a&b))
+;; and-constant-to-left-2
+(rule 9(lower (SimpleAst.And (SimpleAst.And (SimpleAst.Constant c1 data0) a data1) b data2))
+    (And (Constant c1 data1) (And (Any a) (Any b)))
+)
+
+
+
+;; (c1&(c2&a)) => ((c1&c2)&a)
+;; and-constant-to-left-3
+(rule 10(lower (SimpleAst.And (SimpleAst.Constant c1 data0) (SimpleAst.And (SimpleAst.Constant c2 data1) a data2) data3))
+    (And (And (Constant c1 data2) (Constant c2 data2)) (Any a))
+)
+
+
+
+;; (c1&c2) => (c1&c2)
+;; and-constant-to-left-4
+(rule 11(lower (SimpleAst.And (SimpleAst.Constant c1 data0) (SimpleAst.Constant c2 data1) data2))
+    (And (Constant c1 data2) (Constant c2 data2))
+)
+
+
+
+;; (a|c1) => (c1|a)
+;; or-constant-to-left-1
+(rule 12(lower (SimpleAst.Or a (SimpleAst.Constant c1 data0) data1))
+    (Or (Constant c1 data1) (Any a))
+)
+
+
+
+;; ((c1|a)|b) => (c1|(a|b))
+;; or-constant-to-left-2
+(rule 13(lower (SimpleAst.Or (SimpleAst.Or (SimpleAst.Constant c1 data0) a data1) b data2))
+    (Or (Constant c1 data1) (Or (Any a) (Any b)))
+)
+
+
+
+;; (c1|(c2|a)) => ((c1|c2)|a)
+;; or-constant-to-left-3
+(rule 14(lower (SimpleAst.Or (SimpleAst.Constant c1 data0) (SimpleAst.Or (SimpleAst.Constant c2 data1) a data2) data3))
+    (Or (Or (Constant c1 data2) (Constant c2 data2)) (Any a))
+)
+
+
+
+;; (c1|c2) => (c1|c2)
+;; or-constant-to-left-4
+(rule 15(lower (SimpleAst.Or (SimpleAst.Constant c1 data0) (SimpleAst.Constant c2 data1) data2))
+    (Or (Constant c1 data2) (Constant c2 data2))
+)
+
+
+
+;; (a^c1) => (c1^a)
+;; xor-constant-to-left-1
+(rule 16(lower (SimpleAst.Xor a (SimpleAst.Constant c1 data0) data1))
+    (Xor (Constant c1 data1) (Any a))
+)
+
+
+
+;; ((c1^a)^b) => (c1^(a^b))
+;; xor-constant-to-left-2
+(rule 17(lower (SimpleAst.Xor (SimpleAst.Xor (SimpleAst.Constant c1 data0) a data1) b data2))
+    (Xor (Constant c1 data1) (Xor (Any a) (Any b)))
+)
+
+
+
+;; (c1^(c2^a)) => ((c1^c2)^a)
+;; xor-constant-to-left-3
+(rule 18(lower (SimpleAst.Xor (SimpleAst.Constant c1 data0) (SimpleAst.Xor (SimpleAst.Constant c2 data1) a data2) data3))
+    (Xor (Xor (Constant c1 data2) (Constant c2 data2)) (Any a))
+)
+
+
+
+;; (c1^c2) => (c1^c2)
+;; xor-constant-to-left-4
+(rule 19(lower (SimpleAst.Xor (SimpleAst.Constant c1 data0) (SimpleAst.Constant c2 data1) data2))
+    (Xor (Constant c1 data2) (Constant c2 data2))
+)
+
+
+
+;; (~c1) => (~c1)
+;; neg-constant-to-left-1
+(rule 20(lower (SimpleAst.Neg (SimpleAst.Constant c1 data0) data1))
+    (Neg (Constant c1 data1))
+)
+
+
+
+;; (-1+(-1*a)) => (~a)
+;; arith-to-negation
+(rule 21(lower (SimpleAst.Add (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) a data2) data3))
+    (Neg (Any a))
+)
+
+
+
+;; (1+(~a)) => (-1*a)
+;; add-negate-to-invert-sign
+(rule 22(lower (SimpleAst.Add (SimpleAst.Constant 1 data0) (SimpleAst.Neg a data1) data2))
+    (Mul (Constant 18446744073709551615 data1) (Any a))
+)
+
+
+
+;; (((a&d)*(a|d))+((a&(~d))*((~a)&d))) => (a*d)
+;; head-scratcher
+(rule 23(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.And a d data0) (SimpleAst.Or a d data1) data2) (SimpleAst.Mul (SimpleAst.And a (SimpleAst.Neg d data3) data4) (SimpleAst.And (SimpleAst.Neg a data5) d data6) data7) data8))
+    (Mul (Any a) (Any d))
+)
+
+
+
+;; ((x|y)+(x&y)) => (x+y)
+;; or-and-to-add
+(rule 24(lower (SimpleAst.Add (SimpleAst.Or x y data0) (SimpleAst.And x y data1) data2))
+    (Add (Any x) (Any y))
+)
+
+
+
+;; ((2*(a&(~d)))+(-1*(a^d))) => (a+(-1*d))
+;; qsynth-1
+(rule 25(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 2 data0) (SimpleAst.And a (SimpleAst.Neg d data1) data2) data3) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data4) (SimpleAst.Xor a d data5) data6) data7))
+    (Add (Any a) (Mul (Constant 18446744073709551615 data1) (Any d)))
+)
+
+
+
+;; ((2*(d&v1))+(d^v1)) => (d+v1)
+;; qsynth-2
+(rule 26(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 2 data0) (SimpleAst.And d v1 data1) data2) (SimpleAst.Xor d v1 data3) data4))
+    (Add (Any d) (Any v1))
+)
+
+
+
+;; ((d^v1)+(2*(d&v1))) => (d+v1)
+;; qsynth-2-commutative
+(rule 27(lower (SimpleAst.Add (SimpleAst.Xor d v1 data0) (SimpleAst.Mul (SimpleAst.Constant 2 data1) (SimpleAst.And d v1 data2) data3) data4))
+    (Add (Any d) (Any v1))
+)
+
+
+
+;; (0|a) => a
+;; or-zero
+(rule 28(lower (SimpleAst.Or (SimpleAst.Constant 0 data0) a data1))
+    (Any a)
+)
+
+
+
+;; (-1|a) => -1
+;; or-maxint
+(rule 29(lower (SimpleAst.Or (SimpleAst.Constant 18446744073709551615 data0) a data1))
+    (Constant 18446744073709551615 data1)
+)
+
+
+
+;; (a|a) => a
+;; or-itself
+(rule 30(lower (SimpleAst.Or a a data0))
+    (Any a)
+)
+
+
+
+;; (a|(~a)) => -1
+;; or-negated-itself
+(rule 31(lower (SimpleAst.Or a (SimpleAst.Neg a data0) data1))
+    (Constant 18446744073709551615 data0)
+)
+
+
+
+;; (0^a) => a
+;; xor-zero
+(rule 32(lower (SimpleAst.Xor (SimpleAst.Constant 0 data0) a data1))
+    (Any a)
+)
+
+
+
+;; (-1^a) => (~a)
+;; xor-maxint
+(rule 33(lower (SimpleAst.Xor (SimpleAst.Constant 18446744073709551615 data0) a data1))
+    (Neg (Any a))
+)
+
+
+
+;; (a^a) => 0
+;; xor-itself
+(rule 34(lower (SimpleAst.Xor a a data0))
+    (Constant 0 data0)
+)
+
+
+
+;; (((~a)&b)|(a&(~b))) => (a^b)
+;; xor-reduce
+(rule 35(lower (SimpleAst.Or (SimpleAst.And (SimpleAst.Neg a data0) b data1) (SimpleAst.And a (SimpleAst.Neg b data2) data3) data4))
+    (Xor (Any a) (Any b))
+)
+
+
+
+;; (0&a) => 0
+;; and-zero
+(rule 36(lower (SimpleAst.And (SimpleAst.Constant 0 data0) a data1))
+    (Constant 0 data1)
+)
+
+
+
+;; (-1&a) => a
+;; and-maxint
+(rule 37(lower (SimpleAst.And (SimpleAst.Constant 18446744073709551615 data0) a data1))
+    (Any a)
+)
+
+
+
+;; (a&a) => a
+;; and-itself
+(rule 38(lower (SimpleAst.And a a data0))
+    (Any a)
+)
+
+
+
+;; (a&(~a)) => 0
+;; and-negated-itself
+(rule 39(lower (SimpleAst.And a (SimpleAst.Neg a data0) data1))
+    (Constant 0 data0)
+)
+
+
+
+;; (a+a) => (2*a)
+;; add-itself
+(rule 40(lower (SimpleAst.Add a a data0))
+    (Mul (Constant 2 data0) (Any a))
+)
+
+
+
+;; (0+a) => a
+;; add-zero
+(rule 41(lower (SimpleAst.Add (SimpleAst.Constant 0 data0) a data1))
+    (Any a)
+)
+
+
+
+;; (a+(-1*a)) => 0
+;; add-cancellation
+(rule 42(lower (SimpleAst.Add a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) a data1) data2))
+    (Constant 0 data1)
+)
+
+
+
+;; (0*a) => 0
+;; mul-zero
+(rule 43(lower (SimpleAst.Mul (SimpleAst.Constant 0 data0) a data1))
+    (Constant 0 data1)
+)
+
+
+
+;; (1*a) => a
+;; mul-one
+(rule 44(lower (SimpleAst.Mul (SimpleAst.Constant 1 data0) a data1))
+    (Any a)
+)
+
+
+
+;; (a**0) => 1
+;; power-zero
+(rule 45(lower (SimpleAst.Pow a (SimpleAst.Constant 0 data0) data1))
+    (Constant 1 data1)
+)
+
+
+
+;; (a**1) => a
+;; power-one
+(rule 46(lower (SimpleAst.Pow a (SimpleAst.Constant 1 data0) data1))
+    (Any a)
+)
+
+
+
+;; (-1*(-1*a)) => a
+;; minus-twice
+(rule 47(lower (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) a data2) data3))
+    (Any a)
+)
+
+
+
+;; (~(~a)) => a
+;; negate-twice
+(rule 48(lower (SimpleAst.Neg (SimpleAst.Neg a data0) data1))
+    (Any a)
+)
+
+
+
+;; ((-1+(-1*a))&b) => ((~a)&b)
+;; and-bitwise-negation
+(rule 49(lower (SimpleAst.And (SimpleAst.Add (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) a data2) data3) b data4))
+    (And (Neg (Any a)) (Any b))
+)
+
+
+
+;; ((-1+(-1*a))|b) => ((~a)|b)
+;; or-bitwise-negation
+(rule 50(lower (SimpleAst.Or (SimpleAst.Add (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) a data2) data3) b data4))
+    (Or (Neg (Any a)) (Any b))
+)
+
+
+
+;; ((-1+(-1*a))^b) => ((~a)^b)
+;; xor-bitwise-negation
+(rule 51(lower (SimpleAst.Xor (SimpleAst.Add (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) a data2) data3) b data4))
+    (Xor (Neg (Any a)) (Any b))
+)
+
+
+
+;; ((x&y)+((~x)&y)) => y
+;; __merge_inverse_bitwise_terms-19
+(rule 52(lower (SimpleAst.Add (SimpleAst.And x y data0) (SimpleAst.And (SimpleAst.Neg x data1) y data2) data3))
+    (Any y)
+)
+
+
+
+;; ((x|y)+((~x)|y)) => (-1+y)
+;; __merge_inverse_bitwise_terms-20
+(rule 53(lower (SimpleAst.Add (SimpleAst.Or x y data0) (SimpleAst.Or (SimpleAst.Neg x data1) y data2) data3))
+    (Add (Constant 18446744073709551615 data0) (Any y))
+)
+
+
+
+;; ((x^y)+((~x)^y)) => -1
+;; __merge_inverse_bitwise_terms-21
+(rule 54(lower (SimpleAst.Add (SimpleAst.Xor x y data0) (SimpleAst.Xor (SimpleAst.Neg x data1) y data2) data3))
+    (Constant 18446744073709551615 data0)
+)
+
+
+
+;; ((x|y)+(-1*((~x)&y))) => x
+;; __merge_inverse_bitwise_terms-22
+(rule 55(lower (SimpleAst.Add (SimpleAst.Or x y data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) (SimpleAst.And (SimpleAst.Neg x data2) y data3) data4) data5))
+    (Any x)
+)
+
+
+
+;; ((x^y)+(-1*(2*((~x)&y)))) => (x+(-1*y))
+;; __merge_inverse_bitwise_terms-23
+(rule 56(lower (SimpleAst.Add (SimpleAst.Xor x y data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) (SimpleAst.Mul (SimpleAst.Constant 2 data2) (SimpleAst.And (SimpleAst.Neg x data3) y data4) data5) data6) data7))
+    (Add (Any x) (Mul (Constant 18446744073709551615 data0) (Any y)))
+)
+
+
+
+;; ((x^y)+(2*((~x)|y))) => ((-2+(-1*x))+y)
+;; __merge_inverse_bitwise_terms-24
+(rule 57(lower (SimpleAst.Add (SimpleAst.Xor x y data0) (SimpleAst.Mul (SimpleAst.Constant 2 data1) (SimpleAst.Or (SimpleAst.Neg x data2) y data3) data4) data5))
+    (Add (Add (Constant 18446744073709551614 data0) (Mul (Constant 18446744073709551615 data0) (Any x))) (Any y))
+)
+
+
+
+;; (~((~a)&b)) => (a|(~b))
+;; and-move-bitwise-negation-in
+(rule 58(lower (SimpleAst.Neg (SimpleAst.And (SimpleAst.Neg a data0) b data1) data2))
+    (Or (Any a) (Neg (Any b)))
+)
+
+
+
+;; (~((~a)|b)) => (a&(~b))
+;; or-move-bitwise-negation-in
+(rule 59(lower (SimpleAst.Neg (SimpleAst.Or (SimpleAst.Neg a data0) b data1) data2))
+    (And (Any a) (Neg (Any b)))
+)
+
+
+
+;; (~((~a)^b)) => (a^b)
+;; xor-move-bitwise-negation-in
+(rule 60(lower (SimpleAst.Neg (SimpleAst.Xor (SimpleAst.Neg a data0) b data1) data2))
+    (Xor (Any a) (Any b))
+)
+
+
+
+;; ((a**b)*(a**c)) => (a**(b+c))
+;; merge-power-same-base
+(rule 61(lower (SimpleAst.Mul (SimpleAst.Pow a b data0) (SimpleAst.Pow a c data1) data2))
+    (Pow (Any a) (Add (Any b) (Any c)))
+)
+
+
+
+;; ((a*b)+(a*c)) => (a*(b+c))
+;; factor
+(rule 62(lower (SimpleAst.Add (SimpleAst.Mul a b data0) (SimpleAst.Mul a c data1) data2))
+    (Mul (Any a) (Add (Any b) (Any c)))
+)
+
+
+
+;; (a+(~a)) => -1
+;; invert-add-bitwise-not-self
+(rule 63(lower (SimpleAst.Add a (SimpleAst.Neg a data0) data1))
+    (Constant 18446744073709551615 data0)
+)
+
+
+
+;; ((a*(~b))+(a*b)) => (-1*a)
+;; invert-mul-bitwise-not-self
+(rule 64(lower (SimpleAst.Add (SimpleAst.Mul a (SimpleAst.Neg b data0) data1) (SimpleAst.Mul a b data2) data3))
+    (Mul (Constant 18446744073709551615 data0) (Any a))
+)
+
+
+
+;; (y&(~(y|x))) => 0
+;; __insert_fixed_in_conj-1
+(rule 65(lower (SimpleAst.And y (SimpleAst.Neg (SimpleAst.Or y x data0) data1) data2))
+    (Constant 0 data0)
+)
+
+
+
+;; (2*(a|(-1*a))) => (a^(-1*a))
+;; xor_same_mult_by_minus_one_1
+(rule 66(lower (SimpleAst.Mul (SimpleAst.Constant 2 data0) (SimpleAst.Or a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) a data2) data3) data4))
+    (Xor (Any a) (Mul (Constant 18446744073709551615 data2) (Any a)))
+)
+
+
+
+;; (-2*(a&(-1*a))) => (a^(-1*a))
+;; xor_same_mult_by_minus_one_2
+(rule 67(lower (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 data0) (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) a data2) data3) data4))
+    (Xor (Any a) (Mul (Constant 18446744073709551615 data2) (Any a)))
+)
+
+
+
+;; (a&((-1*a)&(2*a))) => 0
+;; conj_zero_rule
+(rule 68(lower (SimpleAst.And a (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) a data1) (SimpleAst.Mul (SimpleAst.Constant 2 data2) a data3) data4) data5))
+    (Constant 0 data1)
+)
+
+
+
+;; ((~(2*a))&(-1*(a^(-1*a)))) => 0
+;; conj_neg_xor_zero_rule
+(rule 69(lower (SimpleAst.And (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 2 data0) a data1) data2) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data3) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data4) a data5) data6) data7) data8))
+    (Constant 0 data1)
+)
+
+
+
+;; ((2*a)|(~(-1*(a^(-1*a))))) => -1
+;; conj_neg_xor_minus_one_rule
+(rule 70(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 2 data0) a data1) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data2) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data3) a data4) data5) data6) data7) data8))
+    (Constant 18446744073709551615 data1)
+)
+
+
+
+;; ((2*a)&(~(a^(-1*a)))) => 0
+;; conj_negated_xor_zero_rule
+(rule 71(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 2 data0) a data1) (SimpleAst.Neg (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data2) a data3) data4) data5) data6))
+    (Constant 0 data1)
+)
+
+
+
+;; ((2*a)&(a^(-1*a))) => (2*a)
+;; conj_xor_identity_rule
+(rule 72(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 2 data0) a data1) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data2) a data3) data4) data5))
+    (Mul (Constant 2 data1) (Any a))
+)
+
+
+
+;; ((2*a)|(-1*(a^(-1*a)))) => (2*a)
+;; disj_xor_identity_rule
+(rule 73(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 2 data0) a data1) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data2) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data3) a data4) data5) data6) data7))
+    (Mul (Constant 2 data1) (Any a))
+)
+
+
+
+;; ((-1*a)&(~(a&(2*a)))) => (-1*a)
+;; conj_neg_conj_identity_rule_1
+(rule 74(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) a data1) (SimpleAst.Neg (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant 2 data2) a data3) data4) data5) data6))
+    (Mul (Constant 18446744073709551615 data1) (Any a))
+)
+
+
+
+;; ((-1*a)&(~(a&(-2*a)))) => (-1*a)
+;; conj_neg_conj_identity_rule_2
+(rule 75(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) a data1) (SimpleAst.Neg (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 data2) a data3) data4) data5) data6))
+    (Mul (Constant 18446744073709551615 data1) (Any a))
+)
+
+
+
+;; ((-1*a)&((~a)|(~(2*a)))) => (-1*a)
+;; conj_neg_conj_identity_rule_3
+(rule 76(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) a data1) (SimpleAst.Or (SimpleAst.Neg a data2) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 2 data3) a data4) data5) data6) data7))
+    (Mul (Constant 18446744073709551615 data1) (Any a))
+)
+
+
+
+;; ((-1*a)&((~a)|(~(-2*a)))) => (-1*a)
+;; conj_neg_conj_identity_rule_4
+(rule 77(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) a data1) (SimpleAst.Or (SimpleAst.Neg a data2) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 data3) a data4) data5) data6) data7))
+    (Mul (Constant 18446744073709551615 data1) (Any a))
+)
+
+
+
+;; (a|(-1*(a|(-1*a)))) => a
+;; disj_disj_identity_rule
+(rule 78(lower (SimpleAst.Or a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Or a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) a data2) data3) data4) data5))
+    (Any a)
+)
+
+
+
+;; (a&(-1*(a&(-1*a)))) => a
+;; conj_conj_identity_rule
+(rule 79(lower (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) a data2) data3) data4) data5))
+    (Any a)
+)
+
+
+
+;; ((-1*a)|((~a)&(2*a))) => (-1*a)
+;; disj_conj_identity_rule_1
+(rule 80(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) a data1) (SimpleAst.And (SimpleAst.Neg a data2) (SimpleAst.Mul (SimpleAst.Constant 2 data3) a data4) data5) data6))
+    (Mul (Constant 18446744073709551615 data1) (Any a))
+)
+
+
+
+;; ((-1*a)|((~a)&(-2*a))) => (-1*a)
+;; disj_conj_identity_rule_2
+(rule 81(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) a data1) (SimpleAst.And (SimpleAst.Neg a data2) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 data3) a data4) data5) data6))
+    (Mul (Constant 18446744073709551615 data1) (Any a))
+)
+
+
+
+;; ((-1*a)|(~(a|(~(2*a))))) => (-1*a)
+;; disj_conj_identity_rule_3
+(rule 82(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) a data1) (SimpleAst.Neg (SimpleAst.Or a (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 2 data2) a data3) data4) data5) data6) data7))
+    (Mul (Constant 18446744073709551615 data1) (Any a))
+)
+
+
+
+;; ((-1*a)|(~(a|(~(-2*a))))) => (-1*a)
+;; disj_conj_identity_rule_4
+(rule 83(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) a data1) (SimpleAst.Neg (SimpleAst.Or a (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 data2) a data3) data4) data5) data6) data7))
+    (Mul (Constant 18446744073709551615 data1) (Any a))
+)
+
+
+
+;; (x|((-1*(~x))&(2*(~x)))) => x
+;; disj_conj_identity_rule_2_1
+(rule 84(lower (SimpleAst.Or x (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Neg x data1) data2) (SimpleAst.Mul (SimpleAst.Constant 2 data3) (SimpleAst.Neg x data4) data5) data6) data7))
+    (Any x)
+)
+
+
+
+;; (x|((-1*(~x))&((-1*2)*(~x)))) => x
+;; disj_conj_identity_rule_2_2
+(rule 85(lower (SimpleAst.Or x (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Neg x data1) data2) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data3) (SimpleAst.Constant 2 data4) data5) (SimpleAst.Neg x data6) data7) data8) data9))
+    (Any x)
+)
+
+
+
+;; (x&((-1*(~(2*x)))|(-1*(~x)))) => x
+;; conj_disj_identity_rule_1
+(rule 86(lower (SimpleAst.And x (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 2 data1) x data2) data3) data4) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data5) (SimpleAst.Neg x data6) data7) data8) data9))
+    (Any x)
+)
+
+
+
+;; (x&((~(2*(~x)))|(-1*(~x)))) => x
+;; conj_disj_identity_rule_2
+(rule 87(lower (SimpleAst.And x (SimpleAst.Or (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 2 data0) (SimpleAst.Neg x data1) data2) data3) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data4) (SimpleAst.Neg x data5) data6) data7) data8))
+    (Any x)
+)
+
+
+
+;; (x&((~((-1*y)*(~x)))|(-1*(~x)))) => x
+;; conj_disj_identity_rule_3
+(rule 88(lower (SimpleAst.And x (SimpleAst.Or (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) y data1) (SimpleAst.Neg x data2) data3) data4) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data5) (SimpleAst.Neg x data6) data7) data8) data9))
+    (Any x)
+)
+
+
+
+;; (x|(-1*((-1*x)|(y*x)))) => x
+;; disj_neg_disj_identity_rule_1
+(rule 89(lower (SimpleAst.Or x (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) x data2) (SimpleAst.Mul y x data3) data4) data5) data6))
+    (Any x)
+)
+
+
+
+;; (x|(-1*((-1*x)|((-1*y)*x)))) => x
+;; disj_neg_disj_identity_rule_2
+(rule 90(lower (SimpleAst.Or x (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) x data2) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data3) y data4) x data5) data6) data7) data8))
+    (Any x)
+)
+
+
+
+;; (x|((x|y)+(-1*y))) => x
+;; disj_sub_disj_identity_rule_1
+(rule 91(lower (SimpleAst.Or x (SimpleAst.Add (SimpleAst.Or x y data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) y data2) data3) data4))
+    (Any x)
+)
+
+
+
+;; (x|(x+(-1*(x&y)))) => x
+;; disj_sub_disj_identity_rule_2
+(rule 92(lower (SimpleAst.Or x (SimpleAst.Add x (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.And x y data1) data2) data3) data4))
+    (Any x)
+)
+
+
+
+;; (x&(x+((~x)&y))) => x
+;; conj_add_conj_identity_rule
+(rule 93(lower (SimpleAst.And x (SimpleAst.Add x (SimpleAst.And (SimpleAst.Neg x data0) y data1) data2) data3))
+    (Any x)
+)
+
+
+
+;; (x|(-1*((-1*y)|(x&y)))) => (x|y)
+;; disj_disj_conj_rule
+(rule 94(lower (SimpleAst.Or x (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) y data2) (SimpleAst.And x y data3) data4) data5) data6))
+    (Or (Any x) (Any y))
+)
+
+
+
+;; (x&(-1*((-1*y)&(x|y)))) => (x&y)
+;; conj_conj_disj_rule
+(rule 95(lower (SimpleAst.And x (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) y data2) (SimpleAst.Or x y data3) data4) data5) data6))
+    (And (Any x) (Any y))
+)
+
+
+
+;; ((-1*((-1*x)|((x&y)&z)))|(x&y)) => x
+;; disj_disj_conj_rule_2
+(rule 96(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) x data2) (SimpleAst.And (SimpleAst.And x y data3) z data4) data5) data6) (SimpleAst.And x y data7) data8))
+    (Any x)
+)
+
+
+
+;; ((2*(x|y))+(-1*x)) => (y+(x^y))
+;; __check_bitwise_in_sums_cancel_terms-4
+(rule 97(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 2 data0) (SimpleAst.Or x y data1) data2) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data3) x data4) data5))
+    (Add (Any y) (Xor (Any x) (Any y)))
+)
+
+
+
+;; ((x&y)|(x^y)) => ((x&y)+(x^y))
+;; __check_disj_involving_xor_in_sums_rule_1
+(rule 98(lower (SimpleAst.Or (SimpleAst.And x y data0) (SimpleAst.Xor x y data1) data2))
+    (Add (And (Any x) (Any y)) (Xor (Any x) (Any y)))
+)
+
+
+
+;; (((z&x)&y)|(x^y)) => (((z&x)&y)+(x^y))
+;; __check_disj_involving_xor_in_sums_rule_2
+(rule 99(lower (SimpleAst.Or (SimpleAst.And (SimpleAst.And z x data0) y data1) (SimpleAst.Xor x y data2) data3))
+    (Add (And (And (Any z) (Any x)) (Any y)) (Xor (Any x) (Any y)))
+)
+
+
+
+;; (x^(x|y)) => ((~x)&y)
+;; __check_xor_involving_disj_rule
+(rule 100(lower (SimpleAst.Xor x (SimpleAst.Or x y data0) data1))
+    (And (Neg (Any x)) (Any y))
+)
+
+
+
+;; ((a*a)+(a*(~a))) => (-1*a)
+;; add-negated-itself-by-two
+(rule 101(lower (SimpleAst.Add (SimpleAst.Mul a a data0) (SimpleAst.Mul a (SimpleAst.Neg a data1) data2) data3))
+    (Mul (Constant 18446744073709551615 data0) (Any a))
+)
+
+
+
+;; (((c*x)+(c*y))+(-1*(c*(x&y)))) => (c*(x|y))
+;; or-mul-shrink
+(rule 102(lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Mul c x data0) (SimpleAst.Mul c y data1) data2) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data3) (SimpleAst.Mul c (SimpleAst.And x y data4) data5) data6) data7))
+    (Mul (Any c) (Or (Any x) (Any y)))
+)
+
+
+
+;; ((a&b)+(a^b)) => (a|b)
+;; or-shrink
+(rule 103(lower (SimpleAst.Add (SimpleAst.And a b data0) (SimpleAst.Xor a b data1) data2))
+    (Or (Any a) (Any b))
+)
+
+
+
+;; (~((~a)&(~b))) => (b|a)
+;; or-shrink-2
+(rule 104(lower (SimpleAst.Neg (SimpleAst.And (SimpleAst.Neg a data0) (SimpleAst.Neg b data1) data2) data3))
+    (Or (Any b) (Any a))
+)
+
+
+
+;; (x+(y&(~x))) => (x|y)
+;; or-shrink-3
+(rule 105(lower (SimpleAst.Add x (SimpleAst.And y (SimpleAst.Neg x data0) data1) data2))
+    (Or (Any x) (Any y))
+)
+
+
+
+;; ((a^b)|a) => (a|b)
+;; or-shrink-4
+(rule 106(lower (SimpleAst.Or (SimpleAst.Xor a b data0) a data1))
+    (Or (Any a) (Any b))
+)
+
+
+
+;; (((c*x)+(c*y))+(-1*((2*c)*(x&y)))) => (c*(x^y))
+;; xor-mul-shrink
+(rule 107(lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Mul c x data0) (SimpleAst.Mul c y data1) data2) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data3) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant 2 data4) c data5) (SimpleAst.And x y data6) data7) data8) data9))
+    (Mul (Any c) (Xor (Any x) (Any y)))
+)
+
+
+
+;; ((x+y)+(-2*(x&y))) => (x^y)
+;; xor-shrink
+(rule 108(lower (SimpleAst.Add (SimpleAst.Add x y data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 data1) (SimpleAst.And x y data2) data3) data4))
+    (Xor (Any x) (Any y))
+)
+
+
+
+;; ((a|b)+(-1*(a&b))) => (a^b)
+;; xor-shrink2
+(rule 109(lower (SimpleAst.Add (SimpleAst.Or a b data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) (SimpleAst.And a b data2) data3) data4))
+    (Xor (Any a) (Any b))
+)
+
+
+
+;; ((~((~a)&(~b)))&(~(a&b))) => (b^a)
+;; xor-shrink-3
+(rule 110(lower (SimpleAst.And (SimpleAst.Neg (SimpleAst.And (SimpleAst.Neg a data0) (SimpleAst.Neg b data1) data2) data3) (SimpleAst.Neg (SimpleAst.And a b data4) data5) data6))
+    (Xor (Any b) (Any a))
+)
+
+
+
+;; ((x&y)+(~(x|y))) => (~(x^y))
+;; negated-xor-shrink-4
+(rule 111(lower (SimpleAst.Add (SimpleAst.And x y data0) (SimpleAst.Neg (SimpleAst.Or x y data1) data2) data3))
+    (Neg (Xor (Any x) (Any y)))
+)
+
+
+
+;; (((a*b)+(a*c))+(-1*(a*(b|c)))) => (a*(b&c))
+;; and-mul-shrink
+(rule 112(lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Mul a b data0) (SimpleAst.Mul a c data1) data2) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data3) (SimpleAst.Mul a (SimpleAst.Or b c data4) data5) data6) data7))
+    (Mul (Any a) (And (Any b) (Any c)))
+)
+
+
+
+;; ((a|b)+(-1*(a^b))) => (a&b)
+;; and-shrink
+(rule 113(lower (SimpleAst.Add (SimpleAst.Or a b data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) (SimpleAst.Xor a b data2) data3) data4))
+    (And (Any a) (Any b))
+)
+
+
+
+;; ((a&b)+(a|b)) => (a+b)
+;; add-shrink
+(rule 114(lower (SimpleAst.Add (SimpleAst.And a b data0) (SimpleAst.Or a b data1) data2))
+    (Add (Any a) (Any b))
+)
+
+
+
+;; ((b*a)+(-1*(b*(a&d)))) => (b*(a&(~d)))
+;; cancel-and-reduce-bitwise-subtraction
+(rule 115(lower (SimpleAst.Add (SimpleAst.Mul b a data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) (SimpleAst.Mul b (SimpleAst.And a d data2) data3) data4) data5))
+    (Mul (Any b) (And (Any a) (Neg (Any d))))
+)
+
+
+
+;; ((x*(a&c))+(-1*(y*(a&c)))) => ((x+(-1*y))*(a&c))
+;; merge-and-multipliers
+(rule 116(lower (SimpleAst.Add (SimpleAst.Mul x (SimpleAst.And a c data0) data1) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data2) (SimpleAst.Mul y (SimpleAst.And a c data3) data4) data5) data6))
+    (Mul (Add (Any x) (Mul (Constant 18446744073709551615 data0) (Any y))) (And (Any a) (Any c)))
+)
+
+
+
+;; (d+(-1*(d&a))) => ((~a)&d)
+;; mba-1
+(rule 117(lower (SimpleAst.Add d (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.And d a data1) data2) data3))
+    (And (Neg (Any a)) (Any d))
+)
+
+
+
+;; ((-1*(d&a))+d) => ((~a)&d)
+;; mba-2
+(rule 118(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.And d a data1) data2) d data3))
+    (And (Neg (Any a)) (Any d))
+)
+
+
+
+;; ((d|a)+(-1*(a&(~d)))) => d
+;; mba-4
+(rule 119(lower (SimpleAst.Add (SimpleAst.Or d a data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) (SimpleAst.And a (SimpleAst.Neg d data2) data3) data4) data5))
+    (Any d)
+)
+
+
+
+;; ((-1*(a&(~d)))+(d|a)) => d
+;; mba-5
+(rule 120(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.And a (SimpleAst.Neg d data1) data2) data3) (SimpleAst.Or d a data4) data5))
+    (Any d)
+)
+
+
+
+;; ((a+(-2*d))+(2*((~a)&(2*d)))) => (a^(2*d))
+;; mba-9
+(rule 121(lower (SimpleAst.Add (SimpleAst.Add a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 data0) d data1) data2) (SimpleAst.Mul (SimpleAst.Constant 2 data3) (SimpleAst.And (SimpleAst.Neg a data4) (SimpleAst.Mul (SimpleAst.Constant 2 data5) d data6) data7) data8) data9))
+    (Xor (Any a) (Mul (Constant 2 data1) (Any d)))
+)
+
+
+
+;; ((x^y)+(-1*(x|y))) => (-1*(x&y))
+;; new-2
+(rule 122(lower (SimpleAst.Add (SimpleAst.Xor x y data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) (SimpleAst.Or x y data2) data3) data4))
+    (Mul (Constant 18446744073709551615 data0) (And (Any x) (Any y)))
+)
+
+
+
+;; ((a|b)+(-1*a)) => ((~a)&b)
+;; new-3
+(rule 123(lower (SimpleAst.Add (SimpleAst.Or a b data0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) a data2) data3))
+    (And (Neg (Any a)) (Any b))
+)
+
+
+
+;; ((a^b)&a) => (a&(~b))
+;; new-16
+(rule 124(lower (SimpleAst.And (SimpleAst.Xor a b data0) a data1))
+    (And (Any a) (Neg (Any b)))
+)
+
+
+
+;; (((~x)&y)+(-1*y)) => (-1*(x&y))
+;; new-23
+(rule 125(lower (SimpleAst.Add (SimpleAst.And (SimpleAst.Neg x data0) y data1) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data2) y data3) data4))
+    (Mul (Constant 18446744073709551615 data0) (And (Any x) (Any y)))
+)
+
+
+
+;; (((~x)&y)+(y*(-1*1))) => (-1*(x&y))
+;; new-24
+(rule 126(lower (SimpleAst.Add (SimpleAst.And (SimpleAst.Neg x data0) y data1) (SimpleAst.Mul y (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data2) (SimpleAst.Constant 1 data3) data4) data5) data6))
+    (Mul (Constant 18446744073709551615 data0) (And (Any x) (Any y)))
+)
+
+
+
+;; (1&(y^((-1*2)+y))) => 0
+;; opaque-constant-1
+(rule 127(lower (SimpleAst.And (SimpleAst.Constant 1 data0) (SimpleAst.Xor y (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data1) (SimpleAst.Constant 2 data2) data3) y data4) data5) data6))
+    (Constant 0 data3)
+)
+
+
+
+;; ((x&y)+(~(x&y))) => -1
+;; opaque-constant-1-again
+(rule 128(lower (SimpleAst.Add (SimpleAst.And x y data0) (SimpleAst.Neg (SimpleAst.And x y data1) data2) data3))
+    (Constant 18446744073709551615 data0)
+)
+
+
+
+;; ((1&y)^(1&(y+(-1*2)))) => 0
+;; opaque-constant-two
+(rule 129(lower (SimpleAst.Xor (SimpleAst.And (SimpleAst.Constant 1 data0) y data1) (SimpleAst.And (SimpleAst.Constant 1 data2) (SimpleAst.Add y (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data3) (SimpleAst.Constant 2 data4) data5) data6) data7) data8))
+    (Constant 0 data1)
+)
+
+
+
+;; ((a&b)|a) => a
+;; opaque-variable-or
+(rule 130(lower (SimpleAst.Or (SimpleAst.And a b data0) a data1))
+    (Any a)
+)
+
+
+
+;; ((a&(~d))+(d&a)) => a
+;; opaque-variable-add
+(rule 131(lower (SimpleAst.Add (SimpleAst.And a (SimpleAst.Neg d data0) data1) (SimpleAst.And d a data2) data3))
+    (Any a)
+)
+
+
+
+;; ((a^b)&(c^(a^(~b)))) => (c&(a^b))
+;; reduce-and-xor-negated
+(rule 132(lower (SimpleAst.And (SimpleAst.Xor a b data0) (SimpleAst.Xor c (SimpleAst.Xor a (SimpleAst.Neg b data1) data2) data3) data4))
+    (And (Any c) (Xor (Any a) (Any b)))
+)
+
+
+
+;; ((y&(a1^c1))^(y&x)) => (y&(x^(a1^c1)))
+;; reduce-and-xor
+(rule 133(lower (SimpleAst.Xor (SimpleAst.And y (SimpleAst.Xor a1 c1 data0) data1) (SimpleAst.And y x data2) data3))
+    (And (Any y) (Xor (Any x) (Xor (Any a1) (Any c1))))
+)
+
+
+
+;; (((y^z)|(y&x))^y) => (z&(~(x&y)))
+;; reduced-or-or-xor
+(rule 134(lower (SimpleAst.Xor (SimpleAst.Or (SimpleAst.Xor y z data0) (SimpleAst.And y x data1) data2) y data3))
+    (And (Any z) (Neg (And (Any x) (Any y))))
+)
+
+
+
+;; (((x&y)+(z^(x|y)))+(2*(z|(~(x&y))))) => (-2+((z^x)^y))
+;; combine-and-add-xor-or
+(rule 135(lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.And x y data0) (SimpleAst.Xor z (SimpleAst.Or x y data1) data2) data3) (SimpleAst.Mul (SimpleAst.Constant 2 data4) (SimpleAst.Or z (SimpleAst.Neg (SimpleAst.And x y data5) data6) data7) data8) data9))
+    (Add (Constant 18446744073709551614 data0) (Xor (Xor (Any z) (Any x)) (Any y)))
+)
+
+
+
+;; ((-1*((x&y)+(z^(x|y))))+(-2*(z|(~(x&y))))) => (2+(-1*((z^x)^y)))
+;; combine-and-add-xor-or-2
+(rule 136(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data0) (SimpleAst.Add (SimpleAst.And x y data1) (SimpleAst.Xor z (SimpleAst.Or x y data2) data3) data4) data5) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 data6) (SimpleAst.Or z (SimpleAst.Neg (SimpleAst.And x y data7) data8) data9) data10) data11))
+    (Add (Constant 2 data1) (Mul (Constant 18446744073709551615 data1) (Xor (Xor (Any z) (Any x)) (Any y))))
+)
+
+
+
+;; ((y^(x^z))+(z^(y&x))) => (z+(z^(x|y)))
+;; pack-add-xor-or
+(rule 137(lower (SimpleAst.Add (SimpleAst.Xor y (SimpleAst.Xor x z data0) data1) (SimpleAst.Xor z (SimpleAst.And y x data2) data3) data4))
+    (Add (Any z) (Xor (Any z) (Or (Any x) (Any y))))
+)
+
+
+
+;; (z&(y|(z^x))) => (z&((~x)|y))
+;; pack-negated-xor
+(rule 138(lower (SimpleAst.And z (SimpleAst.Or y (SimpleAst.Xor z x data0) data1) data2))
+    (And (Any z) (Or (Neg (Any x)) (Any y)))
+)
+
+
+
+;; (((~x)&y)+(y&x)) => y
+;; negated-and-add
+(rule 139(lower (SimpleAst.Add (SimpleAst.And (SimpleAst.Neg x data0) y data1) (SimpleAst.And y x data2) data3))
+    (Any y)
+)
+
+
+
+;; (((a&(~b))&(~c))+((a&b)&c)) => (a&(~(b^c)))
+;; pack-negated-and-neg-into-xor
+(rule 140(lower (SimpleAst.Add (SimpleAst.And (SimpleAst.And a (SimpleAst.Neg b data0) data1) (SimpleAst.Neg c data2) data3) (SimpleAst.And (SimpleAst.And a b data4) c data5) data6))
+    (And (Any a) (Neg (Xor (Any b) (Any c))))
+)
+
+
+
+;; ((~(b|c))|(b&c)) => (~(b^c))
+;; pack-neg-or-and-into-negated-xor
+(rule 141(lower (SimpleAst.Or (SimpleAst.Neg (SimpleAst.Or b c data0) data1) (SimpleAst.And b c data2) data3))
+    (Neg (Xor (Any b) (Any c)))
+)
+
+
+
+;; (z^(x|(~(y&z)))) => (~(z&(x|(~y))))
+;; combine-xor-or
+(rule 142(lower (SimpleAst.Xor z (SimpleAst.Or x (SimpleAst.Neg (SimpleAst.And y z data0) data1) data2) data3))
+    (Neg (And (Any z) (Or (Any x) (Neg (Any y)))))
+)
+
+
+
+;; ((y&x)&(x^z)) => ((x&y)&(~z))
+;; pack-and-xor
+(rule 143(lower (SimpleAst.And (SimpleAst.And y x data0) (SimpleAst.Xor x z data1) data2))
+    (And (And (Any x) (Any y)) (Neg (Any z)))
+)
+
+
+
+;; ((~(y&x))&(x^(z^(~y)))) => (~((x&y)|((x^y)^z)))
+;; pack-into-negated-and-or-xor
+(rule 144(lower (SimpleAst.And (SimpleAst.Neg (SimpleAst.And y x data0) data1) (SimpleAst.Xor x (SimpleAst.Xor z (SimpleAst.Neg y data2) data3) data4) data5))
+    (Neg (Or (And (Any x) (Any y)) (Xor (Xor (Any x) (Any y)) (Any z))))
+)
+
+
+
+;; ((y^(x|(y&(~z))))+((z^(x^y))|(x&y))) => (x+(x^(y|z)))
+;; linear-mba-1
+(rule 145(lower (SimpleAst.Add (SimpleAst.Xor y (SimpleAst.Or x (SimpleAst.And y (SimpleAst.Neg z data0) data1) data2) data3) (SimpleAst.Or (SimpleAst.Xor z (SimpleAst.Xor x y data4) data5) (SimpleAst.And x y data6) data7) data8))
+    (Add (Any x) (Xor (Any x) (Or (Any y) (Any z))))
+)
+
+
+
+;; ((c1*(z^(~(x|(z&y)))))+((-1*c1)*((z&x)+(y|(x|(~z)))))) => ((-1*c1)*x)
+;; linear-mba-2
+(rule 146(lower (SimpleAst.Add (SimpleAst.Mul c1 (SimpleAst.Xor z (SimpleAst.Neg (SimpleAst.Or x (SimpleAst.And z y data0) data1) data2) data3) data4) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 data5) c1 data6) (SimpleAst.Add (SimpleAst.And z x data7) (SimpleAst.Or y (SimpleAst.Or x (SimpleAst.Neg z data8) data9) data10) data11) data12) data13))
+    (Mul (Mul (Constant 18446744073709551615 data0) (Any c1)) (Any x))
+)
+
+(convert SimpleAst index
+lookup_value)
+
+
