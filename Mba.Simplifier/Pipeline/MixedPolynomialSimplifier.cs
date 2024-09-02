@@ -18,7 +18,7 @@ namespace Mba.Simplifier.Pipeline
     /// This works for arbitrary variable counts, up to degree 2.
     /// </summary>
     /// TODO: Extend to higher degrees.
-    public class PolynomialSimplifier
+    public class MixedPolynomialSimplifier
     {
         private readonly AstCtx ctx;
 
@@ -35,9 +35,9 @@ namespace Mba.Simplifier.Pipeline
         IReadOnlyList<AstIdx> allVars;
 
         public static AstIdx Simplify(AstCtx ctx, uint bitSize, IReadOnlyList<AstIdx> polyTerms)
-            => new PolynomialSimplifier(ctx, bitSize, polyTerms).Simplify();
+            => new MixedPolynomialSimplifier(ctx, bitSize, polyTerms).Simplify();
 
-        private PolynomialSimplifier(AstCtx ctx, uint bitSize, IReadOnlyList<AstIdx> polyTerms)
+        private MixedPolynomialSimplifier(AstCtx ctx, uint bitSize, IReadOnlyList<AstIdx> polyTerms)
         {
             this.ctx = ctx;
             this.bitSize = bitSize;

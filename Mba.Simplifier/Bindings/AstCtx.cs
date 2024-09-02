@@ -81,6 +81,17 @@ namespace Mba.Simplifier.Bindings
             return initial;
         }
 
+        public AstIdx Mul(IEnumerable<AstIdx> nodes)
+        {
+            var initial = nodes.First();
+            foreach (var node in nodes.Skip(1))
+            {
+                initial = Mul(initial, node);
+            }
+
+            return initial;
+        }
+
         public AstIdx And(IEnumerable<AstIdx> nodes)
         {
             var initial = nodes.First();
@@ -113,6 +124,7 @@ namespace Mba.Simplifier.Bindings
         public unsafe AstIdx GetOp1(AstIdx id) => Api.ContextGetOp1(this, id);
         public unsafe ulong GetConstantValue(AstIdx id) => Api.ContextGetConstantValue(this, id);
 
+        public unsafe bool IsSymbol(AstIdx id) => GetOpcode(id) == AstOp.Symbol;
         public unsafe bool IsConstant(AstIdx id) => GetOpcode(id) == AstOp.Constant;
         public unsafe bool IsAdd(AstIdx id) => GetOpcode(id) == AstOp.Add;
 
