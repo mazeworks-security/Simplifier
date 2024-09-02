@@ -1,9 +1,13 @@
-﻿using Mba.Simplifier.Bindings;
+﻿using Iced.Intel;
+using Mba.Simplifier.Bindings;
+using Mba.Testing.PolyTesting;
+using Mba.Utility;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -13,17 +17,21 @@ namespace Mba.Simplifier.Pipeline
     {
         private readonly AstCtx ctx;
 
+        // Pointer to a polynomial reduction algorithm that is not (yet) included in this repository.
+        private readonly Func<SparsePolynomial, SparsePolynomial> reducePolynomial;
+
         // For any given node, we store the best possible ISLE result.
         private readonly Dictionary<uint, uint> isleCache = new();
 
         // For any given node, we store the optimal representation yielded by SiMBA.
         private readonly Dictionary<uint, uint> simbaCache = new();
 
-        public static AstIdx Simplify(AstCtx ctx, AstIdx id) => new GeneralSimplifier(ctx).SimplifyGeneral(id);
+        public static AstIdx Simplify(AstCtx ctx, AstIdx id, Func<SparsePolynomial, SparsePolynomial> reducePolynomial = null) => new GeneralSimplifier(ctx, reducePolynomial).SimplifyGeneral(id);
 
-        private GeneralSimplifier(AstCtx ctx)
+        private GeneralSimplifier(AstCtx ctx, Func<SparsePolynomial, SparsePolynomial> reducePolynomial = null)
         {
             this.ctx = ctx;
+            this.reducePolynomial = reducePolynomial;
         }
 
         private AstIdx SimplifyGeneral(AstIdx id, bool useIsle = true)
@@ -77,16 +85,42 @@ namespace Mba.Simplifier.Pipeline
             if (substMapping.Count > 1)
                 withSubstitutions = TryUnmergeLinCombs(withSubstitutions, substMapping);
 
+
+            // If polynomial parts are present, try to simplify them.
+            var inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
+            AstIdx? reducedPoly = null;
+            if (polySimplify && ctx.GetHasPoly(id) && reducePolynomial != null)
+            {
+                // Try to reduce the polynomial parts using "pure" polynomial reduction algorithms.
+                reducedPoly = ReducePolynomials(GetRootTerms(ctx, withSubstitutions), substMapping, inverseMapping);
+
+                // If we succeeded, reset the state.
+                if(reducedPoly != null)
+                {
+                    substMapping.Clear();
+                    isSemiLinear = false;
+                    withSubstitutions = GetAstWithSubstitutions(reducedPoly.Value, substMapping, ref isSemiLinear);
+                    inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
+                }
+            }
+
             // If there are any substitutions, we want to try simplifying the polynomial parts.
             var variables = ctx.CollectVariables(withSubstitutions);
-            var inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
             if (polySimplify && substMapping.Count > 0)
             {
                 // Try to simplify the polynomial parts.
                 // Note that "TrySimplifyPolynomialParts" will update all of the data structures according(substMapping, inverseMapping, variables).
-                var maybeSimplified = TrySimplifyPolynomialParts(withSubstitutions, substMapping, inverseMapping, variables);
+                var maybeSimplified = TrySimplifyMixedPolynomialParts(withSubstitutions, substMapping, inverseMapping, variables);
                 if (maybeSimplified != null)
                     withSubstitutions = maybeSimplified.Value;
+            }
+
+            // If there are still more too many variables remaining, bail out.
+            if (variables.Count > 11)
+            {
+                var simplified = SimplifyViaTermRewriting(id);
+                simbaCache.Add(id, simplified);
+                return simplified;
             }
 
             // Simplify the resulting expression via term rewriting.
@@ -181,7 +215,7 @@ namespace Mba.Simplifier.Pipeline
                     if (opcode == AstOp.Mul)
                     {
                         var constTerm = v0;
-                        return ctx.Mul(constTerm, op1(inBitwise, ref isSemiLinear));
+                        return ctx.Mul(constTerm, GetAstWithSubstitutions(v1, substitutionMapping, ref isSemiLinear, inBitwise));
                     }
 
                     else
@@ -189,6 +223,14 @@ namespace Mba.Simplifier.Pipeline
                         return ctx.Add(op0(inBitwise, ref isSemiLinear), op1(inBitwise, ref isSemiLinear));
                     }
                 case AstOp.Pow:
+                    var basis = SimplifyViaRecursiveSiMBA(ctx.GetOp0(id));
+                    var degree = SimplifyViaRecursiveSiMBA(ctx.GetOp1(id));
+                    if (ctx.IsConstant(basis))
+                        throw new InvalidOperationException($"TODO: Handle base folding to constant");
+                    
+                    var pow = ctx.Pow(basis, degree);
+                    return GetSubstitution(pow, substitutionMapping);
+
                     // We need to check if one of the terms folds to a constant like we do in the multiplication case.
                     throw new InvalidOperationException("TODO");
 
@@ -236,6 +278,119 @@ namespace Mba.Simplifier.Pipeline
                     throw new InvalidOperationException($"Unrecognized opcode: {opcode}!");
             }
         }
+
+        public record PolynomialParts(uint width, ulong coeffSum, Dictionary<AstIdx, ulong> ConstantPowers, List<AstIdx> Others);
+
+        public AstIdx GetAstForPolynomialParts(PolynomialParts parts)
+        {
+            var width = parts.width;
+            var coeffSum = parts.coeffSum;
+            var constantPowers = parts.ConstantPowers;
+            var others = parts.Others;
+
+            List<AstIdx> factors = new();
+            var pows = constantPowers.ToList();
+            pows.Sort((x, y) => { return VarsFirst(ctx, x.Key, y.Key); });
+            factors.Add(ctx.Constant(coeffSum, width));
+            factors.AddRange(pows.Select(x => x.Value == 1 ? x.Key : ctx.Pow(x.Key, ctx.Constant(x.Value, width))));
+            factors.AddRange(others);
+
+            var result = ctx.Mul(factors);
+            return result;
+        }
+
+        // Decompose a monomial into structured factors(coefficient, nodes raised to constant powers, then miscellaneous nodes).
+        public static PolynomialParts GetPolynomialParts(AstCtx ctx, AstIdx id)
+        {
+            // Skip if this is not a multiplication.
+            var opcode = ctx.GetOpcode(id);
+
+            var roots = GetRootMultiplications(ctx,id);
+            ulong coeffSum = 0;
+            Dictionary<AstIdx, ulong> constantPowers = new();
+            List<AstIdx> others = new();
+
+            foreach(var root in roots)
+            {
+                var code = ctx.GetOpcode(root);
+                if (code == AstOp.Constant)
+                {
+                    coeffSum += ctx.GetConstantValue(root);
+                }
+                else if (code == AstOp.Symbol)
+                {
+                    constantPowers.TryAdd(root, 0);
+                    constantPowers[root]++;
+                }
+                else if(code == AstOp.Pow)
+                {
+                    // If we have a power by a nonconstant, we can't really do much here.
+                    var degree = ctx.GetOp1(root);
+                    var constPower = ctx.TryGetConstantValue(degree);
+                    if(constPower == null)
+                    {
+                        others.Add(root);
+                        continue;
+                    }
+
+                    // Otherwise we can combine terms.
+                    var basis = ctx.GetOp0(root);
+                    constantPowers.TryAdd(basis, 0);
+                    constantPowers[basis] += constPower.Value;
+                }
+
+                else
+                {
+                    others.Add(root);
+                }
+            }
+
+            var width = ctx.GetWidth(id);
+            var parts = new PolynomialParts(width, coeffSum, constantPowers, others);
+            return parts;
+        }
+
+        public static int VarsFirst(AstCtx ctx, AstIdx a, AstIdx b)
+        {
+            var comeFirst = -1;
+            var comeLast = 1;
+            var eq = 0;
+
+            var op0 = ctx.IsSymbol(a);
+            var op1 = ctx.IsSymbol(b);
+            if (op0 && !op1)
+                return comeFirst;
+            if (op1 && !op0)
+                return comeLast;
+            if(op0 && op1)
+                return ctx.GetSymbolName(a).CompareTo(ctx.GetSymbolName(b));
+            return comeLast;
+        }
+
+        private int CompareTo(AstIdx a, AstIdx b)
+        {
+            var comeFirst = -1;
+            var comeLast = 1;
+            var eq = 0;
+
+            // Push constants to the left
+            var op0 = ctx.GetOpcode(a);
+            var op1 = ctx.GetOpcode(b);
+            if (op0 == AstOp.Constant)
+                return comeFirst;
+            if (op1 == AstOp.Constant)
+                return comeLast;
+
+            // Sort symbols alphabetically
+            if(op0 == AstOp.Symbol && op1 == AstOp.Symbol)
+                return ctx.GetSymbolName(a).CompareTo(ctx.GetSymbolName(b));
+            if (op0 == AstOp.Pow)
+                return comeLast;
+            if (op1 == AstOp.Pow)
+                return comeFirst;
+            return -1;
+        }
+
 
         private AstIdx GetSubstitution(AstIdx id, Dictionary<AstIdx, AstIdx> substitutionMapping)
         {
@@ -310,10 +465,11 @@ namespace Mba.Simplifier.Pipeline
             return withSubstitutions;
         }
 
-        private AstIdx? TrySimplifyPolynomialParts(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, Dictionary<AstIdx, AstIdx> inverseSubstMapping, List<AstIdx> varList)
+        // Identify and try to eliminate polynomial MBA parts.
+        private AstIdx? TrySimplifyMixedPolynomialParts(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, Dictionary<AstIdx, AstIdx> inverseSubstMapping, List<AstIdx> varList)
         {
             // Decompose the input expression into a summation of terms.
-            var terms = GetRootTerms(id);
+            var terms = GetRootTerms(ctx,id);
 
             // Decompose the summation of terms into a list of possible candidates, and a list of terms that cannot possibly be candidates.
             List<AstIdx> cands = new();
@@ -357,12 +513,12 @@ namespace Mba.Simplifier.Pipeline
             foreach (var cand in cands)
             {
                 // Split the candidate into a summation of terms.
-                var candTerms = GetRootTerms(cand);
+                var candTerms = GetRootTerms(ctx, cand);
 
                 // Decompose each term into a degree two polynomial.
                 foreach (var term in candTerms)
                 {
-                    var multiplications = GetRootMultiplications(term);
+                    var multiplications = GetRootMultiplications(ctx, term);
 
                     // If we have 1111*x*y, rewrite as (1111*x)*y.
                     if (multiplications.Count == 3 && ctx.IsConstant(multiplications[0]))
@@ -404,7 +560,7 @@ namespace Mba.Simplifier.Pipeline
                 if (allVars.Count == 2)
                 {
                     var hello = ctx.Add(degreeTwoPolys);
-                    simpl = PolynomialSimplifier.Simplify(ctx, ctx.GetWidth(degreeTwoPolys.First()), degreeTwoPolys);
+                    simpl = MixedPolynomialSimplifier.Simplify(ctx, ctx.GetWidth(degreeTwoPolys.First()), degreeTwoPolys);
                 }
 
                 else
@@ -457,7 +613,7 @@ namespace Mba.Simplifier.Pipeline
             return sum;
         }
 
-        private IReadOnlyList<AstIdx> GetRootTerms(AstIdx id)
+        public static IReadOnlyList<AstIdx> GetRootTerms(AstCtx ctx, AstIdx id)
         {
             var terms = new List<AstIdx>();
             var toVisit = new Stack<AstIdx>();
@@ -502,7 +658,7 @@ namespace Mba.Simplifier.Pipeline
             return terms;
         }
 
-        private List<AstIdx> GetRootMultiplications(AstIdx id)
+        public static List<AstIdx> GetRootMultiplications(AstCtx ctx, AstIdx id)
         {
             var terms = new List<AstIdx>();
             var toVisit = new Stack<AstIdx>();
@@ -543,6 +699,214 @@ namespace Mba.Simplifier.Pipeline
                 newTerms.Insert(0, ctx.Constant(coeff, ctx.GetWidth(id)));
 
             return newTerms;
+        }
+
+        private AstIdx? ReducePolynomials(IReadOnlyList<AstIdx> terms, IReadOnlyDictionary<AstIdx, AstIdx> substMapping, IReadOnlyDictionary<AstIdx, AstIdx> inverseSubstMapping)
+        {
+            // Try to decompose into high degree polynomials parts.
+            List<PolynomialParts> polyTerms = new();
+            List<AstIdx> other = new();
+            foreach(var term in terms)
+            {
+                // Typically this is going to be a multiplication(coefficient over substituted variable), or whole substituted variable.
+                // TODO: Handle negation.
+                var opcode = ctx.GetOpcode(term);
+                if(opcode != AstOp.Mul && opcode != AstOp.Symbol)
+                    goto skip;
+                
+                // Search for coeff*subst
+                if(opcode == AstOp.Mul)
+                {
+                    // If multiplication, we are looking for coeff*(subst), where coeff is a constant.
+                    var coeff = ctx.GetOp0(term);
+                    if (!ctx.IsConstant(coeff))
+                        goto skip;
+
+                    // Look for a variable on the rhs of the multiplication.
+                    var rhs = ctx.GetOp1(term);
+                    if (!IsSubstitutedPolynomialSymbol(rhs, inverseSubstMapping))
+                        goto skip;
+
+                    // We found a polynomial part, add it to the list.
+                    var invSubst = inverseSubstMapping[rhs];
+                    polyTerms.Add(GetPolynomialParts(ctx, ctx.Mul(coeff, invSubst)));
+                    continue;
+                }
+
+                // Search for a plain substitution(omitted coefficient of 1)
+                if(opcode == AstOp.Symbol && IsSubstitutedPolynomialSymbol(term, inverseSubstMapping))
+                {
+                    var invSubst = inverseSubstMapping[term];
+                    polyTerms.Add(GetPolynomialParts(ctx, invSubst));
+                    continue;
+                }
+
+                skip:
+                other.Add(term);
+                continue;
+            }
+
+            // For now we ignore polynomials with e.g. nonconstant powers.
+            var discarded = polyTerms.Where(x => x.Others.Any()).ToList();
+            polyTerms.RemoveAll(x => x.Others.Any());
+
+            // Bail out if we found no polynomial terms.
+            if (!polyTerms.Any())
+                return null;
+
+            // Now we have a list of polynomial parts, we want to try to simplify them.
+            var uniqueBases = new Dictionary<AstIdx, ulong>();
+            foreach (var poly in polyTerms)
+            {
+                foreach(var (_base, degree) in poly.ConstantPowers)
+                {
+                    // Set the default degree to zero.
+                    uniqueBases.TryAdd(_base, 0);
+
+                    // For each unique base, we want to keep track of the highest degree.
+                    var oldDegree = uniqueBases[_base];
+                    var newDeg = degree;
+                    if(newDeg > oldDegree)
+                        uniqueBases[_base] = newDeg;
+                }
+            }
+
+            // Compute the dense vector size as a heuristic.
+            ulong vecSize = 1;
+            foreach (var degree in uniqueBases.Values)
+                vecSize *= degree;
+
+            // If the dense vector size would be greater than 64**3, we bail out.
+            // In those cases, we may consider implementing variable partitioning and simplifying each partition separately.
+            if (vecSize > 64*64*64)
+                return null;
+
+            // For now we only support polynomials up to degree 255, although this is a somewhat arbitrary limit.
+            var maxDeg = uniqueBases.MaxBy(x => x.Value).Value;
+            if (maxDeg > 255)
+                throw new InvalidOperationException($"Polynomial has degree {maxDeg} which is greater than the limit {255}");
+
+            // Otherwise we can carry on and simplify.
+            var width = ctx.GetWidth(terms.First());
+            var sparsePoly = new SparsePolynomial(uniqueBases.Count, width);
+
+            // Sort the bases alphabetically.
+            var orderedVars = uniqueBases.Keys.ToList();
+            orderedVars.Sort((x, y) => { return VarsFirst(ctx, x, y); });
+
+            // Fill in the sparse polynomial data structure.
+            foreach (var poly in polyTerms)
+            {
+                var coeff = poly.coeffSum;
+              
+                var constPowers = poly.ConstantPowers;
+                var degrees = new byte[orderedVars.Count];
+                for(int varIdx = 0; varIdx < orderedVars.Count; varIdx++)
+                {
+                    var variable = orderedVars[varIdx];
+                    ulong degree = 0;
+                    constPowers.TryGetValue(variable, out degree);
+                    degrees[varIdx] = (byte)degree;
+                }
+
+                // Add this monomial to the sparse polynomial.
+                var monom = new Monomial(degrees);
+                sparsePoly.Sum(monom, coeff);
+            }
+
+            // Reduce.
+            var simplified = reducePolynomial(sparsePoly);
+
+            // The polynomial reduction algorithm guarantees a minimal degree result, but it's often not the most simple result.
+            // E.g. "x**10" becomes "96*x0 + 40*x0**2 + 84*x0**3 + 210*x0**4 + 161*x0**5 + 171*x0**6 + 42*x0**7 + 220*x0**8 + 1*x0**9" on 8 bits.
+            // In the case of a single term solution, we reject the result if it is more complex.
+            if (polyTerms.Count == 1 && simplified.coeffs.Count > 1)
+                return null;
+
+            List<AstIdx> newTerms = new();
+            // Add back all of the ignored parts.
+            newTerms.AddRange(other);
+            // Add back all of the discarded polynomial parts
+            foreach(var part in discarded)
+            {
+                var ast = GetAstForPolynomialParts(part);
+                newTerms.Add(ast);
+            }
+
+            // Then finally convert the sparse polynomial back to an AST.
+            foreach(var (monom, coeff) in simplified.coeffs)
+            {
+                if (coeff == 0)
+                    continue;
+
+                List<AstIdx> factors = new();
+                factors.Add(ctx.Constant(coeff, width));
+                for(int i = 0; i < orderedVars.Count; i++)
+                {
+                    var deg = monom.GetVarDeg(i);
+                    if(deg == 0)
+                    {
+                        factors.Add(ctx.Constant(1, width));
+                        continue;
+                    }
+
+                    var variable = orderedVars[i];
+                    if (deg == 1)
+                    {
+                        factors.Add(variable);
+                        continue;
+                    }
+
+                    factors.Add(ctx.Pow(variable, ctx.Constant(deg, width)));
+                }
+
+                var term = ctx.Mul(factors);
+                newTerms.Add(term);
+            }
+
+
+            // If the whole polynomial was folded to zero, discard it.
+            if (newTerms.Count == 0)
+                newTerms.Add(ctx.Constant(0, width));
+
+            var result = ctx.Add(newTerms);
+            return result;
+        }
+
+        private bool IsSubstitutedPolynomialSymbol(AstIdx id, IReadOnlyDictionary<AstIdx, AstIdx> inverseSubstMapping)
+        {
+            if (!ctx.IsSymbol(id))
+                return false;
+
+            // Make sure the variable is a substituted part
+            if (!inverseSubstMapping.TryGetValue(id, out var substituted))
+                return false;
+            // Ensure that the substituted part atleast contains a polynomial somewhere.
+            if(!ctx.GetHasPoly(substituted))
+                return false;
+
+            // Now we are looking for either a mul or pow.
+            var opcode = ctx.GetOpcode(substituted);
+            if(opcode == AstOp.Pow)
+            {
+                return true;
+            }
+
+            if(opcode == AstOp.Mul)
+            {
+                // If the first operand is not a constant, we have a polynomial part.
+                var rhs = ctx.GetOp0(substituted);
+                if (!ctx.IsConstant(rhs))
+                    return true;
+
+                // Otherwise we need to look for a polynomial part in the second operand.
+                var lhs = ctx.GetOp1(substituted);
+                var lhsKind = ctx.GetOpcode(lhs);
+                if(lhsKind == AstOp.Mul || lhsKind == AstOp.Pow)
+                    return true;
+            }
+
+            return false;
         }
 
         private static AstIdx ApplyBackSubstitution(AstCtx ctx, AstIdx id, Dictionary<AstIdx, AstIdx> backSubstitutions)

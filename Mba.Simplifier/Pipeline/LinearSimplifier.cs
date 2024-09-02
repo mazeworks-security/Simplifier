@@ -202,6 +202,8 @@ namespace Mba.Simplifier.Pipeline
 
             CheckSolutionComplexity(combined.Value);
 
+            resultVector = clone;
+
             // If there is more than 3 variables:
             if (variables.Count > 3)
             {
@@ -1447,7 +1449,7 @@ namespace Mba.Simplifier.Pipeline
         private void FindTwoExpressionsByTwoValues()
         {
             // This step is disabled due to high performance overhead.
-            //return; 
+            return; 
 
             Debug.Assert(resultVector[0] == 0);
             var resultSet = resultVector.ToHashSet();

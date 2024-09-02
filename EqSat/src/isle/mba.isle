@@ -58,7 +58,6 @@
 (decl FoldAdd (index index) SimpleAst)
 (extern constructor FoldAdd fold_add)
 
-
 ;; Declare our top-level lowering function. We will attach rules to this
 ;; declaration for lowering various patterns of `SimpleAst` inputs.
 (decl partial lower (SimpleAst) SimpleAst)
