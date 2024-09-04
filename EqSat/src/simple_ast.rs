@@ -185,7 +185,11 @@ impl Arena {
             has_poly: false,
             class: AstClass::Bitwise,
         };
-        return self.insert_ast_node(SimpleAst::Constant { c: c, data });
+
+        // Reduce the constant modulo 2**width
+        let constant = get_modulo_mask(width) & c;
+
+        return self.insert_ast_node(SimpleAst::Constant { c: constant, data });
     }
 
     pub fn symbol(&mut self, id: u32, width: u8) -> AstIdx {
@@ -523,10 +527,7 @@ impl mba::Context for Context {
     }
 
     fn constant(&mut self, arg0: u64, data: AstData) -> SimpleAst {
-        // Reduce the constant modulo 2**width
-        let constant = get_modulo_mask(data.width) & arg0;
-
-        let id = self.arena.constant(constant, data.width);
+        let id = self.arena.constant(arg0, data.width);
         return self.arena.get_node(id).clone();
     }
 
@@ -1329,6 +1330,26 @@ pub unsafe extern "C" fn ContextJit(
             *output.add(arr_idx) = result;
             arr_idx += 1;
         }
+    }
+}
+
+// Run ISLE until a fixed point is reached, but do not recurse.
+#[no_mangle]
+pub extern "C" fn ContextSingleSimplify(ctx: *mut Context, idx: AstIdx) -> AstIdx {
+    unsafe {
+        let mut deref: &mut Context = &mut (*ctx);
+        let mut ast = deref.arena.get_node(idx).clone();
+
+        while true {
+            let result = try_simplify_with_isle(deref, &ast);
+            if (result.is_none()) {
+                break;
+            }
+
+            ast = result.unwrap();
+        }
+
+        return deref.arena.insert_ast_node(ast);
     }
 }
 

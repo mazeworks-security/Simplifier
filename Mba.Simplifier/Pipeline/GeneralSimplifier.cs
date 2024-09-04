@@ -57,7 +57,7 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // TODO: Add to isle cache
-            bool cacheIsle = false;
+            bool cacheIsle = true;
             if (cacheIsle)
             {
                 isleCache.TryAdd(initialId, id);
@@ -71,6 +71,31 @@ namespace Mba.Simplifier.Pipeline
         {
             if (simbaCache.TryGetValue(id, out var existing))
                 return existing;
+            // TODO: We should probably apply ISLE before attempting any other steps.
+
+            // For linear and semi-linear MBAs, we can skip the substitution / polynomial simplification steps.
+            var linClass = ctx.GetClass(id);
+            if (ctx.IsConstant(id))
+                return id;
+
+            if(linClass != AstClassification.Nonlinear)
+            {
+                // Bail out if there are too many variables.
+                var vars = ctx.CollectVariables(id);
+                if(vars.Count > 11 || vars.Count == 0)
+                {
+                    var simplified = SimplifyViaTermRewriting(id);
+                    simbaCache.Add(id, simplified);
+                    return simplified;
+                }
+
+                var linSimplified = LinearSimplifier.Run(ctx.GetWidth(id), ctx, id, false, linClass == AstClassification.SemiLinear || linClass == AstClassification.BitwiseWithConstants, false, vars);
+                linSimplified = SimplifyViaTermRewriting(linSimplified);
+                simbaCache.TryAdd(id, linSimplified);
+                simbaCache.TryAdd(linSimplified, linSimplified);
+                return linSimplified;
+            }
+
 
             // Apply substitution.
             var substMapping = new Dictionary<AstIdx, AstIdx>();
@@ -80,7 +105,6 @@ namespace Mba.Simplifier.Pipeline
             // If there are multiple substitutions, try to minimize the number of substitutions.
             if (substMapping.Count > 1)
                 withSubstitutions = TryUnmergeLinCombs(withSubstitutions, substMapping);
-
 
             // If polynomial parts are present, try to simplify them.
             var inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
@@ -93,6 +117,10 @@ namespace Mba.Simplifier.Pipeline
                 // If we succeeded, reset the state.
                 if(reducedPoly != null)
                 {
+                    // Back substitute the original substitutions.
+                    reducedPoly = ApplyBackSubstitution(ctx, reducedPoly.Value, inverseMapping);
+
+                    // Reset internal state.
                     substMapping.Clear();
                     isSemiLinear = false;
                     withSubstitutions = GetAstWithSubstitutions(reducedPoly.Value, substMapping, ref isSemiLinear);
@@ -102,7 +130,7 @@ namespace Mba.Simplifier.Pipeline
 
             // If there are any substitutions, we want to try simplifying the polynomial parts.
             var variables = ctx.CollectVariables(withSubstitutions);
-            if (polySimplify && substMapping.Count > 0)
+            if (polySimplify && substMapping.Count > 0 && ctx.GetHasPoly(id))
             {
                 // Try to simplify the polynomial parts.
                 // Note that "TrySimplifyPolynomialParts" will update all of the data structures according(substMapping, inverseMapping, variables).
@@ -211,7 +239,29 @@ namespace Mba.Simplifier.Pipeline
                     if (opcode == AstOp.Mul)
                     {
                         var constTerm = v0;
-                        return ctx.Mul(constTerm, GetAstWithSubstitutions(v1, substitutionMapping, ref isSemiLinear, inBitwise));
+
+                        // In the case of coeff*(x+y), where coeff is a constant, we want to distribute it, yielding coeff*x + coeff*y.
+                        if (ctx.GetOpcode(v1) == AstOp.Add)
+                        {
+                            var left = ctx.Mul(constTerm, ctx.GetOp0(v1));
+                            left = ctx.SingleSimplify(left);
+
+                            var right = ctx.Mul(constTerm, ctx.GetOp1(v1));
+                            right = ctx.SingleSimplify(right);
+                            var sum = ctx.Add(left, right);
+
+                            var oldSum = sum;
+                            var newSum = ctx.SingleSimplify(sum);
+                            sum = newSum;
+                            // In this case, we apply constant folding(but we do not search recursively).
+
+                            return GetAstWithSubstitutions(sum, substitutionMapping, ref isSemiLinear, inBitwise);
+                        }
+
+                        else
+                        {
+                            return ctx.Mul(constTerm, GetAstWithSubstitutions(v1, substitutionMapping, ref isSemiLinear, inBitwise));
+                        }
                     }
 
                     else
@@ -335,9 +385,11 @@ namespace Mba.Simplifier.Pipeline
                     constantPowers[basis] += constPower.Value;
                 }
 
+                // In the case of e.g. (x+y) being a root, we can still collect the constant powers(the number of times x+y is seen).
                 else
                 {
-                    others.Add(root);
+                    constantPowers.TryAdd(root, 0);
+                    constantPowers[root]++;
                 }
             }
 
@@ -346,6 +398,7 @@ namespace Mba.Simplifier.Pipeline
             return parts;
         }
 
+        // Ast comparer that places symbols first, sorted alphabetically.
         public static int VarsFirst(AstCtx ctx, AstIdx a, AstIdx b)
         {
             var comeFirst = -1;
@@ -363,6 +416,8 @@ namespace Mba.Simplifier.Pipeline
             return comeLast;
         }
 
+        // Sort nodes canonically:
+        // - constants, variables, powers sorted by their base(todo), then the rest.
         private int CompareTo(AstIdx a, AstIdx b)
         {
             var comeFirst = -1;
@@ -386,7 +441,6 @@ namespace Mba.Simplifier.Pipeline
                 return comeFirst;
             return -1;
         }
-
 
         private AstIdx GetSubstitution(AstIdx id, Dictionary<AstIdx, AstIdx> substitutionMapping)
         {
@@ -697,6 +751,7 @@ namespace Mba.Simplifier.Pipeline
             return newTerms;
         }
 
+        // Try to reduce the polynomial parts of an expression using the polynomial reduction algorithm.
         private AstIdx? ReducePolynomials(IReadOnlyList<AstIdx> terms, IReadOnlyDictionary<AstIdx, AstIdx> substMapping, IReadOnlyDictionary<AstIdx, AstIdx> inverseSubstMapping)
         {
             // Try to decompose into high degree polynomials parts.
@@ -778,9 +833,10 @@ namespace Mba.Simplifier.Pipeline
                 return null;
 
             // For now we only support polynomials up to degree 255, although this is a somewhat arbitrary limit.
+            ulong limit = 254;
             var maxDeg = uniqueBases.MaxBy(x => x.Value).Value;
-            if (maxDeg > 255)
-                throw new InvalidOperationException($"Polynomial has degree {maxDeg} which is greater than the limit {255}");
+            if (maxDeg > limit)
+                throw new InvalidOperationException($"Polynomial has degree {maxDeg} which is greater than the limit {limit}");
 
             // Otherwise we can carry on and simplify.
             var width = ctx.GetWidth(terms.First());
@@ -816,7 +872,7 @@ namespace Mba.Simplifier.Pipeline
             // The polynomial reduction algorithm guarantees a minimal degree result, but it's often not the most simple result.
             // E.g. "x**10" becomes "96*x0 + 40*x0**2 + 84*x0**3 + 210*x0**4 + 161*x0**5 + 171*x0**6 + 42*x0**7 + 220*x0**8 + 1*x0**9" on 8 bits.
             // In the case of a single term solution, we reject the result if it is more complex.
-            if (polyTerms.Count == 1 && simplified.coeffs.Count > 1)
+            if (polyTerms.Count == 1 && simplified.coeffs.Count(x => x.Value != 0) > 1)
                 return null;
 
             List<AstIdx> newTerms = new();

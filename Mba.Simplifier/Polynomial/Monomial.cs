@@ -136,7 +136,7 @@ namespace Mba.Testing.PolyTesting
                     continue;
                 }
 
-                bool unroll = false;
+                bool unroll = true;
                 string pow = null;
                 if (canonicalBasis)
                     pow = GetCanonicalBasisStr(varName, degree, unroll);
