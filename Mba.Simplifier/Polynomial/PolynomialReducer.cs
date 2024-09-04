@@ -1,5 +1,8 @@
-﻿using Mba.Utility;
+﻿using Iced.Intel;
+using Mba.Simplifier.Polynomial;
+using Mba.Utility;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -10,12 +13,28 @@ using Wintellect.PowerCollections;
 
 namespace Mba.Testing.PolyTesting
 {
+    public struct MonomialWithCoeff
+    {
+        public readonly Monomial monomial;
+
+        public readonly ulong coeff;
+
+        public MonomialWithCoeff(Monomial m, ulong c)
+        {
+            monomial = m;
+            coeff = c;
+        }
+    }
+
     /// <summary>
     /// This class implements the multivariate polynomial reduction algorithm from the NDSS2024 paper
     /// "Efficient Normalized Reduction and Generation of Equivalent Multivariate Binary Polynomials".
     /// </summary>
     public static class PolynomialReducer
     {
+        // Map each monomial to it's expanded factorial basis representation.
+        public static ConcurrentDictionary<Monomial, IReadOnlyList<MonomialWithCoeff>> factorialMap = new();
+
         public static SparsePolynomial Reduce(SparsePolynomial input)
         {
             var fac = GetFactorialForm(input);
@@ -28,13 +47,14 @@ namespace Mba.Testing.PolyTesting
         // This is a naive implementation, and could be significantly optimized.
         public static SparsePolynomial GetFactorialForm(SparsePolynomial input)
         {
-            var bag = new OrderedBag<Monomial>(input.GetOrderedMonomials());
-
+            // Note that `OrderedBag` is used to ensure that monomials are stored in sorted(graded reverse lexicographic) order,
+            // and that ordering is preserved when removing or inserting elements.
+            var worklist = new OrderedBag<Monomial>(input.GetOrderedMonomials());
             var outPoly = new SparsePolynomial(input.numVars, input.width);
-            while (bag.Any())
+            while (worklist.Any())
             {
                 // Get the last monomial
-                var monom = bag.RemoveLast();
+                var monom = worklist.RemoveLast();
 
                 // Skip zero terms
                 var coeff = input.GetCoeff(monom);
@@ -45,36 +65,34 @@ namespace Mba.Testing.PolyTesting
                     continue;
 
                 // Get the factorial basis for this monomial
-                var expandedForm = GetMonomomialFacBasis(monom, input.width);
-
-                // Then distribute our current coefficients, and subtract out the lower degree bits from the rest of the polynomial.
-                // Subtract out the basis, skipping the leading coefficient.
-                expandedForm.Multiply(coeff);
-                var terms = expandedForm.GetOrderedMonomials();
-                Debug.Assert(terms.Last().Equals(monom));
+                if(!factorialMap.TryGetValue(monom, out var expandedForm))
+                {
+                    expandedForm = GetSortedTerms(GetFactorialBasis(monom, 64));
+                    factorialMap[monom] = expandedForm;
+                }
+                
+                // Move the highest(current) degree term over to the new polynomial,
+                // then subtract the input polynomial by the lower degree parts.
+                var terms = expandedForm;
                 for (int i = 0; i < terms.Count - 1; i++)
                 {
-                    // If this term was contained, we can just subtract it out.
-                    var m = terms[i];
-                    var contains = input.ContainsMonomial(m);
+                    // Negate and reduce(modulo the current bit width) the coefficient
+                    var withCoeff = terms[i];
+                    var termMonomial = withCoeff.monomial;
+                    var termCoefficient = withCoeff.coeff;
+                    termCoefficient &= input.moduloMask;
+                    termCoefficient *= coeff;
 
-                    // If the sparse polynomial contains this polynomial:
-                    if (contains)
+                    // Subtract the monomial's coefficient from the input polynomial.
+                    var negatedCoeff = (input.moduloMask * termCoefficient);
+                    var contains = input.Sum(termMonomial, negatedCoeff);
+
+                    // If this monomial was not contained in the input polynomial, we need to add it to the worklist.
+                    if(!contains)
                     {
-                        // Update the coefficient
-                        input.Sum(m, (expandedForm.moduloMask * expandedForm.GetCoeff(m)));
+                        if (!worklist.Contains(termMonomial))
+                            worklist.Add(termMonomial);
                     }
-
-                    // Otherwise we need to add it to the bag.
-                    else
-                    {
-                        if (!bag.Contains(m))
-                            bag.Add(m);
-
-                        var newCoeff = expandedForm.GetCoeff(m);
-                        input.SetCoeff(m, expandedForm.moduloMask * newCoeff);
-                    }
-
                 }
 
                 // Remove this term from the input polynomial
@@ -91,109 +109,131 @@ namespace Mba.Testing.PolyTesting
             return outPoly;
         }
 
-        private static SparsePolynomial GetMonomomialFacBasis(Monomial monomial, byte width)
+        public static IReadOnlyList<MonomialWithCoeff> GetSortedTerms(SparsePolynomial s)
         {
-            // Compute the factorial basis for this monomial.
-            SparsePolynomial mergedFactorial = null;
+            return s.GetOrderedMonomials().Select(x => new MonomialWithCoeff(x, s.GetCoeff(x))).ToList(); ;
+        }
+
+        private static SparsePolynomial GetFactorialBasis(Monomial monomial, byte width)
+        {
+            // For each variable(of some degree) in the monomial, compute the expanded factorial basis,
+            // then multiply with all other factorial bases.
+            DensePolynomial mergedFactorial = null;
             foreach (var deg in monomial.Degrees)
             {
-                SparsePolynomial expanded = null;
-                // For this variable, get the factorial basis for it's degrees,
+                DensePolynomial currFactorial = null;
+                // For the degree zero case, construct a monomial with the constant value `1`.
                 if (deg == 0)
                 {
-                    expanded = new SparsePolynomial(1, width);
-                    expanded.SetCoeff(new Monomial(0), 1);
+                    currFactorial = new DensePolynomial(width, new int[] { 1 });
+                    currFactorial.SetCoeff(0, 1);
                 }
 
                 else
                 {
-                    expanded = PolynomialReducer.GetExpandedUnivariateFacForm(deg, width, true);
+                    currFactorial = PolynomialReducer.GetDenseExpandedFactorial(deg, width, true);
                 }
 
                 // Then multiply the factorial basis with the other factorial bases.
                 if (mergedFactorial == null)
-                    mergedFactorial = expanded;
+                    mergedFactorial = currFactorial;
                 else
-                    mergedFactorial = PolynomialReducer.Multiply(mergedFactorial, expanded);
+                    mergedFactorial = PolynomialReducer.Multiply(mergedFactorial, currFactorial);
             }
 
-            return mergedFactorial;
+            // Convert the dense representation to a sparse representation.
+            var result = new SparsePolynomial(mergedFactorial.NumVars, width);
+            for(int i = 0; i < mergedFactorial.coeffs.Length; i++)
+            {
+                var monom = mergedFactorial.GetMonomial(i);
+                var coeff = mergedFactorial.coeffs[i];
+                if (coeff == 0)
+                    continue;
+
+                result.SetCoeff(monom, coeff);
+            }
+
+            return result;
         }
 
+        public static DensePolynomial GetDenseExpandedFactorial(byte degree, byte width, bool falling)
+        {
+            var densePoly = new DensePolynomial(width, new int[] { degree });
+            GetExpandedFactorial(densePoly.coeffs, degree, width, falling);
+            return densePoly;
+        }
 
-        // Given a degree(for univariate monomials only), compute the expanded factorial form.
-        public static SparsePolynomial GetExpandedUnivariateFacForm(int degree, byte width, bool falling)
+        public static ulong[] GetExpandedFactorial(byte degree, byte width, bool falling)
+        {
+            var terms = new ulong[degree + 1];
+            return GetExpandedFactorial(terms, degree, width, falling);
+        }
+
+        public static ulong[] GetExpandedFactorial(ulong[] terms, byte degree, byte width, bool falling)
         {
             var moduloMask = (ulong)ModuloReducer.GetMask(width);
-            var terms = new ulong[degree + 1];
+            var clone = new ulong[degree + 1];
+            Debug.Assert(terms.Length == clone.Length);
+
             terms[0] = 1;
             terms[1] = 1;
-            for (int degIdx = 1; degIdx < degree + 1; degIdx++)
+            for (byte degIdx = 1; degIdx < degree + 1; degIdx++)
             {
                 ulong coeff = ((ulong)degIdx - 1ul);
                 if (falling)
                     coeff *= moduloMask;
                 coeff &= moduloMask;
 
-                var clone = terms.ToArray();
-                for (int i = 0; i < terms.Length; i++)
+                for (byte i = 0; i < degIdx; i++)
+                {
+                    clone[i] = terms[i];
                     terms[i] = 0;
+                }
 
                 // Move the leading X over
-                for (int i = 0; i < terms.Length - 1; i++)
-                {
+                for (byte i = 0; i < Math.Min(terms.Length - 1, degIdx + 1); i++)
                     terms[i + 1] = clone[i];
-                }
-
                 // Move the coefficient over
-                for (int i = 0; i < degIdx; i++)
-                {
+                for (byte i = 0; i < degIdx; i++)
                     terms[i] += (coeff * clone[i]);
-                    terms[i] &= moduloMask;
-                }
             }
 
-            var poly = new SparsePolynomial(1, width);
-            for (int i = 1; i < terms.Length; i++)
-            {
-                var monom = new Monomial((byte)i);
-                var coeff = (ulong)terms[i];
-                poly.SetCoeff(monom, coeff);
-            }
+            for (byte i = 0; i < terms.Length; i++)
+                terms[i] &= moduloMask;
 
-            return poly;
+            return terms;
         }
 
-        public static SparsePolynomial Multiply(SparsePolynomial a, SparsePolynomial b)
+        // Multiply two dense polynomials, yielding a new polynomial.
+        // Note that this assumes disjoint variable sets.
+        public static DensePolynomial Multiply(DensePolynomial a, DensePolynomial b)
         {
-            // This is not really a "generic" polynomial multiply, this will only work the case that no variables are shared.
-            var newPoly = new SparsePolynomial(a.numVars + b.numVars, a.width);
-            Debug.Assert(b.numVars == 1);
-
-            foreach (var (monomA, coeffA) in a.coeffs)
+            var newDimensions = a.dimensions.Concat(new int[] { b.dimensions.Single() }).ToArray();
+            var newPoly = new DensePolynomial(a.width, newDimensions);
+            for(int aIdx = 0; aIdx < a.coeffs.Length; aIdx++)
             {
+                var monomA = a.GetMonomial(aIdx);
+                var coeffA = a.GetCoeff(monomA);
                 if (coeffA == 0)
                     continue;
 
-                foreach (var (monomB, coeffB) in b.coeffs)
+                for(int bIdx = 0; bIdx < b.coeffs.Length; bIdx++)
                 {
+                    var monomB = b.GetMonomial(bIdx);
+                    var coeffB = b.GetCoeff(monomB);
                     if (coeffB == 0)
                         continue;
 
-                    // If no variables are shared then we can just merge the monomial.
                     var newCoeff = coeffA * coeffB;
                     newCoeff &= a.moduloMask;
 
-                    var degrees = new byte[newPoly.numVars];
-                    for (int i = 0; i < a.numVars; i++)
+                    var degrees = new byte[newPoly.NumVars];
+                    for(int i = 0; i < a.NumVars; i++)
                         degrees[i] = monomA.GetVarDeg(i);
-                    degrees[a.numVars] = monomB.GetVarDeg(0);
+                    degrees[a.NumVars] = monomB.GetVarDeg(0);
 
                     var newMonom = new Monomial(degrees);
-                    ulong oldCoeff = 0;
-                    newPoly.TryGetCoeff(newMonom, out oldCoeff);
-                    oldCoeff += newCoeff;
-                    newPoly.SetCoeff(newMonom, oldCoeff);
+                    newPoly.Sum(newMonom, newCoeff);
                 }
             }
 
@@ -276,7 +316,7 @@ namespace Mba.Testing.PolyTesting
                 if (degrees.Count == 0)
                     throw new InvalidOperationException("TODO: Handle constant terms");
 
-                var expanded = GetMonomomialFacBasis(monom, input.width);
+                var expanded = GetFactorialBasis(monom, input.width);
                 expanded.Multiply(coeff);
                 foreach (var (m, c) in expanded.coeffs)
                 {

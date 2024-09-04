@@ -40,6 +40,20 @@ namespace Mba.Testing.PolyTesting
             return (byte)(value >> (ushort)shiftBy);
         }
 
+        public uint GetNumVars()
+        {
+            uint total = 0;
+            for (int i = 0; i < 8; i++)
+            {
+                var degree = GetVarDeg(i);
+                if (degree == byte.MaxValue)
+                    break;
+                total += 1;
+            }
+
+            return total;
+        }
+
         public uint GetTotalDeg()
         {
             uint total = 0;
