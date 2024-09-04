@@ -36,6 +36,13 @@ namespace Mba.Testing.PolyTesting
             return coeffs[index];
         }
 
+        public ulong GetCoeffOrZero(Monomial index)
+        {
+            ulong coeff = 0;
+            coeffs.TryGetValue(index, out coeff);
+            return coeff;
+        }
+
         public bool TryGetCoeff(Monomial index, out ulong coeff)
             => coeffs.TryGetValue(index, out coeff);
 
@@ -48,13 +55,14 @@ namespace Mba.Testing.PolyTesting
             coeffs[index] = value;
         }
 
-        public void Sum(Monomial index, ulong value)
+        public bool Sum(Monomial index, ulong value)
         {
             value &= moduloMask;
             ulong sum = 0;
-            TryGetCoeff(index, out sum);
+            bool contains = TryGetCoeff(index, out sum);
             sum += value;
             SetCoeff(index, sum);
+            return contains;
         }
 
         public void Multiply(ulong coeff)
