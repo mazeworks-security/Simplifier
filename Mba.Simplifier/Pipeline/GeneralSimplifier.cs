@@ -17,21 +17,17 @@ namespace Mba.Simplifier.Pipeline
     {
         private readonly AstCtx ctx;
 
-        // Pointer to a polynomial reduction algorithm that is not (yet) included in this repository.
-        private readonly Func<SparsePolynomial, SparsePolynomial> reducePolynomial;
-
         // For any given node, we store the best possible ISLE result.
         private readonly Dictionary<uint, uint> isleCache = new();
 
         // For any given node, we store the optimal representation yielded by SiMBA.
         private readonly Dictionary<uint, uint> simbaCache = new();
 
-        public static AstIdx Simplify(AstCtx ctx, AstIdx id, Func<SparsePolynomial, SparsePolynomial> reducePolynomial = null) => new GeneralSimplifier(ctx, reducePolynomial).SimplifyGeneral(id);
+        public static AstIdx Simplify(AstCtx ctx, AstIdx id) => new GeneralSimplifier(ctx).SimplifyGeneral(id);
 
-        private GeneralSimplifier(AstCtx ctx, Func<SparsePolynomial, SparsePolynomial> reducePolynomial = null)
+        private GeneralSimplifier(AstCtx ctx)
         {
             this.ctx = ctx;
-            this.reducePolynomial = reducePolynomial;
         }
 
         private AstIdx SimplifyGeneral(AstIdx id, bool useIsle = true)
@@ -89,7 +85,7 @@ namespace Mba.Simplifier.Pipeline
             // If polynomial parts are present, try to simplify them.
             var inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
             AstIdx? reducedPoly = null;
-            if (polySimplify && ctx.GetHasPoly(id) && reducePolynomial != null)
+            if (polySimplify && ctx.GetHasPoly(id))
             {
                 // Try to reduce the polynomial parts using "pure" polynomial reduction algorithms.
                 reducedPoly = ReducePolynomials(GetRootTerms(ctx, withSubstitutions), substMapping, inverseMapping);
@@ -815,7 +811,7 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // Reduce.
-            var simplified = reducePolynomial(sparsePoly);
+            var simplified = PolynomialReducer.Reduce(sparsePoly);
 
             // The polynomial reduction algorithm guarantees a minimal degree result, but it's often not the most simple result.
             // E.g. "x**10" becomes "96*x0 + 40*x0**2 + 84*x0**3 + 210*x0**4 + 161*x0**5 + 171*x0**6 + 42*x0**7 + 220*x0**8 + 1*x0**9" on 8 bits.
