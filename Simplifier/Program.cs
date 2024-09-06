@@ -4,6 +4,7 @@ using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
+using System.ComponentModel;
 
 bool printUsage = false;
 uint bitWidth = 64;
@@ -64,10 +65,17 @@ var id = RustAstParser.Parse(ctx, inputText, bitWidth);
 
 Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n");
 
-for (int i = 0; i < 5; i++)
+id = ctx.RecursiveSimplify(id);
+for (int i = 0; i < 3; i++)
 {
     // Apply our simplification procedure.
-    id = GeneralSimplifier.Simplify(ctx, id);
+    var simplifier = new GeneralSimplifier(ctx);
+    // Run the simplification pipeline.
+    id = simplifier.SimplifyGeneral(id);
+    // Try to expand and reduce the polynomial parts(if any exist).
+    if(ctx.GetHasPoly(id))
+        id = simplifier.ExpandReduce(id);
+
     if (!useEqsat)
         continue;
     if (bitWidth != 64)

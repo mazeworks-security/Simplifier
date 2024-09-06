@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Mba.Testing.PolyTesting
+namespace Mba.Simplifier.Polynomial
 {
     // Represents a multivariate monomial, with up to 8 variables.
     public struct Monomial : IEquatable<Monomial>, IComparable<Monomial>
@@ -18,7 +18,7 @@ namespace Mba.Testing.PolyTesting
 
         public Monomial(params byte[] varDegrees)
         {
-            Debug.Assert(varDegrees.Length < 8);
+            Debug.Assert(varDegrees.Length <= 8);
             for (int i = 0; i < varDegrees.Length; i++)
             {
                 var degree = (ulong)varDegrees[i];

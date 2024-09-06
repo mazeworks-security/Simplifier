@@ -1,6 +1,7 @@
 ﻿using Iced.Intel;
 using Mba.Simplifier.Bindings;
-using Mba.Testing.PolyTesting;
+using Mba.Simplifier.Pipeline.Intermediate;
+using Mba.Simplifier.Polynomial;
 using Mba.Utility;
 using System;
 using System.Collections.Generic;
@@ -25,12 +26,12 @@ namespace Mba.Simplifier.Pipeline
 
         public static AstIdx Simplify(AstCtx ctx, AstIdx id) => new GeneralSimplifier(ctx).SimplifyGeneral(id);
 
-        private GeneralSimplifier(AstCtx ctx)
+        public GeneralSimplifier(AstCtx ctx)
         {
             this.ctx = ctx;
         }
 
-        private AstIdx SimplifyGeneral(AstIdx id, bool useIsle = true)
+        public AstIdx SimplifyGeneral(AstIdx id, bool useIsle = true)
         {
             // Simplify the AST via efficient, recursive term rewriting(ISLE).
             if (useIsle)
@@ -581,8 +582,14 @@ namespace Mba.Simplifier.Pipeline
                     {
                         bool isSemiLinear = false;
                         var op0 = GetAstWithSubstitutions(multiplications[0], newSubstMapping, ref isSemiLinear, false);
+
+                        // For now we do not support semi-linear MBAs in the polynomial parts, although in practice nothing would prevent it.
                         if (isSemiLinear)
+                        {
+                            Debugger.Break();
+                            return null;
                             throw new InvalidOperationException("Constants are not allowed in polynomials during simplification!");
+                        }
                         var op1 = GetAstWithSubstitutions(multiplications[1], newSubstMapping, ref isSemiLinear, false);
 
                         var poly = ctx.Mul(op0, op1);
@@ -822,6 +829,12 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
+            // Bail out if there are more than three variables.
+            // Nothing prevents more variables, but in general more than 3 variables indicates that there are bitwise parts
+            // that we are not handling.
+            if (uniqueBases.Count > 3)
+                return null;
+
             // Compute the dense vector size as a heuristic.
             ulong vecSize = 1;
             foreach (var degree in uniqueBases.Values)
@@ -922,6 +935,8 @@ namespace Mba.Simplifier.Pipeline
                 newTerms.Add(ctx.Constant(0, width));
 
             var result = ctx.Add(newTerms);
+            // Constant fold.
+            result = ctx.RecursiveSimplify(result);
             return result;
         }
 
@@ -959,6 +974,347 @@ namespace Mba.Simplifier.Pipeline
             }
 
             return false;
+        }
+
+        // Recursive try to expand the polynomial parts, then reduce.
+        public AstIdx ExpandReduce(AstIdx id)
+        {
+            var substMapping = new Dictionary<AstIdx, AstIdx>();
+            var result = TryExpand(id, substMapping, true);
+
+            List<AstIdx> terms = new();
+            var width = ctx.GetWidth(id);
+            foreach(var (monom, coeff) in result.coeffs)
+            {
+                List<AstIdx> factors = new();
+                factors.Add(ctx.Constant(coeff, width));
+                foreach(var (varIdx, degree) in monom.varDegrees)
+                {
+                    // Skip a constant factor of 1
+                    if (degree == 0)
+                        continue;
+                    if(degree == 1)
+                    {
+                        factors.Add(varIdx);
+                        continue;
+                    }
+
+                    var pow = ctx.Pow(varIdx, ctx.Constant(degree, width));
+                    factors.Add(pow);
+                }
+
+                var product = ctx.Mul(factors);
+                terms.Add(product);
+            }
+
+            // Convert the reduced polynomial to an ast.
+            var sum = ctx.Add(terms);
+
+            // Back substitute the substitute variables.
+            var inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
+            sum = ApplyBackSubstitution(ctx, sum, inverseMapping);
+
+            // Try to simplify using the general simplifier.
+            sum = ctx.RecursiveSimplify(sum);
+            sum = SimplifyViaRecursiveSiMBA(sum);
+
+            // Reject solution if it is more complex.
+            if (ctx.GetCost(sum) > ctx.GetCost(id))
+                return id;
+
+            return sum;
+        }
+
+        // Recursively expand and reduce polynomial parts.
+        private IntermediatePoly TryExpand(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, bool isRoot)
+        {
+            var width = ctx.GetWidth(id);
+            var opcode = ctx.GetOpcode(id);
+            IntermediatePoly resultPoly = null;
+
+            // Substitute a node.
+            var subst = (AstIdx id) =>
+            {
+                var subst = GetSubstitution(id, substMapping);
+                var poly = new IntermediatePoly(width);
+                var monom = new IntermediateMonomial(new Dictionary<AstIdx, ulong>() { { subst, 1 } });
+                poly.Sum(monom, 1);
+                return poly;
+            };
+
+            switch(opcode)
+            {
+                case AstOp.Mul:
+                    var factors = GetRootMultiplications(ctx, id);
+                    var facPolys = factors.Select(x => TryExpand(x, substMapping, false)).ToList();
+                    var product = Mul(facPolys);
+                    resultPoly = product;
+
+                    // In this case we should probably distribute the coefficient down always.
+                    break;
+                case AstOp.Add:
+                    var terms = GetRootTerms(ctx, id);
+                    var termPolys = terms.Select(x => TryExpand(x, substMapping, false)).ToList();
+                    var sum = Add(termPolys);
+                    resultPoly = sum;
+
+                    break;
+
+                case AstOp.Pow:
+                    var raisedTo = ctx.TryGetConstantValue(ctx.GetOp1(id));
+                    if (raisedTo == null)
+                        throw new InvalidOperationException($"TODO: Handle powers of nonconstant degree");
+
+                    // Unroll the power into repeated multiplications, then recurse down.
+                    var facs = Enumerable.Repeat(ctx.GetOp0(id), (int)(uint)raisedTo).ToList();
+                    var mul = ctx.Mul(facs);
+                    resultPoly = TryExpand(mul, substMapping, false);
+
+                    break;
+
+                // In the case of a symbol, just directly convert it a polynomial.
+                case AstOp.Symbol:
+                    var symbolPoly = new IntermediatePoly(width);
+                    var symbolMonomial = new IntermediateMonomial(new Dictionary<AstIdx, ulong>() { { id, 1 } });
+                    symbolPoly.coeffs[symbolMonomial] = 1;
+                    resultPoly = symbolPoly;
+                    break;
+
+                case AstOp.Constant:
+                    var constPoly = new IntermediatePoly(width);
+                    var constant = ctx.GetConstantValue(id);
+                    var constMonom = IntermediateMonomial.Constant(ctx, width);
+                    constPoly.coeffs[constMonom] = constant;
+                    resultPoly = constPoly;
+                    break;
+
+                case AstOp.And:
+                case AstOp.Or:
+                case AstOp.Xor:
+                    // Recursively try to expand and reduce the results.
+                    var v0 = ExpandReduce(ctx.GetOp0(id));
+                    var v1 = ExpandReduce(ctx.GetOp1(id));
+                    var bitwise = ctx.Binop(opcode, v0, v1);
+
+                    // Substitute the bitwise operation.
+                    var poly = subst(bitwise);
+                    return poly;
+                    break;
+
+                case AstOp.Neg:
+                    // In the case of a negation, we can apply the identify ~x = -x-1
+                    var neg1 = ctx.Constant(ulong.MaxValue, width);
+                    var negated = ctx.Add(neg1, ctx.Mul(neg1, ctx.GetOp0(id)));
+                    // Forward the isRoot argument.
+                    return TryExpand(negated, substMapping, isRoot);
+
+                default:
+                    return null;
+            }
+
+            // If this is the root of a polynomial part, we want to try and reduce it.
+            // Alternatively we may apply a reduction if there are too many terms.
+            bool shouldReduce = isRoot || resultPoly?.coeffs?.Count > 10;
+            if(shouldReduce && resultPoly != null)
+            {
+                resultPoly = TryReduce(resultPoly);
+            }
+
+            // TODO: Backoff heuristic if the swell is still too large.
+            return resultPoly;
+        }
+
+        private IntermediatePoly Add(IReadOnlyList<IntermediatePoly> polys)
+        {
+            var width = polys.First().bitWidth;
+            ulong constSum = 0;
+            var outPoly = new IntermediatePoly(width);
+            foreach(var poly in polys)
+            {
+                foreach(var (monom, coeff) in poly.coeffs)
+                {
+                    outPoly.Sum(monom, coeff);
+                }
+            }
+
+            return outPoly;
+        }
+
+        private IntermediatePoly Mul(IReadOnlyList<IntermediatePoly> polys)
+        {
+            var width = polys.First().bitWidth;
+            ulong coeffSum = 1;
+            var outPoly = new IntermediatePoly(width);
+            // Set the initial polynomial to `1`.
+            outPoly.coeffs[IntermediateMonomial.Constant(ctx, width)] = 1;
+            foreach(var poly in polys)
+            {
+                outPoly = Mul(outPoly, poly);   
+            }
+
+            return outPoly;
+        }
+
+        private IntermediatePoly Mul(IntermediatePoly a, IntermediatePoly b)
+        {
+            var outPoly = new IntermediatePoly(a.bitWidth);
+            foreach(var (monomA, coeffA) in a.coeffs)
+            {
+                var isAConstant = IsConstant(monomA);
+                foreach(var (monomB, coeffB) in b.coeffs)
+                {
+                    var newCoeff = coeffA * coeffB;
+                    newCoeff &= a.moduloMask;
+
+                    // Then we need to construct a new monomial.
+                    var newMonom = Mul(monomA, monomB);
+                    outPoly.Sum(newMonom, newCoeff);
+                }
+            }
+
+            return outPoly;
+        }
+
+        private IntermediateMonomial Mul(IntermediateMonomial a, IntermediateMonomial b)
+        {
+            // If both are a constant, return the first monomial.
+            var isAConstant = IsConstant(a);
+            var isBConstant = IsConstant(b);
+            if (isAConstant && isBConstant)
+                return a;
+            // If one is a constant, return the other.
+            if (isAConstant)
+                return b;
+            if (isBConstant)
+                return a;
+            // Otherwise we need to multiply.
+            var outputDict = new Dictionary<AstIdx, ulong>();
+            foreach (var (basis, deg) in a.varDegrees)
+            {
+                outputDict.TryAdd(basis, 0);
+                outputDict[basis] += deg;
+            }
+            foreach (var (basis, deg) in b.varDegrees)
+            {
+                outputDict.TryAdd(basis, 0);
+                outputDict[basis] += deg;
+            }
+
+            return new IntermediateMonomial(outputDict);
+        }
+
+        private bool IsConstant(IntermediateMonomial monom)
+        {
+            if (monom.varDegrees.Count != 1)
+                return false;
+            var asConstant = ctx.TryGetConstantValue(monom.varDegrees.First().Key);
+            if (asConstant == null)
+                return false;
+            Debug.Assert(asConstant.Value == 1);
+            Debug.Assert(monom.varDegrees.First().Value <= 1);
+            return true;
+        }
+
+        private IntermediatePoly TryReduce(IntermediatePoly poly)
+        {
+            var uniqueBases = new Dictionary<AstIdx, ulong>();
+            foreach (var monom in poly.coeffs.Keys)
+            {
+                foreach (var (basis, degree) in monom.varDegrees)
+                {
+                    uniqueBases.TryAdd(basis, 0);
+                    var oldDegree = uniqueBases[basis];
+                    if (degree > oldDegree)
+                        uniqueBases[basis] = degree;
+                }
+            }
+
+            // For now we only support up to 8 variables. Note that in practice this limit could be increased.
+            if (uniqueBases.Count > 8)
+                return poly;
+
+            // Place a hard limit on the max degree.
+            ulong limit = 254;
+            if (uniqueBases.Any(x => x.Value > limit))
+                return poly;
+
+            ulong matrixSize = 1;
+            foreach (var deg in uniqueBases.Keys)
+            {
+                // Bail out if the result would be too large.
+                UInt128 result = matrixSize * deg;
+                if (result > (UInt128)(64*64*64))
+                    return poly;
+
+                matrixSize *= deg;
+                matrixSize &= poly.moduloMask;
+            }
+            
+            // Place a limit on the matrix size.
+            if (matrixSize > (ulong)(64*64*64))
+                return poly;
+
+            var width = poly.bitWidth;
+            var sparsePoly = new SparsePolynomial(uniqueBases.Count, (byte)width);
+
+            // Sort the bases alphabetically.
+            var orderedVars = uniqueBases.Keys.ToList();
+            orderedVars.Sort((x, y) => { return VarsFirst(ctx, x, y); });
+
+            // Fill in the sparse polynomial data structure.
+            var degrees = new byte[orderedVars.Count];
+            foreach (var (monom, coeff) in poly.coeffs)
+            {
+                for(int varIdx = 0; varIdx < orderedVars.Count; varIdx++)
+                {
+                    var variable = orderedVars[varIdx];
+                    ulong degree = 0;
+                    monom.varDegrees.TryGetValue(variable, out degree);
+                    degrees[varIdx] = (byte)degree;
+                }
+
+                // Add this momomial to the sparse polynomial.
+                var m = new Monomial(degrees);
+                sparsePoly.Sum(m, coeff);
+            }
+
+            // Reduce.
+            var simplified = PolynomialReducer.Reduce(sparsePoly);
+            var oldCount = poly.coeffs.Count(x => x.Value != 0);
+            var newCount = simplified.coeffs.Count(x => x.Value != 0);
+            // If we got a result with more terms, skip it.
+            // This is required when doing expansion, since expansion is exponential in the number of terms.
+            if(newCount > oldCount)
+                return poly;
+
+
+            var outPoly = new IntermediatePoly(width);
+            // Otherwise we can convert the sparse polynomial back to an AST.
+            foreach(var (monom, coeff) in simplified.coeffs)
+            {
+                if (coeff == 0)
+                    continue;
+
+                Dictionary<AstIdx, ulong> varDegrees = new();
+                for(int i = 0; i < orderedVars.Count; i++)
+                {
+                    var deg = monom.GetVarDeg(i);
+                    if (deg == 0)
+                        continue;
+                    varDegrees.Add(orderedVars[i], deg);
+                }
+
+                // Handle the case of a constant offset.
+                if(varDegrees.Count == 0)
+                {
+                    varDegrees.Add(ctx.Constant(1, width), 1);
+                }
+
+                var m = new IntermediateMonomial(varDegrees);
+                outPoly.Sum(m, coeff);
+            }
+
+            return outPoly;
         }
 
         private static AstIdx ApplyBackSubstitution(AstCtx ctx, AstIdx id, Dictionary<AstIdx, AstIdx> backSubstitutions)

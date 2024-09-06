@@ -11,7 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Wintellect.PowerCollections;
 
-namespace Mba.Testing.PolyTesting
+namespace Mba.Simplifier.Polynomial
 {
     public struct MonomialWithCoeff
     {

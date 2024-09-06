@@ -83,6 +83,12 @@ impl Arena {
         // TODO: If the second part is a constant, swap the operands and apply constant folding.
         } else if let SimpleAst::Constant { c: c1, data } = b_value {
             is_one_part_constant = true;
+
+            if *c1 == 1 {
+                return a;
+            } else if *c1 == 0 {
+                return self.constant(0, self.get_width(a));
+            }
         }
 
         let width = self.get_bin_width(a, b);
@@ -605,7 +611,7 @@ impl AstPrinter {
             | SimpleAst::Or { a, b, data }
             | SimpleAst::Xor { a, b, data } => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
-                self.output.push_str(&format!(" {} ", operator));
+                self.output.push_str(&format!("{}", operator));
                 self.print_node(ctx, ctx.arena.get_node(*b));
             }
             SimpleAst::Zext { a, data } => {

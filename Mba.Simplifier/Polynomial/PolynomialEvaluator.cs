@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Mba.Testing.PolyTesting
+namespace Mba.Simplifier.Polynomial
 {
     public static class PolynomialEvaluator
     {
