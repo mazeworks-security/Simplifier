@@ -64,13 +64,9 @@ namespace Mba.Testing.PolyTesting
                 if (degrees.Count == 0)
                     continue;
 
-                // Get the factorial basis for this monomial
-                if(!factorialMap.TryGetValue(monom, out var expandedForm))
-                {
-                    expandedForm = GetSortedTerms(GetFactorialBasis(monom, 64));
-                    factorialMap[monom] = expandedForm;
-                }
-                
+                // Compute the expand form of this monomial's factorial basis
+                var expandedForm = GetCachedFactorialBasis(monom);
+
                 // Move the highest(current) degree term over to the new polynomial,
                 // then subtract the input polynomial by the lower degree parts.
                 var terms = expandedForm;
@@ -107,6 +103,18 @@ namespace Mba.Testing.PolyTesting
 
             Debug.Assert(input.coeffs.All(x => x.Value == 0));
             return outPoly;
+        }
+
+        private static IReadOnlyList<MonomialWithCoeff> GetCachedFactorialBasis(Monomial monom)
+        {
+            // Get the factorial basis for this monomial
+            if (!factorialMap.TryGetValue(monom, out var expandedForm))
+            {
+                expandedForm = GetSortedTerms(GetFactorialBasis(monom, 64));
+                factorialMap[monom] = expandedForm;
+            }
+
+            return expandedForm;
         }
 
         public static IReadOnlyList<MonomialWithCoeff> GetSortedTerms(SparsePolynomial s)
@@ -314,12 +322,17 @@ namespace Mba.Testing.PolyTesting
 
                 var degrees = monom.Degrees;
                 if (degrees.Count == 0)
-                    throw new InvalidOperationException("TODO: Handle constant terms");
+                    Debugger.Break();
 
-                var expanded = GetFactorialBasis(monom, input.width);
-                expanded.Multiply(coeff);
-                foreach (var (m, c) in expanded.coeffs)
+                var expanded = GetCachedFactorialBasis(monom);
+                foreach (var term in expanded)
                 {
+                    var m = term.monomial;
+                    var c = term.coeff;
+                    c &= input.moduloMask;
+
+                    c *= coeff;
+
                     if (c == 0)
                         continue;
 
@@ -331,3 +344,4 @@ namespace Mba.Testing.PolyTesting
         }
     }
 }
+

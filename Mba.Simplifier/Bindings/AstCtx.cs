@@ -199,6 +199,8 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
+        // Apply term rewriting, but not recursively.
+        public unsafe AstIdx SingleSimplify(AstIdx id) => Api.ContextSingleSimplify(this, id);
         // Apply recursive term rewriting via ISLE.
         public unsafe AstIdx RecursiveSimplify(AstIdx id) => Api.ContextRecursiveSimplify(this, id);
 
@@ -294,6 +296,9 @@ namespace Mba.Simplifier.Bindings
 
             [DllImport("eq_sat")]
             public unsafe static extern ulong* ContextJit(OpaqueAstCtx* ctx, AstIdx id, ulong mask, uint isMultiBit, uint bitWidth, AstIdx* variableArray, ulong varCount, ulong numCombinations, ulong* rwxJitPage, ulong* outputArray);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextSingleSimplify(OpaqueAstCtx* ctx, AstIdx id);
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextRecursiveSimplify(OpaqueAstCtx* ctx, AstIdx id);
