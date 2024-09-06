@@ -1,6 +1,6 @@
 ﻿using Iced.Intel;
 using Mba.Simplifier.Bindings;
-using Mba.Testing.PolyTesting;
+using Mba.Simplifier.Polynomial;
 using Mba.Utility;
 using System;
 using System.Collections.Generic;

@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Mba.Testing.PolyTesting
+namespace Mba.Simplifier.Polynomial
 {
     // Represents a multivariate monomial, with up to 8 variables.
     public struct Monomial : IEquatable<Monomial>, IComparable<Monomial>
