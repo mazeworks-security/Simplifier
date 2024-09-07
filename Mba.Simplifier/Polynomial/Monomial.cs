@@ -18,7 +18,7 @@ namespace Mba.Simplifier.Polynomial
 
         public Monomial(params byte[] varDegrees)
         {
-            Debug.Assert(varDegrees.Length < 8);
+            Debug.Assert(varDegrees.Length <= 8);
             for (int i = 0; i < varDegrees.Length; i++)
             {
                 var degree = (ulong)varDegrees[i];
