@@ -564,35 +564,31 @@ namespace Mba.Simplifier.Pipeline
         private AstIdx? SimplifyParts(uint bitSize, IReadOnlyList<PolynomialParts> polyParts)
         {
             var substMapping = new Dictionary<AstIdx, AstIdx>();
-            bool isSemiLinear = false;
 
             // Rewrite as a sum of polynomial parts, where the factors are linear MBAs with substitution of nonlinear parts.
             HashSet<AstIdx> varSet = new();
+            var bannedParts = new List<PolynomialParts>();
             List<PolynomialParts> partsWithSubstitutions = new();
-            ulong maxDegree = 0;
-            int maxVarsInOnePart = 0;
             foreach(var polyPart in polyParts)
             {
+                bool isSemiLinear = false;
                 Dictionary<AstIdx, ulong> powers = new();
-                ulong degree = 0;
-
-                HashSet<AstIdx> partVars = new();
                 foreach(var factor in polyPart.ConstantPowers)
                 {
                     var withSubstitutions = GetAstWithSubstitutions(factor.Key, substMapping, ref isSemiLinear);
-                    partVars.AddRange(ctx.CollectVariables(withSubstitutions));
+                    varSet.AddRange(ctx.CollectVariables(withSubstitutions));
                     powers.TryAdd(withSubstitutions, 0);
                     powers[withSubstitutions] += factor.Value;
-                    degree += factor.Value;
                 }
 
-                varSet.AddRange(partVars);
+                // TODO: Handle the semi-linear case.
+                if(isSemiLinear)
+                {
+                    bannedParts.Add(polyPart);
+                    continue;
+                }
 
                 partsWithSubstitutions.Add(new PolynomialParts(polyPart.width, polyPart.coeffSum, powers, polyPart.Others));
-                if (degree > maxDegree)
-                    maxDegree = degree;
-                if(partVars.Count > maxVarsInOnePart)
-                    maxVarsInOnePart = partVars.Count;   
             }
 
             var allVars = varSet.OrderBy(x => ctx.GetSymbolName(x)).ToList().AsReadOnly();
@@ -601,9 +597,6 @@ namespace Mba.Simplifier.Pipeline
 
             // Get all possible conjunctions of variables.
             var variableCombinations = LinearSimplifier.GetVariableCombinations(allVars.Count);
-
-            // Keep track of which variables are demanded by which combination,
-            // as well as which result vector idx corresponds to which combination.
             List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx = new();
             for (int i = 0; i < variableCombinations.Length; i++)
             {
@@ -612,10 +605,10 @@ namespace Mba.Simplifier.Pipeline
                 combToMaskAndIdx.Add((myMask, (int)myIndex));
             }
 
-            Dictionary<ulong, AstIdx> basisSubstitutions = new();
+            // Rewrite each polynomial using the basis of the SiMBA paper.
+            // TODO: Extend to the semi-linear case.
             var moduloMask = (ulong)ModuloReducer.GetMask(bitSize);
-
-            var bannedParts = new List<PolynomialParts>();
+            Dictionary<ulong, AstIdx> basisSubstitutions = new();
             List<AstIdx> polys = new();
             foreach (var polyPart in partsWithSubstitutions)
             {
@@ -624,7 +617,7 @@ namespace Mba.Simplifier.Pipeline
                 foreach (var (factor, degree) in polyPart.ConstantPowers)
                 {
                     // Construct a result vector for the linear part.
-                    var resultVec = LinearSimplifier.JitResultVector(ctx, bitSize, moduloMask, allVars, factor, isSemiLinear, numCombinations);
+                    var resultVec = LinearSimplifier.JitResultVector(ctx, bitSize, moduloMask, allVars, factor, multiBit: false, numCombinations);
 
                     // Change to the basis referenced in the SiMBA paper. It's just nicer to work with here IMO.
                     var anfVector = new ulong[resultVec.Length];
@@ -655,7 +648,7 @@ namespace Mba.Simplifier.Pipeline
                         if (coeff == 0)
                             continue;
 
-                        // When the basis is the constant offset, we want to make it just `1`.
+                        // When the basis element corresponds to the constant offset, we want to make the base bitwise expression be `1`.
                         // Otherwise we just substitute it with a variable.
                         AstIdx basis = ctx.Constant(1, (byte)bitSize);
                         if(i != 0)
@@ -703,9 +696,10 @@ namespace Mba.Simplifier.Pipeline
                 polys.Add(poly.Value);
             }
 
+            // Reduce the polynomial parts.
             var linComb = ctx.Add(polys);
             var reduced = ExpandReduce(linComb, false);
-
+            // Add back banned parts
             if(bannedParts.Any())
             {
                 var sum = ctx.Add(bannedParts.Select(x => GetAstForPolynomialParts(x)));
