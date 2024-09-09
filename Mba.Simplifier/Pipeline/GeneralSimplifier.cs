@@ -134,7 +134,7 @@ namespace Mba.Simplifier.Pipeline
             var variables = ctx.CollectVariables(withSubstitutions);
             if (polySimplify && substMapping.Count > 0 && ctx.GetHasPoly(id))
             {
-                var maybeSimplified = TrySimplifyMixedPolynomialParts2(withSubstitutions, substMapping, inverseMapping, variables);
+                var maybeSimplified = TrySimplifyMixedPolynomialParts(withSubstitutions, substMapping, inverseMapping, variables);
                 if (maybeSimplified != null && maybeSimplified.Value != id)
                 {
                     // Reset internal state.
@@ -522,171 +522,19 @@ namespace Mba.Simplifier.Pipeline
             return withSubstitutions;
         }
 
-        // Identify and try to eliminate polynomial MBA parts.
         private AstIdx? TrySimplifyMixedPolynomialParts(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, Dictionary<AstIdx, AstIdx> inverseSubstMapping, List<AstIdx> varList)
         {
-            // Decompose the input expression into a summation of terms.
-            var terms = GetRootTerms(ctx,id);
-
-            // Decompose the summation of terms into a list of possible candidates, and a list of terms that cannot possibly be candidates.
-            List<AstIdx> cands = new();
-            List<AstIdx> other = new();
-            foreach (var term in terms)
-            {
-                var opcode = ctx.GetOpcode(term);
-
-                // (subst) is a possible candidate,
-                if (inverseSubstMapping.TryGetValue(term, out var existing))
-                {
-                    cands.Add(existing);
-                }
-                else if (opcode == AstOp.Neg && inverseSubstMapping.TryGetValue(ctx.GetOp0(term), out existing))
-                {
-                    // Get the term without negation.
-                    var op0 = existing;
-
-                    // Rewrite ~x as -x-1, and throw the -1 offset into the term list.
-                    var negativeOne = ctx.Constant(ulong.MaxValue, ctx.GetWidth(op0));
-                    op0 = ctx.Mul(negativeOne, op0);
-                    other.Insert(0, negativeOne);
-                    cands.Add(op0);
-                }
-                // coeff * subst is another possible candidate
-                else if (opcode == AstOp.Mul && inverseSubstMapping.TryGetValue(ctx.GetOp1(term), out existing))
-                {
-                    cands.Add(ctx.Mul(ctx.GetOp0(term), existing));
-                }
-                else
-                {
-                    other.Add(term);
-                }
-            }
-
-            // Now we have a summation of candidates where each cand could possibly be a polynomial MBA.
-            // Walk through the terms and decompose them into polynomial parts.
-            List<AstIdx> degreeTwoPolys = new();
-            List<AstIdx> notDegreeTwoPolys = new();
-            var newSubstMapping = new Dictionary<AstIdx, AstIdx>();
-            foreach (var cand in cands)
-            {
-                // Split the candidate into a summation of terms.
-                var candTerms = GetRootTerms(ctx, cand);
-
-                // Decompose each term into a degree two polynomial.
-                foreach (var term in candTerms)
-                {
-                    var multiplications = GetRootMultiplications(ctx, term);
-
-                    // If we have 1111*x*y, rewrite as (1111*x)*y.
-                    if (multiplications.Count == 3 && ctx.IsConstant(multiplications[0]))
-                    {
-                        multiplications[0] = ctx.Mul(multiplications[0], multiplications[1]);
-                        multiplications.RemoveAt(1);
-                    }
-
-                    if (multiplications.Count == 2)
-                    {
-                        bool isSemiLinear = false;
-                        var op0 = GetAstWithSubstitutions(multiplications[0], newSubstMapping, ref isSemiLinear, false);
-
-                        // For now we do not support semi-linear MBAs in the polynomial parts, although in practice nothing would prevent it.
-                        if (isSemiLinear)
-                        {
-                            Debugger.Break();
-                            return null;
-                            throw new InvalidOperationException("Constants are not allowed in polynomials during simplification!");
-                        }
-                        var op1 = GetAstWithSubstitutions(multiplications[1], newSubstMapping, ref isSemiLinear, false);
-
-                        var poly = ctx.Mul(op0, op1);
-                        degreeTwoPolys.Add(poly);
-                    }
-
-                    else
-                    {
-                        // Otherwise this is not a polynomial part.
-                        notDegreeTwoPolys.Add(term);
-                    }
-                }
-            }
-
-            // If we failed to find any degree two polynomials, we can exit early.
-            if (!degreeTwoPolys.Any())
-                return null;
-
-            if (degreeTwoPolys.Any())
-            {
-                // If we have a degree two polynomial simplify it.
-                // Note that we only support up to two vars for now,
-                AstIdx? simpl = null;
-                var allVars = degreeTwoPolys.SelectMany(x => ctx.CollectVariables(x)).ToHashSet();
-                if (allVars.Count == 2)
-                {
-                    var hello = ctx.Add(degreeTwoPolys);
-                    simpl = MixedPolynomialSimplifier.Simplify(ctx, ctx.GetWidth(degreeTwoPolys.First()), degreeTwoPolys);
-                }
-
-                else
-                {
-                    simpl = ctx.Add(degreeTwoPolys);
-                }
-
-                simpl = ApplyBackSubstitution(ctx, simpl.Value, newSubstMapping.ToDictionary(x => x.Value, x => x.Key));
-
-                degreeTwoPolys.Clear();
-                degreeTwoPolys.Add(simpl.Value);
-            }
-
-            // Now comes the fun part: Trying to piece the parts back together.
-            var termList = new List<AstIdx>();
-            // First we add all of non-candidates
-            termList.AddRange(other);
-
-            // Then we add all of the nonpolynomial parts of the candidates.
-            termList.AddRange(notDegreeTwoPolys);
-
-            // And finally we add the polynomial parts.
-            termList.AddRange(degreeTwoPolys);
-
-            // Sum up all of the parts.
-            var sum = ctx.Add(termList);
-
-            // Simplify the final result via term rewriting.
-            bool isSl = false;
-            sum = SimplifyViaTermRewriting(sum);
-            // Apply substitution again to get a linear result.
-            sum = GetAstWithSubstitutions(sum, substMapping, ref isSl);
-
-            // Simplify the linear part via SiMBA, and disable the polynomial simplification step
-            // to avoid infinite recursion.
-            sum = SimplifyViaRecursiveSiMBA(sum, polySimplify: false);
-
-            varList.Clear();
-            ctx.CollectVariables(sum, varList);
-            var vars = varList.ToHashSet();
-            inverseSubstMapping.Clear();
-            foreach (var (value, substitute) in substMapping.ToList())
-            {
-                if (!vars.Contains(substitute))
-                    substMapping.Remove(value);
-                else
-                    inverseSubstMapping.Add(substitute, value);
-            }
-
-            return sum;
-        }
-
-        private AstIdx? TrySimplifyMixedPolynomialParts2(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, Dictionary<AstIdx, AstIdx> inverseSubstMapping, List<AstIdx> varList)
-        {
+            // Back substitute in the (possibly) polynomial parts
             var newId = ApplyBackSubstitution(ctx, id, inverseSubstMapping);
+
+            // Decompose each term into structured polynomial parts
             var terms = GetRootTerms(ctx, newId);
-
             List<PolynomialParts> polyParts = terms.Select(x => GetPolynomialParts(ctx, x)).ToList();
-
+            // Remove anything we cannot handle.
             var banned = polyParts.Where(x => x.Others.Any()).ToList();
             polyParts.RemoveAll(x => x.Others.Any());
 
-            // Back substitute variables, decompose the terms into polynomial parts.
+            // Apply the simplification.
             var result = SimplifyParts(ctx.GetWidth(id), polyParts);
             if (result == null)
                 return null;
@@ -712,6 +560,7 @@ namespace Mba.Simplifier.Pipeline
             return result;
         }
 
+        // Rewrite factors of polynomials as linear MBAs(with substitution) with a canonical basis, expand & reduce, then back substitute.
         private AstIdx? SimplifyParts(uint bitSize, IReadOnlyList<PolynomialParts> polyParts)
         {
             var substMapping = new Dictionary<AstIdx, AstIdx>();
@@ -827,7 +676,8 @@ namespace Mba.Simplifier.Pipeline
                     factors.Add(ctx.Pow(sum, ctx.Constant(degree, (byte)bitSize)));
                 }
 
-                // If the expanded form would be too large, we want to block this step. It would take too long.
+                // If the expanded form would be too large, we want to block this polynomial.
+                // It would take too long.
                 if(size >= 1000)
                 {
                     bannedParts.Add(polyPart);
@@ -853,8 +703,6 @@ namespace Mba.Simplifier.Pipeline
                 polys.Add(poly.Value);
             }
 
-            
-
             var linComb = ctx.Add(polys);
             var reduced = ExpandReduce(linComb, false);
 
@@ -876,11 +724,6 @@ namespace Mba.Simplifier.Pipeline
             if (value > ulong.MaxValue)
                 return ulong.MaxValue;
             return (ulong)value;
-        }
-
-        private void GetAnf(ulong[] variableCombinations, List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx, ulong[] resultVector, ulong[] outAnfVector)
-        {
-
         }
 
         public static IReadOnlyList<AstIdx> GetRootTerms(AstCtx ctx, AstIdx id)
