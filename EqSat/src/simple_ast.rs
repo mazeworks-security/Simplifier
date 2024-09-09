@@ -305,7 +305,7 @@ impl Arena {
 
     pub fn get_bin_cost(&self, a: AstIdx, b: AstIdx) -> u32 {
         let c1 = self.get_data(a).cost;
-        let c2 = self.get_data(a).cost;
+        let c2 = self.get_data(b).cost;
         (1 as u32).saturating_add(c1.saturating_add(c2))
     }
 
