@@ -134,18 +134,15 @@ namespace Mba.Simplifier.Pipeline
             var variables = ctx.CollectVariables(withSubstitutions);
             if (polySimplify && substMapping.Count > 0 && ctx.GetHasPoly(id))
             {
-                if (ctx.GetAstString(id).Length > 200)
+                var maybeSimplified = TrySimplifyMixedPolynomialParts2(withSubstitutions, substMapping, inverseMapping, variables);
+                if (maybeSimplified != null && maybeSimplified.Value != id)
                 {
-                    var maybeSimplified = TrySimplifyMixedPolynomialParts2(withSubstitutions, substMapping, inverseMapping, variables);
-                    if (maybeSimplified != null && maybeSimplified.Value != id)
-                    {
-                        // Reset internal state.
-                        substMapping.Clear();
-                        isSemiLinear = false;
-                        withSubstitutions = GetAstWithSubstitutions(maybeSimplified.Value, substMapping, ref isSemiLinear);
-                        inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
-                        variables = ctx.CollectVariables(withSubstitutions);
-                    }
+                    // Reset internal state.
+                    substMapping.Clear();
+                    isSemiLinear = false;
+                    withSubstitutions = GetAstWithSubstitutions(maybeSimplified.Value, substMapping, ref isSemiLinear);
+                    inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
+                    variables = ctx.CollectVariables(withSubstitutions);
                 }
             }
 
@@ -749,16 +746,6 @@ namespace Mba.Simplifier.Pipeline
                     maxVarsInOnePart = partVars.Count;   
             }
 
-            // This is lazy, we can partition the parts into groups with the same variables,
-            // and also allow for more than three variables if the degree is low enough.
-            if (varSet.Count > 7)
-                return null;
-            if (maxVarsInOnePart > 3)
-                return null;
-            // Higher degrees could be supported through factoring and other tricks.
-            if (maxDegree > 6)
-                return null;
-
             var allVars = varSet.OrderBy(x => ctx.GetSymbolName(x)).ToList().AsReadOnly();
             var numCombinations = (ulong)Math.Pow(2, allVars.Count);
             var groupSizes = LinearSimplifier.GetGroupSizes(allVars.Count);
@@ -776,12 +763,15 @@ namespace Mba.Simplifier.Pipeline
                 combToMaskAndIdx.Add((myMask, (int)myIndex));
             }
 
-            List<AstIdx> polys = new();
             Dictionary<ulong, AstIdx> basisSubstitutions = new();
             var moduloMask = (ulong)ModuloReducer.GetMask(bitSize);
+
+            var bannedParts = new List<PolynomialParts>();
+            List<AstIdx> polys = new();
             foreach (var polyPart in partsWithSubstitutions)
             {
                 List<AstIdx> factors = new();
+                ulong size = 1;
                 foreach (var (factor, degree) in polyPart.ConstantPowers)
                 {
                     // Construct a result vector for the linear part.
@@ -790,6 +780,23 @@ namespace Mba.Simplifier.Pipeline
                     // Change to the basis referenced in the SiMBA paper. It's just nicer to work with here IMO.
                     var anfVector = new ulong[resultVec.Length];
                     MixedPolynomialSimplifier.GetAnfVector(bitSize, allVars, variableCombinations, combToMaskAndIdx, resultVec, anfVector);
+
+                    // Count the number of non zero elements.
+                    ulong numNonZeroes = 0;
+                    for (int i = 0; i < anfVector.Length; i++)
+                    {
+                        // Skip zero elements.
+                        var coeff = anfVector[i];
+                        if (coeff == 0)
+                            continue;
+                        numNonZeroes++;
+                    }
+
+                    // Calculate the max possible size of the resulting expression when multiplied out.
+                    for(ulong i = 0; i < degree; i++)
+                    {
+                        size = SaturatingMul(size, numNonZeroes);
+                    }
 
                     List<AstIdx> terms = new();
                     for (int i = 0; i < anfVector.Length; i++)
@@ -820,6 +827,13 @@ namespace Mba.Simplifier.Pipeline
                     factors.Add(ctx.Pow(sum, ctx.Constant(degree, (byte)bitSize)));
                 }
 
+                // If the expanded form would be too large, we want to block this step. It would take too long.
+                if(size >= 1000)
+                {
+                    bannedParts.Add(polyPart);
+                    continue;
+                }
+
                 // Add in the coefficient.
                 AstIdx? poly = null;
                 var constOffset = ctx.Constant(polyPart.coeffSum, (byte)bitSize);
@@ -839,12 +853,29 @@ namespace Mba.Simplifier.Pipeline
                 polys.Add(poly.Value);
             }
 
+            
+
             var linComb = ctx.Add(polys);
             var reduced = ExpandReduce(linComb, false);
 
+            if(bannedParts.Any())
+            {
+                var sum = ctx.Add(bannedParts.Select(x => GetAstForPolynomialParts(x)));
+                reduced = ctx.Add(reduced, sum);
+            }
+
             var invBases = basisSubstitutions.ToDictionary(x => x.Value, x => LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, 1, x.Key).Value);
             var backSub = ApplyBackSubstitution(ctx, reduced, invBases);
+            backSub = ApplyBackSubstitution(ctx, backSub, substMapping.ToDictionary(x => x.Value, x => x.Key));
             return backSub;
+        }
+
+        private ulong SaturatingMul(ulong a, ulong b)
+        {
+            var value = (UInt128)a * (UInt128)b;
+            if (value > ulong.MaxValue)
+                return ulong.MaxValue;
+            return (ulong)value;
         }
 
         private void GetAnf(ulong[] variableCombinations, List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx, ulong[] resultVector, ulong[] outAnfVector)
