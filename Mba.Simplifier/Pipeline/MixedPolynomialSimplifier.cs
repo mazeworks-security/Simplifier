@@ -90,7 +90,7 @@ namespace Mba.Simplifier.Pipeline
             for (int i = 0; i < resultVectors.Count; i++)
             {
                 var outAnfVector = new ulong[(int)numCombinations];
-                GetAnfVector(variableCombinations, combToMaskAndIdx, resultVectors[i], outAnfVector);
+                GetAnfVector(bitSize, allVars, variableCombinations, combToMaskAndIdx, resultVectors[i], outAnfVector);
                 anfVector.Add(outAnfVector);
             }
 
@@ -110,8 +110,9 @@ namespace Mba.Simplifier.Pipeline
             }
         }
 
-        private void GetAnfVector(ApInt[] variableCombinations, List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx, ApInt[] resultVector, ulong[] outAnfVector)
+        public static void GetAnfVector(uint bitSize, IReadOnlyList<AstIdx> allVars, ApInt[] variableCombinations, List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx, ApInt[] resultVector, ulong[] outAnfVector)
         {
+            var moduloMask = (ulong)ModuloReducer.GetMask(bitSize);
             var constantOffset = resultVector[0];
             for (int i = 1; i < resultVector.Length; i++)
                 resultVector[i] = moduloMask & resultVector[i] - constantOffset;
@@ -134,7 +135,8 @@ namespace Mba.Simplifier.Pipeline
                         // and isolate only the bit at the current bit index.
                         var maskForIndex = multiBit ? (ApInt)1 << bitIndex : moduloMask;
                         // Offset the result vector index such that we are fetching entries for the current bit index.
-                        var offset = bitIndex * numCombinations;
+                        //var offset = bitIndex * numCombinations;
+                        var offset = bitIndex * variableCombinations.Length;
                         for (int i = 0; i < variableCombinations.Length; i++)
                         {
                             // Fetch the result vector index for this conjunction.

@@ -1,4 +1,5 @@
 ﻿using Iced.Intel;
+using Mba.Common.MSiMBA;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Pipeline.Intermediate;
 using Mba.Simplifier.Polynomial;
@@ -133,11 +134,19 @@ namespace Mba.Simplifier.Pipeline
             var variables = ctx.CollectVariables(withSubstitutions);
             if (polySimplify && substMapping.Count > 0 && ctx.GetHasPoly(id))
             {
-                // Try to simplify the polynomial parts.
-                // Note that "TrySimplifyPolynomialParts" will update all of the data structures according(substMapping, inverseMapping, variables).
-                var maybeSimplified = TrySimplifyMixedPolynomialParts(withSubstitutions, substMapping, inverseMapping, variables);
-                if (maybeSimplified != null)
-                    withSubstitutions = maybeSimplified.Value;
+                if (ctx.GetAstString(id).Length > 200)
+                {
+                    var maybeSimplified = TrySimplifyMixedPolynomialParts2(withSubstitutions, substMapping, inverseMapping, variables);
+                    if (maybeSimplified != null && maybeSimplified.Value != id)
+                    {
+                        // Reset internal state.
+                        substMapping.Clear();
+                        isSemiLinear = false;
+                        withSubstitutions = GetAstWithSubstitutions(maybeSimplified.Value, substMapping, ref isSemiLinear);
+                        inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
+                        variables = ctx.CollectVariables(withSubstitutions);
+                    }
+                }
             }
 
             // If there are still more too many variables remaining, bail out.
@@ -670,6 +679,179 @@ namespace Mba.Simplifier.Pipeline
             return sum;
         }
 
+        private AstIdx? TrySimplifyMixedPolynomialParts2(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, Dictionary<AstIdx, AstIdx> inverseSubstMapping, List<AstIdx> varList)
+        {
+            var newId = ApplyBackSubstitution(ctx, id, inverseSubstMapping);
+            var terms = GetRootTerms(ctx, newId);
+
+            List<PolynomialParts> polyParts = terms.Select(x => GetPolynomialParts(ctx, x)).ToList();
+
+            var banned = polyParts.Where(x => x.Others.Any()).ToList();
+            polyParts.RemoveAll(x => x.Others.Any());
+
+            // Back substitute variables, decompose the terms into polynomial parts.
+            var result = SimplifyParts(ctx.GetWidth(id), polyParts);
+            if (result == null)
+                return null;
+
+            // Add back any banned parts.
+            if(banned.Any())
+            {
+                var sum = ctx.Add(banned.Select(x => GetAstForPolynomialParts(x)));
+                result = ctx.Add(result.Value, sum);
+            }
+
+            // Do a full back substitution again.
+            result = ApplyBackSubstitution(ctx, result.Value, inverseSubstMapping);
+
+            // Bail out if this resulted in a worse result.
+            var cost1 = ctx.GetCost(result.Value);
+            var cost2 = ctx.GetCost(newId);
+            if (cost1 > cost2)
+            {
+                return null;
+            }
+
+            return result;
+        }
+
+        private AstIdx? SimplifyParts(uint bitSize, IReadOnlyList<PolynomialParts> polyParts)
+        {
+            var substMapping = new Dictionary<AstIdx, AstIdx>();
+            bool isSemiLinear = false;
+
+            // Rewrite as a sum of polynomial parts, where the factors are linear MBAs with substitution of nonlinear parts.
+            HashSet<AstIdx> varSet = new();
+            List<PolynomialParts> partsWithSubstitutions = new();
+            ulong maxDegree = 0;
+            int maxVarsInOnePart = 0;
+            foreach(var polyPart in polyParts)
+            {
+                Dictionary<AstIdx, ulong> powers = new();
+                ulong degree = 0;
+
+                HashSet<AstIdx> partVars = new();
+                foreach(var factor in polyPart.ConstantPowers)
+                {
+                    var withSubstitutions = GetAstWithSubstitutions(factor.Key, substMapping, ref isSemiLinear);
+                    partVars.AddRange(ctx.CollectVariables(withSubstitutions));
+                    powers.TryAdd(withSubstitutions, 0);
+                    powers[withSubstitutions] += factor.Value;
+                    degree += factor.Value;
+                }
+
+                varSet.AddRange(partVars);
+
+                partsWithSubstitutions.Add(new PolynomialParts(polyPart.width, polyPart.coeffSum, powers, polyPart.Others));
+                if (degree > maxDegree)
+                    maxDegree = degree;
+                if(partVars.Count > maxVarsInOnePart)
+                    maxVarsInOnePart = partVars.Count;   
+            }
+
+            // This is lazy, we can partition the parts into groups with the same variables,
+            // and also allow for more than three variables if the degree is low enough.
+            if (varSet.Count > 7)
+                return null;
+            if (maxVarsInOnePart > 3)
+                return null;
+            // Higher degrees could be supported through factoring and other tricks.
+            if (maxDegree > 6)
+                return null;
+
+            var allVars = varSet.OrderBy(x => ctx.GetSymbolName(x)).ToList().AsReadOnly();
+            var numCombinations = (ulong)Math.Pow(2, allVars.Count);
+            var groupSizes = LinearSimplifier.GetGroupSizes(allVars.Count);
+
+            // Get all possible conjunctions of variables.
+            var variableCombinations = LinearSimplifier.GetVariableCombinations(allVars.Count);
+
+            // Keep track of which variables are demanded by which combination,
+            // as well as which result vector idx corresponds to which combination.
+            List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx = new();
+            for (int i = 0; i < variableCombinations.Length; i++)
+            {
+                var myMask = variableCombinations[i];
+                var myIndex = LinearSimplifier.GetGroupSizeIndex(groupSizes, myMask);
+                combToMaskAndIdx.Add((myMask, (int)myIndex));
+            }
+
+            List<AstIdx> polys = new();
+            Dictionary<ulong, AstIdx> basisSubstitutions = new();
+            var moduloMask = (ulong)ModuloReducer.GetMask(bitSize);
+            foreach (var polyPart in partsWithSubstitutions)
+            {
+                List<AstIdx> factors = new();
+                foreach (var (factor, degree) in polyPart.ConstantPowers)
+                {
+                    // Construct a result vector for the linear part.
+                    var resultVec = LinearSimplifier.JitResultVector(ctx, bitSize, moduloMask, allVars, factor, isSemiLinear, numCombinations);
+
+                    // Change to the basis referenced in the SiMBA paper. It's just nicer to work with here IMO.
+                    var anfVector = new ulong[resultVec.Length];
+                    MixedPolynomialSimplifier.GetAnfVector(bitSize, allVars, variableCombinations, combToMaskAndIdx, resultVec, anfVector);
+
+                    List<AstIdx> terms = new();
+                    for (int i = 0; i < anfVector.Length; i++)
+                    {
+                        // Skip zero elements.
+                        var coeff = anfVector[i];
+                        if (coeff == 0)
+                            continue;
+
+                        // When the basis is the constant offset, we want to make it just `1`.
+                        // Otherwise we just substitute it with a variable.
+                        AstIdx basis = ctx.Constant(1, (byte)bitSize);
+                        if(i != 0)
+                        {
+                            if (!basisSubstitutions.TryGetValue((ulong)i, out basis))
+                            {
+                                basis = ctx.Symbol($"basis{i}", (byte)bitSize);
+                                basisSubstitutions.Add((ulong)i, basis);
+                            }
+                        }
+
+                        var term = ctx.Mul(ctx.Constant(coeff, (byte)bitSize), basis);
+                        terms.Add(term);
+                    }
+
+                    // Add this as a factor.
+                    var sum = ctx.Add(terms);
+                    factors.Add(ctx.Pow(sum, ctx.Constant(degree, (byte)bitSize)));
+                }
+
+                // Add in the coefficient.
+                AstIdx? poly = null;
+                var constOffset = ctx.Constant(polyPart.coeffSum, (byte)bitSize);
+                if (factors.Any())
+                {
+                    poly = ctx.Mul(factors);
+                    poly = ctx.Mul(constOffset, poly.Value);
+                }
+
+                // If no factors exist, we have a constant term.
+                else
+                {
+                    poly = constOffset;
+                }
+
+  
+                polys.Add(poly.Value);
+            }
+
+            var linComb = ctx.Add(polys);
+            var reduced = ExpandReduce(linComb, false);
+
+            var invBases = basisSubstitutions.ToDictionary(x => x.Value, x => LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, 1, x.Key).Value);
+            var backSub = ApplyBackSubstitution(ctx, reduced, invBases);
+            return backSub;
+        }
+
+        private void GetAnf(ulong[] variableCombinations, List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx, ulong[] resultVector, ulong[] outAnfVector)
+        {
+
+        }
+
         public static IReadOnlyList<AstIdx> GetRootTerms(AstCtx ctx, AstIdx id)
         {
             var terms = new List<AstIdx>();
@@ -977,7 +1159,7 @@ namespace Mba.Simplifier.Pipeline
         }
 
         // Recursive try to expand the polynomial parts, then reduce.
-        public AstIdx ExpandReduce(AstIdx id)
+        public AstIdx ExpandReduce(AstIdx id, bool polySimplify = true)
         {
             var substMapping = new Dictionary<AstIdx, AstIdx>();
             var result = TryExpand(id, substMapping, true);
@@ -1016,7 +1198,7 @@ namespace Mba.Simplifier.Pipeline
 
             // Try to simplify using the general simplifier.
             sum = ctx.RecursiveSimplify(sum);
-            sum = SimplifyViaRecursiveSiMBA(sum);
+            sum = SimplifyViaRecursiveSiMBA(sum, polySimplify);
 
             // Reject solution if it is more complex.
             if (ctx.GetCost(sum) > ctx.GetCost(id))

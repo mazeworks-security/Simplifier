@@ -180,8 +180,9 @@ namespace Mba.Simplifier.Pipeline.Intermediate
             int hash = 17;
             foreach (var (var, deg) in varDegrees)
             {
-                hash = hash * 31 + var.GetHashCode();
-                hash = hash * 31 + deg.GetHashCode();
+                // The hashes must not be dependent on one another, since the order of the dictionary is not guaranteed.
+                var tempHash = (var.GetHashCode() * 31) + (deg.GetHashCode() * 17);
+                hash += tempHash;
             }
 
             return hash;
