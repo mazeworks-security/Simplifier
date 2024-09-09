@@ -1047,7 +1047,7 @@ namespace Mba.Simplifier.Pipeline
                 case AstOp.Mul:
                     var factors = GetRootMultiplications(ctx, id);
                     var facPolys = factors.Select(x => TryExpand(x, substMapping, false)).ToList();
-                    var product = Mul(facPolys);
+                    var product = IntermediatePoly.Mul(ctx,facPolys);
                     resultPoly = product;
 
                     // In this case we should probably distribute the coefficient down always.
@@ -1055,7 +1055,7 @@ namespace Mba.Simplifier.Pipeline
                 case AstOp.Add:
                     var terms = GetRootTerms(ctx, id);
                     var termPolys = terms.Select(x => TryExpand(x, substMapping, false)).ToList();
-                    var sum = Add(termPolys);
+                    var sum = IntermediatePoly.Add(termPolys);
                     resultPoly = sum;
 
                     break;
@@ -1099,7 +1099,6 @@ namespace Mba.Simplifier.Pipeline
                     // Substitute the bitwise operation.
                     var poly = subst(bitwise);
                     return poly;
-                    break;
 
                 case AstOp.Neg:
                     // In the case of a negation, we can apply the identify ~x = -x-1
@@ -1109,7 +1108,7 @@ namespace Mba.Simplifier.Pipeline
                     return TryExpand(negated, substMapping, isRoot);
 
                 default:
-                    return null;
+                    throw new InvalidOperationException($"Unrecognized operator: {opcode}");
             }
 
             // If this is the root of a polynomial part, we want to try and reduce it.
@@ -1122,97 +1121,6 @@ namespace Mba.Simplifier.Pipeline
 
             // TODO: Backoff heuristic if the swell is still too large.
             return resultPoly;
-        }
-
-        private IntermediatePoly Add(IReadOnlyList<IntermediatePoly> polys)
-        {
-            var width = polys.First().bitWidth;
-            ulong constSum = 0;
-            var outPoly = new IntermediatePoly(width);
-            foreach(var poly in polys)
-            {
-                foreach(var (monom, coeff) in poly.coeffs)
-                {
-                    outPoly.Sum(monom, coeff);
-                }
-            }
-
-            return outPoly;
-        }
-
-        private IntermediatePoly Mul(IReadOnlyList<IntermediatePoly> polys)
-        {
-            var width = polys.First().bitWidth;
-            ulong coeffSum = 1;
-            var outPoly = new IntermediatePoly(width);
-            // Set the initial polynomial to `1`.
-            outPoly.coeffs[IntermediateMonomial.Constant(ctx, width)] = 1;
-            foreach(var poly in polys)
-            {
-                outPoly = Mul(outPoly, poly);   
-            }
-
-            return outPoly;
-        }
-
-        private IntermediatePoly Mul(IntermediatePoly a, IntermediatePoly b)
-        {
-            var outPoly = new IntermediatePoly(a.bitWidth);
-            foreach(var (monomA, coeffA) in a.coeffs)
-            {
-                var isAConstant = IsConstant(monomA);
-                foreach(var (monomB, coeffB) in b.coeffs)
-                {
-                    var newCoeff = coeffA * coeffB;
-                    newCoeff &= a.moduloMask;
-
-                    // Then we need to construct a new monomial.
-                    var newMonom = Mul(monomA, monomB);
-                    outPoly.Sum(newMonom, newCoeff);
-                }
-            }
-
-            return outPoly;
-        }
-
-        private IntermediateMonomial Mul(IntermediateMonomial a, IntermediateMonomial b)
-        {
-            // If both are a constant, return the first monomial.
-            var isAConstant = IsConstant(a);
-            var isBConstant = IsConstant(b);
-            if (isAConstant && isBConstant)
-                return a;
-            // If one is a constant, return the other.
-            if (isAConstant)
-                return b;
-            if (isBConstant)
-                return a;
-            // Otherwise we need to multiply.
-            var outputDict = new Dictionary<AstIdx, ulong>();
-            foreach (var (basis, deg) in a.varDegrees)
-            {
-                outputDict.TryAdd(basis, 0);
-                outputDict[basis] += deg;
-            }
-            foreach (var (basis, deg) in b.varDegrees)
-            {
-                outputDict.TryAdd(basis, 0);
-                outputDict[basis] += deg;
-            }
-
-            return new IntermediateMonomial(outputDict);
-        }
-
-        private bool IsConstant(IntermediateMonomial monom)
-        {
-            if (monom.varDegrees.Count != 1)
-                return false;
-            var asConstant = ctx.TryGetConstantValue(monom.varDegrees.First().Key);
-            if (asConstant == null)
-                return false;
-            Debug.Assert(asConstant.Value == 1);
-            Debug.Assert(monom.varDegrees.First().Value <= 1);
-            return true;
         }
 
         private IntermediatePoly TryReduce(IntermediatePoly poly)

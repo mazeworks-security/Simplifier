@@ -2,6 +2,7 @@
 using Mba.Utility;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -48,6 +49,97 @@ namespace Mba.Simplifier.Pipeline.Intermediate
             }
 
             return String.Join(" + ", terms);
+        }
+
+        public static IntermediatePoly Add(IReadOnlyList<IntermediatePoly> polys)
+        {
+            var width = polys.First().bitWidth;
+            ulong constSum = 0;
+            var outPoly = new IntermediatePoly(width);
+            foreach (var poly in polys)
+            {
+                foreach (var (monom, coeff) in poly.coeffs)
+                {
+                    outPoly.Sum(monom, coeff);
+                }
+            }
+
+            return outPoly;
+        }
+
+        public static IntermediatePoly Mul(AstCtx ctx, IReadOnlyList<IntermediatePoly> polys)
+        {
+            var width = polys.First().bitWidth;
+            ulong coeffSum = 1;
+            var outPoly = new IntermediatePoly(width);
+            // Set the initial polynomial to `1`.
+            outPoly.coeffs[IntermediateMonomial.Constant(ctx, width)] = 1;
+            foreach (var poly in polys)
+            {
+                outPoly = Mul(ctx, outPoly, poly);
+            }
+
+            return outPoly;
+        }
+
+        public static IntermediatePoly Mul(AstCtx ctx, IntermediatePoly a, IntermediatePoly b)
+        {
+            var outPoly = new IntermediatePoly(a.bitWidth);
+            foreach (var (monomA, coeffA) in a.coeffs)
+            {
+                var isAConstant = IsConstant(ctx, monomA);
+                foreach (var (monomB, coeffB) in b.coeffs)
+                {
+                    var newCoeff = coeffA * coeffB;
+                    newCoeff &= a.moduloMask;
+
+                    // Then we need to construct a new monomial.
+                    var newMonom = Mul(ctx, monomA, monomB);
+                    outPoly.Sum(newMonom, newCoeff);
+                }
+            }
+
+            return outPoly;
+        }
+
+        public static IntermediateMonomial Mul(AstCtx ctx, IntermediateMonomial a, IntermediateMonomial b)
+        {
+            // If both are a constant, return the first monomial.
+            var isAConstant = IsConstant(ctx, a);
+            var isBConstant = IsConstant(ctx, b);
+            if (isAConstant && isBConstant)
+                return a;
+            // If one is a constant, return the other.
+            if (isAConstant)
+                return b;
+            if (isBConstant)
+                return a;
+            // Otherwise we need to multiply.
+            var outputDict = new Dictionary<AstIdx, ulong>();
+            foreach (var (basis, deg) in a.varDegrees)
+            {
+                outputDict.TryAdd(basis, 0);
+                outputDict[basis] += deg;
+            }
+            foreach (var (basis, deg) in b.varDegrees)
+            {
+                outputDict.TryAdd(basis, 0);
+                outputDict[basis] += deg;
+            }
+
+            return new IntermediateMonomial(outputDict);
+        }
+
+        public static bool IsConstant(AstCtx ctx, IntermediateMonomial monom)
+        {
+            if (monom.varDegrees.Count != 1)
+                return false;
+            var asConstant = ctx.TryGetConstantValue(monom.varDegrees.First().Key);
+            if (asConstant == null)
+                return false;
+            Debug.Assert(asConstant.Value == 1);
+            Debug.Assert(monom.varDegrees.First().Value <= 1);
+            return true;
         }
     }
 
