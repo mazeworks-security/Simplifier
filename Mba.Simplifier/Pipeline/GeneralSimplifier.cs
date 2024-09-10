@@ -696,6 +696,10 @@ namespace Mba.Simplifier.Pipeline
                 polys.Add(poly.Value);
             }
 
+            // If there were no polynomial parts we could expand, return null.
+            if (!polys.Any())
+                return null;
+
             // Reduce the polynomial parts.
             var linComb = ctx.Add(polys);
             var reduced = ExpandReduce(linComb, false);
