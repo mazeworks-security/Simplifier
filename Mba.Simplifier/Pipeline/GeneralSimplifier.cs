@@ -892,7 +892,7 @@ namespace Mba.Simplifier.Pipeline
             // Compute the dense vector size as a heuristic.
             ulong vecSize = 1;
             foreach (var degree in uniqueBases.Values)
-                vecSize *= degree;
+                vecSize = SaturatingMul(vecSize, degree);
 
             // If the dense vector size would be greater than 64**3, we bail out.
             // In those cases, we may consider implementing variable partitioning and simplifying each partition separately.
@@ -1208,7 +1208,7 @@ namespace Mba.Simplifier.Pipeline
                 if (result > (UInt128)(64*64*64))
                     return poly;
 
-                matrixSize *= deg;
+                matrixSize = SaturatingMul(matrixSize, deg);
                 matrixSize &= poly.moduloMask;
             }
             
