@@ -8,7 +8,7 @@ namespace Mba.Simplifier.Bindings
 {
     public struct AstIdx
     {
-        uint Idx;
+        public uint Idx;
 
         public AstIdx(uint idx)
         {
