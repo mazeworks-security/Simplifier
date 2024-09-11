@@ -460,7 +460,6 @@ namespace Mba.Simplifier.Pipeline
         // Try to find a single boolean term fitting the result vector.
         private unsafe AstIdx? AsPureBoolean()
         {
-            
             // Linear combination, where the index can be seen as an index into `variableCombinations`,
             // and the element at that index is a list of terms operating over that boolean combination.
             // Term = coeff*(bitMask&basisExpression).
@@ -583,6 +582,7 @@ namespace Mba.Simplifier.Pipeline
 
             foreach(var dict in bases)
             {
+                //continue;
                 var clone = dict.ToDictionary(x => x.Key, x => x.Value);
                 dict.Clear();
                 foreach (var (coeff, mask) in clone)
@@ -610,8 +610,8 @@ namespace Mba.Simplifier.Pipeline
                 List<AstIdx> myTerms = new();
                 foreach(var (coeff, mask) in bases[i])
                 {
-                    if (coeff == target)
-                        continue;
+                    //if (coeff == target)
+                    //    continue;
                     var masked2 = ctx.And(ctx.Constant(mask, (byte)width), basis);
                     var multiplied = ctx.Mul(ctx.Constant(coeff, (byte)width), masked2);
                     otherTerms.Add(multiplied);
