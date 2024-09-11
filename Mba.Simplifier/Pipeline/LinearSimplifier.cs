@@ -538,8 +538,17 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // To find a single fitting solution, there must only be one unique coefficient shared among all terms.
-            if (uniqueCoeffs.Count != 1)
+            if (uniqueCoeffs.Count == 2)
+            {
+                // Temp hack
+                var first = uniqueCoeffs.First();
+                uniqueCoeffs = new HashSet<ApInt>();
+                uniqueCoeffs.Add(first);
+            }
+            else if (uniqueCoeffs.Count != 1)
+            {
                 return null;
+            }
 
             var target = uniqueCoeffs.Single();
             var allOtherCoeffs = bases.SelectMany(x => x.Keys).ToHashSet();
@@ -604,6 +613,7 @@ namespace Mba.Simplifier.Pipeline
             // Collect all of the bitwise parts.
             List<AstIdx> bitwiseTerms = new();
             List<AstIdx> otherTerms = new();
+            Dictionary<ulong, List<AstIdx>> otherTermsGroup = new();
             for(int i = 0; i < (int)numCombinations; i++)
             {
                 var basis = GetBooleanForIndex(i);
@@ -615,6 +625,18 @@ namespace Mba.Simplifier.Pipeline
                     var masked2 = ctx.And(ctx.Constant(mask, (byte)width), basis);
                     var multiplied = ctx.Mul(ctx.Constant(coeff, (byte)width), masked2);
                     otherTerms.Add(multiplied);
+
+                    if (mask == 9223372036798319153)
+                        Debugger.Break();
+
+                    var minMask = refiner.FindMinimalMask2(coeff, mask);
+                    if (minMask != mask)
+                        Debugger.Break();
+
+                    otherTermsGroup.TryAdd(coeff, new());
+                    var list = otherTermsGroup[coeff];
+                    //otherTermsGroup.Add(coeff, masked2);
+                    list.Add(masked2);
                 }
 
                 ulong outMask = 0;
@@ -636,6 +658,11 @@ namespace Mba.Simplifier.Pipeline
 
             var meGuess = ctx.Add(otherTerms);
 
+            var guessTerms = otherTermsGroup.Select(x => ctx.Mul(ctx.Constant(x.Key, (byte)width), ctx.Or(x.Value)));
+            var guessSum = ctx.Add(guessTerms);
+
+
+            var minimizedMask = refiner.FindMinimalMask2(453534554, ulong.MaxValue);
             return null;
             
 
