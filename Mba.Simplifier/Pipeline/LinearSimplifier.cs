@@ -327,7 +327,7 @@ namespace Mba.Simplifier.Pipeline
             // Short circuit if we can find a single term solution.
             if (multiBit)
             {
-                var asBoolean = AsPureBoolean();
+                var asBoolean = AsPureBoolean(constant);
                 if (asBoolean != null)
                 {
                     CheckSolutionComplexity(asBoolean.Value, 1, ctx.Constant(constant, width));
@@ -458,7 +458,7 @@ namespace Mba.Simplifier.Pipeline
         }
 
         // Try to find a single boolean term fitting the result vector.
-        private unsafe AstIdx? AsPureBoolean()
+        private unsafe AstIdx? AsPureBoolean(ulong constantOffset)
         {
             // Linear combination, where the index can be seen as an index into `variableCombinations`,
             // and the element at that index is a list of terms operating over that boolean combination.
@@ -467,6 +467,7 @@ namespace Mba.Simplifier.Pipeline
             for (int i = 0; i < (int)numCombinations; i++)
                 linearCombinations.Add(new((int)width));
 
+            // Convert the result vector to a linear combination.
             fixed (ApInt* ptr = &resultVector[0])
             {
                 for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
@@ -494,6 +495,14 @@ namespace Mba.Simplifier.Pipeline
             {
                 // Run the multi-bit refinement pipeline, using DNF as a basis instead of all possible conjunctions.
                 var entry = refiner.SimplifyMultibitEntry(linearCombinations[i]);
+                // Skip nil elements.
+                if(entry.Count == 0)
+                {
+                    bases[i] = entry;
+                    continue;
+                }
+                  
+                // Canonicalize the coefficients.
                 var clone = entry.ToDictionary(x => x.Key, x => x.Value);
                 entry.Clear();
                 foreach(var (coeff, mask) in clone)
@@ -501,26 +510,20 @@ namespace Mba.Simplifier.Pipeline
                     var minimized = refiner.FindMinimalCoeff(coeff, mask);
                     entry.Add(minimized, mask);
                 }
-
               
                 bases[i] = entry;
-                //continue;
-                if (entry.Count == 0)
-                    continue;
-                // We can only find a single bitwise solution when there are up to 2 unique coefficients.
+                // We can only find a single bitwise solution when there are up to 2 unique coefficients for a given basis expression.
+                // The reasoning behind this: "SimplifyMultibitEntry" should have already merged all possible terms.
+                // If we have a sum of three elements, say 11111*(x&2) + 54354*(x&4) + 65767*(x&8), then there's no way to express this result vector with one term.
+                // The 2 element case can be handled if one coefficient is equivalent to -1 * the other.
                 if(entry.Count > 2)
                 {
                     Debugger.Break();
                     return null;
                 }
 
-                foreach(var (coeff, mask) in entry)
-                {
-                    var minimized = refiner.FindMinimalCoeff(coeff, mask);
-                    if (minimized != coeff)
-                        Debugger.Break();
-                }
-
+                // If this is the first non-zero entry we've seen, append all coefficients to the unique coefficient list,
+                // in a canonical form.
                 bool isFirst = uniqueCoeffs.Count == 0;
                 if(isFirst)
                 {
@@ -531,16 +534,52 @@ namespace Mba.Simplifier.Pipeline
                     }
                 }
 
+                // Otherwise we want to eliminate any coefficient that is not shared among all terms for all basis expressions.
                 else
                 {
                     uniqueCoeffs.RemoveWhere(x => !entry.ContainsKey(x));
                 }
             }
 
-            // To find a single fitting solution, there must only be one unique coefficient shared among all terms.
+            // To find a single fitting solution, there must be no more than two shared coefficients among all terms.
+            // In the case of two coefficients, we need to try both, in hopes that one of them will fit the result vector.
+            //ApInt target = 0;
+    
+            var allCoeffs = bases.SelectMany(x => x.Keys).ToHashSet();
+
+            /*
+            if(uniqueCoeffs.Count == 1)
+            {
+                target = uniqueCoeffs.First();
+                var possibilities = GetPossibilitiesExcept(allCoeffs, target);
+            }
+            */
+
+            // If there are more than 2 unique coefficients, we cannot find a single term solution.
+            if (uniqueCoeffs.Count > 2)
+                return null;
+
+            ApInt target = 0;
+            ApInt? otherCoeff = null;
+            foreach (var t in uniqueCoeffs)
+            {
+                var possibilities = GetPossibilitiesExcept(allCoeffs, t);
+                otherCoeff = TryFitOtherCoefficient(t, possibilities, bases);
+                if(otherCoeff != null)
+                {
+                    target = t;
+                    break;
+                }
+                
+            }
+
+            if (otherCoeff == null)
+                Debugger.Break();
+
+            /*
             if (uniqueCoeffs.Count == 2)
             {
-                // Temp hack
+                // Temp hack: Pick the first one. In the future we need to try the other one if this one does not work.
                 var first = uniqueCoeffs.First();
                 uniqueCoeffs = new HashSet<ApInt>();
                 uniqueCoeffs.Add(first);
@@ -564,7 +603,6 @@ namespace Mba.Simplifier.Pipeline
                     if (coeff == target)
                         continue;
 
-       
                     for(int i = 0; i < coeffPossibleArray.Length; i++)
                     {
                         var newCoeff = coeffPossibleArray[i].x;
@@ -588,10 +626,11 @@ namespace Mba.Simplifier.Pipeline
             }
             if (otherCoeff == null)
                 return null;
+            */
 
+            // If we've determined that all coefficients other than `target` can be rewritten to `otherCoeff`, we can proceed.
             foreach(var dict in bases)
             {
-                //continue;
                 var clone = dict.ToDictionary(x => x.Key, x => x.Value);
                 dict.Clear();
                 foreach (var (coeff, mask) in clone)
@@ -610,6 +649,119 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
+            // For both coefficients we want to construct a list of terms, aswell as a demanded bits mask.
+            var demandedBits = new ulong[2];
+            var termsUnderCoeffs = new List<AstIdx>[2];
+            for (int i = 0; i < termsUnderCoeffs.Length; i++)
+                termsUnderCoeffs[i] = new();
+            for(int i = 0; i < (int)numCombinations; i++)
+            {
+                var dict = bases[i];
+                if (dict.Count == 0)
+                    continue;
+
+                var boolean = GetBooleanForIndex(i);
+                foreach(var (coeff, mask) in dict)
+                {
+                    var idx = coeff == target ? 0 : 1;
+                    var minMask = refiner.FindMinimalMask2(coeff, mask);
+                    // Update the demanded bits.
+                    demandedBits[idx] |= minMask;
+
+                    // Update the terms.
+                    var masked2 = ctx.And(ctx.Constant(mask, (byte)width), boolean);
+                    termsUnderCoeffs[idx].Add(masked2);
+                }
+            }
+            
+            // Construct up to two boolean expressions.
+            var booleans = termsUnderCoeffs.Select(x => ctx.Or(x)).ToList();
+            // Union them into a single boolean.
+            var combined = ctx.Or(booleans);
+
+            //otherCoeff = 0xFFFFFFFFE4F79CA6;
+            var coefficients = new ulong[] { target, otherCoeff.Value};
+            var divs = new ulong[2];
+            divs[0] = constantOffset / target;
+            divs[1] = constantOffset / otherCoeff.Value;
+            int partIdx = 0;
+            if ((divs[0] & demandedBits[0]) == 0 && divs[0] * coefficients[0] == constantOffset)
+            {
+                partIdx = 0;
+            }
+            else if ((divs[1] & demandedBits[1]) == 0 && divs[1] * coefficients[1] == constantOffset)
+            {
+                partIdx = 1;
+            }
+            // If the constant offset does not fit anywhere, we cannot find a single term solution.
+            else
+            {
+                var solutions = new ulong[2];
+                var solver = new LinearCongruenceSolver(moduloMask);
+                var modulus = (UInt128)moduloMask + 1;
+                // Otherwise we can exhaustively search for a value that fits either coefficient.
+                for (int coeffIdx = 0; coeffIdx < 2; coeffIdx++)
+                {
+                    var currCoeff = coefficients[coeffIdx];
+                    var lc = solver.LinearCongruence(currCoeff, constantOffset, modulus);
+                    if (lc == null)
+                        continue;
+
+                    for (UInt128 i = 0; i <= lc.d - 1; i++)
+                    {
+                        var an = solver.GetSolution(i, lc);
+                        if((an & demandedBits[coeffIdx]) == 0)
+                        {
+                            solutions[coeffIdx] = (ulong)an;
+                            break;
+                        }
+                    }
+                }
+
+                // If we STILL cannot find a value that fits, there is probably no solution.
+                if(solutions.All(x => x == 0))
+                {
+                    Debugger.Break();
+                    return null;
+                }
+
+                // We can expect only a single solution.
+                Debug.Assert(solutions.Count(x => x != 0) == 1);
+
+                partIdx = solutions[0] != 0 ? 0 : 1;
+                divs[partIdx] = solutions[partIdx];
+
+                /*
+                var lc = solver.LinearCongruence(453534554, constantOffset, modulus);
+                if(lc != null)
+                {
+                    for(UInt128 i = 0; i <= lc.d - 1; i++)
+                    {
+                        var an = solver.GetSolution(i, lc);
+                        Console.WriteLine(an);
+                    }
+                }
+                */
+
+
+                // If it still doesn't fit, we could try to solve f
+                //Debugger.Break();
+                //return null;
+            }
+
+
+            // Pick our coefficient. If constant offset is not a multiple of the coefficient, we cannot find a single term solution.
+            var ourCoeff = coefficients[partIdx];
+            if(ourCoeff * divs[partIdx] != constantOffset)
+            {
+                Debugger.Break();
+                return null;
+            }
+
+            var xored = ctx.Xor(combined, ctx.Constant(divs[partIdx], (byte)width));
+            var m = ctx.Mul(ctx.Constant(ourCoeff, (byte)width), xored);
+
+
             // Collect all of the bitwise parts.
             List<AstIdx> bitwiseTerms = new();
             List<AstIdx> otherTerms = new();
@@ -620,8 +772,6 @@ namespace Mba.Simplifier.Pipeline
                 List<AstIdx> myTerms = new();
                 foreach(var (coeff, mask) in bases[i])
                 {
-                    //if (coeff == target)
-                    //    continue;
                     var masked2 = ctx.And(ctx.Constant(mask, (byte)width), basis);
                     var multiplied = ctx.Mul(ctx.Constant(coeff, (byte)width), masked2);
                     otherTerms.Add(multiplied);
@@ -658,15 +808,63 @@ namespace Mba.Simplifier.Pipeline
 
             var meGuess = ctx.Add(otherTerms);
 
+            // Take the result.
             var guessTerms = otherTermsGroup.Select(x => ctx.Mul(ctx.Constant(x.Key, (byte)width), ctx.Or(x.Value)));
+            // If the constant offset exists:
+            //var otherCoeff = otherTermsGroup.Keys.Single(x => x != target);
+
+            var div1 = (constantOffset / otherCoeff.Value) & moduloMask;
+
+            var or = ctx.Or(otherTermsGroup.Values.Select(x => ctx.Or(x)));
+            // Xor the ORed expression by it's coeff.
+            // Now we need a heuristic to pick the correct coefficient.
+            // There's typically only one plausible option, it's the where the divided version can be packed into the undemanded bits.
+            var xor = ctx.Xor(ctx.Constant(div1, (byte)width), or);
+            var muled = ctx.Mul(ctx.Constant(target, (byte)width), xor);
+
             var guessSum = ctx.Add(guessTerms);
+
+            
 
 
             var minimizedMask = refiner.FindMinimalMask2(453534554, ulong.MaxValue);
             return null;
-            
+        }
 
+        private (ApInt coeff, bool possible)[] GetPossibilitiesExcept(HashSet<ApInt> coeffs, ApInt target)
+        {
+            return coeffs.Where(x => x != target).Select(x => (x, true)).ToArray();
+        }
 
+        private ApInt? TryFitOtherCoefficient(ApInt target, (ApInt coeff, bool possible)[] coeffPossibleArray, IReadOnlyList<Dictionary<ApInt, ApInt>> bases)
+        {
+            foreach (var b in bases)
+            {
+                foreach (var (coeff, mask) in b)
+                {
+                    if (coeff == target)
+                        continue;
+
+                    for (int i = 0; i < coeffPossibleArray.Length; i++)
+                    {
+                        var newCoeff = coeffPossibleArray[i].coeff;
+                        if (!refiner.CanChangeCoefficientTo(coeff, newCoeff, mask))
+                            coeffPossibleArray[i] = (newCoeff, false);
+                    }
+                }
+            }
+
+            // Try to find any coefficient that fits the whole array
+            for (int i = 0; i < coeffPossibleArray.Length; i++)
+            {
+                var (coeff, possible) = coeffPossibleArray[i];
+                if (!possible)
+                    continue;
+
+                return coeff;
+            }
+
+            return null;
         }
 
         // Get a naive boolean function for the given result vector idx.
