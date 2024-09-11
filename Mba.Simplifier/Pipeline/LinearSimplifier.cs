@@ -17,6 +17,7 @@ using Mba.Common.Minimization;
 using System.Numerics;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Minimization;
+using System.Reflection;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -317,7 +318,7 @@ namespace Mba.Simplifier.Pipeline
                         ApInt constantOffset = moduloMask & constant >> shiftBy;
                         for (int i = 0; i < (int)numCombinations; i++)
                         {
-                            ptr[comb + i] = moduloMask & ptr[comb + i] - constantOffset;
+                            ptr[comb + i] = moduloMask & (ptr[comb + i] - constantOffset);
                         }
                     }
                 }
@@ -457,82 +458,188 @@ namespace Mba.Simplifier.Pipeline
         }
 
         // Try to find a single boolean term fitting the result vector.
-        private AstIdx? AsPureBoolean()
+        private unsafe AstIdx? AsPureBoolean()
         {
-            var rv = resultVector;
+            
+            // Linear combination, where the index can be seen as an index into `variableCombinations`,
+            // and the element at that index is a list of terms operating over that boolean combination.
+            // Term = coeff*(bitMask&basisExpression).
+            var linearCombinations = new List<List<(ApInt coeff, ApInt bitMask)>>((int)numCombinations);
+            for (int i = 0; i < (int)numCombinations; i++)
+                linearCombinations.Add(new((int)width));
 
-            // Keep track of the bits being demanded of each base expression.
-            List<ApInt> demandedBits = Enumerable.Range(0, (int)numCombinations).Select(x => (ApInt)0).ToList();
-            // Single non-zero coefficient being multiplied over the base expression.
-            ApInt firstNonzero = 0;
-            for (int comb = 0; comb < resultVector.Length; comb += (int)numCombinations)
+            fixed (ApInt* ptr = &resultVector[0])
             {
-                var bitIndex = (ushort)((uint)comb / numCombinations);
-                var bitMask = (ApInt)1 << bitIndex;
-                for (int i = 0; i < (int)numCombinations; i++)
+                for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
                 {
-                    // Skip zero entries.
-                    var entry = resultVector[comb + i];
-                    if (entry == 0)
-                        continue;
+                    // If multi-bit simba is enabled, we need to take our base expression
+                    // and isolate only the bit at the current bit index.
+                    var maskForIndex = multiBit ? (ApInt)1 << bitIndex : moduloMask;
+                    // Offset the result vector index such that we are fetching entries for the current bit index.
+                    var offset = bitIndex * numCombinations;
 
-                    // If this is the first non-zero entry, cache it.
-                    if (firstNonzero == 0)
+                    for (int i = 0; i < (int)numCombinations; i++)
                     {
-                        firstNonzero = entry;
-                        demandedBits[i] |= bitMask;
-                        continue;
-                    }
+                        var coeff = ptr[(int)offset + i];
+                        if (coeff == 0)
+                            continue;
 
-                    // If the entry is equivalent to all other non-zero entries, skip it.
-                    if (entry == firstNonzero)
-                    {
-                        demandedBits[i] |= bitMask;
-                        continue;
+                        linearCombinations[i].Add((coeff, maskForIndex));
                     }
-
-                    // Because bit masks are involved, there is a degree of flexibility
-                    // in the coefficient being multiplied over the boolean function. 
-                    // If we can legally change the coefficient to the first non-zero coefficient,
-                    // then two entries are still equivalent.
-                    bool canChangeCoefficient = refiner.CanChangeCoefficientTo(entry, firstNonzero, bitMask);
-                    if (!canChangeCoefficient)
-                        return null;
-                    demandedBits[i] |= bitMask;
                 }
             }
 
-            // If we only found one unique entry, we have a single term solution.
-            uint? result = null;
+            HashSet<ulong> uniqueCoeffs = new();
+            var bases = new Dictionary<ApInt, ApInt>[(int)numCombinations];
             for (int i = 0; i < (int)numCombinations; i++)
             {
-                // Skip this entry if no bits are demanded.
-                var demandedMask = demandedBits[i];
-                if (demandedMask == 0)
+                // Run the multi-bit refinement pipeline, using DNF as a basis instead of all possible conjunctions.
+                var entry = refiner.SimplifyMultibitEntry(linearCombinations[i]);
+                var clone = entry.ToDictionary(x => x.Key, x => x.Value);
+                entry.Clear();
+                foreach(var (coeff, mask) in clone)
+                {
+                    var minimized = refiner.FindMinimalCoeff(coeff, mask);
+                    entry.Add(minimized, mask);
+                }
+
+              
+                bases[i] = entry;
+                //continue;
+                if (entry.Count == 0)
+                    continue;
+                // We can only find a single bitwise solution when there are up to 2 unique coefficients.
+                if(entry.Count > 2)
+                {
+                    Debugger.Break();
+                    return null;
+                }
+
+                foreach(var (coeff, mask) in entry)
+                {
+                    var minimized = refiner.FindMinimalCoeff(coeff, mask);
+                    if (minimized != coeff)
+                        Debugger.Break();
+                }
+
+                bool isFirst = uniqueCoeffs.Count == 0;
+                if(isFirst)
+                {
+                    foreach (var (coeff, mask) in entry)
+                    {
+                        var minCoeff = refiner.FindMinimalCoeff(coeff, mask);
+                        uniqueCoeffs.Add(coeff);
+                    }
+                }
+
+                else
+                {
+                    uniqueCoeffs.RemoveWhere(x => !entry.ContainsKey(x));
+                }
+            }
+
+            // To find a single fitting solution, there must only be one unique coefficient shared among all terms.
+            if (uniqueCoeffs.Count != 1)
+                return null;
+
+            var target = uniqueCoeffs.Single();
+            var allOtherCoeffs = bases.SelectMany(x => x.Keys).ToHashSet();
+            allOtherCoeffs.Remove(target);
+
+            // For all terms not using the target coefficient, can we rewrite them all to use the same coefficient?
+            // TODO: If not present, we could also append -target and possibly ~target(latter one is not guaranteed to ever be profitable).
+            var coeffPossibleArray = allOtherCoeffs.Select(x => (x, true)).ToArray();
+            foreach(var b in bases)
+            {
+                foreach(var (coeff, mask) in b)
+                {
+                    if (coeff == target)
+                        continue;
+
+       
+                    for(int i = 0; i < coeffPossibleArray.Length; i++)
+                    {
+                        var newCoeff = coeffPossibleArray[i].x;
+                        if (!refiner.CanChangeCoefficientTo(coeff, newCoeff, mask))
+                            coeffPossibleArray[i] = (newCoeff, false);
+                    }
+                }
+            }
+
+            // Bail out if we failed to find a coeff. 
+            // Otherwise rewrite.
+            ApInt? otherCoeff = null;
+            for(int i = 0; i < coeffPossibleArray.Length; i++)
+            {
+                var (coeff, possible) = coeffPossibleArray[i];
+                if (!possible)
                     continue;
 
-                // Try to minimize the number of set bits in a mask.
-                demandedMask = refiner.FindMinimalMask(firstNonzero, demandedMask);
-
-                // Check if we can remove the bitmask altogether.
-                bool canRemoveMask = refiner.CanRemoveMask(firstNonzero, demandedMask);
-                ApInt? conjMask = canRemoveMask ? null : demandedMask;
-                var conj = GetBooleanForIndex(i);
-                var term = Conjunction(1, conj, conjMask);
-                result = Or(result, term);
+                otherCoeff = coeff;
+                break;
             }
-
-            // If the result vector is nil then a boolean term does not exist.
-            if (result == null)
-            {
-                Debug.Assert(resultVector.All(x => x == 0));
+            if (otherCoeff == null)
                 return null;
+
+            foreach(var dict in bases)
+            {
+                var clone = dict.ToDictionary(x => x.Key, x => x.Value);
+                dict.Clear();
+                foreach (var (coeff, mask) in clone)
+                {
+                    if (coeff == target)
+                    {
+                        dict.Add(target, mask);
+                        continue;
+                    }
+
+                    // Otherwise rewrite the coeff.
+                    var newCoeff = otherCoeff.Value;
+                    dict.TryGetValue(newCoeff, out var existingMask);
+                    existingMask |= mask;
+                    dict[newCoeff] = existingMask;
+                }
             }
 
-            result = Term(result.Value, firstNonzero);
-            if (dbg)
-                Console.WriteLine(result);
-            return result;
+            // Collect all of the bitwise parts.
+            List<AstIdx> bitwiseTerms = new();
+            List<AstIdx> otherTerms = new();
+            for(int i = 0; i < (int)numCombinations; i++)
+            {
+                var basis = GetBooleanForIndex(i);
+                List<AstIdx> myTerms = new();
+                foreach(var (coeff, mask) in bases[i])
+                {
+                    if (coeff == target)
+                        continue;
+                    var masked2 = ctx.And(ctx.Constant(mask, (byte)width), basis);
+                    var multiplied = ctx.Mul(ctx.Constant(coeff, (byte)width), masked2);
+                    otherTerms.Add(multiplied);
+                }
+
+                ulong outMask = 0;
+                foreach(var mask in bases[i].Values)
+                    outMask |= mask;
+                if (outMask == 0)
+                    continue;
+
+                
+                var masked = ctx.And(ctx.Constant(outMask, (byte)width), basis);
+                bitwiseTerms.Add(masked);
+            }
+            if (!bitwiseTerms.Any())
+                return null;
+
+            // Multiply
+            var bitwise = ctx.Or(bitwiseTerms);
+            var guess = ctx.Mul(ctx.Constant(uniqueCoeffs.Single(), (byte)width), bitwise);
+
+            var meGuess = ctx.Add(otherTerms);
+
+            return null;
+            
+
+
         }
 
         // Get a naive boolean function for the given result vector idx.
