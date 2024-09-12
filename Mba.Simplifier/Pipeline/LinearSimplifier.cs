@@ -17,6 +17,7 @@ using Mba.Common.Minimization;
 using System.Numerics;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Minimization;
+using Mba.Common.Interop;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -326,10 +327,10 @@ namespace Mba.Simplifier.Pipeline
             // Short circuit if we can find a single term solution.
             if (multiBit)
             {
-                var asBoolean = AsPureBoolean();
+                var asBoolean = AsPureBoolean(constant);
                 if (asBoolean != null)
                 {
-                    CheckSolutionComplexity(asBoolean.Value, 1, ctx.Constant(constant, width));
+                    CheckSolutionComplexity(asBoolean.Value, 1, null);
                     // Note that we return 0 because the "single variable with no conjunctions" logic is only used in the linear case.
                     return (0, null, null);
                 }
@@ -457,82 +458,183 @@ namespace Mba.Simplifier.Pipeline
         }
 
         // Try to find a single boolean term fitting the result vector.
-        private AstIdx? AsPureBoolean()
+        private unsafe AstIdx? AsPureBoolean(ApInt constantOffset)
         {
-            var rv = resultVector;
-
-            // Keep track of the bits being demanded of each base expression.
-            List<ApInt> demandedBits = Enumerable.Range(0, (int)numCombinations).Select(x => (ApInt)0).ToList();
-            // Single non-zero coefficient being multiplied over the base expression.
-            ApInt firstNonzero = 0;
-            for (int comb = 0; comb < resultVector.Length; comb += (int)numCombinations)
+            // Is there a single, canonical coefficient for each bit idx?
+            var demandedBits = new ulong[(int)numCombinations];
+            var bitCoeffs = new ulong[width];
+            for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
-                var bitIndex = (ushort)((uint)comb / numCombinations);
-                var bitMask = (ApInt)1 << bitIndex;
+                var offset = bitIndex * numCombinations;
                 for (int i = 0; i < (int)numCombinations; i++)
                 {
-                    // Skip zero entries.
-                    var entry = resultVector[comb + i];
-                    if (entry == 0)
+                    var coeff = resultVector[(int)offset + i];
+                    if (coeff == 0)
                         continue;
 
-                    // If this is the first non-zero entry, cache it.
-                    if (firstNonzero == 0)
+                    demandedBits[i] |= (ulong)1 << bitIndex;
+                    var oldCoeff = bitCoeffs[bitIndex];
+                    if (oldCoeff == 0)
                     {
-                        firstNonzero = entry;
-                        demandedBits[i] |= bitMask;
+                        bitCoeffs[bitIndex] = coeff;
                         continue;
                     }
 
-                    // If the entry is equivalent to all other non-zero entries, skip it.
-                    if (entry == firstNonzero)
+                    // If two base bitwise expressions have different coefficients at the same bit index,
+                    // we cannot find a solution using this technique.
+                    if (oldCoeff != coeff)
                     {
-                        demandedBits[i] |= bitMask;
-                        continue;
-                    }
-
-                    // Because bit masks are involved, there is a degree of flexibility
-                    // in the coefficient being multiplied over the boolean function. 
-                    // If we can legally change the coefficient to the first non-zero coefficient,
-                    // then two entries are still equivalent.
-                    bool canChangeCoefficient = refiner.CanChangeCoefficientTo(entry, firstNonzero, bitMask);
-                    if (!canChangeCoefficient)
                         return null;
-                    demandedBits[i] |= bitMask;
+                    }
                 }
             }
 
-            // If we only found one unique entry, we have a single term solution.
-            uint? result = null;
-            for (int i = 0; i < (int)numCombinations; i++)
+            // Union all of the demanded bits.
+            ulong demandedSum = 0;
+            foreach (var db in demandedBits)
+                demandedSum |= db;
+
+            // If there are no demanded bits then this is a constant result vector, which will be handled elsewhere.
+            if (demandedSum == 0)
+                return null;
+
+            // Combine all of the terms, in hopes of finding a single term result.
+            var len = BitOperations.PopCount(demandedSum);
+            var arr = stackalloc CoeffWithMask[len];
+            int arrIdx = 0;
+            for (ushort i = 0; i < width; i++)
             {
-                // Skip this entry if no bits are demanded.
+                // Skip if this bit is not demanded.
+                var mask = (ulong)1 << i;
+                if ((mask & demandedSum) == 0)
+                    continue;
+
+                arr[arrIdx] = new CoeffWithMask(bitCoeffs[i], mask);
+                arrIdx++;
+            }
+            UnmanagedAnalyses.SimplifyDisjointSumMultiply(arr, len, demandedSum);
+
+            CoeffWithMask? result = null;
+            var foobar = new List<CoeffWithMask>();
+            for (int i = 0; i < len; i++)
+            {
+                var entry = arr[i];
+                if (entry.mask == 0)
+                    continue;
+                if (entry.coeff == 0)
+                    continue;
+
+                // There must only be one coefficient across all terms
+                if (result != null)
+                    return null;
+                result = entry;
+            }
+
+            return GetAstForSingleTerm(demandedBits, demandedSum, result.Value.coeff, constantOffset);
+        }
+
+        private AstIdx GetAstForSingleTerm(ApInt[] demandedBits, ApInt demandedSum, ApInt coeff, ApInt constantOffset)
+        {
+            // Try to fit the constant offset into the undemanded bits.
+            // TODO: If 'isFit' is false, we still may be able to fit the constant offset by 
+            // searching for a different coefficient that divides the constant offset with no remainder.
+            bool isFit = false;
+            ulong div = 0;
+            var cand = FindFittingConstantFactor(coeff, constantOffset, demandedSum);
+            if (cand != null)
+            {
+                isFit = true;
+                div = cand.Value;
+            }
+
+            Dictionary<ApInt, AstIdx> maskToTerms = new();
+            for (int i = 1; i < (int)numCombinations; i++)
+            {
+                // Skip null terms
                 var demandedMask = demandedBits[i];
                 if (demandedMask == 0)
                     continue;
 
-                // Try to minimize the number of set bits in a mask.
-                demandedMask = refiner.FindMinimalMask(firstNonzero, demandedMask);
+                // Compute mask&bitwise
+                var boolean = GetBooleanForIndex(i);
 
-                // Check if we can remove the bitmask altogether.
-                bool canRemoveMask = refiner.CanRemoveMask(firstNonzero, demandedMask);
-                ApInt? conjMask = canRemoveMask ? null : demandedMask;
-                var conj = GetBooleanForIndex(i);
-                var term = Conjunction(1, conj, conjMask);
-                result = Or(result, term);
+                // OR two boolean expressions if they have the same demanded bits mask
+                if (!maskToTerms.TryGetValue(demandedMask, out var term))
+                {
+                    maskToTerms[demandedMask] = boolean;
+                }
+
+                else
+                {
+                    term = ctx.Or(term, boolean);
+                    maskToTerms[demandedMask] = term;
+                }
             }
 
-            // If the result vector is nil then a boolean term does not exist.
-            if (result == null)
+            AstIdx? result = null;
+            foreach (var (mask, term) in maskToTerms)
             {
-                Debug.Assert(resultVector.All(x => x == 0));
-                return null;
+                var t = term;
+                if (mask != moduloMask)
+                    t = ctx.And(ctx.Constant(mask, (byte)width), t);
+
+                result = result == null ? t : ctx.Or(result.Value, t);
             }
 
-            result = Term(result.Value, firstNonzero);
-            if (dbg)
-                Console.WriteLine(result);
-            return result;
+            // Partition the constant offset into the boolean expression if possible.
+            if (isFit)
+            {
+                result = ctx.Or(result.Value, ctx.Constant(div, (byte)width));
+            }
+
+            // Compute m1*bitop
+            result = ctx.Mul(ctx.Constant(coeff, (byte)width), result.Value);
+            // Append the constant offset to the outside, if the constant offset does not fit.
+            if (!isFit)
+                result = ctx.Add(ctx.Constant(constantOffset, (byte)width), result.Value);
+
+            return result.Value;
+        }
+
+        private ApInt? FindFittingConstantFactor(ApInt coeff, ApInt constantOffset, ApInt demandedBits)
+        {
+            // Try a trivial fit.
+            var div = moduloMask & (constantOffset / coeff);
+            var isDivFit = IsFit(coeff, div, constantOffset, demandedBits);
+            if (isDivFit)
+                return div;
+
+            // We want to solve for coeff*unknown = constantOffset, where unknown is disjoint to the demanded bits set.
+            var solver = new LinearCongruenceSolver(moduloMask);
+            var modulus = (UInt128)moduloMask + 1;
+            var lc = solver.LinearCongruence(coeff, constantOffset, modulus);
+
+            var limit = lc.d;
+            if (limit > 255)
+                limit = 255;
+            for (UInt128 i = 0; i < limit; i++)
+            {
+                var solution = (ApInt)solver.GetSolution(i, lc);
+                if (IsFit(coeff, solution, constantOffset, demandedBits))
+                {
+                    return (ApInt)solution;
+                }
+            }
+
+            return null;
+        }
+
+        private bool IsFit(ApInt coeff, ApInt div, ApInt constantOffset, ApInt demandedBits)
+        {
+            // The dividend must be disjoint to the demanded bits mask.
+            bool isDisjoint = (div & demandedBits) == 0;
+            if (!isDisjoint)
+                return false;
+            // It must multiply out to the target constant offset.
+            bool isMultiple = (moduloMask & (div * coeff)) == constantOffset;
+            if (!isMultiple)
+                return false;
+            return true;
         }
 
         // Get a naive boolean function for the given result vector idx.
