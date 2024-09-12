@@ -18,6 +18,7 @@ using System.Numerics;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Minimization;
 using System.Reflection;
+using System.Reflection.Metadata;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -700,6 +701,7 @@ namespace Mba.Simplifier.Pipeline
                 var solver = new LinearCongruenceSolver(moduloMask);
                 var modulus = (UInt128)moduloMask + 1;
                 // Otherwise we can exhaustively search for a value that fits either coefficient.
+                // 
                 for (int coeffIdx = 0; coeffIdx < 2; coeffIdx++)
                 {
                     var currCoeff = coefficients[coeffIdx];
@@ -761,6 +763,33 @@ namespace Mba.Simplifier.Pipeline
             var xored = ctx.Xor(combined, ctx.Constant(divs[partIdx], (byte)width));
             var m = ctx.Mul(ctx.Constant(ourCoeff, (byte)width), xored);
 
+            // Subtract the constant offset.
+            //var negated = moduloMask & (moduloMask * constantOffset);
+            //var sub = ctx.Add(ctx.Constant(negated, (byte)width), m);
+            var rv = JitResultVector(ctx, width, moduloMask, variables, m, true, numCombinations);
+
+            for (int comb = 0; comb < resultVector.Length; comb += (int)numCombinations)
+            {
+                var shiftBy = (ushort)((uint)comb / numCombinations);
+                ApInt newOffset = moduloMask & (constantOffset >> shiftBy);
+                for(int i = 0; i < (int)numCombinations; i++)
+                {
+                    var oldVal = resultVector[comb + i];
+                    var newVal = moduloMask & (rv[comb + i] - newOffset);
+                    if (oldVal != newVal)
+                        return null;
+                }    
+
+            }
+                /*
+                for(int i = 0; i < rv.Length; i++)
+                {
+                    if (rv[i] != resultVector[i])
+                        return null;
+                }
+                */
+
+            return m;
 
             // Collect all of the bitwise parts.
             List<AstIdx> bitwiseTerms = new();

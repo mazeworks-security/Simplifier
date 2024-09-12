@@ -17,8 +17,6 @@ namespace Mba.Simplifier.Pipeline
             this.moduloMask = moduloMask;
         }
 
-        // Function to give the distinct
-        // solutions of ax = b (mod n)
         public Lc? LinearCongruence(UInt128 A, UInt128 B, UInt128 N)
         {
             A = R(A % N);
@@ -26,8 +24,6 @@ namespace Mba.Simplifier.Pipeline
 
             UInt128 u = 0, v = 0;
 
-            // Function Call to find
-            // the value of d and u
             UInt128[] person = ExtendedEuclidean(A, N);
             UInt128 d = person[0];
             u = person[1];
@@ -49,8 +45,6 @@ namespace Mba.Simplifier.Pipeline
             return new Lc(d, x0, N);
         }
 
-        // Function to stores the values of x and y
-        // and find the value of gcd(a, b)
         public UInt128[] ExtendedEuclidean(UInt128 a, UInt128 b)
         {
             // Base Case
@@ -60,15 +54,12 @@ namespace Mba.Simplifier.Pipeline
             }
             else
             {
-                // Store the result of recursive call
                 UInt128 x1 = 1, y1 = 1;
                 UInt128[] gcdy = ExtendedEuclidean(b % a, a);
                 UInt128 gcd = gcdy[0];
                 x1 = gcdy[1];
                 y1 = gcdy[2];
 
-                // Update x and y using results of
-                // recursive call
                 UInt128 y = x1;
                 UInt128 x = y1 - (UInt128)(R(b / a)) * x1;
 
