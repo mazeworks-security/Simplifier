@@ -30,9 +30,7 @@ namespace Mba.Simplifier.LinEq
             }
 
             var sum = string.Join(" + ", terms);
-
             sum = $"({sum}) == {result}";
-
             return sum;
         }
 

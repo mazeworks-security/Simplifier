@@ -65,11 +65,8 @@ namespace Mba.Simplifier.LinEq
                 // after solving a linear congruence.
                 if (pivotIdx == -1)
                 {
-                    for (int i = 0; i < 5; i++)
-                    {
-                        EliminateViaSubtraction(varIdx);
-                        linearSystem.Sort();
-                    }
+                    EliminateViaSubtraction(varIdx);
+                    linearSystem.Sort();
                     continue;
                 }
 
