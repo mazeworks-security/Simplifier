@@ -608,6 +608,8 @@ namespace Mba.Simplifier.Pipeline
             var solver = new LinearCongruenceSolver(moduloMask);
             var modulus = (UInt128)moduloMask + 1;
             var lc = solver.LinearCongruence(coeff, constantOffset, modulus);
+            if (lc == null)
+                return null;
 
             var limit = lc.d;
             if (limit > 255)
