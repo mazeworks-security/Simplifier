@@ -176,7 +176,7 @@ namespace Mba.Simplifier.Minimization
                     continue;
                 }
 
-                // Otherwise recurisvely factor
+                // Otherwise recursively factor
                 var other = Factor(elems, demandedVarsMap);
                 var and = ctx.And(result, other.Value);
                 output.Add(and);
