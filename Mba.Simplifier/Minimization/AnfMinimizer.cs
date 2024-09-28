@@ -304,13 +304,13 @@ namespace Mba.Simplifier.Minimization
 
         private uint GetDemandedVarsMask(AstIdx id)
         {
-            var op0 = () => GetDemandedVarsMask(ctx.GetOp0(id));
-            var op1 = () => GetDemandedVarsMask(ctx.GetOp1(id));
-
             // If we already know the mask, return it.
             uint mask = 0;
             if (demandedVarsMap.TryGetValue(id, out mask))
                 return mask;
+
+            var op0 = () => GetDemandedVarsMask(ctx.GetOp0(id));
+            var op1 = () => GetDemandedVarsMask(ctx.GetOp1(id));
 
             var kind = ctx.GetOpcode(id);
             mask = kind switch
