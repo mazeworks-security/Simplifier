@@ -2041,10 +2041,12 @@ namespace Mba.Simplifier.Pipeline
 
         private bool CheckTermCount(int value)
         {
+            return false;
+
             if (lincombTerms.GetValueOrDefault() <= value)
                 return false;
-            if (metric != Metric.Terms)
-                return false;
+            //if (metric != Metric.Terms)
+            //    return false;
 
             var currTermCount = GetTermCountOfCurrentSolution();
             return currTermCount <= value;

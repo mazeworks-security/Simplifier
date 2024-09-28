@@ -114,6 +114,17 @@ namespace Mba.Simplifier.Bindings
             return initial;
         }
 
+        public AstIdx Xor(IEnumerable<AstIdx> nodes)
+        {
+            var initial = nodes.First();
+            foreach (var node in nodes.Skip(1))
+            {
+                initial = Xor(initial, node);
+            }
+
+            return initial;
+        }
+
         // Getters
         public unsafe AstOp GetOpcode(AstIdx id) => Api.ContextGetOpcode(this, id);
         public unsafe byte GetWidth(AstIdx id) => Api.ContextGetWidth(this, id);
