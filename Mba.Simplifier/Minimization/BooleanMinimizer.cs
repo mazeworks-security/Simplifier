@@ -59,7 +59,7 @@ namespace Mba.Simplifier.Minimization
             return ctx.Constant((uint)first, width);
         }
 
-        private static AstIdx FromTruthTable(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector)
+        public static AstIdx FromTruthTable(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector)
         {
             // Convert the result vector to an index into the N variable truth table.
             var tableIdx = ResultVecToTableIdx(resultVector);
