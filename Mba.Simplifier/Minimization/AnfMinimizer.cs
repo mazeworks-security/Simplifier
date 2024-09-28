@@ -102,7 +102,6 @@ namespace Mba.Simplifier.Minimization
                 simplified = ctx.RecursiveSimplify(simplified);
             }
 
-            // var min = ctx.RecursiveSimplify(other.Value);
             return result.Value;
         }
 
@@ -263,7 +262,6 @@ namespace Mba.Simplifier.Minimization
             Debug.Assert(terms.All(x => ctx.GetOpcode(x) != kind));
 
             // Do a disjoint variable decomposition. We can start from the least common variables and work our way up.
-            //var decompositions = new List<(uint, AstIdx)>();
             var decompositions = new List<(uint, AstIdx)>();
             foreach(var term in terms)
             {
@@ -298,9 +296,7 @@ namespace Mba.Simplifier.Minimization
 
             var simplified = ctx.Binop(kind, simplifiedTerms);
 
-            //Debugger.Break();
             return simplified;
-
         }
 
         private uint GetDemandedVarsMask(AstIdx id)
@@ -343,7 +339,6 @@ namespace Mba.Simplifier.Minimization
             {
                 vec.Add((int)(uint)r);
             }
-
 
             return BooleanMinimizer.FromTruthTable(ctx, varSet, vec);
         }
