@@ -96,7 +96,8 @@ namespace Mba.Simplifier.Minimization
             var factored = Factor(terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
             var simplified = SimplifyRec(factored.Value);
 
-            for(int i = 0; i < 3; i++)
+            simplified = SimplifyRec(factored.Value);
+            for (int i = 0; i < 3; i++)
             {
                 simplified = SimplifyRec(simplified);
                 simplified = ctx.RecursiveSimplify(simplified);
@@ -217,6 +218,8 @@ namespace Mba.Simplifier.Minimization
             // If we have 4 or less variables, pull the optimal representation from the truth table.
             var currMask = GetDemandedVarsMask(id);
             var count = BitOperations.PopCount(currMask);
+            if (count == 1)
+                return id;
             if(count <= 4)
                 return SimplifyViaLookupTable(id, currMask);
 
@@ -292,7 +295,7 @@ namespace Mba.Simplifier.Minimization
             }
 
             // Recursively simplify each term.
-            var simplifiedTerms = terms.Select(x => SimplifyRec(x));
+            var simplifiedTerms = decompositions.Select(x => SimplifyRec(x.Item2)).ToList();
 
             var simplified = ctx.Binop(kind, simplifiedTerms);
 
