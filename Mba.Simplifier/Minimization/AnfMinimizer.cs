@@ -65,19 +65,30 @@ namespace Mba.Simplifier.Minimization
                     result = ctx.Xor(result.Value, conj.Value);
             }
 
-            var other = Factor(ctx, variables, terms.Select(x => (uint)variableCombinations[x]).ToList());
+            // Set the initial demanded variable masks.
+            var demandedVarsMap = new Dictionary<AstIdx, uint>();
+            for (int i = 0; i < variables.Count; i++)
+            {
+                var mask = 1u << i;
+                var var = variables[i];
+                demandedVarsMap.Add(var, mask);
+            }
+
+            var other = Factor(ctx, variables, terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
+
+            // var min = ctx.RecursiveSimplify(other.Value);
+            // min = ctx.RecursiveSimplify(other.Value);
+            // min = ctx.RecursiveSimplify(other.Value);
 
             return result.Value;
         }
 
-        private static AstIdx? Factor(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<uint> conjs)
+        private static AstIdx? Factor(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<uint> conjs, Dictionary<AstIdx, uint> demandedVarsMap)
         {
             var getConjFromMask = (uint mask) => LinearSimplifier.ConjunctionFromVarMask(ctx, variables, 1, mask, null);
 
             // Remove the constant term if it exists
             bool has = conjs.Remove(uint.MaxValue);
-            if (has)
-                Debugger.Break();
 
             var variableCounts = new (int, uint)[variables.Count];
             // Collect the number of times we encounter each variable.
@@ -126,27 +137,48 @@ namespace Mba.Simplifier.Minimization
                 // If we have just 1 a single variable, yield it.
                 if(elems.Count == 0 || (elems.Count == 1 && elems[0] == uint.MaxValue))
                 {
-                    output.Add(result);
+                    output.Add(result); // In this case we already know the demanded mask
                     continue;
                 }
                 // If we have 1 variable by another conjunction, yield it.
                 else if(elems.Count == 1)
                 {
-                    var conj = ctx.And(result, getConjFromMask(elems[0]).Value);
+                    var mask = elems[0];
+                    var conj = ctx.And(result, getConjFromMask(mask).Value);
                     output.Add(conj);
+
+                    mask |= 1u << varIdx;
+                    demandedVarsMap.TryAdd(conj, mask);
                     continue;
                 }
 
                 // Otherwise recurisvely factor
-                var other = Factor(ctx, variables, elems);
+                var other = Factor(ctx, variables, elems, demandedVarsMap);
                 var and = ctx.And(result, other.Value);
                 output.Add(and);
+
+                // Update the demanded mask.
+                var demanded = (1u << varIdx) | demandedVarsMap[other.Value];
+                demandedVarsMap.TryAdd(and, demanded);
             }
 
-            if (has)
-                output.Add(ctx.Constant(ulong.MaxValue, ctx.GetWidth(variables[0])));
+            // Compute the union of all of the demanded variables.
+            var demandedSum = 0u;
+            foreach (var id in output)
+                demandedSum |= demandedVarsMap[id];
+            
+            // Compute the XOR of all the terms.
+            var xored = ctx.Xor(output);
+            demandedVarsMap.TryAdd(xored, demandedSum);
 
-            return ctx.Xor(output);
+            // If we have a constant offset of one, add it back.
+            if (has)
+            {
+                xored = ctx.Neg(xored);
+                demandedVarsMap.TryAdd(xored, demandedSum);
+            }
+
+            return xored;
         }
     }
 }
