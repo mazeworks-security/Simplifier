@@ -85,6 +85,12 @@ namespace Mba.Simplifier.Minimization
                     result = ctx.Xor(result.Value, conj.Value);
             }
 
+            // Leave the new minimization algorithm disabled by default. 
+            // It should return substantially better results for high variable counts, but it's not well tested (yet).
+            bool newMinimizationAlgo = false;
+            if(!newMinimizationAlgo)
+                return result.Value;
+            
             // Set the initial demanded variable masks.
             for (int i = 0; i < variables.Count; i++)
             {
@@ -103,7 +109,7 @@ namespace Mba.Simplifier.Minimization
                 simplified = ctx.RecursiveSimplify(simplified);
             }
 
-            return result.Value;
+            return simplified;
         }
 
         // Apply greedy factoring over a sum of variable conjunctions
