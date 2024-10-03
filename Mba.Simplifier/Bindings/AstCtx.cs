@@ -70,6 +70,17 @@ namespace Mba.Simplifier.Bindings
             };
         }
 
+        public AstIdx Binop(AstOp opcode, IEnumerable<AstIdx> nodes)
+        {
+            var initial = nodes.First();
+            foreach (var node in nodes.Skip(1))
+            {
+                initial = Binop(opcode, initial, node);
+            }
+
+            return initial;
+        }
+
         public AstIdx Add(IEnumerable<AstIdx> nodes)
         {
             var initial = nodes.First();
@@ -109,6 +120,17 @@ namespace Mba.Simplifier.Bindings
             foreach (var node in nodes.Skip(1))
             {
                 initial = Or(initial, node);
+            }
+
+            return initial;
+        }
+
+        public AstIdx Xor(IEnumerable<AstIdx> nodes)
+        {
+            var initial = nodes.First();
+            foreach (var node in nodes.Skip(1))
+            {
+                initial = Xor(initial, node);
             }
 
             return initial;

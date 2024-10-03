@@ -36,7 +36,7 @@ namespace Mba.Simplifier.Minimization
             }
 
             // Otherwise use Espresso to compute a semi optimal version of the boolean function.
-            var xnf = SimbaMinimizer.SimplifyBoolean(ctx, variables, resultVector);
+            var xnf = AnfMinimizer.SimplifyBoolean(ctx, variables, resultVector);
             var dnf = EspressoMinimizer.SimplifyBoolean(ctx, resultVector, variables).ast;
 
             var c1 = LinearSimplifier.GetCost(ctx, xnf, false, 1);
@@ -58,7 +58,7 @@ namespace Mba.Simplifier.Minimization
             return ctx.Constant((uint)first, width);
         }
 
-        private static AstIdx FromTruthTable(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector)
+        public static AstIdx FromTruthTable(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector)
         {
             // Convert the result vector to an index into the N variable truth table.
             var tableIdx = ResultVecToTableIdx(resultVector);
