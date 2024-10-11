@@ -36,8 +36,9 @@ namespace Mba.Simplifier.Minimization
             }
 
             // Otherwise use Espresso to compute a semi optimal version of the boolean function.
-            var xnf = AnfMinimizer.SimplifyBoolean(ctx, variables, resultVector);
             var dnf = EspressoMinimizer.SimplifyBoolean(ctx, resultVector, variables).ast;
+            var xnf = AnfMinimizer.SimplifyBoolean(ctx, variables, resultVector);
+        
 
             var c1 = LinearSimplifier.GetCost(ctx, xnf, false, 1);
             var c2 = LinearSimplifier.GetCost(ctx, dnf, false, 1);

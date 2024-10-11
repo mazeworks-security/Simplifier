@@ -30,7 +30,7 @@ namespace Mba.Simplifier.Minimization
         public static unsafe AstIdx SimplifyBoolean(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector)
             => new AnfMinimizer(ctx, variables, resultVector).SimplifyBoolean();
 
-        private AnfMinimizer(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector)
+        public AnfMinimizer(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector)
         {
             this.ctx = ctx;
             this.variables = variables;
