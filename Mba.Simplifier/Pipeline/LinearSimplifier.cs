@@ -301,12 +301,10 @@ namespace Mba.Simplifier.Pipeline
         private void Solve(ulong constant, ApInt[] withConstant, ApInt[] withoutConstant, List<ApInt> constantTerms, List<ApInt> candCoeffs)
         {
             // (a^b) = (a&~b)|(~a&b)
-            // if you have 
+            // Collect all possible pairs of (coefficient, constant offset) that fit the result vector.
             var solver = new LinearCongruenceSolver(moduloMask);
             var modulus = (UInt128)moduloMask + 1;
-
             HashSet<(ulong coeff, ulong constOffset)> possibleConstantOffsets = new();
-
             for (int candIdx = 0; candIdx < candCoeffs.Count; candIdx++)
             {
                 var cand = candCoeffs[candIdx];
@@ -355,6 +353,54 @@ namespace Mba.Simplifier.Pipeline
                 {
                     possibleConstantOffsets.Add((cand, s));
                 }
+            }
+
+
+            // Walk each candidate, and try to find a fit for the result vector.
+            var l = withConstant.Length;
+            //possibleConstantOffsets.RemoveWhere(x => x.coeff != 17);
+            foreach (var (sCoeff, sMask) in possibleConstantOffsets)
+            {
+                bool succ = true;
+                for (int comb = 0; comb < l; comb += (int)numCombinations)
+                {
+                    var bitIdx = (ushort)((ulong)comb / numCombinations);
+                    var bitMask = 1ul << bitIdx;
+                    for (int i = 0; i < (int)numCombinations; i++)
+                    {
+                        var coeff = withConstant[comb + i];
+                        // Now we have four possible valid choices.
+                        // The first choice is just nil.
+                        var cand0 = 0ul;
+                        cand0 &= moduloMask;
+                        cand0 >>= bitIdx;
+                        // The second choice is sCoeff * sMask
+                        var cand1 = sCoeff * sMask;
+                        cand1 &= moduloMask;
+                        cand1 >>= bitIdx;
+                        var cand2 = sCoeff * (sMask | bitMask);
+                        cand2 &= moduloMask;
+                        cand2 >>= bitIdx;
+                        var cand3 = sCoeff * (sMask & (~bitMask));
+                        cand3 &= moduloMask;
+                        cand3 >>= bitIdx;
+                        if(coeff == cand0 || coeff == cand1 || coeff == cand2 || coeff == cand3)
+                        {
+                            continue;
+                        }
+
+                        else
+                        {
+                            succ = false;
+                            goto next;
+                        }
+                    }
+                }
+
+
+            next:
+                Console.WriteLine($"Succeeded: {succ}");
+                continue;
             }
 
             // Algorithm: Collect all all constant offset terms
