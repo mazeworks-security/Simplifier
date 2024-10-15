@@ -18,6 +18,7 @@ using System.Numerics;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Minimization;
 using Mba.Common.Interop;
+using Iced.Intel;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -297,6 +298,70 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
+        private void Solve(ulong constant, ApInt[] withConstant, ApInt[] withoutConstant, List<ApInt> constantTerms, List<ApInt> candCoeffs)
+        {
+            // (a^b) = (a&~b)|(~a&b)
+            // if you have 
+            var solver = new LinearCongruenceSolver(moduloMask);
+            var modulus = (UInt128)moduloMask + 1;
+
+            HashSet<(ulong coeff, ulong constOffset)> possibleConstantOffsets = new();
+
+            for (int candIdx = 0; candIdx < candCoeffs.Count; candIdx++)
+            {
+                var cand = candCoeffs[candIdx];
+
+                int seen = 0;
+                HashSet<ulong> firstSolutions = new();
+                for (ushort i = 0; i < constantTerms.Count; i++)
+                {
+                    HashSet<ulong> currSolutions = new();
+
+                    // Solve for cand*what == constProduct
+                    var constProduct = constantTerms[(int)i];
+                    if (constProduct == 0)
+                        continue;
+
+                    var shifted = cand * (1ul << i);
+                    var lc = solver.LinearCongruence(shifted, constProduct, modulus);
+                    if (lc == null)
+                        break;
+
+                    // Enumerate the solutions for the constant offset, given the current coefficient.
+                    var limit = lc.d;
+                    if (limit > 255)
+                        limit = 255;
+                    for (UInt128 solIdx = 0; i < limit; i++)
+                    {
+                        var solution = (ApInt)solver.GetSolution(solIdx, lc);
+                        if(seen == 0)
+                        {
+                            firstSolutions.Add(solution); // At the first coefficient, enumerate all possible solutions that could fit.
+                        }
+
+                        else
+                        {
+                            currSolutions.Add(solution);
+                        }
+                    }
+
+                    if (seen != 0)
+                        firstSolutions.IntersectWith(currSolutions);
+
+                    seen += 1;
+                }
+
+                foreach(var s in firstSolutions)
+                {
+                    possibleConstantOffsets.Add((cand, s));
+                }
+            }
+
+            // Algorithm: Collect all all constant offset terms
+            // Collect a set of candidate coefficients...
+            Debugger.Break();
+        }
+
         // Find an initial linear combination of conjunctions.
         private (ulong withNoConjunctions, AstIdx? univariateParts, AstIdx? otherParts) SimplifyGeneric()
         {
@@ -304,10 +369,13 @@ namespace Mba.Simplifier.Pipeline
 
             // Fetch the constant offset.
             var constant = resultVector[0];
+            var withConstant = resultVector.ToArray();
 
             // Subtract the constant offset from the result vector.
             // Note that doing this on the multi-bit level requires that you shift 
             // the constant offset down, accordingly to the bit index you are operating at.
+            var constantTerms = new List<ApInt>();
+            var candCoeffs = new HashSet<ApInt>();
             unsafe
             {
                 fixed (ApInt* ptr = &resultVector[0])
@@ -316,13 +384,24 @@ namespace Mba.Simplifier.Pipeline
                     {
                         var shiftBy = (ushort)((uint)comb / numCombinations);
                         ApInt constantOffset = moduloMask & constant >> shiftBy;
+                        constantTerms.Add(constantOffset);
                         for (int i = 0; i < (int)numCombinations; i++)
                         {
                             ptr[comb + i] = moduloMask & ptr[comb + i] - constantOffset;
+
+                            if(i != 0)
+                            {
+                                var c = ptr[comb + i];
+                                candCoeffs.Add(c);
+                            }
                         }
                     }
                 }
             }
+
+            var withoutConstant = resultVector.ToArray();
+
+            Solve(constant, withConstant, withoutConstant, constantTerms, candCoeffs.ToList());
 
             // Short circuit if we can find a single term solution.
             if (multiBit)
