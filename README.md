@@ -46,6 +46,8 @@ Build `Simplifier` in release mode:
 - Change the build configuration from `Debug` to `Release`
 - Build the solution
 
+Building `Simplifier` requires .NET 8 and Visual Studio 2022 w/ ClangCL.
+
 # Status
 `Simplifier` has reached a stage where it works quite well on general MBAs. That said, it is still under active development. 
 
