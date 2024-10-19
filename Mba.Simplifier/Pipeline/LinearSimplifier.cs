@@ -42,6 +42,8 @@ namespace Mba.Simplifier.Pipeline
         // If enabled, we try to find a simpler representation of grouping of basis expressions.
         private readonly bool tryDecomposeMultiBitBases;
 
+        private readonly Action<ulong[], ulong>? resultVectorHook;
+
         private readonly ApInt moduloMask = 0;
 
         // Number of combinations of input variables(2^n), for a single bit index.
@@ -66,14 +68,14 @@ namespace Mba.Simplifier.Pipeline
 
         private readonly bool dbg = false;
 
-        public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null)
+        public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null, Action<ulong[], ApInt>? resultVectorHook = null)
         {
             if (variables == null)
                 variables = ctx.CollectVariables(ast);
-            return new LinearSimplifier(ctx, ast, variables, bitSize, refine: true, multiBit, tryDecomposeMultiBitBases).Simplify(false, alreadySplit);
+            return new LinearSimplifier(ctx, ast, variables, bitSize, refine: true, multiBit, tryDecomposeMultiBitBases, resultVectorHook).Simplify(false, alreadySplit);
         }
 
-        public LinearSimplifier(AstCtx ctx, AstIdx ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true)
+        public LinearSimplifier(AstCtx ctx, AstIdx ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null)
         {
             this.ctx = ctx;
             this.ast = ast;
@@ -82,6 +84,7 @@ namespace Mba.Simplifier.Pipeline
             this.refine = refine;
             this.multiBit = multiBit;
             this.tryDecomposeMultiBitBases = tryDecomposeMultiBitBases;
+            this.resultVectorHook = resultVectorHook;
             moduloMask = (ApInt)ModuloReducer.GetMask(bitSize);
             groupSizes = GetGroupSizes(variables.Count);
             numCombinations = (ApInt)Math.Pow(2, variables.Count);
@@ -92,6 +95,9 @@ namespace Mba.Simplifier.Pipeline
                 resultVector = new ApInt[] { asConstant.Value };
             else
                 resultVector = JitResultVector(ctx, bitSize, moduloMask, variables, ast, multiBit, numCombinations);
+
+            if(resultVectorHook != null)
+                resultVectorHook(resultVector, numCombinations);
 
             // TODO: If multi-bit, try to rewrite as linear result vector.
             refiner = new MultibitRefiner(bitSize, moduloMask);
