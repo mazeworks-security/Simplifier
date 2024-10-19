@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Mba.Simplifier": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}

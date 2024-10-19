@@ -70,6 +70,17 @@ namespace Mba.Simplifier.Bindings
             };
         }
 
+        public AstIdx Binop(AstOp opcode, params AstIdx[] nodes)
+        {
+            var initial = nodes[0];
+            for(int i = 1; i < nodes.Length; i++)
+            {
+                initial = Binop(opcode, initial, nodes[i]);
+            }
+
+            return initial;
+        }
+
         public AstIdx Binop(AstOp opcode, IEnumerable<AstIdx> nodes)
         {
             var initial = nodes.First();

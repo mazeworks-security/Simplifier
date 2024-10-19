@@ -28,8 +28,6 @@ namespace Mba.Simplifier.Pipeline
 
         private readonly AstCtx ctx;
 
-        private readonly AstIdx ast;
-
         private readonly IReadOnlyList<AstIdx> variables;
 
         private readonly uint width;
@@ -68,17 +66,16 @@ namespace Mba.Simplifier.Pipeline
 
         private readonly bool dbg = false;
 
-        public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null, Action<ulong[], ApInt>? resultVectorHook = null)
+        public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx? ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
         {
             if (variables == null)
-                variables = ctx.CollectVariables(ast);
-            return new LinearSimplifier(ctx, ast, variables, bitSize, refine: true, multiBit, tryDecomposeMultiBitBases, resultVectorHook).Simplify(false, alreadySplit);
+                variables = ctx.CollectVariables(ast.Value);
+            return new LinearSimplifier(ctx, ast, variables, bitSize, refine: true, multiBit, tryDecomposeMultiBitBases, resultVectorHook, inVec).Simplify(false, alreadySplit);
         }
 
-        public LinearSimplifier(AstCtx ctx, AstIdx ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null)
+        public LinearSimplifier(AstCtx ctx, AstIdx? ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
         {
             this.ctx = ctx;
-            this.ast = ast;
             this.variables = variables;
             width = bitSize;
             this.refine = refine;
@@ -89,18 +86,27 @@ namespace Mba.Simplifier.Pipeline
             groupSizes = GetGroupSizes(variables.Count);
             numCombinations = (ApInt)Math.Pow(2, variables.Count);
 
-            // If for some reason the user inputs a constant, just yield that constant.
-            var asConstant = ctx.TryGetConstantValue(ast);
-            if (asConstant != null)
-                resultVector = new ApInt[] { asConstant.Value };
+            refiner = new MultibitRefiner(bitSize, moduloMask);
+            // TODO: Refactor out into two different constructors.
+            // We need to support accepting an expression in both AST and result vector form.
+            if (inVec != null)
+            {
+                resultVector = inVec;
+            }
+
             else
-                resultVector = JitResultVector(ctx, bitSize, moduloMask, variables, ast, multiBit, numCombinations);
+            {
+                // TODO: If multi-bit, try to rewrite as linear result vector.
+                // If for some reason the user inputs a constant, just yield that constant.
+                var asConstant = ctx.TryGetConstantValue(ast.Value);
+                if (asConstant != null)
+                    resultVector = new ApInt[] { asConstant.Value };
+                else
+                    resultVector = JitResultVector(ctx, bitSize, moduloMask, variables, ast.Value, multiBit, numCombinations);
+            }
 
             if(resultVectorHook != null)
                 resultVectorHook(resultVector, numCombinations);
-
-            // TODO: If multi-bit, try to rewrite as linear result vector.
-            refiner = new MultibitRefiner(bitSize, moduloMask);
         }
 
         // Initialize the group sizes of the various variables, i.e., their numbers

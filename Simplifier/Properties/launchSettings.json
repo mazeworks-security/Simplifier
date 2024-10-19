@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Simplifier": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}
