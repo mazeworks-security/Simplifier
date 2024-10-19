@@ -7,7 +7,7 @@ using Mba.Utility;
 using System.ComponentModel;
 
 bool printUsage = false;
-uint bitWidth = 64;
+uint bitWidth = 8;
 bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
@@ -17,9 +17,19 @@ string inputText = null;
 inputText = "4534434534355345*((((1111^x)&y)))";
 
 // inputText = "546776870978778*(a|4534545345534&b&435345435543453&c|8889879798)";
-inputText = "17*(a^5)";
+//inputText = "17*((a&b)^5)";
+
+//inputText = "17*((a^5)&(b^3))";
 //inputText = "546776870978778*((a|4534545345534&b&435345435543453&c|8889879798)|((a|b&5564456546)^56456654|(5645665&b&c^76878889)|(65655656^a&688768&c|(6545654&b))|(a^(b|4554453)^c^6706767590)))";
-inputText = "4534434534355345*(1010101|(((((1111^x)&y)))))";
+//inputText = "4534434534355345*(1010101|(((((1111^x)&y)))))";
+inputText = "0xA96AAABCE6AAAAAA*((a&b)^453457888900)";
+inputText = "17*(((a^5)|(b^3))^8)";
+
+inputText = "17*(((a^5)|(b^8))^67567567)";
+inputText = "17*(((a^5)|(b^5))^67567567)";
+inputText = "17*(((a^5)|(b^3))^67567567)";
+inputText = "546776870978778*((a|4534545345534&b&435345435543453&c|8889879798)|((a|b&5564456546)^56456654|(5645665&b&c^76878889)|(65655656^a&688768&c|(6545654&b))|(a^(b|4554453)^c^6706767590)))";
+inputText = "17*(((a^5)|(b^3)))";
 var printHelp = () =>
 {
     Console.WriteLine("Usage: Simplifier.exe");

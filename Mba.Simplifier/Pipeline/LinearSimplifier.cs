@@ -300,6 +300,8 @@ namespace Mba.Simplifier.Pipeline
 
         private void Solve(ulong constant, ApInt[] withConstant, ApInt[] withoutConstant, List<ApInt> constantTerms, List<ApInt> candCoeffs)
         {
+            candCoeffs.Add(546776870978778);
+            candCoeffs.Add(17);
             // (a^b) = (a&~b)|(~a&b)
             // Collect all possible pairs of (coefficient, constant offset) that fit the result vector.
             var solver = new LinearCongruenceSolver(moduloMask);
@@ -357,6 +359,7 @@ namespace Mba.Simplifier.Pipeline
 
 
             // Walk each candidate, and try to find a fit for the result vector.
+            //possibleConstantOffsets.Add((17, 0));
             var l = withConstant.Length;
             //possibleConstantOffsets.RemoveWhere(x => x.coeff != 17);
             foreach (var (sCoeff, sMask) in possibleConstantOffsets)
@@ -400,6 +403,10 @@ namespace Mba.Simplifier.Pipeline
 
             next:
                 Console.WriteLine($"Succeeded: {succ}");
+                if(succ)
+                {
+                    Debugger.Break();
+                }
                 continue;
             }
 
@@ -447,7 +454,7 @@ namespace Mba.Simplifier.Pipeline
 
             var withoutConstant = resultVector.ToArray();
 
-            Solve(constant, withConstant, withoutConstant, constantTerms, candCoeffs.ToList());
+            //Solve(constant, withConstant, withoutConstant, constantTerms, candCoeffs.ToList());
 
             // Short circuit if we can find a single term solution.
             if (multiBit)
