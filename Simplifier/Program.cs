@@ -4,6 +4,7 @@ using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
+using Microsoft.Z3;
 using System.ComponentModel;
 
 bool printUsage = false;
@@ -31,7 +32,7 @@ for (int i = 0; i < args.Length; i++)
         case "-h":
             printUsage = true;
             break;
-        case "-b":
+        case "-b":  
             bitWidth = uint.Parse(args[i + 1]);
             i++;
             break;
@@ -65,6 +66,7 @@ var id = RustAstParser.Parse(ctx, inputText, bitWidth);
 
 Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n");
 
+var input = id;
 id = ctx.RecursiveSimplify(id);
 for (int i = 0; i < 3; i++)
 {
@@ -94,5 +96,37 @@ for (int i = 0; i < 3; i++)
     
 }
 
-// TODO: Prove equivalence.
+
 Console.WriteLine($"Simplified to: {ctx.GetAstString(id)}\n\nwith cost: {ctx.GetCost(id)} ");
+
+if (!proveEquivalence)
+    return;
+
+var z3Ctx = new Context();
+var translator = new Z3Translator(ctx, z3Ctx);
+var before = translator.Translate(input);
+var after = translator.Translate(id);
+var solver = z3Ctx.MkSolver("QF_BV");
+
+// Set the maximum timeout to 10 seconds.
+var p = z3Ctx.MkParams();
+uint solverLimit = 10000;
+p.Add("timeout", solverLimit);
+solver.Parameters = p;
+
+Console.WriteLine("Proving equivalence...\n");
+solver.Add(z3Ctx.MkNot(z3Ctx.MkEq(before, after)));
+var check = solver.Check();
+
+var printModel = (Model model) =>
+{
+    var values = model.Consts.Select(x => $"{x.Key.Name} = {(long)ulong.Parse(model.Eval(x.Value).ToString())}");
+    return $"[{String.Join(", ", values)}]";
+};
+
+if (check == Status.UNSATISFIABLE)
+    Console.WriteLine("Expressions are equivalent.");
+else if (check == Status.SATISFIABLE)
+    Console.WriteLine($"Expressions are not equivalent. Counterexample:\n{printModel(solver.Model)}");
+else
+    Console.WriteLine($"Solver timed out - expressions are probably equivalent. Could not find counterexample within {solverLimit}ms");
