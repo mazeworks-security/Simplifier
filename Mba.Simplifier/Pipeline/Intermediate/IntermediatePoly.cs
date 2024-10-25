@@ -28,7 +28,7 @@ namespace Mba.Simplifier.Pipeline.Intermediate
 
         public void Sum(IntermediateMonomial monomial, ulong value)
         {
-            bool contained =coeffs.TryGetValue(monomial, out var old);
+            bool contained = coeffs.TryGetValue(monomial, out var old);
             old += value;
             old &= moduloMask;
             if (old == 0)
