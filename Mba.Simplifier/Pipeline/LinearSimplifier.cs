@@ -65,7 +65,7 @@ namespace Mba.Simplifier.Pipeline
 
         private readonly bool newLine = false;
 
-        private readonly bool dbg = false;
+        private readonly bool dbg = true;
 
         public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null)
         {
@@ -300,6 +300,10 @@ namespace Mba.Simplifier.Pipeline
 
         private void Solve(ulong constant, ApInt[] withConstant, ApInt[] withoutConstant, List<ApInt> constantTerms, List<ApInt> candCoeffs)
         {
+            Console.WriteLine($"Dnf with constant removed:\n{constant} + {GetDnfBasis(withoutConstant)}");
+
+            Console.WriteLine("\n\n\n");
+            Console.WriteLine($"Dnf with constant embedded:\n{GetDnfBasis(withConstant)}");
             candCoeffs.Add(546776870978778);
             candCoeffs.Add(17);
             // (a^b) = (a&~b)|(~a&b)
@@ -436,11 +440,11 @@ namespace Mba.Simplifier.Pipeline
                     for (int comb = 0; comb < l; comb += (int)numCombinations)
                     {
                         var shiftBy = (ushort)((uint)comb / numCombinations);
-                        ApInt constantOffset = moduloMask & constant >> shiftBy;
+                        ApInt constantOffset = moduloMask & (constant >> shiftBy);
                         constantTerms.Add(constantOffset);
                         for (int i = 0; i < (int)numCombinations; i++)
                         {
-                            ptr[comb + i] = moduloMask & ptr[comb + i] - constantOffset;
+                            ptr[comb + i] = moduloMask & (ptr[comb + i] - constantOffset);
 
                             if(i != 0)
                             {
@@ -454,7 +458,7 @@ namespace Mba.Simplifier.Pipeline
 
             var withoutConstant = resultVector.ToArray();
 
-            //Solve(constant, withConstant, withoutConstant, constantTerms, candCoeffs.ToList());
+            Solve(constant, withConstant, withoutConstant, constantTerms, candCoeffs.ToList());
 
             // Short circuit if we can find a single term solution.
             if (multiBit)
@@ -870,6 +874,65 @@ namespace Mba.Simplifier.Pipeline
             Debug.Assert(terms.Count > 0);
             var sum = ctx.Add(terms);
             univariateParts = sum;
+        }
+
+        private string GetDnfBasis(ApInt[] resultVec)
+        {
+
+            var linearCombinations = new List<List<(ApInt coeff, ApInt bitMask)>>();
+            var booleans = new List<AstIdx>();
+            for (int i = 0; i < (int)numCombinations; i++)
+            {
+                linearCombinations.Add(new());
+                booleans.Add(GetBooleanForIndex(i));
+            }
+
+            List<string> terms = new();
+            for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
+            {
+                var offset = bitIndex * numCombinations;
+                for (int i = 0; i < (int)numCombinations; i++)
+                {
+                    var coeff = resultVec[(int)offset + i];
+                    if (coeff == 0)
+                        continue;
+
+                    var boolean = GetBooleanForIndex(i);
+
+                    var mask = 1ul << bitIndex;
+                    boolean = ctx.And(ctx.Constant(mask, width), boolean);
+
+                    var boolStr = ctx.GetAstString(boolean);
+                    //boolStr = boolStr.Replace("(", "");
+                    //boolStr = boolStr.Replace(")", "");
+
+                    linearCombinations[i].Add((coeff, mask));
+
+                    
+
+                    terms.Add($"{coeff}*{boolStr}");
+                }
+            }
+
+            var output = new List<Dictionary<ApInt, ApInt>>();
+
+            var otherTerms = new List<string>(0);
+
+            for(int i = 0; i < linearCombinations.Count; i++)
+            {
+                var dict = refiner.SimplifyMultibitEntry(linearCombinations[i]);
+                output.Add(dict);
+
+                var boolean = booleans[i];
+                foreach(var (coeff, mask) in dict)
+                {
+                    otherTerms.Add($"{coeff}*({mask}&{ctx.GetAstString(boolean)})");
+                }
+            }
+
+            var sol = String.Join(" + ", otherTerms);
+
+            return string.Join(" + ", terms);
         }
 
         // Convert a N-bit result vector into a linear combination.
