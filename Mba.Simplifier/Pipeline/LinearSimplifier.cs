@@ -19,6 +19,7 @@ using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Minimization;
 using Mba.Common.Interop;
 using Iced.Intel;
+using Antlr4.Runtime.Tree;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -298,8 +299,112 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
+        private void BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations, ulong targetCoeff)
+        {
+            AstIdx.ctx = ctx;
+            variableCombinations = new List<ApInt>() { 0}.Concat(variableCombinations).ToArray();
+
+            var xorMasks = new ApInt[withoutConstant.Length];
+
+            var solver = new LinearCongruenceSolver(moduloMask);
+            var modulus = (UInt128)moduloMask + 1;
+
+            var terms = new List<string>();
+            var og = constant;
+            // Bug, but need to handle the case:
+            // op1 = (0^(16&a))
+            // op2 = c1 + (17 * (c2 ^ (16 & a)))
+            for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
+            {
+                var offset = bitIndex * numCombinations;
+                for (int i = 0; i < (int)numCombinations; i++)
+                {
+                    var coeff = withoutConstant[(int)offset + i];
+                    if (coeff == 0)
+                        continue;
+
+                    var mask = 1ul << bitIndex;
+                    var bw = ConjunctionFromVarMask(1, variableCombinations[i], mask).Value;
+                    
+
+                    if (coeff == targetCoeff)
+                    {
+                        bw = ctx.Mul(ctx.Constant(targetCoeff, width), bw);
+                        var t = ctx.GetAstString(bw);
+                        terms.Add(t);
+                        Console.WriteLine("");
+                        continue;
+                    }
+                    
+                    if (i == 0)
+                        continue;
+
+                    // Evaluate the formula and check if the solution is just onOne + targetCoeff*(mask^(coeff)
+
+                    ApInt onZero = 0;
+                    ApInt onOne = moduloMask & (coeff * mask);
+
+                    var tbl1 = new ApInt[] { onZero, onOne };
+                    var formula1 = moduloMask & (onOne + (targetCoeff * (mask)));
+                    var formula2 = moduloMask & (onOne + (targetCoeff * (0)));
+                    var tbl2 = new ApInt[] { formula1, formula2 };
+
+                    ApInt xorMask = 0;
+                    ApInt subOffset = 0;
+                    if(tbl1.SequenceEqual(tbl2))
+                    {
+                        xorMask = mask;
+                        subOffset = onOne;
+                    }
+
+                    else if(refiner.CanChangeCoefficientTo(coeff, targetCoeff, mask))
+                    {
+                        xorMask = 0;
+                        subOffset = 0;
+                    }
+
+                    else
+                    {
+                        Debugger.Break();
+                    }
+
+                    // 239*(a&1)
+                    // => 
+
+                    // (a&b), (a&b&c) are not linearly independent!
+                    // But it should still be fine
+
+                    constant += subOffset;
+                    constant &= moduloMask;
+
+                    //withoutConstant[(int)offset + i] = targetCoeff;
+
+
+                    
+                    bw = ctx.Xor(ctx.Constant(xorMask, width), bw);
+                    bw = ctx.Mul(ctx.Constant(targetCoeff, width), bw);
+
+                    var tt = ctx.GetAstString(bw);
+                    terms.Add(tt);
+                    Console.WriteLine("");
+                    // Solve for ax = b
+                    //var sol = solver.LinearCongruence()
+
+                    // We want to solve for target*(c1^(x&mask)) == ourValue
+                    //Debugger.Break();
+                }
+            }
+
+
+            Console.WriteLine($"\n\nSolution: {constant} + {String.Join(" + ", terms)}");
+
+            Debugger.Break();
+        }
+
         private void Solve(ulong constant, ApInt[] withConstant, ApInt[] withoutConstant, List<ApInt> constantTerms, List<ApInt> candCoeffs)
         {
+            //BacktrackingSearch(constant, withoutConstant, 17);
+
             Console.WriteLine($"Dnf with constant removed:\n{constant} + {GetDnfBasis(withoutConstant)}");
 
             Console.WriteLine("\n\n\n");
@@ -458,7 +563,7 @@ namespace Mba.Simplifier.Pipeline
 
             var withoutConstant = resultVector.ToArray();
 
-            Solve(constant, withConstant, withoutConstant, constantTerms, candCoeffs.ToList());
+            //Solve(constant, withConstant, withoutConstant, constantTerms, candCoeffs.ToList());
 
             // Short circuit if we can find a single term solution.
             if (multiBit)
@@ -541,6 +646,9 @@ namespace Mba.Simplifier.Pipeline
             // Identify variables that are not present in any conjunction.
             // E.g. if we have a + (b&c), then a is not present in a conjunction, while b is.
             var withNoConjunctions = GetVariablesWithNoConjunctions(variableCombinations, linearCombinations);
+
+
+            BacktrackingSearch(constant, resultVector.ToArray(), variableCombinations, 546776870978778);
 
             // Simplify the linear combination and turn it back into an expression.
             if (multiBit)
