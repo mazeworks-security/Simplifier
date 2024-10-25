@@ -35,8 +35,8 @@ namespace Mba.Simplifier.Utility
             var op0 = () => (BitVecExpr)Translate(ctx.GetOp0(idx));
             var op1 = () => (BitVecExpr)Translate(ctx.GetOp1(idx));
 
-            var opc = ctx.GetOpcode(idx);
-            Expr z3Ast = opc switch
+            var opcode = ctx.GetOpcode(idx);
+            Expr z3Ast = opcode switch
             {
                 AstOp.Add => z3Ctx.MkBVAdd(op0(), op1()),
                 AstOp.Mul => z3Ctx.MkBVMul(op0(), op1()),
@@ -48,7 +48,7 @@ namespace Mba.Simplifier.Utility
                 AstOp.Constant => z3Ctx.MkBV(ctx.GetConstantValue(idx), ctx.GetWidth(idx)),
                 AstOp.Symbol => z3Ctx.MkBVConst(ctx.GetSymbolName(idx), ctx.GetWidth(idx)),
                 AstOp.Zext => z3Ctx.MkZeroExt((uint)ctx.GetWidth(idx) - ctx.GetWidth(ctx.GetOp0(idx)), op0()),
-                _ => throw new InvalidOperationException($"Cannot translate opcode {opc} to z3!")
+                _ => throw new InvalidOperationException($"Cannot translate opcode {opcode} to z3!")
             };
 
             cache[idx] = z3Ast;
