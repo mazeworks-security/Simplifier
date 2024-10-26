@@ -412,7 +412,7 @@ namespace Mba.Simplifier.Pipeline
         // (2) Assume each row is aligned, if not, bail out.
         // (3) Maintain a mapping of <coeff, bits>
         // (4) Enumerate each coefficient, check if all other coefficients can be changed or reduced to the target coefficient.
-        private ApInt? BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations, ulong targetCoeff)
+        private ApInt? BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations)
         {
             // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
             bool truthTableIdx = true;
@@ -436,11 +436,12 @@ namespace Mba.Simplifier.Pipeline
                 return null;
             // Try to find a single coefficient that all result vector entries can be changed to.
             // If the result is nil, then a single term solution does not exist!
+            // TODO: It's possible that a solution exists with a coefficient that is not present in the set, though in practice I've never seen this happen!
             var singleCoeff = TryGetSingleCoeff(uniqueCoeffs);
             if (singleCoeff == null)
                 return null;
 
-                  
+            var targetCoeff = singleCoeff.Value;
 
             var xorMasks = new ApInt[withoutConstant.Length];
 
@@ -472,10 +473,7 @@ namespace Mba.Simplifier.Pipeline
                     if (i == 0)
                         continue;
 
-
-
                     // Evaluate the formula and check if the solution is just onOne + targetCoeff*(mask^(coeff)
-
                     ApInt onZero = 0;
                     ApInt onOne = moduloMask & (coeff * mask);
 
@@ -723,7 +721,7 @@ namespace Mba.Simplifier.Pipeline
             // Get all combinations of variables.
             var variableCombinations = GetVariableCombinations(variables.Count);
 
-            BacktrackingSearch(constant, resultVector.ToArray(), variableCombinations, 18446197296838572838);
+            BacktrackingSearch(constant, resultVector.ToArray(), variableCombinations);
 
             // Linear combination, where the index can be seen as an index into `variableCombinations`,
             // and the element at that index is a list of terms operating over that boolean combination.
