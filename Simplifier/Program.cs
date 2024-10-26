@@ -7,7 +7,7 @@ using Mba.Utility;
 using System.ComponentModel;
 
 bool printUsage = false;
-uint bitWidth = 8;
+uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
@@ -61,7 +61,7 @@ inputText = "8*((a^7763425967556079)|((a|4534545345534&b&435345435543453&c|88898
 //inputText = "17*(((a^5)|(b^3))^67567567)"; // Triggers edge case, maximal value or minimal value will not work
 //inputText = "17*~(a&11111)";
 
-inputText = "17*((a|b|c)^5)";
+//inputText = "17*((a|b|c)^5)";
 
 //inputText = "(2^(2&(a&(~b)))) + (2^(2&((~a)&b)))";
 

@@ -455,13 +455,14 @@ namespace Mba.Simplifier.Pipeline
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
                 var offset = (int)(bitIndex * numCombinations);
+                var mask = 1ul << bitIndex;
                 for (int i = 0; i < (int)numCombinations; i++)
                 {
                     var coeff = withoutConstant[offset + i];
                     if (coeff == 0)
                         continue;
 
-                    var mask = 1ul << bitIndex;
+                   
                     var bw = getConj((ApInt)i, mask);
 
 
@@ -533,11 +534,73 @@ namespace Mba.Simplifier.Pipeline
                     Console.WriteLine("");
                 }
             }
-
-
             Console.WriteLine($"\n\nSolution: {constant} + {String.Join(" + ", terms)}");
 
-             Debugger.Break();
+            // Walk result vector, get the ones with xor mask.. merge them, then merge the ones without the XOR mask..
+
+            List<AstIdx> allTerms = new();
+
+            for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
+            {
+                var offset = (int)(bitIndex * numCombinations);
+                var mask = 1ul << bitIndex;
+
+                ApInt globMask = 0;
+                var withoutXor = new List<AstIdx>();
+                var withXor = new List<AstIdx>();
+                for (int i = 0; i < (int)numCombinations; i++)
+                {
+                    var coeff = withoutConstant[offset + i];
+                    if (coeff == 0)
+                        continue;
+
+                    var bw = getConj((ApInt)i, mask);
+                    var xorMask = xorMasks[offset + i];
+                    if (xorMask == 0)
+                    {
+                        withoutXor.Add(bw);
+                    }
+                    else
+                    {
+                        withXor.Add(bw);
+                        globMask = xorMask;
+                    }
+                }
+
+                if (withXor.Any())
+                {
+                    var newOffset = moduloMask & (((ApInt)withXor.Count - 1) * globMask);
+                    newOffset = moduloMask & (targetCoeff * newOffset);
+
+                    constant += newOffset;
+
+                    var ored = ctx.Or(withXor);
+                    var xored = ctx.Xor(ctx.Constant(globMask, width), ored);
+                    allTerms.Add(xored);
+                }
+
+                if(withoutXor.Any())
+                {
+                    allTerms.Add(ctx.Or(withoutXor));
+                }
+
+                //withXor = withXor.Take(2).ToList();
+
+                // TODO: Delete me.
+
+                // Update the constant offset.
+                // The formula for the offset adjustment is (xorMask * termCount-1)
+              
+                //var muled = ctx.Mul(ctx.Constant(targetCoeff, width), xored);
+
+                //Debugger.Break();
+            }
+
+            var product = ctx.Mul(ctx.Constant(targetCoeff, width), ctx.Or(allTerms));
+            var res = ctx.Add(ctx.Constant(constant, width), product);
+
+            Console.WriteLine($"\nRes:\n{ctx.GetAstString(res)}");
+            Debugger.Break();
             return null;
         }
 
