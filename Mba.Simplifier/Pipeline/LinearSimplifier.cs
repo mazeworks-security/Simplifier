@@ -380,12 +380,12 @@ namespace Mba.Simplifier.Pipeline
             ApInt onZero = 0;
             ApInt onOne = moduloMask & (coeff * mask);
 
-            // This one could be formulated as a system of linear equations
             var tbl1 = new ApInt[] { onZero, onOne };
             var formula1 = moduloMask & (onOne + (targetCoeff * (mask)));
             var formula2 = moduloMask & (onOne + (targetCoeff * (0)));
             var tbl2 = new ApInt[] { formula1, formula2 };
 
+            // In this case we can rewrite the term using a XOR by constant and an addition of a constant offset.
             ApInt xorMask = 0;
             ApInt subOffset = 0;
             if (tbl1.SequenceEqual(tbl2))
@@ -395,8 +395,7 @@ namespace Mba.Simplifier.Pipeline
                 return (xorMask, subOffset);
             }
 
-            // But this could not?
-            // System of linear equations.. we can either have onOne+ targetCoeff*(mask^bitop), or... we can just change the coefficient as is..
+            // In this case we can just change the coefficient without making any other changes.
             else if (refiner.CanChangeCoefficientTo(coeff, targetCoeff, mask))
             {
                 xorMask = 0;
@@ -404,6 +403,7 @@ namespace Mba.Simplifier.Pipeline
                 return (xorMask, subOffset);
             }
 
+            // Otherwise there is no solution, we cannot use this coefficient.
             return null;
         }
 
