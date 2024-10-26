@@ -301,6 +301,10 @@ namespace Mba.Simplifier.Pipeline
 
         private void BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations, ulong targetCoeff)
         {
+            // Heuristic for identifying dominating coefficient...
+            // For each m1*(mask&bitop), look at the bits that must be set, and the bits that must be zero.
+            // 
+
             bool truthTableIdx = true;
             var getConj = (ApInt i, ApInt mask) =>
             {
@@ -316,8 +320,28 @@ namespace Mba.Simplifier.Pipeline
             AstIdx.ctx = ctx;
             variableCombinations = new List<ApInt>() { 0}.Concat(variableCombinations).ToArray();
 
+            var uniqueCoeffs = new Dictionary<ApInt, int>();
+            for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
+            {
+                var mask = 1ul << bitIndex;
+                Console.Write($"\n(x&{mask}): ");
+                var offset = bitIndex * numCombinations;
+                for (int i = 1; i < (int)numCombinations; i++)
+                {
+                    var coeff = withoutConstant[(int)offset + i];
 
-            //variableCombinations = variableCombinations.Select(x => (ApInt)1).ToArray();
+                    //if (coeff == 193661765465604498)
+                    //    Debugger.Break();
+                    coeff = refiner.FindMinimalCoeffSlow(coeff, mask, constant);
+                    withoutConstant[(int)offset + i] = coeff;
+                    Console.Write($"{coeff} + ");
+
+                    uniqueCoeffs.TryAdd(coeff, 0);
+                    uniqueCoeffs[coeff] += 1;
+                }
+            }
+
+                    //variableCombinations = variableCombinations.Select(x => (ApInt)1).ToArray();
 
             var xorMasks = new ApInt[withoutConstant.Length];
 
@@ -340,7 +364,9 @@ namespace Mba.Simplifier.Pipeline
 
                     var mask = 1ul << bitIndex;
                     var bw = getConj((ApInt)i, mask);
-                    
+
+                    if (coeff == 274877906927)
+                        Debugger.Break();
 
                     if (coeff == targetCoeff)
                     {
@@ -354,8 +380,6 @@ namespace Mba.Simplifier.Pipeline
                     if (i == 0)
                         continue;
 
-                    if (coeff == 459154)
-                        Debugger.Break();
 
 
                     // Evaluate the formula and check if the solution is just onOne + targetCoeff*(mask^(coeff)
@@ -378,6 +402,7 @@ namespace Mba.Simplifier.Pipeline
                     }
 
                     // But this could not?
+                    // System of linear equations.. we can either have onOne+ targetCoeff*(mask^bitop), or... we can just change the coefficient as is..
                     else if(refiner.CanChangeCoefficientTo(coeff, targetCoeff, mask))
                     {
                         xorMask = 0;
@@ -419,7 +444,7 @@ namespace Mba.Simplifier.Pipeline
 
             Console.WriteLine($"\n\nSolution: {constant} + {String.Join(" + ", terms)}");
 
-            Debugger.Break();
+             Debugger.Break();
         }
 
         private void Solve(ulong constant, ApInt[] withConstant, ApInt[] withoutConstant, List<ApInt> constantTerms, List<ApInt> candCoeffs)
