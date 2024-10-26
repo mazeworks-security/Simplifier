@@ -20,6 +20,7 @@ using Mba.Simplifier.Minimization;
 using Mba.Common.Interop;
 using Iced.Intel;
 using Antlr4.Runtime.Tree;
+using System.Reflection.Metadata;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -299,6 +300,52 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
+        private (ApInt coeff, ApInt mask)[] TryReduceRows(ApInt constant, ApInt[] withoutConstant)
+        {
+            var coeffsToMasks = new Dictionary<ApInt, ApInt>();
+            for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
+            {
+                var mask = 1ul << bitIndex;
+                Log($"\n(x&{mask}): ");
+
+                var offset = bitIndex * numCombinations;
+                ApInt curr = 0;
+                for (int i = 1; i < (int)numCombinations; i++)
+                {
+                    var coeff = withoutConstant[(int)offset + i];
+                    if (coeff == 0)
+                        continue;
+
+                    coeff = refiner.FindMinimalCoeffSlow(coeff, mask, constant);
+                    withoutConstant[(int)offset + i] = coeff;
+                    Log($"{coeff} + ");
+
+                    // If this is the first non zero coeff in the row, set it.
+                    if (curr == 0)
+                    {
+                        curr = coeff;
+                        continue;
+                    }
+
+                    // If a row is not aligned, we cannot possibly have a solution.
+                    else if (curr != coeff)
+                    {
+                        return null;
+                    }
+                }
+
+                // Skip if the whole row was nil
+                if (curr == 0)
+                    continue;
+
+                coeffsToMasks.TryAdd(curr, 0);
+                coeffsToMasks[curr] |= mask;
+            }
+
+            var arr = coeffsToMasks.Select(x => (x.Key, x.Value)).ToArray(); 
+            return arr;
+        }
+
         private (ApInt xorMask, ApInt subOffset)? TryRewrite(ApInt coeff, ApInt targetCoeff, ApInt mask)
         {
             ApInt onZero = 0;
@@ -331,15 +378,13 @@ namespace Mba.Simplifier.Pipeline
             return null;
         }
 
+        // Algorithm:
+        // (1) Reduce each coefficient
+        // (2) Assume each row is aligned, if not, bail out.
+        // (3) Maintain a mapping of <coeff, bits>
+        // (4) Enumerate each coefficient, check if all other coefficients can be changed or reduced to the target coefficient.
         private ApInt? BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations, ulong targetCoeff)
         {
-            // Algorithm:
-            // (1) Reduce each coefficient
-            // (2) Assume each row is aligned, if not, bail out.
-            // (3) Maintain a mapping of <coeff, bits>
-            // (4) Enumerate each coefficient, check if all other coefficients can be changed or reduced to the target coefficient.
-
-
             // Heuristic for identifying dominating coefficient...
             // For each m1*(mask&bitop), look at the bits that must be set, and the bits that must be zero.
             // 
@@ -360,57 +405,10 @@ namespace Mba.Simplifier.Pipeline
             AstIdx.ctx = ctx;
             variableCombinations = new List<ApInt>() { 0}.Concat(variableCombinations).ToArray();
 
-            var uniqueCoeffs = new Dictionary<ApInt, int>();
+            var arr = TryReduceRows(constant, withoutConstant);
+            if (arr == null)
+                return null;
 
-            var coeffsToMasks = new Dictionary<ApInt, ApInt>();
-
-            for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
-            {
-                var mask = 1ul << bitIndex;
-                Console.Write($"\n(x&{mask}): ");
-                var offset = bitIndex * numCombinations;
-
-                ApInt curr = 0;
-
-                for (int i = 1; i < (int)numCombinations; i++)
-                {
-                    var coeff = withoutConstant[(int)offset + i];
-                    if (coeff == 0)
-                        continue;
-
-
-                    //if (coeff == 193661765465604498)
-                    //    Debugger.Break();
-                    coeff = refiner.FindMinimalCoeffSlow(coeff, mask, constant);
-                    withoutConstant[(int)offset + i] = coeff;
-                    Console.Write($"{coeff} + ");
-
-                    uniqueCoeffs.TryAdd(coeff, 0);
-                    uniqueCoeffs[coeff] += 1;
-
-                    // If this is the first non zero coeff in the row, set it.
-                    if(curr == 0)
-                    {
-                        curr = coeff;
-                        continue;
-                    }
-
-                    // If a row is not aligned, we cannot possibly have a solution.
-                    else if(curr != coeff)
-                    {
-                        return null;
-                    }
-                }
-
-                // Skip if the whole row was nil
-                if (curr == 0)
-                    continue;
-
-                coeffsToMasks.TryAdd(curr, 0);
-                coeffsToMasks[curr] |= mask;
-            }
-
-            var arr = coeffsToMasks.ToArray();
             foreach (var (coeff, mask) in arr)
             {
                 bool success = true;
