@@ -443,6 +443,7 @@ namespace Mba.Simplifier.Pipeline
 
             var targetCoeff = singleCoeff.Value;
 
+            // Fill in a table for XOR masks.
             var xorMasks = new ApInt[withoutConstant.Length];
 
 
