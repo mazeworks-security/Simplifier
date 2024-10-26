@@ -300,6 +300,35 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
+        private ApInt? TryGetSingleCoeff((ApInt coeff, ApInt mask)[] uniqueCoeffs)
+        {
+            foreach (var (coeff, mask) in uniqueCoeffs)
+            {
+                bool success = true;
+                for (int i = 0; i < uniqueCoeffs.Length; i++)
+                {
+                    // Skip ourselves
+                    var (otherCoeff, otherMask) = uniqueCoeffs[i];
+                    if (otherCoeff == coeff)
+                        continue;
+
+                    if (TryRewrite(otherCoeff, coeff, otherMask) == null)
+                    {
+                        success = false;
+                        break;
+                    }
+                }
+
+                if (success)
+                    return coeff;
+            }
+
+            return null;
+        }
+
+        // Canonicalize each row by eliminating undemanded set bits in all of the coefficients.
+        // If a row can not be fully aligned(i.e. rewrite every row to use the same coefficient) we return nil.
+        // Otherwise we return a compact mapping of all unique coefficients, and the bit indices those coefficients can be multiplied over.
         private (ApInt coeff, ApInt mask)[] TryReduceRows(ApInt constant, ApInt[] withoutConstant)
         {
             var coeffsToMasks = new Dictionary<ApInt, ApInt>();
@@ -385,10 +414,6 @@ namespace Mba.Simplifier.Pipeline
         // (4) Enumerate each coefficient, check if all other coefficients can be changed or reduced to the target coefficient.
         private ApInt? BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations, ulong targetCoeff)
         {
-            // Heuristic for identifying dominating coefficient...
-            // For each m1*(mask&bitop), look at the bits that must be set, and the bits that must be zero.
-            // 
-
             // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
             bool truthTableIdx = true;
             var getConj = (ApInt i, ApInt mask) =>
@@ -405,45 +430,23 @@ namespace Mba.Simplifier.Pipeline
             AstIdx.ctx = ctx;
             variableCombinations = new List<ApInt>() { 0}.Concat(variableCombinations).ToArray();
 
-            var arr = TryReduceRows(constant, withoutConstant);
-            if (arr == null)
+            // Reduce each row to a canonical form. If a row cannot be canonicalized, there is no solution.
+            var uniqueCoeffs = TryReduceRows(constant, withoutConstant);
+            if (uniqueCoeffs == null)
+                return null;
+            // Try to find a single coefficient that all result vector entries can be changed to.
+            // If the result is nil, then a single term solution does not exist!
+            var singleCoeff = TryGetSingleCoeff(uniqueCoeffs);
+            if (singleCoeff == null)
                 return null;
 
-            foreach (var (coeff, mask) in arr)
-            {
-                bool success = true;
-                for (int i = 0; i < arr.Length; i++)
-                {
-                    // Skip ourselves
-                    var (otherCoeff, otherMask) = arr[i];
-                    if (otherCoeff == coeff)
-                        continue;
-
-                    if (TryRewrite(otherCoeff, coeff, otherMask) == null)
-                    {
-                        success = false;
-                        break;
-                    }
-                }
-
-                if(success)
-                {
-                    Debugger.Break();
-                }
-            }
-
-                    //variableCombinations = variableCombinations.Select(x => (ApInt)1).ToArray();
+                  
 
             var xorMasks = new ApInt[withoutConstant.Length];
 
-            var solver = new LinearCongruenceSolver(moduloMask);
-            var modulus = (UInt128)moduloMask + 1;
 
             var terms = new List<string>();
             var og = constant;
-            // Bug, but need to handle the case:
-            // op1 = (0^(16&a))
-            // op2 = c1 + (17 * (c2 ^ (16 & a)))
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
                 var offset = bitIndex * numCombinations;
@@ -456,8 +459,6 @@ namespace Mba.Simplifier.Pipeline
                     var mask = 1ul << bitIndex;
                     var bw = getConj((ApInt)i, mask);
 
-                    if (coeff == 274877906927)
-                        Debugger.Break();
 
                     if (coeff == targetCoeff)
                     {
@@ -524,11 +525,6 @@ namespace Mba.Simplifier.Pipeline
                     var tt = ctx.GetAstString(bw);
                     terms.Add(tt);
                     Console.WriteLine("");
-                    // Solve for ax = b
-                    //var sol = solver.LinearCongruence()
-
-                    // We want to solve for target*(c1^(x&mask)) == ourValue
-                    //Debugger.Break();
                 }
             }
 
