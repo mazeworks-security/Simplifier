@@ -301,8 +301,23 @@ namespace Mba.Simplifier.Pipeline
 
         private void BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations, ulong targetCoeff)
         {
+            bool truthTableIdx = true;
+            var getConj = (ApInt i, ApInt mask) =>
+            {
+                if(truthTableIdx)
+                {
+                    var boolean = GetBooleanForIndex((int)i);
+                    return ctx.And(ctx.Constant(mask, width), boolean);
+                }
+
+                return ConjunctionFromVarMask(1, i, mask).Value;
+            };
+
             AstIdx.ctx = ctx;
             variableCombinations = new List<ApInt>() { 0}.Concat(variableCombinations).ToArray();
+
+
+            //variableCombinations = variableCombinations.Select(x => (ApInt)1).ToArray();
 
             var xorMasks = new ApInt[withoutConstant.Length];
 
@@ -324,7 +339,7 @@ namespace Mba.Simplifier.Pipeline
                         continue;
 
                     var mask = 1ul << bitIndex;
-                    var bw = ConjunctionFromVarMask(1, variableCombinations[i], mask).Value;
+                    var bw = getConj((ApInt)i, mask);
                     
 
                     if (coeff == targetCoeff)
@@ -339,11 +354,16 @@ namespace Mba.Simplifier.Pipeline
                     if (i == 0)
                         continue;
 
+                    if (coeff == 459154)
+                        Debugger.Break();
+
+
                     // Evaluate the formula and check if the solution is just onOne + targetCoeff*(mask^(coeff)
 
                     ApInt onZero = 0;
                     ApInt onOne = moduloMask & (coeff * mask);
 
+                    // This one could be formulated as a system of linear equations
                     var tbl1 = new ApInt[] { onZero, onOne };
                     var formula1 = moduloMask & (onOne + (targetCoeff * (mask)));
                     var formula2 = moduloMask & (onOne + (targetCoeff * (0)));
@@ -357,6 +377,7 @@ namespace Mba.Simplifier.Pipeline
                         subOffset = onOne;
                     }
 
+                    // But this could not?
                     else if(refiner.CanChangeCoefficientTo(coeff, targetCoeff, mask))
                     {
                         xorMask = 0;
@@ -589,6 +610,8 @@ namespace Mba.Simplifier.Pipeline
             // Get all combinations of variables.
             var variableCombinations = GetVariableCombinations(variables.Count);
 
+            BacktrackingSearch(constant, resultVector.ToArray(), variableCombinations, 1346583270072451474);
+
             // Linear combination, where the index can be seen as an index into `variableCombinations`,
             // and the element at that index is a list of terms operating over that boolean combination.
             // Term = coeff*(bitMask&basisExpression).
@@ -648,7 +671,7 @@ namespace Mba.Simplifier.Pipeline
             var withNoConjunctions = GetVariablesWithNoConjunctions(variableCombinations, linearCombinations);
 
 
-            BacktrackingSearch(constant, resultVector.ToArray(), variableCombinations, 546776870978778);
+           // BacktrackingSearch(constant, resultVector.ToArray(), variableCombinations, 546776870978778);
 
             // Simplify the linear combination and turn it back into an expression.
             if (multiBit)
