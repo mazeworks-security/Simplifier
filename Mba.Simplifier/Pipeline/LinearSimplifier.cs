@@ -335,19 +335,21 @@ namespace Mba.Simplifier.Pipeline
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
                 var mask = 1ul << bitIndex;
-                Log($"\n(x&{mask}): ");
+                Log($"\n(x&{mask}): ", false);
 
                 var offset = bitIndex * numCombinations;
                 ApInt curr = 0;
                 for (int i = 1; i < (int)numCombinations; i++)
                 {
                     var coeff = withoutConstant[(int)offset + i];
-                    if (coeff == 0)
-                        continue;
+
 
                     coeff = refiner.FindMinimalCoeffSlow(coeff, mask, constant);
                     withoutConstant[(int)offset + i] = coeff;
-                    Log($"{coeff} + ");
+                    Log($"{coeff} + ", false);
+
+                    if (coeff == 0)
+                        continue;
 
                     // If this is the first non zero coeff in the row, set it.
                     if (curr == 0)
@@ -412,6 +414,7 @@ namespace Mba.Simplifier.Pipeline
         // (2) Assume each row is aligned, if not, bail out.
         // (3) Maintain a mapping of <coeff, bits>
         // (4) Enumerate each coefficient, check if all other coefficients can be changed or reduced to the target coefficient.
+        // (5) If we found a solution for the coefficients, rewrite the result vector and keep track of the XOR masks.
         private ApInt? BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations)
         {
             // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
@@ -436,7 +439,7 @@ namespace Mba.Simplifier.Pipeline
                 return null;
             // Try to find a single coefficient that all result vector entries can be changed to.
             // If the result is nil, then a single term solution does not exist!
-            // TODO: It's possible that a solution exists with a coefficient that is not present in the set, though in practice I've never seen this happen!
+            // Note: It's possible that a solution exists with a coefficient that is not present in the set, though in practice I've never seen this happen.
             var singleCoeff = TryGetSingleCoeff(uniqueCoeffs);
             if (singleCoeff == null)
                 return null;
@@ -451,10 +454,10 @@ namespace Mba.Simplifier.Pipeline
             var og = constant;
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
-                var offset = bitIndex * numCombinations;
+                var offset = (int)(bitIndex * numCombinations);
                 for (int i = 0; i < (int)numCombinations; i++)
                 {
-                    var coeff = withoutConstant[(int)offset + i];
+                    var coeff = withoutConstant[offset + i];
                     if (coeff == 0)
                         continue;
 
@@ -474,6 +477,7 @@ namespace Mba.Simplifier.Pipeline
                     if (i == 0)
                         continue;
 
+                    /*
                     // Evaluate the formula and check if the solution is just onOne + targetCoeff*(mask^(coeff)
                     ApInt onZero = 0;
                     ApInt onOne = moduloMask & (coeff * mask);
@@ -504,7 +508,10 @@ namespace Mba.Simplifier.Pipeline
                     {
                         Debugger.Break();
                     }
+                    */
 
+                    var (xorMask, subOffset) = TryRewrite(coeff, targetCoeff, mask).Value;
+                    xorMasks[offset + i] = xorMask;
                     // 239*(a&1)
                     // => 
 
@@ -699,6 +706,7 @@ namespace Mba.Simplifier.Pipeline
             //Solve(constant, withConstant, withoutConstant, constantTerms, candCoeffs.ToList());
 
             // Short circuit if we can find a single term solution.
+            //if (multiBit)
             if (false)
             {
                 var asBoolean = AsPureBoolean(constant);
@@ -2557,10 +2565,16 @@ namespace Mba.Simplifier.Pipeline
             }
         }
 
-        private void Log(string message)
+        private void Log(string message, bool newLine = true)
         {
-            if (dbg)
+            if (!dbg)
+                return;
+
+
+            if (newLine)
                 Console.WriteLine(message);
+            else
+                Console.Write(message);
         }
 
         private void Log(AstIdx conj)

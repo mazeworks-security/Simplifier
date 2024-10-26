@@ -7,7 +7,7 @@ using Mba.Utility;
 using System.ComponentModel;
 
 bool printUsage = false;
-uint bitWidth = 32;
+uint bitWidth = 8;
 bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
@@ -61,7 +61,11 @@ inputText = "8*((a^7763425967556079)|((a|4534545345534&b&435345435543453&c|88898
 //inputText = "17*(((a^5)|(b^3))^67567567)"; // Triggers edge case, maximal value or minimal value will not work
 //inputText = "17*~(a&11111)";
 
-inputText = "17*(a^5)";
+inputText = "17*((a|b|c)^5)";
+
+//inputText = "(2^(2&(a&(~b)))) + (2^(2&((~a)&b)))";
+
+//inputText = "127*(a&b&2) + 127*((~a&b)&2)";
 
 //inputText = "546776870978778*((a|4534545345534&b&435345435543453&c|8889879798)|((a|b&5564456546)^56456654|(5645665&b&c^76878889)|(65655656^a&688768&c|(6545654&b))|(a^(b|4554453)^c^6706767590))) + 0xA96AAABCE6AAAAAA*((x&y)^453457888900)";
 //inputText = "7876788766782324334*(45435435453|(a^b^c^234234324234234)|(a&b&~c^909908890809))";
@@ -118,8 +122,8 @@ var id = RustAstParser.Parse(ctx, inputText, bitWidth);
 
 Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n");
 
-LinearSimplifier.Run(bitWidth, ctx, id, false, true);
-
+var res = LinearSimplifier.Run(bitWidth, ctx, id, false, true);
+Console.WriteLine(ctx.GetAstString(res));
 id = ctx.RecursiveSimplify(id);
 for (int i = 0; i < 3; i++)
 {
