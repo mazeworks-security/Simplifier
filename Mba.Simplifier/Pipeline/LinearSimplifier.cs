@@ -299,12 +299,51 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
-        private void BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations, ulong targetCoeff)
+        private bool CanRewrite(ApInt coeff, ApInt targetCoeff, ApInt mask)
         {
+            ApInt onZero = 0;
+            ApInt onOne = moduloMask & (coeff * mask);
+
+            // This one could be formulated as a system of linear equations
+            var tbl1 = new ApInt[] { onZero, onOne };
+            var formula1 = moduloMask & (onOne + (targetCoeff * (mask)));
+            var formula2 = moduloMask & (onOne + (targetCoeff * (0)));
+            var tbl2 = new ApInt[] { formula1, formula2 };
+
+            ApInt xorMask = 0;
+            ApInt subOffset = 0;
+            if (tbl1.SequenceEqual(tbl2))
+            {
+                return true;
+            }
+
+            // But this could not?
+            // System of linear equations.. we can either have onOne+ targetCoeff*(mask^bitop), or... we can just change the coefficient as is..
+            else if (refiner.CanChangeCoefficientTo(coeff, targetCoeff, mask))
+            {
+                xorMask = 0;
+                subOffset = 0;
+                return true;
+            }
+
+            return false;
+
+        }
+
+        private ApInt? BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations, ulong targetCoeff)
+        {
+            // Algorithm:
+            // (1) Reduce each coefficient
+            // (2) Assume each row is aligned, if not, bail out.
+            // (3) Maintain a mapping of <coeff, bits>
+            // (4) Enumerate each coefficient, check if all other coefficients can be changed or reduced to the target coefficient.
+
+
             // Heuristic for identifying dominating coefficient...
             // For each m1*(mask&bitop), look at the bits that must be set, and the bits that must be zero.
             // 
 
+            // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
             bool truthTableIdx = true;
             var getConj = (ApInt i, ApInt mask) =>
             {
@@ -321,14 +360,23 @@ namespace Mba.Simplifier.Pipeline
             variableCombinations = new List<ApInt>() { 0}.Concat(variableCombinations).ToArray();
 
             var uniqueCoeffs = new Dictionary<ApInt, int>();
+
+            var coeffsToMasks = new Dictionary<ApInt, ApInt>();
+
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
                 var mask = 1ul << bitIndex;
                 Console.Write($"\n(x&{mask}): ");
                 var offset = bitIndex * numCombinations;
+
+                ApInt curr = 0;
+
                 for (int i = 1; i < (int)numCombinations; i++)
                 {
                     var coeff = withoutConstant[(int)offset + i];
+                    if (coeff == 0)
+                        continue;
+
 
                     //if (coeff == 193661765465604498)
                     //    Debugger.Break();
@@ -338,6 +386,50 @@ namespace Mba.Simplifier.Pipeline
 
                     uniqueCoeffs.TryAdd(coeff, 0);
                     uniqueCoeffs[coeff] += 1;
+
+                    // If this is the first non zero coeff in the row, set it.
+                    if(curr == 0)
+                    {
+                        curr = coeff;
+                        continue;
+                    }
+
+                    // If a row is not aligned, we cannot possibly have a solution.
+                    else if(curr != coeff)
+                    {
+                        return null;
+                    }
+                }
+
+                // Skip if the whole row was nil
+                if (curr == 0)
+                    continue;
+
+                coeffsToMasks.TryAdd(curr, 0);
+                coeffsToMasks[curr] |= mask;
+            }
+
+            var arr = coeffsToMasks.ToArray();
+            foreach (var (coeff, mask) in arr)
+            {
+                bool success = true;
+                for (int i = 0; i < arr.Length; i++)
+                {
+                    // Skip ourselves
+                    var (otherCoeff, otherMask) = arr[i];
+                    if (otherCoeff == coeff)
+                        continue;
+
+                    if (!CanRewrite(otherCoeff, coeff, otherMask))
+                    {
+                        success = false;
+                        break;
+                    }
+                }
+
+                if(success)
+                {
+                    Debugger.Break();
                 }
             }
 
@@ -445,6 +537,7 @@ namespace Mba.Simplifier.Pipeline
             Console.WriteLine($"\n\nSolution: {constant} + {String.Join(" + ", terms)}");
 
              Debugger.Break();
+            return null;
         }
 
         private void Solve(ulong constant, ApInt[] withConstant, ApInt[] withoutConstant, List<ApInt> constantTerms, List<ApInt> candCoeffs)
@@ -612,7 +705,7 @@ namespace Mba.Simplifier.Pipeline
             //Solve(constant, withConstant, withoutConstant, constantTerms, candCoeffs.ToList());
 
             // Short circuit if we can find a single term solution.
-            if (multiBit)
+            if (false)
             {
                 var asBoolean = AsPureBoolean(constant);
                 if (asBoolean != null)
@@ -635,7 +728,7 @@ namespace Mba.Simplifier.Pipeline
             // Get all combinations of variables.
             var variableCombinations = GetVariableCombinations(variables.Count);
 
-            BacktrackingSearch(constant, resultVector.ToArray(), variableCombinations, 1346583270072451474);
+            BacktrackingSearch(constant, resultVector.ToArray(), variableCombinations, 14730329389266648710);
 
             // Linear combination, where the index can be seen as an index into `variableCombinations`,
             // and the element at that index is a list of terms operating over that boolean combination.
