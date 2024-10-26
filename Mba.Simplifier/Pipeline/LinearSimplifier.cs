@@ -299,7 +299,7 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
-        private bool CanRewrite(ApInt coeff, ApInt targetCoeff, ApInt mask)
+        private (ApInt xorMask, ApInt subOffset)? TryRewrite(ApInt coeff, ApInt targetCoeff, ApInt mask)
         {
             ApInt onZero = 0;
             ApInt onOne = moduloMask & (coeff * mask);
@@ -314,7 +314,9 @@ namespace Mba.Simplifier.Pipeline
             ApInt subOffset = 0;
             if (tbl1.SequenceEqual(tbl2))
             {
-                return true;
+                xorMask = mask;
+                subOffset = onOne;
+                return (xorMask, subOffset);
             }
 
             // But this could not?
@@ -323,11 +325,10 @@ namespace Mba.Simplifier.Pipeline
             {
                 xorMask = 0;
                 subOffset = 0;
-                return true;
+                return (xorMask, subOffset);
             }
 
-            return false;
-
+            return null;
         }
 
         private ApInt? BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations, ulong targetCoeff)
@@ -420,7 +421,7 @@ namespace Mba.Simplifier.Pipeline
                     if (otherCoeff == coeff)
                         continue;
 
-                    if (!CanRewrite(otherCoeff, coeff, otherMask))
+                    if (TryRewrite(otherCoeff, coeff, otherMask) == null)
                     {
                         success = false;
                         break;
@@ -728,7 +729,7 @@ namespace Mba.Simplifier.Pipeline
             // Get all combinations of variables.
             var variableCombinations = GetVariableCombinations(variables.Count);
 
-            BacktrackingSearch(constant, resultVector.ToArray(), variableCombinations, 14730329389266648710);
+            BacktrackingSearch(constant, resultVector.ToArray(), variableCombinations, 18446197296838572838);
 
             // Linear combination, where the index can be seen as an index into `variableCombinations`,
             // and the element at that index is a list of terms operating over that boolean combination.
