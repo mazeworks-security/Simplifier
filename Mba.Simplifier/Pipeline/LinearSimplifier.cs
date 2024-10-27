@@ -486,53 +486,10 @@ namespace Mba.Simplifier.Pipeline
                     if (i == 0)
                         continue;
 
-                    /*
-                    // Evaluate the formula and check if the solution is just onOne + targetCoeff*(mask^(coeff)
-                    ApInt onZero = 0;
-                    ApInt onOne = moduloMask & (coeff * mask);
-
-                    // This one could be formulated as a system of linear equations
-                    var tbl1 = new ApInt[] { onZero, onOne };
-                    var formula1 = moduloMask & (onOne + (targetCoeff * (mask)));
-                    var formula2 = moduloMask & (onOne + (targetCoeff * (0)));
-                    var tbl2 = new ApInt[] { formula1, formula2 };
-
-                    ApInt xorMask = 0;
-                    ApInt subOffset = 0;
-                    if(tbl1.SequenceEqual(tbl2))
-                    {
-                        xorMask = mask;
-                        subOffset = onOne;
-                    }
-
-                    // But this could not?
-                    // System of linear equations.. we can either have onOne+ targetCoeff*(mask^bitop), or... we can just change the coefficient as is..
-                    else if(refiner.CanChangeCoefficientTo(coeff, targetCoeff, mask))
-                    {
-                        xorMask = 0;
-                        subOffset = 0;
-                    }
-
-                    else
-                    {
-                        Debugger.Break();
-                    }
-                    */
-
                     var (xorMask, subOffset) = TryRewrite(coeff, targetCoeff, mask).Value;
                     xorMasks[offset + i] = xorMask;
-                    // 239*(a&1)
-                    // => 
-
-                    // (a&b), (a&b&c) are not linearly independent!
-                    // But it should still be fine
-
                     constant += subOffset;
                     constant &= moduloMask;
-
-                    //withoutConstant[(int)offset + i] = targetCoeff;
-
-
                     
                     bw = ctx.Xor(ctx.Constant(xorMask, width), bw);
                     bw = ctx.Mul(ctx.Constant(targetCoeff, width), bw);
@@ -545,7 +502,6 @@ namespace Mba.Simplifier.Pipeline
             Console.WriteLine($"\n\nSolution: {constant} + {String.Join(" + ", terms)}");
 
             // Walk result vector, get the ones with xor mask.. merge them, then merge the ones without the XOR mask..
-
             List<AstIdx> allTerms = new();
 
 
