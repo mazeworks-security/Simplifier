@@ -419,12 +419,15 @@ namespace Mba.Simplifier.Pipeline
         {
             // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
             bool truthTableIdx = true;
-            var getConj = (ApInt i, ApInt mask) =>
+            var getConj = (ApInt i, ApInt? mask) =>
             {
                 if(truthTableIdx)
                 {
                     var boolean = GetBooleanForIndex((int)i);
-                    return ctx.And(ctx.Constant(mask, width), boolean);
+                    if (mask == null)
+                        return boolean;
+
+                    return ctx.And(ctx.Constant(mask.Value, width), boolean);
                 }
 
                 return ConjunctionFromVarMask(1, i, mask).Value;
@@ -449,6 +452,11 @@ namespace Mba.Simplifier.Pipeline
             // Fill in a table for XOR masks.
             var xorMasks = new ApInt[withoutConstant.Length];
 
+
+            // Group basis expression that use XOR.. and basis expression that do not use XOR..
+            // Merge XOR masks..
+
+          
 
             var terms = new List<string>();
             var og = constant;
@@ -540,6 +548,19 @@ namespace Mba.Simplifier.Pipeline
 
             List<AstIdx> allTerms = new();
 
+
+            var combinedXors = new ApInt[(int)numCombinations];
+            var combinedAnds = new ApInt[(int)numCombinations];
+
+            // We want to group XOR terms by their base bitwise expressions
+            var xorTerms = new List<AstIdx>();
+
+            var xorMap = new Dictionary<ApInt, ApInt>();
+
+            ApInt freeMask = moduloMask;
+
+
+
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
                 var offset = (int)(bitIndex * numCombinations);
@@ -548,23 +569,37 @@ namespace Mba.Simplifier.Pipeline
                 ApInt globMask = 0;
                 var withoutXor = new List<AstIdx>();
                 var withXor = new List<AstIdx>();
+
+                ushort truthIdx = 0;
+                ApInt xoredIndices = 0;
+
                 for (int i = 0; i < (int)numCombinations; i++)
                 {
                     var coeff = withoutConstant[offset + i];
                     if (coeff == 0)
+                    {
+                        truthIdx += 1;
                         continue;
+                    }
 
                     var bw = getConj((ApInt)i, mask);
                     var xorMask = xorMasks[offset + i];
+                    freeMask &= ~mask;
+
                     if (xorMask == 0)
                     {
+                        combinedAnds[i] |= mask;
                         withoutXor.Add(bw);
                     }
                     else
                     {
                         withXor.Add(bw);
                         globMask = xorMask;
+                        combinedXors[i] |= xorMask;
+                        xoredIndices |= 1ul << (truthIdx);
                     }
+
+                    truthIdx += 1;
                 }
 
                 if (withXor.Any())
@@ -577,6 +612,10 @@ namespace Mba.Simplifier.Pipeline
                     var ored = ctx.Or(withXor);
                     var xored = ctx.Xor(ctx.Constant(globMask, width), ored);
                     allTerms.Add(xored);
+
+
+                    xorTerms.Add(xored);
+                    xorMap[globMask] = xoredIndices;
                 }
 
                 if(withoutXor.Any())
@@ -596,12 +635,95 @@ namespace Mba.Simplifier.Pipeline
                 //Debugger.Break();
             }
 
-            var product = ctx.Mul(ctx.Constant(targetCoeff, width), ctx.Or(allTerms));
+            // Group by AND / XOR masks.
+            var process = (ApInt[] arr) =>
+            {
+                Dictionary<ApInt, AstIdx> maskToBitwise = new();
+                for(int i = 0; i < arr.Length; i++)
+                {
+                    var mask = arr[i];
+                    if (mask == 0)
+                        continue;
+
+                    if(maskToBitwise.TryGetValue(mask, out var existing))
+                    {
+                        maskToBitwise[mask] = ctx.Or(existing, getConj((ApInt)i, null));
+                    }
+
+                    else
+                    {
+                        maskToBitwise[mask] = getConj((ApInt)i, null);
+                    }
+                }
+
+                return maskToBitwise;
+            };
+
+            // Frick, the merging is assuming they are all.... combined... 
+            // its over...
+
+            // Merge bitwise terms.
+            var andToBitwise = process(combinedAnds);
+            var xorToBitwise = process(combinedXors);
+
+            var newXors = xorMap.Select(x => MaskAndMinimize(GetBooleanTableAst(x.Value), AstOp.Xor, x.Key)).ToList();
+            
+
+
+            var union = new List<AstIdx>();
+            union.AddRange(andToBitwise.Select(x => MaskAndMinimize(x.Value, AstOp.And, x.Key)));
+            //union.AddRange(xorTerms);
+            union.AddRange(newXors);
+            //union.AddRange(xorToBitwise.Select(x => MaskAndMinimize(x.Value, AstOp.Xor, x.Key)));
+
+            // Walk through each (mask, bitwise) pair, minimize bitwise, apply mask.
+
+            var combined2 = ctx.Or(allTerms); // Exploded representation
+            var combined = ctx.Or(union);
+
+            var product = ctx.Mul(ctx.Constant(targetCoeff, width), combined);
             var res = ctx.Add(ctx.Constant(constant, width), product);
 
             Console.WriteLine($"\nRes:\n{ctx.GetAstString(res)}");
             Debugger.Break();
             return null;
+        }
+
+        private AstIdx GetBooleanTableAst(ulong table)
+        {
+            var vec = new List<int>();
+            for(ushort i = 0; i < (ushort)numCombinations; i++)
+            {
+                var mask = 1ul << i;
+                if ((table & mask) != 0)
+                    vec.Add(1);
+                else
+                    vec.Add(0);
+            }
+
+            var boolean = BooleanMinimizer.GetBitwise(ctx, variables, vec);
+            return boolean;
+        }
+
+        private AstIdx MaskAndMinimize(AstIdx idx, AstOp opcode, ApInt mask)
+        {
+            var maskId = ctx.Constant(mask, width);
+            var minimized = Minimize(idx);
+            if (opcode == AstOp.Xor)
+                minimized = ctx.And(maskId, minimized);
+
+            
+            return ctx.Binop(opcode, maskId, minimized);
+        }
+
+        // TODO: Rewrite using efficient logic for constructing truth table. 
+        // Alternatively allocate a more compact(ulong based) truth table structure.
+        private AstIdx Minimize(AstIdx idx)
+        {
+            return idx; 
+            var vec = BuildResultVector(ctx, idx, 1);
+            var boolean = BooleanMinimizer.GetBitwise(ctx, variables, vec.Select(x => (int)x).ToList());
+            return boolean;
         }
 
         private void Solve(ulong constant, ApInt[] withConstant, ApInt[] withoutConstant, List<ApInt> constantTerms, List<ApInt> candCoeffs)
