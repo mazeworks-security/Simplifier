@@ -615,7 +615,11 @@ namespace Mba.Simplifier.Pipeline
 
 
                     xorTerms.Add(xored);
-                    xorMap[globMask] = xoredIndices;
+
+                    xorMap.TryAdd(xoredIndices, globMask);
+                    xorMap[xoredIndices] |= globMask;
+
+                    //xorMap[globMask] = xoredIndices;
                 }
 
                 if(withoutXor.Any())
@@ -666,7 +670,7 @@ namespace Mba.Simplifier.Pipeline
             var andToBitwise = process(combinedAnds);
             var xorToBitwise = process(combinedXors);
 
-            var newXors = xorMap.Select(x => MaskAndMinimize(GetBooleanTableAst(x.Value), AstOp.Xor, x.Key)).ToList();
+            var newXors = xorMap.Select(x => MaskAndMinimize(GetBooleanTableAst(x.Key), AstOp.Xor, x.Value)).ToList();
             
 
 
@@ -720,7 +724,6 @@ namespace Mba.Simplifier.Pipeline
         // Alternatively allocate a more compact(ulong based) truth table structure.
         private AstIdx Minimize(AstIdx idx)
         {
-            return idx; 
             var vec = BuildResultVector(ctx, idx, 1);
             var boolean = BooleanMinimizer.GetBitwise(ctx, variables, vec.Select(x => (int)x).ToList());
             return boolean;
