@@ -669,37 +669,68 @@ namespace Mba.Simplifier.Pipeline
                 return ctx.Mul(constantId, ctx.Neg(bitwise));
             }
 
-            // var minimalMask = refiner.FindMinimalMask2(coeff, ~freeMask, constant);
+            //var minimalMask = refiner.FindMinimalMask2(coeff, ~freeMask, constant);
 
-            if(constant == 1ul << ((ushort)width - 1))
+            var signBit = 1ul << ((ushort)width - 1);
+            if (constant == signBit)
             {
-                var xorMask1 = 1ul << (ushort)(width - 1);
-                var xorMask2 = 1ul << (ushort)(width - 2);
-
-                ApInt xorMask = 0;
-                if ((moduloMask & (xorMask1 * coeff)) == constant)
-                    xorMask = xorMask1;
-                else if ((moduloMask & (xorMask2 * coeff)) == constant)
-                    xorMask = xorMask2;
-                else
-                    throw new InvalidOperationException($"Cannot partition constant offset!");
-
+                var withoutSign = SubtractSignBit(coeff, bitwise);
+                if (withoutSign == null)
+                    throw new InvalidOperationException($"Failed to partition constant offset!");
                 var coeffId = ctx.Constant(coeff, width);
-                return ctx.Mul(coeffId, ctx.Xor(ctx.Constant(xorMask, width), bitwise));
+                return ctx.Mul(coeffId, withoutSign.Value);
             }
 
-
-            /*
+            var coeffIdx = ctx.Constant(coeff, width);
+            // Try to find a fit. If there is no fit, can we negate the coefficient and d
             var fittingMask = FindFittingConstantFactor(coeff, constant, (~freeMask) & moduloMask);
             if(fittingMask != null)
             {
-                bitwise = ctx.Or(ctx.Constant(fittingMask.Value, width), bitwise);
-                return ctx.Mul(ctx.Constant(coeff, width), bitwise);
+                var mask = ctx.Constant(fittingMask.Value, width);
+                return ctx.Mul(coeffIdx, ctx.Or(mask, bitwise));
+                Debugger.Break();
             }
-            */
+
+            // Otherwise the fitting mask is null.
+            ApInt adjusted = moduloMask & (constant - signBit);
+            fittingMask = FindFittingConstantFactor(coeff, moduloMask & adjusted, (~freeMask) & moduloMask);
+            if(fittingMask != null)
+            {
+                // Maybe TODO(probably not): Check if OR mask overlaps with sign bit mask.
+                var withoutSb = SubtractSignBit(coeff, bitwise);
+                if(withoutSb != null)
+                {
+                    var mask = ctx.Constant(fittingMask.Value, width);
+                    return ctx.Mul(coeffIdx, ctx.Or(mask, withoutSb.Value));
+                }
+            }
+            /*
+       if(fittingMask != null)
+       {
+           bitwise = ctx.Or(ctx.Constant(fittingMask.Value, width), bitwise);
+           return ctx.Mul(ctx.Constant(coeff, width), bitwise);
+       }
+       */
 
             Debugger.Break();
             return null;
+        }
+
+        private AstIdx? SubtractSignBit(ApInt coeff, AstIdx bitwise)
+        {
+            var constant = 1ul << ((ushort)width - 1);
+            var xorMask1 = 1ul << (ushort)(width - 1);
+            var xorMask2 = 1ul << (ushort)(width - 2);
+
+            ApInt xorMask = 0;
+            if ((moduloMask & (xorMask1 * coeff)) == constant)
+                xorMask = xorMask1;
+            else if ((moduloMask & (xorMask2 * coeff)) == constant)
+                xorMask = xorMask2;
+            else
+                return null;
+
+            return ctx.Xor(ctx.Constant(xorMask, width), bitwise);
         }
 
         private AstIdx GetBooleanTableAst(ulong table)
