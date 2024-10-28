@@ -423,6 +423,9 @@ namespace Mba.Simplifier.Pipeline
         {
             // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
             bool truthTableIdx = true;
+            if(!truthTableIdx)
+                variableCombinations = new List<ApInt>() { 0 }.Concat(variableCombinations).ToArray();
+
             var getConj = (ApInt i, ApInt? mask) =>
             {
                 if(truthTableIdx)
@@ -438,7 +441,6 @@ namespace Mba.Simplifier.Pipeline
             };
 
             AstIdx.ctx = ctx;
-            variableCombinations = new List<ApInt>() { 0}.Concat(variableCombinations).ToArray();
 
             // Reduce each row to a canonical form. If a row cannot be canonicalized, there is no solution.
             var uniqueCoeffs = TryReduceRows(constant, withoutConstant);
@@ -459,9 +461,6 @@ namespace Mba.Simplifier.Pipeline
 
             // Group basis expression that use XOR.. and basis expression that do not use XOR..
             // Merge XOR masks..
-
-          
-
             var terms = new List<string>();
             var og = constant;
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
@@ -518,9 +517,6 @@ namespace Mba.Simplifier.Pipeline
             var xorMap = new Dictionary<ApInt, ApInt>();
 
             ApInt freeMask = moduloMask;
-
-
-
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
                 var offset = (int)(bitIndex * numCombinations);
@@ -579,24 +575,12 @@ namespace Mba.Simplifier.Pipeline
                     xorMap.TryAdd(xoredIndices, globMask);
                     xorMap[xoredIndices] |= globMask;
 
-                    //xorMap[globMask] = xoredIndices;
                 }
 
                 if(withoutXor.Any())
                 {
                     allTerms.Add(ctx.Or(withoutXor));
                 }
-
-                //withXor = withXor.Take(2).ToList();
-
-                // TODO: Delete me.
-
-                // Update the constant offset.
-                // The formula for the offset adjustment is (xorMask * termCount-1)
-              
-                //var muled = ctx.Mul(ctx.Constant(targetCoeff, width), xored);
-
-                //Debugger.Break();
             }
 
             // Group by AND / XOR masks.
@@ -623,9 +607,7 @@ namespace Mba.Simplifier.Pipeline
                 return maskToBitwise;
             };
 
-            // Frick, the merging is assuming they are all.... combined... 
-            // its over...
-
+            // Merging needs to be carefully, because the constant offset adjustment is assuming we have already performed some merging
             // Merge bitwise terms.
             var andToBitwise = process(combinedAnds);
             var xorToBitwise = process(combinedXors);
