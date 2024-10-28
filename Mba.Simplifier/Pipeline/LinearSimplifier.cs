@@ -458,10 +458,8 @@ namespace Mba.Simplifier.Pipeline
             // Fill in a table for XOR masks.
             var xorMasks = new ApInt[withoutConstant.Length];
 
-
             // Group basis expression that use XOR.. and basis expression that do not use XOR..
-            // Merge XOR masks..
-            var terms = new List<string>();
+            // Merge XOR masks.
             var og = constant;
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
@@ -472,17 +470,10 @@ namespace Mba.Simplifier.Pipeline
                     var coeff = withoutConstant[offset + i];
                     if (coeff == 0)
                         continue;
-
                    
                     var bw = getConj((ApInt)i, mask);
-
-
                     if (coeff == targetCoeff)
                     {
-                        bw = ctx.Mul(ctx.Constant(targetCoeff, width), bw);
-                        var t = ctx.GetAstString(bw);
-                        terms.Add(t);
-                        Console.WriteLine("");
                         continue;
                     }
                     
@@ -493,27 +484,16 @@ namespace Mba.Simplifier.Pipeline
                     xorMasks[offset + i] = xorMask;
                     constant += subOffset;
                     constant &= moduloMask;
-                    
-                    bw = ctx.Xor(ctx.Constant(xorMask, width), bw);
-                    bw = ctx.Mul(ctx.Constant(targetCoeff, width), bw);
-
-                    var tt = ctx.GetAstString(bw);
-                    terms.Add(tt);
-                    Console.WriteLine("");
                 }
             }
-            Console.WriteLine($"\n\nSolution: {constant} + {String.Join(" + ", terms)}");
 
             // Walk result vector, get the ones with xor mask.. merge them, then merge the ones without the XOR mask..
             List<AstIdx> allTerms = new();
-
 
             var combinedXors = new ApInt[(int)numCombinations];
             var combinedAnds = new ApInt[(int)numCombinations];
 
             // We want to group XOR terms by their base bitwise expressions
-            var xorTerms = new List<AstIdx>();
-
             var xorMap = new Dictionary<ApInt, ApInt>();
 
             ApInt freeMask = moduloMask;
@@ -570,8 +550,6 @@ namespace Mba.Simplifier.Pipeline
                     allTerms.Add(xored);
 
 
-                    xorTerms.Add(xored);
-
                     xorMap.TryAdd(xoredIndices, globMask);
                     xorMap[xoredIndices] |= globMask;
 
@@ -610,26 +588,18 @@ namespace Mba.Simplifier.Pipeline
             // Merging needs to be carefully, because the constant offset adjustment is assuming we have already performed some merging
             // Merge bitwise terms.
             var andToBitwise = process(combinedAnds);
-            var xorToBitwise = process(combinedXors);
 
             var newXors = xorMap.Select(x => MaskAndMinimize(GetBooleanTableAst(x.Key), AstOp.Xor, x.Value)).ToList();
             
-
-
             var union = new List<AstIdx>();
             union.AddRange(andToBitwise.Select(x => MaskAndMinimize(x.Value, AstOp.And, x.Key)));
-            //union.AddRange(xorTerms);
             union.AddRange(newXors);
-            //union.AddRange(xorToBitwise.Select(x => MaskAndMinimize(x.Value, AstOp.Xor, x.Key)));
 
-            // Walk through each (mask, bitwise) pair, minimize bitwise, apply mask.
 
             var combined2 = ctx.Or(allTerms); // Exploded representation
             var combinedBitwise = ctx.Or(union);
 
             // Now we need to partition the constant offset.
-
-
             var product = ctx.Mul(ctx.Constant(targetCoeff, width), combinedBitwise);
             var res = ctx.Add(ctx.Constant(constant, width), product);
 
@@ -651,8 +621,7 @@ namespace Mba.Simplifier.Pipeline
                 return ctx.Mul(constantId, ctx.Neg(bitwise));
             }
 
-            //var minimalMask = refiner.FindMinimalMask2(coeff, ~freeMask, constant);
-
+            // If the sign bit pops out, try to move it back in.
             var signBit = 1ul << ((ushort)width - 1);
             if (constant == signBit)
             {
@@ -663,17 +632,17 @@ namespace Mba.Simplifier.Pipeline
                 return ctx.Mul(coeffId, withoutSign.Value);
             }
 
+            // Try to fit the constant offset into the undemanded bits.
             var coeffIdx = ctx.Constant(coeff, width);
-            // Try to find a fit. If there is no fit, can we negate the coefficient and d
             var fittingMask = FindFittingConstantFactor(coeff, constant, (~freeMask) & moduloMask);
             if(fittingMask != null)
             {
                 var mask = ctx.Constant(fittingMask.Value, width);
                 return ctx.Mul(coeffIdx, ctx.Or(mask, bitwise));
-                Debugger.Break();
             }
 
-            // Otherwise the fitting mask is null.
+            // If the constant offset does not fit, try to remove the sign bit from the constant offset,
+            // then look for a fitting mask.
             ApInt adjusted = moduloMask & (constant - signBit);
             fittingMask = FindFittingConstantFactor(coeff, moduloMask & adjusted, (~freeMask) & moduloMask);
             if(fittingMask != null)
@@ -686,16 +655,13 @@ namespace Mba.Simplifier.Pipeline
                     return ctx.Mul(coeffIdx, ctx.Or(mask, withoutSb.Value));
                 }
             }
-            /*
-       if(fittingMask != null)
-       {
-           bitwise = ctx.Or(ctx.Constant(fittingMask.Value, width), bitwise);
-           return ctx.Mul(ctx.Constant(coeff, width), bitwise);
-       }
-       */
 
+            // If all else fails, we cannot find a single term solution.
+            // Place the constant offset on the outside of the expression.
+            var constTerm = ctx.Constant(constant, width);
+            var mul = ctx.Mul(ctx.Constant(coeff, width), bitwise);
             Debugger.Break();
-            return null;
+            return ctx.Add(constTerm, mul);
         }
 
         private AstIdx? SubtractSignBit(ApInt coeff, AstIdx bitwise)
@@ -751,129 +717,6 @@ namespace Mba.Simplifier.Pipeline
             return boolean;
         }
 
-        private void Solve(ulong constant, ApInt[] withConstant, ApInt[] withoutConstant, List<ApInt> constantTerms, List<ApInt> candCoeffs)
-        {
-            //BacktrackingSearch(constant, withoutConstant, 17);
-
-            Console.WriteLine($"Dnf with constant removed:\n{constant} + {GetDnfBasis(withoutConstant)}");
-
-            Console.WriteLine("\n\n\n");
-            Console.WriteLine($"Dnf with constant embedded:\n{GetDnfBasis(withConstant)}");
-            candCoeffs.Add(546776870978778);
-            candCoeffs.Add(17);
-            // (a^b) = (a&~b)|(~a&b)
-            // Collect all possible pairs of (coefficient, constant offset) that fit the result vector.
-            var solver = new LinearCongruenceSolver(moduloMask);
-            var modulus = (UInt128)moduloMask + 1;
-            HashSet<(ulong coeff, ulong constOffset)> possibleConstantOffsets = new();
-            for (int candIdx = 0; candIdx < candCoeffs.Count; candIdx++)
-            {
-                var cand = candCoeffs[candIdx];
-
-                int seen = 0;
-                HashSet<ulong> firstSolutions = new();
-                for (ushort i = 0; i < constantTerms.Count; i++)
-                {
-                    HashSet<ulong> currSolutions = new();
-
-                    // Solve for cand*what == constProduct
-                    var constProduct = constantTerms[(int)i];
-                    if (constProduct == 0)
-                        continue;
-
-                    var shifted = cand * (1ul << i);
-                    var lc = solver.LinearCongruence(shifted, constProduct, modulus);
-                    if (lc == null)
-                        break;
-
-                    // Enumerate the solutions for the constant offset, given the current coefficient.
-                    var limit = lc.d;
-                    if (limit > 255)
-                        limit = 255;
-                    for (UInt128 solIdx = 0; i < limit; i++)
-                    {
-                        var solution = (ApInt)solver.GetSolution(solIdx, lc);
-                        if(seen == 0)
-                        {
-                            firstSolutions.Add(solution); // At the first coefficient, enumerate all possible solutions that could fit.
-                        }
-
-                        else
-                        {
-                            currSolutions.Add(solution);
-                        }
-                    }
-
-                    if (seen != 0)
-                        firstSolutions.IntersectWith(currSolutions);
-
-                    seen += 1;
-                }
-
-                foreach(var s in firstSolutions)
-                {
-                    possibleConstantOffsets.Add((cand, s));
-                }
-            }
-
-
-            // Walk each candidate, and try to find a fit for the result vector.
-            //possibleConstantOffsets.Add((17, 0));
-            var l = withConstant.Length;
-            //possibleConstantOffsets.RemoveWhere(x => x.coeff != 17);
-            foreach (var (sCoeff, sMask) in possibleConstantOffsets)
-            {
-                bool succ = true;
-                for (int comb = 0; comb < l; comb += (int)numCombinations)
-                {
-                    var bitIdx = (ushort)((ulong)comb / numCombinations);
-                    var bitMask = 1ul << bitIdx;
-                    for (int i = 0; i < (int)numCombinations; i++)
-                    {
-                        var coeff = withConstant[comb + i];
-                        // Now we have four possible valid choices.
-                        // The first choice is just nil.
-                        var cand0 = 0ul;
-                        cand0 &= moduloMask;
-                        cand0 >>= bitIdx;
-                        // The second choice is sCoeff * sMask
-                        var cand1 = sCoeff * sMask;
-                        cand1 &= moduloMask;
-                        cand1 >>= bitIdx;
-                        var cand2 = sCoeff * (sMask | bitMask);
-                        cand2 &= moduloMask;
-                        cand2 >>= bitIdx;
-                        var cand3 = sCoeff * (sMask & (~bitMask));
-                        cand3 &= moduloMask;
-                        cand3 >>= bitIdx;
-                        if(coeff == cand0 || coeff == cand1 || coeff == cand2 || coeff == cand3)
-                        {
-                            continue;
-                        }
-
-                        else
-                        {
-                            succ = false;
-                            goto next;
-                        }
-                    }
-                }
-
-
-            next:
-                Console.WriteLine($"Succeeded: {succ}");
-                if(succ)
-                {
-                    Debugger.Break();
-                }
-                continue;
-            }
-
-            // Algorithm: Collect all all constant offset terms
-            // Collect a set of candidate coefficients...
-            Debugger.Break();
-        }
-
         // Find an initial linear combination of conjunctions.
         private (ulong withNoConjunctions, AstIdx? univariateParts, AstIdx? otherParts) SimplifyGeneric()
         {
@@ -912,8 +755,6 @@ namespace Mba.Simplifier.Pipeline
             }
 
             var withoutConstant = resultVector.ToArray();
-
-            //Solve(constant, withConstant, withoutConstant, constantTerms, candCoeffs.ToList());
 
             // Short circuit if we can find a single term solution.
             //if (multiBit)
