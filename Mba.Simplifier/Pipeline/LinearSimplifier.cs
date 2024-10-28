@@ -415,6 +415,10 @@ namespace Mba.Simplifier.Pipeline
         // (3) Maintain a mapping of <coeff, bits>
         // (4) Enumerate each coefficient, check if all other coefficients can be changed or reduced to the target coefficient.
         // (5) If we found a solution for the coefficients, rewrite the result vector and keep track of the XOR masks.
+        // TODO:
+        // op1 = (-9223372036854775808+(-6238986605467882838*((4611685564969499003&(a&b))|(4611686471885276804^(4611686471885276804&(a&b))))))
+        // op2 = 0xA96AAABCE6AAAAAA*((a&b)^453457888900)
+        // When constructing the expression, identify simple cases of the identity (c1&x)|(c1^~s). Also partition constant offset back into expression.
         private ApInt? BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations)
         {
             // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
@@ -639,12 +643,61 @@ namespace Mba.Simplifier.Pipeline
             // Walk through each (mask, bitwise) pair, minimize bitwise, apply mask.
 
             var combined2 = ctx.Or(allTerms); // Exploded representation
-            var combined = ctx.Or(union);
+            var combinedBitwise = ctx.Or(union);
 
-            var product = ctx.Mul(ctx.Constant(targetCoeff, width), combined);
+            // Now we need to partition the constant offset.
+
+
+            var product = ctx.Mul(ctx.Constant(targetCoeff, width), combinedBitwise);
             var res = ctx.Add(ctx.Constant(constant, width), product);
 
             Console.WriteLine($"\nRes:\n{ctx.GetAstString(res)}");
+
+            var bar = PartitionCoeffAndConstant(combinedBitwise, targetCoeff, constant, freeMask);
+
+            Debugger.Break();
+            return null;
+        }
+
+        private AstIdx? PartitionCoeffAndConstant(AstIdx bitwise, ApInt coeff, ApInt constant, ApInt freeMask)
+        {
+            // Trivial partition: -c1 + (-c1)*(x) => c1*~x,
+            // or alternatively c1 + (c1*x) => (-c1)*~x
+            if (coeff == constant)
+            {
+                var constantId = ctx.Constant(moduloMask * constant, width);
+                return ctx.Mul(constantId, ctx.Neg(bitwise));
+            }
+
+            // var minimalMask = refiner.FindMinimalMask2(coeff, ~freeMask, constant);
+
+            if(constant == 1ul << ((ushort)width - 1))
+            {
+                var xorMask1 = 1ul << (ushort)(width - 1);
+                var xorMask2 = 1ul << (ushort)(width - 2);
+
+                ApInt xorMask = 0;
+                if ((moduloMask & (xorMask1 * coeff)) == constant)
+                    xorMask = xorMask1;
+                else if ((moduloMask & (xorMask2 * coeff)) == constant)
+                    xorMask = xorMask2;
+                else
+                    throw new InvalidOperationException($"Cannot partition constant offset!");
+
+                var coeffId = ctx.Constant(coeff, width);
+                return ctx.Mul(coeffId, ctx.Xor(ctx.Constant(xorMask, width), bitwise));
+            }
+
+
+            /*
+            var fittingMask = FindFittingConstantFactor(coeff, constant, (~freeMask) & moduloMask);
+            if(fittingMask != null)
+            {
+                bitwise = ctx.Or(ctx.Constant(fittingMask.Value, width), bitwise);
+                return ctx.Mul(ctx.Constant(coeff, width), bitwise);
+            }
+            */
+
             Debugger.Break();
             return null;
         }
