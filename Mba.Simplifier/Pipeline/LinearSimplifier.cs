@@ -418,7 +418,7 @@ namespace Mba.Simplifier.Pipeline
         // TODO:
         // op1 = (-9223372036854775808+(-6238986605467882838*((4611685564969499003&(a&b))|(4611686471885276804^(4611686471885276804&(a&b))))))
         // op2 = 0xA96AAABCE6AAAAAA*((a&b)^453457888900)
-        // When constructing the expression, identify simple cases of the identity (c1&x)|(c1^~s). Also partition constant offset back into expression.
+        // When constructing the expression, identify simple cases of the identity (c1&x)|(c1^~s)
         private ApInt? BacktrackingSearch(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations)
         {
             // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
@@ -490,7 +490,6 @@ namespace Mba.Simplifier.Pipeline
             // Walk result vector, get the ones with xor mask.. merge them, then merge the ones without the XOR mask..
             List<AstIdx> allTerms = new();
 
-            var combinedXors = new ApInt[(int)numCombinations];
             var combinedAnds = new ApInt[(int)numCombinations];
 
             // We want to group XOR terms by their base bitwise expressions
@@ -531,7 +530,6 @@ namespace Mba.Simplifier.Pipeline
                     {
                         withXor.Add(bw);
                         globMask = xorMask;
-                        combinedXors[i] |= xorMask;
                         xoredIndices |= 1ul << (truthIdx);
                     }
 
@@ -548,7 +546,6 @@ namespace Mba.Simplifier.Pipeline
                     var ored = ctx.Or(withXor);
                     var xored = ctx.Xor(ctx.Constant(globMask, width), ored);
                     allTerms.Add(xored);
-
 
                     xorMap.TryAdd(xoredIndices, globMask);
                     xorMap[xoredIndices] |= globMask;
