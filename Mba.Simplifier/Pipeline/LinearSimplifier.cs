@@ -602,12 +602,55 @@ namespace Mba.Simplifier.Pipeline
 
             Console.WriteLine($"\nRes:\n{ctx.GetAstString(res)}");
 
-            var bar = PartitionCoeffAndConstant(combinedBitwise, targetCoeff, constant, freeMask);
+            //argetCoeff = 2392425022361408741;
+            //targetCoeff = 8835177092614161910;
+            var bar = TryPartition(combinedBitwise, targetCoeff, constant, freeMask);
 
+            /*
+            var otherOffset = moduloMask & (constant - targetCoeff);
+            var otherCoeff = moduloMask & (moduloMask * targetCoeff);   
+            var otherBitwise = ctx.Neg(combinedBitwise);
+            // Now the formerly free bits are guaranteed equal to 1...
+            //
+            var otherRes = TryPartition(otherBitwise, otherCoeff, otherOffset, moduloMask & (~freeMask));
             Debugger.Break();
+            */
             return null;
         }
 
+        private AstIdx TryPartition(AstIdx bitwise, ApInt coeff, ApInt constant, ApInt freeMask)
+        {
+            // Identify how many undemanded bits there are in the coefficient.
+            // As a heuristic, how do prune the search space for coeff candidates.
+            // You have a set of possible coefficients, and a set of possible undemanded bits where you can cram the constant offset..
+            var undemanded = refiner.FindUndemandedCoeffBits(coeff, moduloMask & ~freeMask, constant);
+            var minimal = refiner.FindMinimalCoeff(coeff, moduloMask & ~freeMask, constant);
+            var maximal = refiner.FindMaximalCoeff(coeff, moduloMask & ~freeMask);
+
+            // You have a coefficient with N bits that must be zero or one, then N bits that you can flip to anything you want.
+            // You then have N bits that you can 
+
+            /*
+            var res = PartitionCoeffAndConstant(bitwise, minimal, constant, freeMask);
+            if (res != null)
+                return res.Value;
+            res = PartitionCoeffAndConstant(bitwise, maximal, constant, freeMask);
+            if (res != null)
+                return res.Value;
+            */
+
+            res = PartitionCoeffAndConstant(bitwise, coeff, constant, freeMask);
+            if (res != null)
+                return res.Value;
+
+            // If all else fails, we cannot find a single term solution.
+            // Place the constant offset on the outside of the expression.
+            var constTerm = ctx.Constant(constant, width);
+            var mul = ctx.Mul(ctx.Constant(coeff, width), bitwise);
+            return ctx.Add(constTerm, mul);
+        }
+
+        // Heuristic: Identify flexibility in the coefficient, try again...
         private AstIdx? PartitionCoeffAndConstant(AstIdx bitwise, ApInt coeff, ApInt constant, ApInt freeMask)
         {
             // Trivial partition: -c1 + (-c1)*(x) => c1*~x,
@@ -617,6 +660,30 @@ namespace Mba.Simplifier.Pipeline
                 var constantId = ctx.Constant(moduloMask * constant, width);
                 return ctx.Mul(constantId, ctx.Neg(bitwise));
             }
+
+            var modulus = (UInt128)moduloMask + 1;
+            var solver = new LinearCongruenceSolver((UInt128)moduloMask);
+            for(ushort bitIdx = 0; bitIdx < width; bitIdx++)
+            {
+                var bitMask = 1ul << bitIdx;
+                if ((bitMask & freeMask) == 0)
+                    continue;
+
+                var lc = solver.LinearCongruence(bitMask, constant, moduloMask);
+                var limit = lc.d;
+                if (limit > 255)
+                    limit = 255;
+                for (UInt128 i = 0; i < limit; i++)
+                {
+                    var solution = (ApInt)solver.GetSolution(i, lc);
+                    if (!refiner.CanChangeCoefficientTo(coeff, (ApInt)solution, moduloMask & (~freeMask)))
+                        continue;
+
+                    bitwise = ctx.Or(ctx.Constant(bitMask, width), bitwise);
+                    return ctx.Mul(ctx.Constant(solution, width), bitwise);
+                }
+            }
+
 
             // If the sign bit pops out, try to move it back in.
             var signBit = 1ul << ((ushort)width - 1);
@@ -653,12 +720,7 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
-            // If all else fails, we cannot find a single term solution.
-            // Place the constant offset on the outside of the expression.
-            var constTerm = ctx.Constant(constant, width);
-            var mul = ctx.Mul(ctx.Constant(coeff, width), bitwise);
-            Debugger.Break();
-            return ctx.Add(constTerm, mul);
+            return null;
         }
 
         private AstIdx? SubtractSignBit(ApInt coeff, AstIdx bitwise)
@@ -709,7 +771,8 @@ namespace Mba.Simplifier.Pipeline
         // Alternatively allocate a more compact(ulong based) truth table structure.
         private AstIdx Minimize(AstIdx idx)
         {
-            var vec = BuildResultVector(ctx, idx, 1);
+            // TODO: Stop using jit result vector. Interpret or do parallel evaluation.
+            var vec = JitResultVector(ctx, width, 1, variables, idx, false, numCombinations);
             var boolean = BooleanMinimizer.GetBitwise(ctx, variables, vec.Select(x => (int)x).ToList());
             return boolean;
         }
