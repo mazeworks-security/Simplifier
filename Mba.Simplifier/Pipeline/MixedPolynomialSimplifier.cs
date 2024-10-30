@@ -180,7 +180,7 @@ namespace Mba.Simplifier.Pipeline
 
                 // Walk through the vector, pick out the most common term.
                 var (commonBasis, commonCount) = GetMostCommonBasis(basisCounts);
-                var conj = LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, 1, commonBasis).Value;
+                var conj = LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, 1, commonBasis);
 
                 AstIdx? sum = null;
                 int combinedIdx = 0;
@@ -198,7 +198,7 @@ namespace Mba.Simplifier.Pipeline
                         // If we found the basis:
                         if ((ApInt)a == commonBasis)
                         {
-                            var otherBasis = LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, (ApInt)b).Value;
+                            var otherBasis = LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, (ApInt)b);
                             if (sum == null)
                                 sum = otherBasis;
                             else
@@ -209,7 +209,7 @@ namespace Mba.Simplifier.Pipeline
 
                         else if ((ApInt)b == commonBasis)
                         {
-                            var otherBasis = LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, (ApInt)a).Value;
+                            var otherBasis = LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, (ApInt)a);
                             if (sum == null)
                                 sum = otherBasis;
                             else
@@ -264,7 +264,7 @@ namespace Mba.Simplifier.Pipeline
 
                     if (BitOperations.PopCount((uint)a) == 0)
                     {
-                        var term = LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, (ApInt)b).Value;
+                        var term = LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, (ApInt)b);
                         if (sum == null)
                             sum = term;
                         else
@@ -275,7 +275,7 @@ namespace Mba.Simplifier.Pipeline
 
                     else if (BitOperations.PopCount((uint)b) == 0)
                     {
-                        var term = LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, (ApInt)a).Value;
+                        var term = LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, (ApInt)a);
                         if (sum == null)
                             sum = term;
                         else

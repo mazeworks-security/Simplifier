@@ -1,18 +1,20 @@
 ﻿using Mba.Common.MSiMBA;
 using Mba.Parsing;
 using Mba.Simplifier.Bindings;
+using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
 using Microsoft.Z3;
 using System.ComponentModel;
+using System.Diagnostics;
+
 
 bool printUsage = false;
 uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
-
 var printHelp = () =>
 {
     Console.WriteLine("Usage: Simplifier.exe");
@@ -62,9 +64,10 @@ if (bitWidth > maxWidth)
     throw new InvalidOperationException($"Received bit width {bitWidth}, which is greater than the max width {maxWidth}");
 
 var ctx = new AstCtx();
+AstIdx.ctx = ctx;
 var id = RustAstParser.Parse(ctx, inputText, bitWidth);
 
-Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n");
+Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n\n");
 
 var input = id;
 id = ctx.RecursiveSimplify(id);

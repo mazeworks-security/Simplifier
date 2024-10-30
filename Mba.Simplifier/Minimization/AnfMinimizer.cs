@@ -48,9 +48,9 @@ namespace Mba.Simplifier.Minimization
             List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx = new();
             for (int i = 0; i < variableCombinations.Length; i++)
             {
-                var myMask = variableCombinations[i];
-                var myIndex = MultibitSiMBA.GetGroupSizeIndex(groupSizes, myMask);
-                combToMaskAndIdx.Add((myMask, (int)myIndex));
+                var comb = variableCombinations[i];
+                var myIndex = MultibitSiMBA.GetGroupSizeIndex(groupSizes, comb);
+                combToMaskAndIdx.Add((comb, (int)myIndex));
             }
 
             var varCount = variables.Count;
@@ -82,12 +82,12 @@ namespace Mba.Simplifier.Minimization
                 if (result == null)
                     result = conj;
                 else
-                    result = ctx.Xor(result.Value, conj.Value);
+                    result = ctx.Xor(result.Value, conj);
             }
 
             // Leave the new minimization algorithm disabled by default. 
             // It should return substantially better results for high variable counts, but it's not well tested (yet).
-            bool newMinimizationAlgo = false;
+            bool newMinimizationAlgo = true;
             if(!newMinimizationAlgo)
                 return result.Value;
             
@@ -102,12 +102,15 @@ namespace Mba.Simplifier.Minimization
             var factored = Factor(terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
             var simplified = SimplifyRec(factored.Value);
 
+            // The results are somewhat improved by running the simplifier a few times, but we don't want to pay this cost for now.
+            /*
             simplified = SimplifyRec(factored.Value);
             for (int i = 0; i < 3; i++)
             {
                 simplified = SimplifyRec(simplified);
                 simplified = ctx.RecursiveSimplify(simplified);
             }
+            */
 
             return simplified;
         }
@@ -160,6 +163,7 @@ namespace Mba.Simplifier.Minimization
                 }
             }
 
+            // Recursively factor each group.
             var output = new List<AstIdx>();
             foreach (var (varIdx, elems) in groups)
             {
@@ -174,7 +178,7 @@ namespace Mba.Simplifier.Minimization
                 else if (elems.Count == 1)
                 {
                     var mask = elems[0];
-                    var conj = ctx.And(result, getConjFromMask(mask).Value);
+                    var conj = ctx.And(result, getConjFromMask(mask));
                     output.Add(conj);
 
                     mask |= 1u << varIdx;
@@ -192,7 +196,7 @@ namespace Mba.Simplifier.Minimization
                 demandedVarsMap.TryAdd(and, demanded);
             }
 
-            // Compute the union of all of the demanded variables.
+            // Compute the union of all demanded variables.
             var demandedSum = 0u;
             foreach (var id in output)
                 demandedSum |= demandedVarsMap[id];
@@ -286,7 +290,7 @@ namespace Mba.Simplifier.Minimization
                     var sum = oldMask | demandedMask;
                     if (BitOperations.PopCount(sum) <= 4)
                     {
-                        var newId = ctx.Or(oldId, term);
+                        var newId = ctx.Binop(kind, oldId, term);
                         decompositions[i] = (sum, newId);
                         found = true;
                         break;
@@ -343,13 +347,12 @@ namespace Mba.Simplifier.Minimization
             // Build a result vector for the millionth time..
             var w = ctx.GetWidth(id);
             var rv = LinearSimplifier.JitResultVector(ctx, 1, 1, varSet, id, false, (ulong)Math.Pow(2, varSet.Count));
-            var vec = new List<int>();
-            foreach(var r in rv)
-            {
-                vec.Add((int)(uint)r);
-            }
 
-            return BooleanMinimizer.FromTruthTable(ctx, varSet, vec);
+            var table = new TruthTable(varSet.Count);
+            for (int i = 0; i < rv.Length; i++)
+                table.SetBit(i, rv[i] != 0);
+
+            return BooleanMinimizer.FromTruthTable(ctx, varSet, table);
         }
     }
 }

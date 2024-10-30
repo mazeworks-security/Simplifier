@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap, HashSet},
     f32::consts::PI,
     ffi::{CStr, CString},
     u64,
@@ -10,7 +10,7 @@ use libc::{c_char, c_void};
 
 use crate::{
     mba::{self, Context as MbaContext},
-    truth_table_database::TruthTableDatabase,
+    truth_table_database::{TruthTable, TruthTableDatabase},
 };
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -150,6 +150,15 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Xor { a, b, data });
     }
 
+    pub fn xor_many(&mut self, nodes: &Vec<AstIdx>) -> AstIdx {
+        let mut initial = nodes[0];
+        for i in 1..nodes.len() {
+            initial = self.xor(initial, nodes[i]);
+        }
+
+        return initial;
+    }
+
     pub fn neg(&mut self, a: AstIdx) -> AstIdx {
         let width = self.get_width(a);
         let cost = (1 as u32).saturating_add(self.get_data(a).cost);
@@ -238,14 +247,17 @@ impl Arena {
     }
 
     pub fn insert_ast_node(&mut self, node: SimpleAst) -> AstIdx {
-        if let Some(&idx) = self.ast_to_idx.get(&node) {
-            return idx;
-        }
+        let entry: Entry<'_, SimpleAst, AstIdx> = self.ast_to_idx.entry(node.clone());
 
-        let idx = AstIdx(self.elements.len() as u32);
-        self.elements.push(node.clone());
-        self.ast_to_idx.insert(node, idx);
-        idx
+        return match entry {
+            Entry::Occupied(occupied_entry) => *occupied_entry.get(),
+            Entry::Vacant(vacant_entry) => {
+                let idx = AstIdx(self.elements.len() as u32);
+                self.elements.push(node.clone());
+                vacant_entry.insert(idx);
+                idx
+            }
+        };
     }
 
     #[inline(always)]
@@ -386,7 +398,6 @@ pub fn try_make_semilinear(max: AstClass, c1: AstClass, c2: AstClass) -> AstClas
 }
 
 #[derive(Clone, Hash, PartialEq, Eq, Copy)]
-#[repr(packed)]
 pub struct AstData {
     // Bit width
     width: u8,
@@ -950,23 +961,26 @@ pub fn marshal_string(s: *const c_char) -> String {
 }
 
 #[no_mangle]
-pub extern "C" fn ContextGetOpcode(ctx: *mut Context, id: AstIdx) -> u8 {
+pub extern "C" fn ContextGetOpcode(ctx: *const Context, id: AstIdx) -> u8 {
     unsafe {
-        let ast = (*ctx).arena.get_node(id);
-        let res: u8 = match ast {
-            SimpleAst::Add { a, b, data } => 1,
-            SimpleAst::Mul { a, b, data } => 2,
-            SimpleAst::Pow { a, b, data } => 3,
-            SimpleAst::And { a, b, data } => 4,
-            SimpleAst::Or { a, b, data } => 5,
-            SimpleAst::Xor { a, b, data } => 6,
-            SimpleAst::Neg { a, data } => 7,
-            SimpleAst::Constant { c, data } => 8,
-            SimpleAst::Symbol { id, data } => 9,
-            SimpleAst::Zext { a, data } => 10,
-        };
-        return res;
+        return get_opcode(&(*ctx), id);
     }
+}
+
+pub fn get_opcode(ctx: &Context, id: AstIdx) -> u8 {
+    let ast = ctx.arena.get_node(id);
+    return match ast {
+        SimpleAst::Add { a, b, data } => 1,
+        SimpleAst::Mul { a, b, data } => 2,
+        SimpleAst::Pow { a, b, data } => 3,
+        SimpleAst::And { a, b, data } => 4,
+        SimpleAst::Or { a, b, data } => 5,
+        SimpleAst::Xor { a, b, data } => 6,
+        SimpleAst::Neg { a, data } => 7,
+        SimpleAst::Constant { c, data } => 8,
+        SimpleAst::Symbol { id, data } => 9,
+        SimpleAst::Zext { a, data } => 10,
+    };
 }
 
 #[no_mangle]
@@ -1006,37 +1020,47 @@ pub extern "C" fn ContextGetClass(ctx: *mut Context, id: AstIdx) -> u8 {
 }
 
 #[no_mangle]
-pub extern "C" fn ContextGetOp0(ctx: *mut Context, id: AstIdx) -> AstIdx {
+pub extern "C" fn ContextGetOp0(ctx: *const Context, id: AstIdx) -> AstIdx {
     unsafe {
-        let ast = (*ctx).arena.get_node(id);
-        return match ast {
-            SimpleAst::Add { a, b, data } => *a,
-            SimpleAst::Mul { a, b, data } => *a,
-            SimpleAst::Pow { a, b, data } => *a,
-            SimpleAst::And { a, b, data } => *a,
-            SimpleAst::Or { a, b, data } => *a,
-            SimpleAst::Xor { a, b, data } => *a,
-            SimpleAst::Neg { a, data } => *a,
-            SimpleAst::Zext { a, data } => *a,
-            _ => unreachable!("Type has no operand!"),
-        };
+        return get_op0(&(*ctx), id);
     }
+}
+
+pub fn get_op0(ctx: &Context, id: AstIdx) -> AstIdx {
+    let ast = ctx.arena.get_node(id);
+    return match ast {
+        SimpleAst::Add { a, b, data } => *a,
+        SimpleAst::Mul { a, b, data } => *a,
+        SimpleAst::Pow { a, b, data } => *a,
+        SimpleAst::And { a, b, data } => *a,
+        SimpleAst::Or { a, b, data } => *a,
+        SimpleAst::Xor { a, b, data } => *a,
+        SimpleAst::Neg { a, data } => *a,
+        SimpleAst::Zext { a, data } => *a,
+        _ => unreachable!("Type has no first operand!"),
+    };
 }
 
 #[no_mangle]
 pub extern "C" fn ContextGetOp1(ctx: *mut Context, id: AstIdx) -> AstIdx {
     unsafe {
-        let ast = (*ctx).arena.get_node(id);
-        return match ast {
-            SimpleAst::Add { a, b, data } => *b,
-            SimpleAst::Mul { a, b, data } => *b,
-            SimpleAst::Pow { a, b, data } => *b,
-            SimpleAst::And { a, b, data } => *b,
-            SimpleAst::Or { a, b, data } => *b,
-            SimpleAst::Xor { a, b, data } => *b,
-            _ => unreachable!("Type has no operand!"),
-        };
+        unsafe {
+            return get_op1(&(*ctx), id);
+        }
     }
+}
+
+pub fn get_op1(ctx: &Context, id: AstIdx) -> AstIdx {
+    let ast = (*ctx).arena.get_node(id);
+    return match ast {
+        SimpleAst::Add { a, b, data } => *b,
+        SimpleAst::Mul { a, b, data } => *b,
+        SimpleAst::Pow { a, b, data } => *b,
+        SimpleAst::And { a, b, data } => *b,
+        SimpleAst::Or { a, b, data } => *b,
+        SimpleAst::Xor { a, b, data } => *b,
+        _ => unreachable!("Type has no second operand!"),
+    };
 }
 
 #[no_mangle]
@@ -1111,6 +1135,67 @@ pub extern "C" fn ContextCollectVariables(
         // https://stackoverflow.com/a/57616981/6855629
         return released as *mut _;
     }
+}
+
+#[no_mangle]
+pub extern "C" fn ContextGetBooleanForIndex(
+    ctx: *mut Context,
+    vars: *const AstIdx,
+    num_vars: u16,
+    result_vec_idx: u32,
+) -> AstIdx {
+    let mut ast = None;
+
+    unsafe {
+        let mut deref: &mut Context = &mut (*ctx);
+        for var_idx in 0..num_vars {
+            let vmask: u32 = 1 << var_idx;
+            let isSet = (result_vec_idx & vmask) != 0;
+            let var = *vars.wrapping_add(var_idx as usize);
+            let term = if isSet { var } else { deref.arena.neg(var) };
+            if ast.is_none() {
+                ast = Some(term);
+            } else {
+                ast = Some(deref.arena.and(ast.unwrap(), term));
+            }
+        }
+    }
+
+    return ast.unwrap();
+}
+
+#[no_mangle]
+pub extern "C" fn ContextGetConjunctionFromVarMask(
+    ctx: *mut Context,
+    vars: *const AstIdx,
+    var_mask: u64,
+) -> AstIdx {
+    unsafe {
+        let mut deref: &mut Context = &mut (*ctx);
+        return conjunction_from_var_mask(deref, vars, var_mask);
+    }
+}
+
+fn conjunction_from_var_mask(ctx: &mut Context, vars: *const AstIdx, var_mask: u64) -> AstIdx {
+    let mut conj_mask = var_mask;
+
+    let mut conj = None;
+    while conj_mask != 0 {
+        let lsb = conj_mask.trailing_zeros();
+
+        unsafe {
+            let op = *vars.wrapping_add(lsb as usize);
+            conj = if conj.is_none() {
+                Some(op)
+            } else {
+                Some(ctx.arena.and(conj.unwrap(), op))
+            };
+        }
+
+        conj_mask ^= 1 << lsb;
+    }
+
+    return conj.unwrap();
 }
 
 #[no_mangle]
@@ -1365,4 +1450,648 @@ pub extern "C" fn ContextRecursiveSimplify(ctx: *mut Context, id: AstIdx) -> Ast
         let mut deref: &mut Context = &mut (*ctx);
         return recursive_simplify(deref, id);
     }
+}
+
+const VARIABLE_COMBINATIONS_1: &[u16] = &get_variable_combinations::<1, 1>();
+const VARIABLE_COMBINATIONS_2: &[u16] = &get_variable_combinations::<3, 2>();
+const VARIABLE_COMBINATIONS_3: &[u16] = &get_variable_combinations::<7, 3>();
+const VARIABLE_COMBINATIONS_4: &[u16] = &get_variable_combinations::<15, 4>();
+const VARIABLE_COMBINATIONS_5: &[u16] = &get_variable_combinations::<31, 5>();
+const VARIABLE_COMBINATIONS_6: &[u16] = &get_variable_combinations::<63, 6>();
+const VARIABLE_COMBINATIONS_7: &[u16] = &get_variable_combinations::<127, 7>();
+const VARIABLE_COMBINATIONS_8: &[u16] = &get_variable_combinations::<255, 8>();
+const VARIABLE_COMBINATIONS_9: &[u16] = &get_variable_combinations::<511, 9>();
+const VARIABLE_COMBINATIONS_10: &[u16] = &get_variable_combinations::<1023, 10>();
+const VARIABLE_COMBINATIONS_11: &[u16] = &get_variable_combinations::<2047, 11>();
+const VARIABLE_COMBINATIONS_12: &[u16] = &get_variable_combinations::<4095, 12>();
+const VARIABLE_COMBINATIONS_13: &[u16] = &get_variable_combinations::<8191, 13>();
+const VARIABLE_COMBINATIONS_14: &[u16] = &get_variable_combinations::<16383, 14>();
+const VARIABLE_COMBINATIONS_15: &[u16] = &get_variable_combinations::<32767, 15>();
+const VARIABLE_COMBINATIONS_16: &[u16] = &get_variable_combinations::<65535, 16>();
+
+#[inline]
+fn get_combs(num_vars: u32) -> &'static [u16] {
+    return match num_vars {
+        1 => VARIABLE_COMBINATIONS_1,
+        2 => VARIABLE_COMBINATIONS_2,
+        3 => VARIABLE_COMBINATIONS_3,
+        4 => VARIABLE_COMBINATIONS_4,
+        5 => VARIABLE_COMBINATIONS_5,
+        6 => VARIABLE_COMBINATIONS_6,
+        7 => VARIABLE_COMBINATIONS_7,
+        8 => VARIABLE_COMBINATIONS_8,
+        9 => VARIABLE_COMBINATIONS_9,
+        10 => VARIABLE_COMBINATIONS_10,
+        11 => VARIABLE_COMBINATIONS_11,
+        12 => VARIABLE_COMBINATIONS_12,
+        13 => VARIABLE_COMBINATIONS_13,
+        14 => VARIABLE_COMBINATIONS_14,
+        15 => VARIABLE_COMBINATIONS_15,
+        16 => VARIABLE_COMBINATIONS_16,
+        _ => panic!(
+            "Cannot compute variable combinations for {num_vars}, vector would be too large!"
+        ),
+    };
+}
+
+const fn get_variable_combinations<const ENTRIES: usize, const VARS: usize>() -> [u16; ENTRIES] {
+    let mut outputs: [u16; ENTRIES] = [0; ENTRIES];
+
+    let numEntries = ENTRIES as u16;
+    let varCount = VARS as u16;
+
+    let mut i: usize = 0;
+    while i < varCount as usize {
+        outputs[i] = 1 << i;
+
+        i += 1;
+    }
+
+    let mut combCount = varCount;
+    let mut _new = varCount;
+
+    let mut count = 1;
+    while count < varCount {
+        let size = combCount;
+        let mut nnew = 0;
+        let mut from = size - _new;
+
+        let mut ei = from;
+        while ei < from + (size - from) {
+            let e = outputs[ei as usize];
+            let last_idx = (16 - e.leading_zeros()) as u16;
+
+            let mut v = last_idx;
+            while v < varCount {
+                outputs[combCount as usize] |= (1 << v);
+                outputs[combCount as usize] |= e;
+                combCount += 1;
+                nnew += 1;
+
+                v += 1;
+            }
+
+            ei += 1;
+        }
+
+        _new = nnew;
+
+        count += 1;
+    }
+
+    return outputs;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ContextMinimizeAnf(
+    ctx: *mut Context,
+    db: *mut TruthTableDatabase,
+    truth_table: *mut u64,
+    vars: *const AstIdx,
+    variable_count: u32,
+    page: *mut u8,
+) -> AstIdx {
+    unsafe {
+        let mut ctx_deref: &mut Context = &mut (*ctx);
+        let table = TruthTable {
+            num_vars: variable_count,
+            arr: truth_table,
+        };
+
+        let mut table_deref: &mut TruthTableDatabase = &mut (*db);
+
+        return minimize_anf(ctx_deref, table_deref, &table, vars, variable_count, page);
+    }
+}
+
+// Compute a minimized algebraic normal form.
+// pub fn minimize_anf(ctx: &mut Context, vars: *const AstIdx, table: &TruthTable) -> AstIdx {
+pub fn minimize_anf(
+    ctx: &mut Context,
+    db: &mut TruthTableDatabase,
+    table: &TruthTable,
+    vars: *const AstIdx,
+    variable_count: u32,
+    page: *mut u8,
+) -> AstIdx {
+    let variable_combinations = get_combs(table.num_vars);
+
+    // println!(
+    //     "Variable combinations:  {:?} ",
+    //     variable_combinations.clone()
+    // );
+
+    let only_one_var = table.num_vars == 1;
+    let width: u32 = if table.num_vars == 1 {
+        1
+    } else {
+        2 << (table.num_vars - 1)
+    };
+
+    let mut terms: Vec<u32> =
+        Vec::with_capacity(std::cmp::min(32, variable_combinations.len() + 1));
+
+    unsafe {
+        let safe_arr = std::slice::from_raw_parts_mut(table.arr, table.get_num_words());
+
+        for i in 0..variable_combinations.len() as u32 {
+            let comb = variable_combinations[i as usize];
+            let trueMask = variable_combinations[i as usize];
+            let index = get_group_size_index(comb as u64);
+            let coeff = table.get_bit(safe_arr, index);
+            if coeff == 0 {
+                continue;
+            }
+
+            // println!(
+            //     "Got comb {}, index {}, and coeff {} for idx {}",
+            //     comb, index, coeff, i
+            // );
+
+            subtract_coeff_boolean(
+                &table,
+                safe_arr,
+                0,
+                coeff,
+                index,
+                width,
+                only_one_var,
+                trueMask as u64,
+            );
+            terms.push(comb.into());
+        }
+    }
+
+    // For debugging / performance reasons it's useful to be able to terminate here if needbe.
+    let only_anf = false;
+    if only_anf {
+        let mut result: Option<AstIdx> = None;
+        for term in terms {
+            let conj = conjunction_from_var_mask(ctx, vars, term.into());
+            result = if result.is_none() {
+                Some(conj)
+            } else {
+                Some(ctx.arena.xor(result.unwrap(), conj))
+            };
+        }
+
+        return result.unwrap();
+    }
+
+    let mut demanded_vars_map: AHashMap<AstIdx, u32> = AHashMap::new();
+    // Set the initial demanded variable masks.
+    for i in 0..variable_count {
+        let var = unsafe { *vars.add(i as usize) };
+        demanded_vars_map.insert(var, 1 << i);
+    }
+
+    let factored = factor(
+        ctx,
+        vars,
+        variable_count,
+        &mut terms,
+        &mut demanded_vars_map,
+    );
+
+    let simplified = simplify_rec(
+        ctx,
+        db,
+        factored,
+        vars,
+        variable_count,
+        page,
+        &mut demanded_vars_map,
+    );
+
+    return simplified;
+}
+
+// Recursively factor a boolean function in algebraic normal form
+pub fn factor(
+    ctx: &mut Context,
+    variables: *const AstIdx,
+    var_count: u32,
+    conjs: &mut Vec<u32>,
+    demanded_vars_map: &mut AHashMap<AstIdx, u32>,
+) -> AstIdx {
+    // Delete -1 if present
+    let mut has = false;
+    let mut nil_idx = None;
+    for i in 0..conjs.len() {
+        if conjs[i] == u32::MAX {
+            nil_idx = Some(i);
+        }
+    }
+    if nil_idx.is_some() {
+        has = true;
+        conjs.remove(nil_idx.unwrap());
+    }
+
+    // Collect the number of times we encounter each variable.
+    let mut variable_counts: Vec<(u32, u32)> = vec![(0, 0); var_count as usize];
+    for conj in conjs.iter() {
+        for i in 0..var_count {
+            let mask = 1 << i;
+            if (mask & *conj) != 0 {
+                variable_counts[i as usize] = (i, variable_counts[i as usize].1 + 1);
+            }
+        }
+    }
+
+    // Order the variables by the number of times they appear.
+    let compare = |a: &(u32, u32), b: &(u32, u32)| {
+        return b.1.cmp(&a.1);
+    };
+    variable_counts.sort_by(compare);
+
+    // For each conjunction, we take out the leading factor.
+    let mut groups: AHashMap<u32, Vec<u32>> = AHashMap::new();
+    for conj in conjs.iter() {
+        for index in 0..var_count {
+            let i = variable_counts[index as usize].0;
+
+            let mask = 1 << i;
+            if (*conj & mask) == 0 {
+                continue;
+            }
+
+            let new_conj = conj & !mask;
+
+            let group = groups.entry(i).or_insert(Vec::new());
+            if new_conj != 0 {
+                group.push(new_conj);
+            } else {
+                group.push(u32::MAX);
+            }
+
+            break;
+        }
+    }
+
+    let output: &mut Vec<AstIdx> = &mut Vec::new();
+    for (var_id, count) in variable_counts.iter() {
+        if *count == 0 {
+            continue; // Skip variables that don't appear in the function.
+        }
+
+        let var_idx = *var_id;
+
+        let mut maybe_elems = groups.get_mut(&var_idx);
+        if maybe_elems.is_none() {
+            continue;
+        }
+
+        let mut elems = maybe_elems.unwrap();
+
+        // Get the variable
+        let mut result: AstIdx = AstIdx(0);
+        unsafe {
+            result = *variables.wrapping_add(var_idx as usize);
+        }
+
+        // If we have just 1 a single variable, yield it.
+        if elems.len() == 0 || (elems.len() == 1 && elems[0] == u32::MAX) {
+            output.push(result);
+            continue;
+        } else if elems.len() == 1 {
+            let mut mask = elems[0];
+
+            let from_mask = conjunction_from_var_mask(ctx, variables, mask as u64);
+            let conj = ctx.arena.and(result, from_mask);
+            output.push(conj);
+
+            mask |= 1 << var_idx;
+            demanded_vars_map.insert(conj, mask);
+            continue;
+        }
+
+        // Otherwise recursivley factor
+        let other = factor(ctx, variables, var_count, &mut elems, demanded_vars_map);
+        let and = ctx.arena.and(result, other);
+        output.push(and);
+
+        // Update the demanded mask
+        let demanded = (1 << var_idx) | demanded_vars_map[&other];
+        demanded_vars_map.insert(and, demanded);
+    }
+
+    // Compute the union of all demanded variables
+    let mut demanded_sum: u32 = 0;
+    for id in output.iter() {
+        demanded_sum |= demanded_vars_map[id];
+    }
+
+    // Compute the XOR of all the terms.
+    let mut xored = ctx.arena.xor_many(&output);
+    demanded_vars_map.insert(xored, demanded_sum);
+
+    if has {
+        let width = ctx.arena.get_width(xored);
+        let xor_mask = ctx.arena.constant(get_modulo_mask(width), width);
+        xored = ctx.arena.xor(xor_mask, xored);
+        demanded_vars_map.insert(xored, demanded_sum);
+    }
+
+    return xored;
+}
+
+pub fn get_demanded_vars_mask(
+    ctx: &Context,
+    idx: AstIdx,
+    variables: *const AstIdx,
+    variable_count: u32,
+    demanded_vars_map: &mut AHashMap<AstIdx, u32>,
+) -> u32 {
+    if let Some(mask) = demanded_vars_map.get(&idx) {
+        return *mask;
+    }
+
+    let mask: u32 = match ctx.arena.get_node(idx) {
+        SimpleAst::Symbol { id, data } => {
+            let mut var_idx = u32::MAX;
+            for i in 0..variable_count {
+                unsafe {
+                    if *variables.wrapping_add(i as usize) == idx {
+                        var_idx = i;
+                        break;
+                    }
+                }
+            }
+
+            if var_idx == u32::MAX {
+                panic!("Variable not found!");
+            }
+
+            1 << var_idx
+        }
+        SimpleAst::Neg { a, data } => {
+            get_demanded_vars_mask(ctx, *a, variables, variable_count, demanded_vars_map)
+        }
+        SimpleAst::And { a, b, data }
+        | SimpleAst::Xor { a, b, data }
+        | SimpleAst::And { a, b, data } => {
+            let a_mask =
+                get_demanded_vars_mask(ctx, *a, variables, variable_count, demanded_vars_map);
+            let b_mask =
+                get_demanded_vars_mask(ctx, *b, variables, variable_count, demanded_vars_map);
+            a_mask | b_mask
+        }
+        SimpleAst::Constant { c, data } => 0,
+
+        _ => panic!("Unexpected node type!"),
+    };
+
+    demanded_vars_map.insert(idx, mask);
+    return mask;
+}
+
+pub fn simplify_rec(
+    ctx: &mut Context,
+    db: &mut TruthTableDatabase,
+    idx: AstIdx,
+    variables: *const AstIdx,
+    variable_count: u32,
+    page: *mut u8, // Mutable RWX page for JIT evaluation. TODO: Use parallel boolean jit instead of traditional semi-linear JIT)
+    demanded_vars_map: &mut AHashMap<AstIdx, u32>,
+) -> AstIdx {
+    let ast = ctx.arena.get_node(idx).clone();
+    // If the node is a symbol, constant, or negation, we can either return it or recurse onto the only chilld.
+    if let SimpleAst::Symbol { id, data } = ast {
+        return idx;
+    }
+    if let SimpleAst::Constant { c, data } = ast {
+        return idx;
+    }
+    if let SimpleAst::Neg { a, data } = ast {
+        let child = simplify_rec(
+            ctx,
+            db,
+            a,
+            variables,
+            variable_count,
+            page,
+            demanded_vars_map,
+        );
+
+        return ctx.arena.neg(child);
+    }
+
+    // If we have four or less variables, pull the optimal representation from the truth table.
+    let curr_mask = get_demanded_vars_mask(ctx, idx, variables, variable_count, demanded_vars_map);
+    let count = curr_mask.count_ones();
+    if count == 1 {
+        return idx;
+    }
+    if count <= 4 {
+        return simplify_via_lookup_table(ctx, db, idx, variables, variable_count, curr_mask, page);
+    }
+
+    // Otherwise we cannot use a lookup table.
+    // In this case we want to check if we can decompose the boolean into terms with disjoint variable sets.
+    let mut worklist: Vec<AstIdx> = Vec::new();
+    worklist.push(idx);
+
+    // First recursively hoist all associative terms.
+    // TODO: Rewrite negations as XORs, then normalize after the fact.
+    let mut terms: Vec<AstIdx> = Vec::new();
+    let kind = get_opcode(ctx, idx);
+
+    // Hoist children of the same kind.
+    let visit = |terms: &mut Vec<AstIdx>, wkl: &mut Vec<AstIdx>, id: AstIdx| {
+        let opcode = get_opcode(ctx, id);
+        if opcode != kind {
+            terms.push(id);
+            return;
+        }
+
+        wkl.push(get_op0(ctx, id));
+        wkl.push(get_op1(ctx, id));
+    };
+
+    // Recurisely hoist associative children.
+    while true {
+        if worklist.len() == 0 {
+            break;
+        }
+
+        let current = worklist.pop().unwrap();
+        if get_opcode(ctx, current) != kind {
+            terms.push(current);
+            continue;
+        }
+
+        let a = get_op0(ctx, current);
+        let b = get_op1(ctx, current);
+        visit(&mut terms, &mut worklist, a);
+        visit(&mut terms, &mut worklist, b);
+    }
+
+    // Invariant: All terms must not be of the same kind as the original input id.
+    // Do a disjoint variable decomposition. We can start from the least common variables and work our way up.
+    let mut decompositions: Vec<(u32, AstIdx)> = Vec::new();
+    for term in terms.iter() {
+        let demanded_mask =
+            get_demanded_vars_mask(ctx, *term, variables, variable_count, demanded_vars_map);
+
+        let mut found = false;
+        for i in 0..decompositions.len() {
+            let (old_mask, old_id) = decompositions[i];
+            let sum = old_mask | demanded_mask;
+            if sum.count_ones() <= 4 {
+                //let new_id = ctx.arena.or(old_id, *term);
+                let new_id = match ast {
+                    SimpleAst::And { a, b, data } => ctx.arena.and(old_id, *term),
+                    SimpleAst::Or { a, b, data } => ctx.arena.or(old_id, *term),
+                    SimpleAst::Xor { a, b, data } => ctx.arena.xor(old_id, *term),
+                    _ => panic!("Unexpected node type!"),
+                };
+                decompositions[i] = (sum, new_id);
+                found = true;
+                break;
+            }
+        }
+
+        if found {
+            continue;
+        }
+
+        decompositions.push((demanded_mask, *term));
+    }
+
+    let mut simplified: Option<AstIdx> = None;
+
+    // Recurisvely simplify each term.
+    for (_, term) in decompositions.iter() {
+        let reduced = simplify_rec(
+            ctx,
+            db,
+            *term,
+            variables,
+            variable_count,
+            page,
+            demanded_vars_map,
+        );
+
+        if simplified.is_none() {
+            simplified = Some(reduced);
+        } else {
+            simplified = match ast {
+                SimpleAst::And { a, b, data } => Some(ctx.arena.and(simplified.unwrap(), reduced)),
+                SimpleAst::Or { a, b, data } => Some(ctx.arena.or(simplified.unwrap(), reduced)),
+                SimpleAst::Xor { a, b, data } => Some(ctx.arena.xor(simplified.unwrap(), reduced)),
+                _ => panic!("Unexpected node type!"),
+            };
+        }
+    }
+
+    return simplified.unwrap();
+}
+
+pub fn simplify_via_lookup_table(
+    ctx: &mut Context,
+    db: &mut TruthTableDatabase,
+    idx: AstIdx,
+    variables: *const AstIdx,
+    variable_count: u32,
+    demanded_mask: u32,
+    page: *mut u8, // Mutable RWX page for JIT evaluation
+) -> AstIdx {
+    // Collect the variables that are demanded.
+    let var_set: &mut Vec<AstIdx> = &mut Vec::with_capacity(demanded_mask.count_ones() as usize);
+    for i in 0..variable_count {
+        let mask = 1 << i;
+        if (mask & demanded_mask) != 0 {
+            let var = unsafe { *variables.wrapping_add(i as usize) };
+            var_set.push(var);
+        }
+    }
+
+    let w = ctx.arena.get_width(idx);
+    let num_combinations: u32 = (2 as u32).pow(var_set.len() as u32);
+
+    let rv: &mut Vec<u64> = &mut vec![0; num_combinations as usize];
+    let rvSlice = rv.as_mut_ptr();
+
+    // Construct a result vector
+    // TODO: Use parallel boolean jit instead of traditional semi-linear JIT
+    unsafe {
+        ContextJit(
+            ctx,
+            idx,
+            1,
+            1,
+            1,
+            var_set.as_ptr(),
+            var_set.len() as u64,
+            num_combinations as u64,
+            page,
+            rvSlice,
+        );
+    }
+
+    let mut truth_table: u64 = 0;
+    for i in 0..num_combinations {
+        let result = rv[i as usize];
+        truth_table |= (result << i);
+    }
+
+    let boolean = TruthTableDatabase::get_truth_table_entry(
+        db,
+        ctx,
+        var_set.len() as u32,
+        var_set.as_ptr(),
+        truth_table as usize,
+    );
+
+    return boolean;
+}
+
+#[inline]
+pub fn subtract_coeff_boolean(
+    table: &TruthTable,
+    safe_arr: &mut [u64],
+    bit_index: u16,
+    coeff: u8,
+    first_start: u32,
+    width: u32,
+    only_one_var: bool,
+    true_mask: u64,
+) {
+    let offset = (bit_index as u32) * width;
+    let v0 = true_mask.trailing_zeros();
+    let group_size_1: u32 = 1 << v0;
+    let period1 = 2 * group_size_1;
+
+    let mut start = first_start;
+    while start < width {
+        let mut i = start;
+        while i < start + group_size_1 {
+            let shares_variables = ((i as u64) & true_mask) == true_mask;
+            if (i != first_start) && (only_one_var || shares_variables) {
+                let val = 1 & (table.get_bit(safe_arr, i) - coeff);
+                table.set_bit(safe_arr, i, val);
+            }
+
+            i += 1;
+        }
+
+        start += period1;
+    }
+}
+
+pub fn get_group_size_index(mask: u64) -> u32 {
+    let mut sum: u32 = 0;
+    let mut var_mask = mask;
+    while var_mask != 0 {
+        let lsb = var_mask.trailing_zeros();
+        sum += get_group_size(lsb);
+
+        var_mask ^= (1 << lsb);
+    }
+
+    return sum;
+}
+
+pub fn get_group_size(idx: u32) -> u32 {
+    return 1 << idx;
 }

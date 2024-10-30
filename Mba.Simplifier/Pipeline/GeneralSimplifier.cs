@@ -591,7 +591,7 @@ namespace Mba.Simplifier.Pipeline
                 partsWithSubstitutions.Add(new PolynomialParts(polyPart.width, polyPart.coeffSum, powers, polyPart.Others));
             }
 
-            var allVars = varSet.OrderBy(x => ctx.GetSymbolName(x)).ToList().AsReadOnly();
+            IReadOnlyList<AstIdx> allVars = varSet.OrderBy(x => ctx.GetSymbolName(x)).ToList();
             var numCombinations = (ulong)Math.Pow(2, allVars.Count);
             var groupSizes = LinearSimplifier.GetGroupSizes(allVars.Count);
 
@@ -710,7 +710,7 @@ namespace Mba.Simplifier.Pipeline
                 reduced = ctx.Add(reduced, sum);
             }
 
-            var invBases = basisSubstitutions.ToDictionary(x => x.Value, x => LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, 1, x.Key).Value);
+            var invBases = basisSubstitutions.ToDictionary(x => x.Value, x => LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, 1, x.Key));
             var backSub = ApplyBackSubstitution(ctx, reduced, invBases);
             backSub = ApplyBackSubstitution(ctx, backSub, substMapping.ToDictionary(x => x.Value, x => x.Key));
             return backSub;

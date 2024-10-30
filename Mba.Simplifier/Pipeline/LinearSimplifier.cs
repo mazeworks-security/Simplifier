@@ -1,4 +1,5 @@
-﻿using Antlr4.Runtime.Atn;
+﻿// #define DBG
+using Antlr4.Runtime.Atn;
 using Mba.Ast;
 using Mba.Testing;
 using Mba.Utility;
@@ -18,6 +19,9 @@ using System.Numerics;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Minimization;
 using Mba.Common.Interop;
+using System.Runtime.CompilerServices;
+
+
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -54,17 +58,13 @@ namespace Mba.Simplifier.Pipeline
 
         private readonly MultibitRefiner refiner;
 
-        private AstIdx? res = null;
+        private AstIdx? bestSolution = null;
 
         private AstIdx? univariateParts = null;
-
-        private List<int?> __compl = null;
 
         private int? lincombTerms = null;
 
         private readonly bool newLine = false;
-
-        private readonly bool dbg = false;
 
         public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx? ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
         {
@@ -105,7 +105,7 @@ namespace Mba.Simplifier.Pipeline
                     resultVector = JitResultVector(ctx, bitSize, moduloMask, variables, ast.Value, multiBit, numCombinations);
             }
 
-            if(resultVectorHook != null)
+            if (resultVectorHook != null)
                 resultVectorHook(resultVector, numCombinations);
         }
 
@@ -158,8 +158,8 @@ namespace Mba.Simplifier.Pipeline
             // Find an initial solution.
             SimplifyGeneric();
 
-            var solution = res;
-            return res.Value;
+            var solution = bestSolution;
+            return bestSolution.Value;
         }
 
         private int GetCost(AstCtx ctx, AstIdx ast, bool inBitwise)
@@ -269,8 +269,8 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
-            Debug.Assert(res != null);
-            return res.Value;
+            Debug.Assert(bestSolution != null);
+            return bestSolution.Value;
         }
 
         // Convert a 1-bit result vector into a linear combination.
@@ -293,7 +293,7 @@ namespace Mba.Simplifier.Pipeline
                 if (expr == null)
                     expr = term;
                 else
-                    expr = ctx.Add(expr.Value, term.Value);
+                    expr = ctx.Add(expr.Value, term);
                 termCount++;
             }
 
@@ -309,13 +309,14 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
-        // Find an initial linear combination of conjunctions.
-        private (ulong withNoConjunctions, AstIdx? univariateParts, AstIdx? otherParts) SimplifyGeneric()
+        private static ApInt SubtractConstantOffset(ApInt moduloMask, ApInt[] resultVector, int numCombinations)
         {
             var l = resultVector.Length;
 
-            // Fetch the constant offset.
+            // Fetch the constant offset. If the offset is zero then there is nothing to subtract.
             var constant = resultVector[0];
+            if (constant == 0)
+                return 0;
 
             // Subtract the constant offset from the result vector.
             // Note that doing this on the multi-bit level requires that you shift 
@@ -324,20 +325,31 @@ namespace Mba.Simplifier.Pipeline
             {
                 fixed (ApInt* ptr = &resultVector[0])
                 {
+                    ushort bitIndex = 0;
                     for (int comb = 0; comb < l; comb += (int)numCombinations)
                     {
-                        var shiftBy = (ushort)((uint)comb / numCombinations);
-                        ApInt constantOffset = moduloMask & constant >> shiftBy;
+                        ApInt constantOffset = moduloMask & constant >> bitIndex;
                         for (int i = 0; i < (int)numCombinations; i++)
                         {
-                            ptr[comb + i] = moduloMask & ptr[comb + i] - constantOffset;
+                            ptr[comb + i] = moduloMask & (ptr[comb + i] - constantOffset);
                         }
+
+                        bitIndex += 1;
                     }
                 }
             }
 
+            return constant;
+        }
+
+        // Find an initial linear combination of conjunctions.
+        private (ulong withNoConjunctions, AstIdx? univariateParts, AstIdx? otherParts) SimplifyGeneric()
+        {
+            // Remove the constant offset
+            var constant = SubtractConstantOffset(moduloMask, resultVector, (int)numCombinations);
+
             // Short circuit if we can find a single term solution.
-            if (multiBit)
+            if (false)
             {
                 var asBoolean = AsPureBoolean(constant);
                 if (asBoolean != null)
@@ -359,6 +371,17 @@ namespace Mba.Simplifier.Pipeline
 
             // Get all combinations of variables.
             var variableCombinations = GetVariableCombinations(variables.Count);
+
+            if (multiBit)
+            {
+                var r = SimplifyOneValueMultibit(constant, resultVector.ToArray(), variableCombinations).Value;
+                if (r != null)
+                {
+                    CheckSolutionComplexity(r, 1, null);
+                    return (0, null, null);
+                }
+            }
+            
 
             // Linear combination, where the index can be seen as an index into `variableCombinations`,
             // and the element at that index is a list of terms operating over that boolean combination.
@@ -453,7 +476,7 @@ namespace Mba.Simplifier.Pipeline
                         if (univariateParts == null)
                             univariateParts = term;
                         else
-                            univariateParts = ctx.Add(univariateParts.Value, term.Value);
+                            univariateParts = ctx.Add(univariateParts.Value, term);
                     }
 
                     else
@@ -461,7 +484,7 @@ namespace Mba.Simplifier.Pipeline
                         if (otherParts == null)
                             otherParts = term;
                         else
-                            otherParts = ctx.Add(otherParts.Value, term.Value);
+                            otherParts = ctx.Add(otherParts.Value, term);
                     }
                 }
 
@@ -654,19 +677,7 @@ namespace Mba.Simplifier.Pipeline
         // Get a naive boolean function for the given result vector idx.
         private AstIdx GetBooleanForIndex(int resultVecIdx)
         {
-            AstIdx? ast = null;
-            for (int varIdx = 0; varIdx < variables.Count; varIdx++)
-            {
-                uint vMask = 1u << (ushort)varIdx;
-                bool isSet = (resultVecIdx & vMask) != 0;
-                AstIdx term = isSet ? variables[varIdx] : ctx.Neg(variables[varIdx]);
-                if (ast == null)
-                    ast = term;
-                else
-                    ast = ctx.And(ast.Value, term);
-            }
-
-            return ast.Value;
+            return ctx.GetBooleanForIndex((List<AstIdx>)variables, resultVecIdx);
         }
 
         public static ulong[] GetVariableCombinations(int varCount)
@@ -752,6 +763,419 @@ namespace Mba.Simplifier.Pipeline
             univariateParts = sum;
         }
 
+        private ApInt? TryGetSingleCoeff((ApInt coeff, ApInt mask)[] uniqueCoeffs)
+        {
+            foreach (var (coeff, mask) in uniqueCoeffs)
+            {
+                bool success = true;
+                for (int i = 0; i < uniqueCoeffs.Length; i++)
+                {
+                    // Skip ourselves
+                    var (otherCoeff, otherMask) = uniqueCoeffs[i];
+                    if (otherCoeff == coeff)
+                        continue;
+
+                    if (TryRewrite(otherCoeff, coeff, otherMask) == null)
+                    {
+                        success = false;
+                        break;
+                    }
+                }
+
+                if (success)
+                    return coeff;
+            }
+
+            return null;
+        }
+
+        private (ApInt coeff, ApInt mask)[] TryReduceRows(ApInt constant, ApInt[] withoutConstant)
+        {
+            var coeffsToMasks = new Dictionary<ApInt, ApInt>(Math.Min(8, (int)numCombinations));
+            for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
+            {
+                var mask = 1ul << bitIndex;
+#if DBG
+                Log($"\n(x&{mask}): ", false);
+#endif
+
+                var offset = bitIndex * numCombinations;
+                ApInt curr = 0;
+                for (int i = 1; i < (int)numCombinations; i++)
+                {
+                    var coeff = withoutConstant[(int)offset + i];
+
+                    
+                    var newCoeff = refiner.MinimizeCoeffOptimal(coeff, bitIndex);
+
+                    //var oldCoeff = refiner.FindMinimalCoeffSlow(coeff, mask, constant);
+                    /*
+                    var newCoeff = refiner.MinimizeCoeff(coeff, mask);
+                    var oldCoeff = refiner.MinimizeCoeffOptimal(coeff, bitIndex);
+                    if (oldCoeff != newCoeff)
+                        throw new InvalidOperationException();
+                    
+                   */
+                    coeff = newCoeff;
+
+                    withoutConstant[(int)offset + i] = coeff;
+# if DBG
+                    Log($"{coeff} + ", false);
+#endif
+
+                    if (coeff == 0)
+                        continue;
+
+                    // If this is the first non zero coeff in the row, set it.
+                    if (curr == 0)
+                    {
+                        curr = coeff;
+                        continue;
+                    }
+
+                    // If a row is not aligned, we cannot possibly have a solution.
+                    else if (curr != coeff)
+                    {
+                        return null;
+                    }
+                }
+
+                // Skip if the whole row was nil
+                if (curr == 0)
+                    continue;
+
+                coeffsToMasks.TryAdd(curr, 0);
+                coeffsToMasks[curr] |= mask;
+            }
+
+            var arr = coeffsToMasks.Select(x => (x.Key, x.Value)).ToArray();
+            return arr;
+        }
+
+        private (ApInt xorMask, ApInt subOffset)? TryRewrite(ApInt coeff, ApInt targetCoeff, ApInt mask)
+        {
+            ApInt onZero = 0;
+            ApInt onOne = moduloMask & (coeff * mask);
+
+            //var tbl1 = new ApInt[] { onZero, onOne };
+            var onZero1 = onZero;
+            var onOne1 = onOne;
+
+            var formula1 = moduloMask & (onOne + (targetCoeff * (mask)));
+            var formula2 = moduloMask & (onOne + (targetCoeff * (0)));
+            //var tbl2 = new ApInt[] { formula1, formula2 };
+            var onZero2 = formula1;
+            var onOne2 = formula2;
+
+            // In this case we can rewrite the term using a XOR by constant and an addition of a constant offset.
+            ApInt xorMask = 0;
+            ApInt subOffset = 0;
+            if (onZero1 == onZero2 && onOne1 == onOne2)
+            {
+                xorMask = mask;
+                subOffset = onOne;
+                return (xorMask, subOffset);
+            }
+
+            // In this case we can just change the coefficient without making any other changes.
+            else if (refiner.CanChangeCoefficientTo(coeff, targetCoeff, mask))
+            {
+                xorMask = 0;
+                subOffset = 0;
+                return (xorMask, subOffset);
+            }
+
+            // Otherwise there is no solution, we cannot use this coefficient.
+            return null;
+        }
+
+        private AstIdx? SimplifyOneValueMultibit(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations)
+        {
+            // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
+            bool truthTableIdx = true;
+            if (!truthTableIdx)
+                variableCombinations = new List<ApInt>() { 0 }.Concat(variableCombinations).ToArray();
+
+            var getConj = (ApInt i, ApInt? mask) =>
+            {
+                if (truthTableIdx)
+                {
+                    var boolean = GetBooleanForIndex((int)i);
+                    if (mask == null)
+                        return boolean;
+
+                    return ctx.And(ctx.Constant(mask.Value, width), boolean);
+                }
+
+                return ConjunctionFromVarMask(1, i, mask);
+            };
+
+            AstIdx.ctx = ctx;
+
+            // Reduce each row to a canonical form. If a row cannot be canonicalized, there is no solution.
+            var uniqueCoeffs = TryReduceRows(constant, withoutConstant);
+            if (uniqueCoeffs == null)
+                return null;
+            // Try to find a single coefficient that all result vector entries can be changed to.
+            // If the result is nil, then a single term solution does not exist!
+            // Note: It's possible that a solution exists with a coefficient that is not present in the set, though in practice I've never seen this happen.
+            var singleCoeff = TryGetSingleCoeff(uniqueCoeffs);
+            if (singleCoeff == null)
+                return null;
+
+            var targetCoeff = singleCoeff.Value;
+
+            // Fill in a table for XOR masks.
+            var xorMasks = new ApInt[withoutConstant.Length];
+
+            // Compute XOR masks and adjusted constant offset
+            var casted = (int)numCombinations;
+            for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
+            {
+                var offset = (int)(bitIndex * numCombinations);
+                var mask = 1ul << bitIndex;
+                for (int i = 0; i < casted; i++)
+                {
+                    var coeff = withoutConstant[offset + i];
+                    if (coeff == 0)
+                        continue;
+
+                    if (coeff == targetCoeff)
+                        continue;
+                    if (i == 0)
+                        continue;
+
+                    var (xorMask, subOffset) = TryRewrite(coeff, targetCoeff, mask).Value;
+                    xorMasks[offset + i] = xorMask;
+                    constant += subOffset;
+                    constant &= moduloMask;
+                }
+            }
+
+            // Walk result vector, get the ones with xor mask.. merge them, then merge the ones without the XOR mask..
+            var combinedAnds = new ApInt[(int)numCombinations];
+            // We want to group XOR terms by their base bitwise expressions
+            var xorMap = new Dictionary<TruthTable, ApInt>();
+            ApInt freeMask = moduloMask;
+            for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
+            {
+                var offset = (int)(bitIndex * numCombinations);
+                var mask = 1ul << bitIndex;
+
+                ApInt globMask = 0;
+
+                ushort truthIdx = 0;
+                var xoredIndices = new TruthTable(variables.Count);
+
+                int withXorCount = 0;
+                for (int i = 0; i < (int)numCombinations; i++)
+                {
+                    var coeff = withoutConstant[offset + i];
+                    if (coeff == 0)
+                    {
+                        truthIdx += 1;
+                        continue;
+                    }
+
+                    var xorMask = xorMasks[offset + i];
+                    freeMask &= ~mask;
+
+                    if (xorMask == 0)
+                    {
+                        combinedAnds[i] |= mask;
+                    }
+                    else
+                    {
+                        withXorCount += 1;
+                        globMask = xorMask;
+                        xoredIndices.SetBit(truthIdx, true);
+                    }
+
+                    truthIdx += 1;
+                }
+
+                if (withXorCount > 0)
+                {
+                    var newOffset = moduloMask & (((ApInt)withXorCount - 1) * globMask);
+                    newOffset = moduloMask & (targetCoeff * newOffset);
+
+                    constant += newOffset;
+                    xorMap.TryAdd(xoredIndices, globMask);
+                    xorMap[xoredIndices] |= globMask;
+                }
+            }
+
+            // Group by AND / XOR masks.
+            var process = (ApInt[] arr) =>
+            {
+                Dictionary<ApInt, TruthTable> maskToBitwise = new();
+                for (int i = 0; i < arr.Length; i++)
+                {
+                    var mask = arr[i];
+                    if (mask == 0)
+                        continue;
+
+                    if (maskToBitwise.TryGetValue(mask, out var existing))
+                    {
+                        existing.SetBit((ushort)i, true);
+                    }
+
+                    else
+                    {
+                        var tt = new TruthTable(variables.Count);
+                        tt.SetBit(i, true);
+                        maskToBitwise[mask] = tt;
+                    }
+                }
+
+                return maskToBitwise;
+            };
+
+            // Merging needs to be carefully, because the constant offset adjustment is assuming we have already performed some merging
+            // Merge bitwise terms.
+            var andToBitwise = process(combinedAnds);
+            var union = new List<AstIdx>();
+            foreach(var x in andToBitwise)
+                union.Add(MaskAndMinimize(GetBooleanTableAst(x.Value), AstOp.And, x.Key));
+            foreach (var x in xorMap)
+                union.Add(MaskAndMinimize(GetBooleanTableAst(x.Key), AstOp.Xor, x.Value));
+
+
+            var combinedBitwise = ctx.Or(union);
+
+            var bar = TryPartition(combinedBitwise, targetCoeff, constant, freeMask);
+            return bar;
+        }
+
+        private AstIdx TryPartition(AstIdx bitwise, ApInt coeff, ApInt constant, ApInt freeMask)
+        {
+            // Identify how many undemanded bits there are in the coefficient.
+            // As a heuristic, how do prune the search space for coeff candidates.
+            // You have a set of possible coefficients, and a set of possible undemanded bits where you can cram the constant offset..
+            var undemanded = refiner.FindUndemandedCoeffBits(coeff, moduloMask & ~freeMask, constant);
+            var minimal = refiner.FindMinimalCoeff(coeff, moduloMask & ~freeMask, constant);
+            var maximal = refiner.FindMaximalCoeff(coeff, moduloMask & ~freeMask);
+
+            // Try to partition the constant offset.
+            // Note: In the event that this fails, we could still try other means of partitioning the constant offset.
+            // Trying to find a fitting coefficient / OR mask is exponential in the worst case, but there should be a linear time solution.
+            bestSolution = PartitionCoeffAndConstant(bitwise, coeff, constant, freeMask);
+            if (bestSolution != null)
+                return bestSolution.Value;
+
+            // If all else fails, we cannot find a single term solution.
+            // Place the constant offset on the outside of the expression.
+            var constTerm = ctx.Constant(constant, width);
+            var mul = ctx.Mul(ctx.Constant(coeff, width), bitwise);
+            return ctx.Add(constTerm, mul);
+        }
+
+        // Heuristic: Identify flexibility in the coefficient, try again...
+        private AstIdx? PartitionCoeffAndConstant(AstIdx bitwise, ApInt coeff, ApInt constant, ApInt freeMask)
+        {
+            if (constant == 0)
+                return ctx.Mul(ctx.Constant(coeff, width), bitwise);
+
+            // Trivial partition: -c1 + (-c1)*(x) => c1*~x,
+            // or alternatively c1 + (c1*x) => (-c1)*~x
+            if (coeff == constant)
+            {
+                var constantId = ctx.Constant(moduloMask * constant, width);
+                return ctx.Mul(constantId, ctx.Neg(bitwise));
+            }
+
+            var modulus = (UInt128)moduloMask + 1;
+            var solver = new LinearCongruenceSolver((UInt128)moduloMask);
+            for (ushort bitIdx = 0; bitIdx < width; bitIdx++)
+            {
+                var bitMask = 1ul << bitIdx;
+                if ((bitMask & freeMask) == 0)
+                    continue;
+
+                var lc = solver.LinearCongruence(bitMask, constant, moduloMask);
+                var limit = lc.d;
+                if (limit > 255)
+                    limit = 255;
+                for (UInt128 i = 0; i < limit; i++)
+                {
+                    var solution = (ApInt)solver.GetSolution(i, lc);
+                    if (!refiner.CanChangeCoefficientTo(coeff, (ApInt)solution, moduloMask & (~freeMask)))
+                        continue;
+
+                    bitwise = ctx.Or(ctx.Constant(bitMask, width), bitwise);
+                    return ctx.Mul(ctx.Constant(solution, width), bitwise);
+                }
+            }
+
+            // If the sign bit pops out, try to move it back in.
+            var signBit = 1ul << ((ushort)width - 1);
+            if (constant == signBit)
+            {
+                var withoutSign = SubtractSignBit(coeff, bitwise);
+                if (withoutSign == null)
+                    throw new InvalidOperationException($"Failed to partition constant offset!");
+                var coeffId = ctx.Constant(coeff, width);
+                return ctx.Mul(coeffId, withoutSign.Value);
+            }
+
+            // Try to fit the constant offset into the undemanded bits.
+            var coeffIdx = ctx.Constant(coeff, width);
+            var fittingMask = FindFittingConstantFactor(coeff, constant, (~freeMask) & moduloMask);
+            if (fittingMask != null)
+            {
+                var mask = ctx.Constant(fittingMask.Value, width);
+                return ctx.Mul(coeffIdx, ctx.Or(mask, bitwise));
+            }
+
+            // If the constant offset does not fit, try to remove the sign bit from the constant offset,
+            // then look for a fitting mask.
+            ApInt adjusted = moduloMask & (constant - signBit);
+            fittingMask = FindFittingConstantFactor(coeff, moduloMask & adjusted, (~freeMask) & moduloMask);
+            if (fittingMask != null)
+            {
+                // Maybe TODO(probably not): Check if OR mask overlaps with sign bit mask.
+                var withoutSb = SubtractSignBit(coeff, bitwise);
+                if (withoutSb != null)
+                {
+                    var mask = ctx.Constant(fittingMask.Value, width);
+                    return ctx.Mul(coeffIdx, ctx.Or(mask, withoutSb.Value));
+                }
+            }
+
+            return null;
+        }
+
+        private AstIdx? SubtractSignBit(ApInt coeff, AstIdx bitwise)
+        {
+            var constant = 1ul << ((ushort)width - 1);
+            var xorMask1 = 1ul << (ushort)(width - 1);
+            var xorMask2 = 1ul << (ushort)(width - 2);
+
+            ApInt xorMask = 0;
+            if ((moduloMask & (xorMask1 * coeff)) == constant)
+                xorMask = xorMask1;
+            else if ((moduloMask & (xorMask2 * coeff)) == constant)
+                xorMask = xorMask2;
+            else
+                return null;
+
+            return ctx.Xor(ctx.Constant(xorMask, width), bitwise);
+        }
+
+        private unsafe AstIdx GetBooleanTableAst(TruthTable table)
+        {
+            return BooleanMinimizer.GetBitwise(ctx, variables, table);
+        }
+
+        private AstIdx MaskAndMinimize(AstIdx idx, AstOp opcode, ApInt mask)
+        {
+            var maskId = ctx.Constant(mask, width);
+            if (opcode == AstOp.Xor)
+                idx = ctx.And(maskId, idx);
+            return ctx.Binop(opcode, maskId, idx);
+        }
+
+
         // Convert a N-bit result vector into a linear combination.
         private (AstIdx expr, int termCount) SimplifyMultiBitGeneric(ApInt constantOffset, ulong[] variableCombinations, List<List<(ApInt coeff, ApInt bitMask)>> linearCombinations)
         {
@@ -782,7 +1206,7 @@ namespace Mba.Simplifier.Pipeline
                     if (coeff == 0 || mask == 0)
                         continue;
                     var conj = ConjunctionFromVarMask(coeff, varComb, mask);
-                    Log(conj.Value);
+                    Log(conj);
                 }
             }
 
@@ -822,7 +1246,7 @@ namespace Mba.Simplifier.Pipeline
                     if (mask == 0)
                         continue;
 
-                    var newTerm = ConjunctionFromVarMask(coeff, variableCombinations[i], mask).Value;
+                    var newTerm = ConjunctionFromVarMask(coeff, variableCombinations[i], mask);
                     if (final == null)
                         final = newTerm;
                     else
@@ -830,8 +1254,9 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
-            if (dbg)
-                Log($"New solution: {ctx.GetAstString(final.Value)}");
+#if DBG
+            Log($"New solution: {ctx.GetAstString(final.Value)}");
+#endif
 
 
             if (final == null)
@@ -856,7 +1281,7 @@ namespace Mba.Simplifier.Pipeline
 
                 // Add a new XOR term.
                 var xorConst = ctx.Constant(xor.xorMask, width);
-                var xorNode = ctx.Xor(xorConst, ConjunctionFromVarMask(1, varComb, null).Value);
+                var xorNode = ctx.Xor(xorConst, ConjunctionFromVarMask(1, varComb, null));
                 var newTerm = ctx.Mul(ctx.Constant(xor.coeff, width), xorNode);
                 newTerms.Add(newTerm);
             };
@@ -877,7 +1302,7 @@ namespace Mba.Simplifier.Pipeline
                 if (or.orMask != moduloMask)
                 {
                     var orConst = ctx.Constant(or.orMask, width);
-                    orNode = ctx.Or(orConst, conj.Value);
+                    orNode = ctx.Or(orConst, conj);
                 }
 
                 else
@@ -895,7 +1320,7 @@ namespace Mba.Simplifier.Pipeline
                     return;
 
                 var conj = ConjunctionFromVarMask(coeff.Value, varComb, null);
-                newTerms.Add(conj.Value);
+                newTerms.Add(conj);
             };
 
             // Try to identify trivial XORs by constant.
@@ -954,34 +1379,23 @@ namespace Mba.Simplifier.Pipeline
             return Term(conj.Value, coeff);
         }
 
-        private AstIdx? ConjunctionFromVarMask(ApInt coeff, ApInt varMask, ApInt? mask = null)
+        private AstIdx ConjunctionFromVarMask(ApInt coeff, ApInt varMask, ApInt? mask = null)
             => ConjunctionFromVarMask(ctx, variables, coeff, varMask, mask);
 
-        public static AstIdx? ConjunctionFromVarMask(AstCtx ctx, IReadOnlyList<AstIdx> variables, ApInt coeff, ApInt varMask, ApInt? mask = null)
+        public static AstIdx ConjunctionFromVarMask(AstCtx ctx, IReadOnlyList<AstIdx> variables, ApInt coeff, ApInt varMask, ApInt? mask = null)
         {
             Debug.Assert(variables.Count > 0);
+            Debug.Assert(BitOperations.PopCount(varMask) > 0);
 
-            // Note that this assumes all variables are of the same width.
-            var width = ctx.GetWidth(variables[0]);
-            if (coeff == 0)
-                return null;
-
-            AstIdx? conj = null;
-            while (varMask != 0)
-            {
-                var lsb = BitOperations.TrailingZeroCount(varMask);
-                var op = variables[lsb];
-                if (conj == null)
-                    conj = op;
-                else
-                    conj = ctx.And(conj.Value, op);
-
-                varMask ^= 1ul << (ushort)lsb;
-            }
+            var casted = (List<AstIdx>)variables;
+            var conj = ctx.GetConjunctionFromVarMask(casted, varMask);
 
             if (mask != null)
-                conj = ctx.And(ctx.Constant(mask.Value, width), conj.Value);
-            return Term(ctx, conj.Value, coeff);
+            {
+                var width = ctx.GetWidth(variables[0]);
+                conj = ctx.And(ctx.Constant(mask.Value, width), conj);
+            }
+            return Term(ctx, conj, coeff).Value;
         }
 
         private AstIdx? Conjunction(ApInt coeff, AstIdx conj, ApInt? mask = null)
@@ -1012,12 +1426,12 @@ namespace Mba.Simplifier.Pipeline
         // since we might be able to simplify the expression using truth tables.
         bool TrySimplifyFewerVariables()
         {
-            Debug.Assert(res != null);
+            Debug.Assert(bestSolution != null);
 
             // Get the unique set of variables.
             // Note that this mutates the variable objects such that their 
             // index field is updated based off of their alphabetical name ordering.
-            var newVariables = ctx.CollectVariables(res.Value);
+            var newVariables = ctx.CollectVariables(bestSolution.Value);
 
             // If there are more than three variables, we cannot simplify it any further.
             if (newVariables.Count > 3)
@@ -1027,7 +1441,7 @@ namespace Mba.Simplifier.Pipeline
                 return false;
 
             // Run the linear MBA simplifier on the expression.
-            var expr = Run(width, ctx, res.Value);
+            var expr = Run(width, ctx, bestSolution.Value);
             CheckSolutionComplexity(expr);
 
             return true;
@@ -1039,7 +1453,7 @@ namespace Mba.Simplifier.Pipeline
         // and compose the results.
         void TrySplit()
         {
-            var expr = res.Value;
+            var expr = bestSolution.Value;
             Debug.Assert(expr != null);
 
             var l = new List<AstIdx>();
@@ -1512,7 +1926,14 @@ namespace Mba.Simplifier.Pipeline
                 return;
 
             // Get a negated representation of the boolean truth table.
-            var t = resultVector.Select(x => x == b ? 1 : 0).ToList();
+            //var t = resultVector.Select(x => x == b ? 1 : 0).ToList();
+            var t = new TruthTable(variables.Count);
+            for (int i = 0; i < resultVector.Length; i++)
+            {
+                if (resultVector[i] == b)
+                    t.SetBit(i, true);
+            }
+
             var e = BooleanMinimizer.GetBitwise(ctx, variables, t, negate: true);
 
             e = Term(e, NegateCoefficient(a)).Value;
@@ -1565,7 +1986,7 @@ namespace Mba.Simplifier.Pipeline
         private void FindTwoExpressionsByTwoValues()
         {
             // This step is disabled due to high performance overhead.
-            return; 
+            return;
 
             Debug.Assert(resultVector[0] == 0);
             var resultSet = resultVector.ToHashSet();
@@ -1703,11 +2124,23 @@ namespace Mba.Simplifier.Pipeline
             List<Decision> cases = _case.Select(x => x.Single()).ToList();
 
             // Compute a boolean function for the first term.
-            var l = cases.Select(x => x == Decision.First || x == Decision.Both ? 1 : 0).ToList();
-            var first = BooleanMinimizer.GetBitwise(ctx, variables, l);
+            //var l = cases.Select(x => x == Decision.First || x == Decision.Both ? 1 : 0).ToList();
+            var l = new TruthTable(variables.Count);
+            for(int i = 0; i < cases.Count; i++)
+            {
+                if (cases[i] == Decision.First || cases[i] == Decision.Both)
+                    l.SetBit(i, true);
+            }
 
+            var first = BooleanMinimizer.GetBitwise(ctx, variables, l);
+            l.SetAllZeroes();
+            // l = cases.Select(x => x == Decision.Second || x == Decision.Both ? 1 : 0).ToList();
+            for (int i = 0; i < cases.Count; i++)
+            {
+                if (cases[i] == Decision.Second || cases[i] == Decision.Both)
+                    l.SetBit(i, true);
+            }
             // Compute a boolean function for the second term.
-            l = cases.Select(x => x == Decision.Second || x == Decision.Both ? 1 : 0).ToList();
             var second = BooleanMinimizer.GetBitwise(ctx, variables, l, secNegated);
 
             // Compose the terms together, optionally negating the second coefficient if requested.
@@ -1869,12 +2302,25 @@ namespace Mba.Simplifier.Pipeline
                 return;
 
             var coeff1 = a;
-            var l = vec.Select(x => x == coeff1 || x == coeffSum ? 1 : 0).ToList();
+            //var l = vec.Select(x => x == coeff1 || x == coeffSum ? 1 : 0).ToList();
+            var l = new TruthTable(variables.Count);
+            for(int i = 0; i < vec.Count; i++)
+            {
+                if (vec[i] == coeff1 || vec[i] == coeffSum)
+                    l.SetBit(i, true);
+            }
+
             var bitwise1 = BooleanMinimizer.GetBitwise(ctx, variables, l, negate: true);
 
             var coeff2 = b;
-            vec = RangeUtil.Get(vec.Count).Select(x => moduloMask & vec[x] - coeff1 * (ApInt)l[x]).ToList();
-            l = vec.Select(x => x == coeff2 ? 1 : 0).ToList();
+            vec = RangeUtil.Get(vec.Count).Select(x => moduloMask & vec[x] - coeff1 * (ApInt)(l.GetBit(x) ? 1 : 0)).ToList();
+            // l = vec.Select(x => x == coeff2 ? 1 : 0).ToList();
+            l.SetAllZeroes();
+            for(int i = 0; i < vec.Count; i++)
+            {
+                if (vec[i] == coeff2)
+                    l.SetBit(i, true);
+            }
             var bitwise2 = BooleanMinimizer.GetBitwise(ctx, variables, l, negate: true);
 
             var e = Compose(new() { bitwise1, bitwise2 }, new() { NegateCoefficient(coeff1), NegateCoefficient(coeff2) });
@@ -1913,7 +2359,7 @@ namespace Mba.Simplifier.Pipeline
             foreach (var r in resultSet)
             {
                 // Skip zero entries.
-                if (r == 0) 
+                if (r == 0)
                     continue;
 
                 var term = TermRefinement(r);
@@ -1931,11 +2377,12 @@ namespace Mba.Simplifier.Pipeline
         // rAlt to the given expression.
         private AstIdx TermRefinement(ApInt r1, ApInt? rAlt = null)
         {
-            var t = new List<int>();
-            foreach (var r2 in resultVector)
+            var t = new TruthTable(variables.Count);
+            for(int i = 0; i < resultVector.Length; i++)
             {
-                var cond = r2 == r1 || rAlt != null && r2 == rAlt.Value ? 1 : 0;
-                t.Add(cond);
+                var r2 = resultVector[i];
+                var cond = r2 == r1 || rAlt != null && r2 == rAlt.Value ? true : false;
+                t.SetBit(i, cond);
             }
 
             // Return m1 * bitop.
@@ -2053,6 +2500,7 @@ namespace Mba.Simplifier.Pipeline
 
         private bool CheckTermCount(int value)
         {
+            /*
             if (lincombTerms.GetValueOrDefault() <= value)
                 return false;
             if (metric != Metric.Terms)
@@ -2060,16 +2508,9 @@ namespace Mba.Simplifier.Pipeline
 
             var currTermCount = GetTermCountOfCurrentSolution();
             return currTermCount <= value;
-        }
+            */
 
-        private int? GetTermCountOfCurrentSolution()
-        {
-            var m = (int)Metric.Terms - (int)metric;
-            Debug.Assert(m >= 0);
-
-            Debug.Assert(__compl != null);
-            Debug.Assert(__compl[m] != null);
-            return __compl[m];
+            return false;
         }
 
         // Check whether the given solution is less complex than the currently
@@ -2079,73 +2520,44 @@ namespace Mba.Simplifier.Pipeline
         // the given term count has to be incremented by one accordingly.
         private void CheckSolutionComplexity(AstIdx e, int? t = null, AstIdx? constant = null)
         {
-            Debug.Assert(res == null == (__compl == null));
-
-
             if (constant != null)
             {
                 e = AddConstant(e, constant.Value);
-                if (t != null)
-                    t = t + 1;
             }
 
-            if (univariateParts != null)
-                e = ctx.Add(e, univariateParts.Value);
-
-            //Console.WriteLine($"Solution: {ctx.GetAstString(e)}");
-            // No known solution yet
-            var getCompl = () => Enumerable.Range((int)metric, (int)Metric.Count).Select(x => (int?)null).ToList();
-            if (res == null)
+            if(bestSolution == null)
             {
-                res = e;
-                __compl = getCompl();
-                if (t != null && (int)metric <= (int)Metric.Terms)
-                {
-                    //__compl[(int)Metric.Terms - (int)metric] = t;
-                    __compl[(int)Metric.Terms] = t;
-                }
-
+                bestSolution = e;
                 return;
             }
 
-            // TODO: Reimplement GAMBA's metric system?
-            var size = GetCost(ctx, e, false);
-            var otherSize = GetCost(ctx, res.Value, false);
-
-            var min = (double)Math.Min(size, otherSize);
-            var max = (double)Math.Max(size, otherSize);
-
-            var tc1 = CountTerms(e);
-            var tc2 = CountTerms(res.Value);
-
-            // Apply additional weight to the term count.
-            // If two expressions have the same number of nodes,
-            // we want the one with the least terms.
-            size += tc1;
-            otherSize += tc2;
-
-            if (size < otherSize)
-            {
-                res = e;
-                __compl[(int)Metric.Terms] = t;
-            }
+            // Take the new solution if the cost is lower.
+            var cost1 = ctx.GetCost(bestSolution.Value);
+            var cost2 = ctx.GetCost(e);
+            if(cost2 < cost1)
+                bestSolution = e;
         }
 
-        private void Log(string message)
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void Log(string message, bool newLine = true)
         {
-            if (dbg)
+#if DBG
+            if (newLine)
                 Console.WriteLine(message);
+            else
+                Console.Write(message);
+#endif
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private void Log(AstIdx conj)
         {
-            if (!dbg)
-                return;
-
+#if DBG
             if (newLine)
                 Console.WriteLine(ctx.GetAstString(conj));
             else
                 Console.Write(ctx.GetAstString(conj) + " + ");
+#endif
         }
 
         private AstIdx AddConstant(AstIdx expr, AstIdx constant)
