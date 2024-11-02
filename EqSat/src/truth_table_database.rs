@@ -15,6 +15,61 @@ pub struct TruthTableDatabase {
     four_var_truth_table: Vec<u8>,
 }
 
+pub struct TruthTable {
+    pub num_vars: u32,
+    pub arr: *mut u64,
+}
+
+impl TruthTable {
+    pub fn get_num_bits(&self) -> u32 {
+        return 1 << self.num_vars;
+    }
+
+    pub fn get_num_words(&self) -> usize {
+        let num_bits = self.get_num_bits();
+        if num_bits <= 64 {
+            return 1;
+        } else {
+            return (num_bits >> 6) as usize;
+        }
+    }
+
+    pub fn get_bit(&self, safe_arr: &mut [u64], index: u32) -> u8 {
+        let word_idx = index >> 6;
+        let bit_idx = index - (64 * word_idx);
+        unsafe {
+            let word = safe_arr.get_unchecked(word_idx as usize) >> bit_idx;
+            return (word & 1) as u8;
+        }
+    }
+
+    pub fn set_bit(&self, safe_arr: &mut [u64], index: u32, value: u8) {
+        let word_idx = index >> 6;
+        let bit_idx = index - (64 * word_idx);
+
+        unsafe {
+            let word = safe_arr.get_unchecked_mut(word_idx as usize);
+            *word &= !(1 << bit_idx);
+            *word |= (value as u64) << bit_idx;
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn SetTruthTableElements(num_vars: u32, arr: *mut u64) {
+    let mut tt = TruthTable {
+        num_vars: num_vars,
+        arr: arr,
+    };
+
+    unsafe {
+        let casted = std::slice::from_raw_parts_mut(arr, tt.get_num_words());
+        for i in 0..tt.get_num_bits() {
+            tt.set_bit(casted, i, 1);
+        }
+    }
+}
+
 // Two, three, and four variable boolean truth table utility.
 impl TruthTableDatabase {
     pub fn new() -> Self {

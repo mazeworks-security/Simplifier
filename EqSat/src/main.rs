@@ -37,6 +37,8 @@ pub extern "C" fn SimplifyViaEqsat(s: *const c_char, ms: u64) -> *mut c_char {
     unsafe {
         return CString::new(res).unwrap().into_raw();
     }
+
+    println!(" ");
 }
 
 fn read_expr_from_args() -> String {

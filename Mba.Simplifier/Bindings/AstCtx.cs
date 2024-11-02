@@ -7,6 +7,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using Mba.Utility;
+using Mba.Simplifier.Minimization;
+using System.Diagnostics;
 
 namespace Mba.Simplifier.Bindings
 {
@@ -202,6 +204,37 @@ namespace Mba.Simplifier.Bindings
             return vec;
         }
 
+        public unsafe AstIdx GetBooleanForIndex(List<AstIdx> variables, int vecIdx)
+        {
+            var span = CollectionsMarshal.AsSpan(variables);
+            fixed (AstIdx* arrPtr = &span[0])
+            {
+                return Api.ContextGetBooleanForIndex(this, arrPtr, (uint)variables.Count, (uint)vecIdx);
+            }
+        }
+
+        public unsafe AstIdx GetConjunctionFromVarMask(List<AstIdx> variables, ulong varMask)
+        {
+            var span = CollectionsMarshal.AsSpan(variables);
+            fixed (AstIdx* arrPtr = &span[0])
+            {
+                return Api.ContextGetConjunctionFromVarMask(this, arrPtr, varMask);
+            }
+        }
+
+        // public unsafe static extern AstIdx ContextMinimizeAnf(OpaqueAstCtx* ctx, OpaqueTruthTableDb* db, ulong* truthTable, AstIdx* variableArray, uint numVars, ulong* rwxJitPage);
+        public unsafe AstIdx MinimizeAnf(TruthTableDb db, TruthTable table, List<AstIdx> variables, nint rwxPagePtr)
+        {
+            var span = CollectionsMarshal.AsSpan(variables);
+            fixed (AstIdx* arrPtr = &span[0])
+            {
+                fixed (ulong* tablePtr = &table.arr[0])
+                {
+                    return Api.ContextMinimizeAnf(this, db, tablePtr, arrPtr, (uint)variables.Count, (ulong*)rwxPagePtr);
+                }
+            }
+        }
+
         // Evaluate the AST for all possible combinations of zeroes and ones.
         // Note that this method orders the input variables alphabetically, with the same ordering returned by CollectVariables.
         public unsafe ulong[] EvaluateForZeroesAndOnes(AstIdx id, ulong mask)
@@ -241,7 +274,7 @@ namespace Mba.Simplifier.Bindings
 
         public unsafe static implicit operator AstCtx(OpaqueAstCtx* ctx) => new AstCtx((nint)ctx);
 
-        protected static class Api
+        public static class Api
         {
             [DllImport("eq_sat")]
             public unsafe static extern OpaqueAstCtx* CreateContext();
@@ -328,6 +361,15 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern ulong* ContextEvaluateForAllZeroesAndOnes(OpaqueAstCtx* ctx, AstIdx id, ulong mask, ulong* outLen);
 
             [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextGetBooleanForIndex(OpaqueAstCtx* ctx, AstIdx* variableArray, uint numVars, uint vecIdx);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextGetConjunctionFromVarMask(OpaqueAstCtx* ctx, AstIdx* variableArray, ulong varMask);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextMinimizeAnf(OpaqueAstCtx* ctx, OpaqueTruthTableDb* db, ulong* truthTable, AstIdx* variableArray, uint numVars, ulong* rwxJitPage);
+
+            [DllImport("eq_sat")]
             public unsafe static extern ulong* ContextJit(OpaqueAstCtx* ctx, AstIdx id, ulong mask, uint isMultiBit, uint bitWidth, AstIdx* variableArray, ulong varCount, ulong numCombinations, ulong* rwxJitPage, ulong* outputArray);
 
             [DllImport("eq_sat")]
@@ -335,6 +377,10 @@ namespace Mba.Simplifier.Bindings
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextRecursiveSimplify(OpaqueAstCtx* ctx, AstIdx id);
+
+            // DELETEME:
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx SetTruthTableElements(uint numVars, ulong* truthTable);
         }
     }
 }

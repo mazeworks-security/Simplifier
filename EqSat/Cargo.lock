@@ -100,10 +100,17 @@ dependencies = [
  "cranelift-isle",
  "egg",
  "egraph",
+ "foldhash",
  "libc",
  "mimalloc",
  "rand",
 ]
+
+[[package]]
+name = "foldhash"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4deb59dd6330afa472c000b86c0c9ada26274836eb59563506c3e34e4bb9a819"
 
 [[package]]
 name = "fxhash"

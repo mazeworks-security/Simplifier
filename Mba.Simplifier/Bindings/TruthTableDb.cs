@@ -24,12 +24,12 @@ namespace Mba.Simplifier.Bindings
             handle = (nint)Api.CreateTruthTableDb();
         }
 
-        public unsafe AstIdx GetBoolean(AstCtx ctx, uint varCount, IReadOnlyList<AstIdx> vars, ulong idx)
+        public unsafe AstIdx GetBoolean(AstCtx ctx, uint varCount, List<AstIdx> vars, ulong idx)
         {
-            var variableArray = vars.ToArray();
-            fixed (AstIdx* p = &variableArray[0])
+            var span = CollectionsMarshal.AsSpan(vars);
+            fixed (AstIdx* arrPtr = &span[0])
             {
-                return Api.GetTruthTableDbEntry(this, ctx, varCount, p, idx);
+                return Api.GetTruthTableDbEntry(this, ctx, varCount, arrPtr, idx);
             }
         }
 

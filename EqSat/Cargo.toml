@@ -10,10 +10,6 @@ crate-type = ["cdylib"]
 path = "src/main.rs"
 
 
-[[bin]]
-name = "eq-sat"
-path = "src/main.rs"
-
 [dependencies]
 egg = { git = "https://github.com/egraphs-good/egg.git" }
 rand = "0.8.5"
@@ -22,6 +18,7 @@ cranelift-isle = "0.102.1"
 ahash = "0.8.11"
 mimalloc = { version = "*", default-features = false }
 egraph = { path = "./egraph" }
+foldhash = "=0.1.0"
 
 [profile.release]
 debug = true

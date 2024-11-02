@@ -10,15 +10,15 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.Minimization
 {
-    public class TruthTables
+    public class TableDatabase
     {
         private IReadOnlyList<byte[]> Tables { get; }
 
-        private readonly TruthTableDb db;
+        public readonly TruthTableDb db;
 
-        public static readonly TruthTables Instance = new();
+        public static readonly TableDatabase Instance = new();
 
-        private TruthTables()
+        private TableDatabase()
         {
             Tables = new List<byte[]>()
             {
@@ -42,7 +42,7 @@ namespace Mba.Simplifier.Minimization
             return bytes;
         }
 
-        public unsafe AstIdx GetTableEntry(AstCtx ctx, IReadOnlyList<AstIdx> vars, int index)
+        public unsafe AstIdx GetTableEntry(AstCtx ctx, List<AstIdx> vars, int index)
         {
             return db.GetBoolean(ctx, (uint)vars.Count, vars, (ulong)index);
         }

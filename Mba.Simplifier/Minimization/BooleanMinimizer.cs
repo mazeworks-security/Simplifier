@@ -1,9 +1,12 @@
 ﻿using Mba.Ast;
+using Mba.Common.MSiMBA;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Pipeline;
 using Mba.Testing;
+using Mba.Utility;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,59 +15,69 @@ namespace Mba.Simplifier.Minimization
 {
     public static class BooleanMinimizer
     {
-        public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector, bool negate = false)
+        private const bool useLegacyMinimizer = false;
+
+        public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable, bool negate = false)
         {
             // If requested, negate the result vector to find a negated expression.
             if (negate)
-                resultVector = resultVector.Select(x => ~x & 1).ToList();
+            {
+                truthTable.Negate();
+            }
+
 
             // Exit early if the boolean function is a constant.
-            var asConstant = AsConstant(ctx, resultVector, ctx.GetWidth(variables[0]));
+            var asConstant = AsConstant(ctx, truthTable, ctx.GetWidth(variables[0]));
             if (asConstant != null)
                 return asConstant.Value;
 
             if (variables.Count == 1)
             {
-                return resultVector[0] == 0 ? variables[0] : ctx.Neg(variables[0]);
+                return truthTable.GetBit(0) == false ? variables[0] : ctx.Neg(variables[0]);
             }
 
             // If there are four or less variables, we can pull the optimal representation from the truth table.
             // TODO: One could possibly construct a 5 variable truth table for all 5 variable NPN classes.
             if (variables.Count <= 4)
             {
-                return FromTruthTable(ctx, variables, resultVector);
+                return FromTruthTable(ctx, variables, truthTable);
             }
 
-            // Otherwise use Espresso to compute a semi optimal version of the boolean function.
-            var xnf = AnfMinimizer.SimplifyBoolean(ctx, variables, resultVector);
-            var dnf = EspressoMinimizer.SimplifyBoolean(ctx, resultVector, variables).ast;
+            // For debugging purposes we still want to keep the legacy boolean minimization logic around.
+            if (useLegacyMinimizer)
+            {
+                // Otherwise use Espresso to compute a semi optimal version of the boolean function.
+                var xnf = AnfMinimizer.SimplifyBoolean(ctx, variables, truthTable.AsList());
+                var dnf = EspressoMinimizer.SimplifyBoolean(ctx, truthTable.AsList(), variables).ast;
 
-            var c1 = LinearSimplifier.GetCost(ctx, xnf, false, 1);
-            var c2 = LinearSimplifier.GetCost(ctx, dnf, false, 1);
-            if (c1 < c2)
-                return xnf;
-            return dnf;
+                var c1 = LinearSimplifier.GetCost(ctx, xnf, false, 1);
+                var c2 = LinearSimplifier.GetCost(ctx, dnf, false, 1);
+                if (c1 < c2)
+                    return xnf;
+                return dnf;
+            }
+
+            // Though now we prefer to use the new minimizer implemented purely in rust. It's faster and generally yields better results.
+            return ctx.MinimizeAnf(TableDatabase.Instance.db, truthTable, (List<AstIdx>)variables, MultibitSiMBA.JitPage.Value);
         }
 
-        private static AstIdx? AsConstant(AstCtx ctx, List<int> resultVector, uint width)
+        private static AstIdx? AsConstant(AstCtx ctx, TruthTable table, uint width)
         {
-            var first = resultVector[0];
-            for (int i = 1; i < resultVector.Count; i++)
+            var first = table.GetBit(0);
+            for (int i = 1; i < table.NumBits; i++)
             {
-                if (resultVector[i] != first)
+                if (table.GetBit(i) != first)
                     return null;
             }
 
-            return ctx.Constant((uint)first, width);
+            ulong constant = first ? (ulong)ModuloReducer.GetMask(width) : 0;
+            return ctx.Constant(constant, width);
         }
 
-        public static AstIdx FromTruthTable(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector)
+        public static AstIdx FromTruthTable(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
         {
-            // Convert the result vector to an index into the N variable truth table.
-            var tableIdx = ResultVecToTableIdx(resultVector);
-
             // Fetch the truth table entry corresponding to this node.
-            var ast = TruthTables.Instance.GetTableEntry(ctx, variables, (int)tableIdx);
+            var ast = TableDatabase.Instance.GetTableEntry(ctx, (List<AstIdx>)variables, (int)(uint)truthTable.arr[0]);
             return ast;
         }
 
@@ -84,21 +97,6 @@ namespace Mba.Simplifier.Minimization
                 XorNode => new XorNode(op1(), op2()),
                 NegNode => new NegNode(op1()),
             };
-        }
-
-        public static ulong ResultVecToTableIdx(List<int> resultVector)
-        {
-            // Represent the result vector as a 64 bit integer,
-            // where each bit represents whether the result vector entry at that idx is non-zero.
-            ulong table = 0;
-            for (int i = 0; i < resultVector.Count; i++)
-            {
-                ulong cond = resultVector[i] != 0 ? 1u : 0;
-                ulong value = cond << (ushort)i;
-                table |= value;
-            }
-
-            return table;
         }
     }
 }
