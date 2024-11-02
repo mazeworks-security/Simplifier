@@ -25,7 +25,6 @@ namespace Mba.Simplifier.Minimization
                 truthTable.Negate();
             }
 
-
             // Exit early if the boolean function is a constant.
             var asConstant = AsConstant(ctx, truthTable, ctx.GetWidth(variables[0]));
             if (asConstant != null)

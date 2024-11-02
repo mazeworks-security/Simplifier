@@ -247,17 +247,14 @@ impl Arena {
     }
 
     pub fn insert_ast_node(&mut self, node: SimpleAst) -> AstIdx {
-        let entry: Entry<'_, SimpleAst, AstIdx> = self.ast_to_idx.entry(node.clone());
+        if let Some(&idx) = self.ast_to_idx.get(&node) {
+            return idx;
+        }
 
-        return match entry {
-            Entry::Occupied(occupied_entry) => *occupied_entry.get(),
-            Entry::Vacant(vacant_entry) => {
-                let idx = AstIdx(self.elements.len() as u32);
-                self.elements.push(node.clone());
-                vacant_entry.insert(idx);
-                idx
-            }
-        };
+        let idx = AstIdx(self.elements.len() as u32);
+        self.elements.push(node.clone());
+        self.ast_to_idx.insert(node, idx);
+        idx
     }
 
     #[inline(always)]
@@ -1497,22 +1494,22 @@ fn get_combs(num_vars: u32) -> &'static [u16] {
 const fn get_variable_combinations<const ENTRIES: usize, const VARS: usize>() -> [u16; ENTRIES] {
     let mut outputs: [u16; ENTRIES] = [0; ENTRIES];
 
-    let numEntries = ENTRIES as u16;
-    let varCount = VARS as u16;
+    let num_entries = ENTRIES as u16;
+    let var_count = VARS as u16;
 
     let mut i: usize = 0;
-    while i < varCount as usize {
+    while i < var_count as usize {
         outputs[i] = 1 << i;
 
         i += 1;
     }
 
-    let mut combCount = varCount;
-    let mut _new = varCount;
+    let mut comb_count = var_count;
+    let mut _new = var_count;
 
     let mut count = 1;
-    while count < varCount {
-        let size = combCount;
+    while count < var_count {
+        let size = comb_count;
         let mut nnew = 0;
         let mut from = size - _new;
 
@@ -1522,10 +1519,10 @@ const fn get_variable_combinations<const ENTRIES: usize, const VARS: usize>() ->
             let last_idx = (16 - e.leading_zeros()) as u16;
 
             let mut v = last_idx;
-            while v < varCount {
-                outputs[combCount as usize] |= (1 << v);
-                outputs[combCount as usize] |= e;
-                combCount += 1;
+            while v < var_count {
+                outputs[comb_count as usize] |= (1 << v);
+                outputs[comb_count as usize] |= e;
+                comb_count += 1;
                 nnew += 1;
 
                 v += 1;
@@ -1575,12 +1572,6 @@ pub fn minimize_anf(
     page: *mut u8,
 ) -> AstIdx {
     let variable_combinations = get_combs(table.num_vars);
-
-    // println!(
-    //     "Variable combinations:  {:?} ",
-    //     variable_combinations.clone()
-    // );
-
     let only_one_var = table.num_vars == 1;
     let width: u32 = if table.num_vars == 1 {
         1
@@ -1596,17 +1587,12 @@ pub fn minimize_anf(
 
         for i in 0..variable_combinations.len() as u32 {
             let comb = variable_combinations[i as usize];
-            let trueMask = variable_combinations[i as usize];
+            let true_mask = variable_combinations[i as usize];
             let index = get_group_size_index(comb as u64);
             let coeff = table.get_bit(safe_arr, index);
             if coeff == 0 {
                 continue;
             }
-
-            // println!(
-            //     "Got comb {}, index {}, and coeff {} for idx {}",
-            //     comb, index, coeff, i
-            // );
 
             subtract_coeff_boolean(
                 &table,
@@ -1616,7 +1602,7 @@ pub fn minimize_anf(
                 index,
                 width,
                 only_one_var,
-                trueMask as u64,
+                true_mask as u64,
             );
             terms.push(comb.into());
         }
@@ -2010,7 +1996,7 @@ pub fn simplify_via_lookup_table(
     let num_combinations: u32 = (2 as u32).pow(var_set.len() as u32);
 
     let rv: &mut Vec<u64> = &mut vec![0; num_combinations as usize];
-    let rvSlice = rv.as_mut_ptr();
+    let rv_slice = rv.as_mut_ptr();
 
     // Construct a result vector
     // TODO: Use parallel boolean jit instead of traditional semi-linear JIT
@@ -2025,7 +2011,7 @@ pub fn simplify_via_lookup_table(
             var_set.len() as u64,
             num_combinations as u64,
             page,
-            rvSlice,
+            rv_slice,
         );
     }
 
@@ -2060,7 +2046,7 @@ pub fn subtract_coeff_boolean(
     let offset = (bit_index as u32) * width;
     let v0 = true_mask.trailing_zeros();
     let group_size_1: u32 = 1 << v0;
-    let period1 = 2 * group_size_1;
+    let period_1 = 2 * group_size_1;
 
     let mut start = first_start;
     while start < width {
@@ -2075,7 +2061,7 @@ pub fn subtract_coeff_boolean(
             i += 1;
         }
 
-        start += period1;
+        start += period_1;
     }
 }
 
