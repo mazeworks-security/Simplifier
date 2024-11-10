@@ -499,7 +499,7 @@ namespace Mba.Simplifier.Pipeline
             var terms = new List<AstIdx>();
             if (constantOffset != 0)
                 terms.Add(ctx.Constant(constantOffset, width));
-            foreach(var (coeff, table) in coeffToTable)
+            foreach (var (coeff, table) in coeffToTable)
             {
                 var bitwise = GetBooleanTableAst(table);
                 terms.Add(Term(bitwise, coeff));
@@ -1426,34 +1426,26 @@ namespace Mba.Simplifier.Pipeline
                 return maskToBitwise;
             };
 
-            // Merging needs to be carefully, because the constant offset adjustment is assuming we have already performed some merging
+            // Merging needs to be done carefully, because the constant offset adjustment is assuming we have already performed some merging
             // Merge bitwise terms.
             var andToBitwise = process(combinedAnds);
             var union = new List<AstIdx>();
-            foreach(var x in andToBitwise)
+            foreach (var x in andToBitwise)
                 union.Add(MaskAndMinimize(GetBooleanTableAst(x.Value), AstOp.And, x.Key));
             foreach (var x in xorMap)
                 union.Add(MaskAndMinimize(GetBooleanTableAst(x.Key), AstOp.Xor, x.Value));
 
-
             var combinedBitwise = ctx.Or(union);
-
-            var bar = TryPartition(combinedBitwise, targetCoeff, constant, freeMask);
-            return bar;
+            var solution = TryPartition(combinedBitwise, targetCoeff, constant, freeMask);
+            return solution;
         }
 
         private AstIdx TryPartition(AstIdx bitwise, ApInt coeff, ApInt constant, ApInt freeMask)
         {
-            // Identify how many undemanded bits there are in the coefficient.
-            // As a heuristic, how do prune the search space for coeff candidates.
-            // You have a set of possible coefficients, and a set of possible undemanded bits where you can cram the constant offset..
-            var undemanded = refiner.FindUndemandedCoeffBits(coeff, moduloMask & ~freeMask, constant);
-            var minimal = refiner.FindMinimalCoeff(coeff, moduloMask & ~freeMask, constant);
-            var maximal = refiner.FindMaximalCoeff(coeff, moduloMask & ~freeMask);
-
             // Try to partition the constant offset.
             // Note: In the event that this fails, we could still try other means of partitioning the constant offset.
             // Trying to find a fitting coefficient / OR mask is exponential in the worst case, but there should be a linear time solution.
+            // TODO: We need to find a better method of partitioning the constant offset.
             bestSolution = PartitionCoeffAndConstant(bitwise, coeff, constant, freeMask);
             if (bestSolution != null)
                 return bestSolution.Value;
@@ -1652,7 +1644,6 @@ namespace Mba.Simplifier.Pipeline
 #if DBG
             Log($"New solution: {ctx.GetAstString(final.Value)}");
 #endif
-
 
             if (final == null)
                 final = ctx.Constant(0, width);

@@ -1282,7 +1282,6 @@ namespace Mba.Simplifier.Pipeline
             if(newCount > oldCount)
                 return poly;
 
-
             var outPoly = new IntermediatePoly(width);
             // Otherwise we can convert the sparse polynomial back to an AST.
             foreach(var (monom, coeff) in simplified.coeffs)
