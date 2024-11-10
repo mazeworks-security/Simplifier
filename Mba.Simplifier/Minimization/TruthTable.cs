@@ -20,10 +20,6 @@ namespace Mba.Simplifier.Minimization
 
         public TruthTable(int numVars)
         {
-            if (numVars == 127)
-                Debugger.Break();
-
-
             this.numVars = numVars;
             int width = NumBits <= 64 ? 1 : (NumBits >> 6);
             arr = new ulong[width];
@@ -52,20 +48,42 @@ namespace Mba.Simplifier.Minimization
                 SetBit(i, GetBit(i) ? false : true);
         }
 
-        public void SetAllZeroes()
+        public void Or(TruthTable other)
+        {
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] |= other.arr[i];
+        }
+
+        public void Clear()
         {
             for (int i = 0; i < arr.Length; i++)
                 arr[i] = 0;
+        }
+
+        public bool IsDisjoint(TruthTable other)
+        {
+            for (int i = 0; i < arr.Length; i++)
+            {
+                if ((arr[i] & other.arr[i]) != 0)
+                    return false;
+            }
+
+            return true;
+        }
+
+        public TruthTable Clone()
+        {
+            var table = new TruthTable(numVars);
+            for(int i = 0; i < arr.Length ; i++)
+                table.arr[i] = arr[i];
+            return table;
         }
 
         public override int GetHashCode()
         {
             int hash = 17;
             foreach(var value in arr)
-            {
                 hash = hash * 23 + value.GetHashCode();
-            }
-
             return hash;
         }
 
@@ -73,7 +91,6 @@ namespace Mba.Simplifier.Minimization
         {
             if(obj is not TruthTable table)
                 return false;
-
             if (numVars != table.numVars)
                 return false;
 

@@ -9,12 +9,12 @@ using Microsoft.Z3;
 using System.ComponentModel;
 using System.Diagnostics;
 
-
 bool printUsage = false;
 uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
+
 var printHelp = () =>
 {
     Console.WriteLine("Usage: Simplifier.exe");
@@ -96,11 +96,10 @@ for (int i = 0; i < 3; i++)
     // Apply term rewriting.
     id = ctx.RecursiveSimplify(id);
     Console.WriteLine($"Eqsat run {i} yielded: {ctx.GetAstString(id)}\n\n");
-    
 }
 
 
-Console.WriteLine($"Simplified to: {ctx.GetAstString(id)}\n\nwith cost: {ctx.GetCost(id)} ");
+Console.WriteLine($"Simplified to: {ctx.GetAstString(id)}\n\nwith cost: {ctx.GetCost(id)}");
 
 if (!proveEquivalence)
     return;

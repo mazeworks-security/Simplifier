@@ -73,6 +73,7 @@ namespace Mba.Simplifier.Pipeline
         {
             if (simbaCache.TryGetValue(id, out var existing))
                 return existing;
+            id = SimplifyViaTermRewriting(id);
             // TODO: We should probably apply ISLE before attempting any other steps.
 
             // For linear and semi-linear MBAs, we can skip the substitution / polynomial simplification steps.
@@ -103,10 +104,13 @@ namespace Mba.Simplifier.Pipeline
             var substMapping = new Dictionary<AstIdx, AstIdx>();
             bool isSemiLinear = false;
             var withSubstitutions = GetAstWithSubstitutions(id, substMapping, ref isSemiLinear);
+            // Apply recursive term rewriting again in hopes that it will cheaply reduce some parts.
+            withSubstitutions = SimplifyViaTermRewriting(withSubstitutions);
 
             // If there are multiple substitutions, try to minimize the number of substitutions.
             if (substMapping.Count > 1)
                 withSubstitutions = TryUnmergeLinCombs(withSubstitutions, substMapping);
+            withSubstitutions = SimplifyViaTermRewriting(withSubstitutions);
 
             // If polynomial parts are present, try to simplify them.
             var inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
@@ -454,72 +458,61 @@ namespace Mba.Simplifier.Pipeline
             if (substitutionMapping.TryGetValue(id, out var existing))
                 return existing;
 
-            var subst = ctx.Symbol($"subst{substitutionMapping.Count}", ctx.GetWidth(id));
-            substitutionMapping.TryAdd(id, subst);
-            return subst;
+            var substCount = substitutionMapping.Count;
+            while(true)
+            {
+                var subst = ctx.Symbol($"subst{substCount}", ctx.GetWidth(id));
+                if(substitutionMapping.Values.Contains(subst))
+                {
+                    substCount++;
+                    continue;
+                }
+
+                substitutionMapping.TryAdd(id, subst);
+                return subst;
+            }
         }
 
-        // Try to reduce the number of substituted variables via expressing them in terms of each other.
-        // E.g. (x & (x+y) + (x & -(x+y+1)) would yield (x & subst0) + (x & subst1) after substitution,
-        // which can then be expressed as (x & subst0) + (x& ~subst0), noting that "-(x+y+1)" is just a negation of "x+y".
         private AstIdx TryUnmergeLinCombs(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping)
         {
-            // This could probably be more efficient, but it's a start.
+            // We cannot rewrite substitutions as negations of one another if there is only one substitution.
+            if (substitutionMapping.Count == 1)
+                return withSubstitutions;
+
+            var rewriteMapping = GetUnmergeMapping(substitutionMapping);
+
+            // Return if we cannot rewrite any substitutions as negations of one another.
+            if(!rewriteMapping.Any())
+                return withSubstitutions;
+
+            withSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, rewriteMapping);
+            return withSubstitutions;
+        }
+
+        private Dictionary<AstIdx, AstIdx> GetUnmergeMapping(Dictionary<AstIdx, AstIdx> substitutionMapping)
+        {
             var rewriteMapping = new Dictionary<AstIdx, AstIdx>();
             bool changed = true;
             while (changed)
             {
             start:
                 changed = false;
-                var clone = substitutionMapping.ToDictionary(x => x.Key, x => x.Value);
+                var clone = substitutionMapping.ToDictionary();
                 foreach (var (ast, substVariable) in clone)
                 {
                     var neg = ctx.Neg(ast);
                     neg = SimplifyViaRecursiveSiMBA(neg);
 
-                    if (clone.TryGetValue(neg, out var otherSubstVar))
+                    if (clone.TryGetValue(neg, out var otherSubst))
                     {
-                        rewriteMapping.Add(substVariable, ctx.Neg(otherSubstVar));
+                        rewriteMapping.Add(substVariable, ctx.Neg(otherSubst));
                         substitutionMapping.Remove(ast);
                         goto start;
                     }
                 }
             }
 
-            // If we found any substitutions that could be rewritten as negations of other substitutions, replace them.
-            // TODO: Cleanup bookkeeping logic. This is a bit messy due an invariant that we maintain.
-            if (rewriteMapping.Any())
-            {
-                // Replace the substitutions
-                withSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, rewriteMapping);
-
-                var substReplacementMapping = new Dictionary<AstIdx, AstIdx>();
-                Dictionary<AstIdx, AstIdx> replacementToOriginal = new();
-                foreach (var (original, subst) in substitutionMapping)
-                {
-                    var replacement = ctx.Symbol($"replacement_{substReplacementMapping.Count}", ctx.GetWidth(original));
-                    substReplacementMapping.Add(subst, replacement);
-                    replacementToOriginal.Add(replacement, original);
-                }
-
-                // Replacement the variables again.
-                withSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, substReplacementMapping);
-
-                // Finally apply back substitution again
-                var finalMapping = new Dictionary<AstIdx, AstIdx>();
-                var delMapping = new Dictionary<AstIdx, AstIdx>();
-                substitutionMapping.Clear();
-                foreach (var replacement in substReplacementMapping)
-                {
-                    var subst = ctx.Symbol($"subst{finalMapping.Count}", ctx.GetWidth(replacement.Key));
-                    substitutionMapping.Add(replacementToOriginal[replacement.Value], subst);
-                    finalMapping.Add(replacement.Value, subst);
-                }
-
-                withSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, finalMapping);
-            }
-
-            return withSubstitutions;
+            return rewriteMapping;
         }
 
         private AstIdx? TrySimplifyMixedPolynomialParts(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, Dictionary<AstIdx, AstIdx> inverseSubstMapping, List<AstIdx> varList)
@@ -534,7 +527,7 @@ namespace Mba.Simplifier.Pipeline
             var banned = polyParts.Where(x => x.Others.Any()).ToList();
             polyParts.RemoveAll(x => x.Others.Any());
 
-            // Apply the simplification.
+
             var result = SimplifyParts(ctx.GetWidth(id), polyParts);
             if (result == null)
                 return null;
@@ -560,13 +553,40 @@ namespace Mba.Simplifier.Pipeline
             return result;
         }
 
+        private List<PolynomialParts> UnmergePolynomialParts(Dictionary<AstIdx, AstIdx> substitutionMapping, List<PolynomialParts> parts)
+        {
+            // Skip if there is only one substituted part.
+            if(substitutionMapping.Count <= 1)
+                return parts;
+
+            // Try to rewrite substituted parts as negations of one another. Exit early if this fails.
+            var rewriteMapping = GetUnmergeMapping(substitutionMapping);
+            if (rewriteMapping.Count == 0)
+                return parts;
+
+            var output = new List<PolynomialParts>();
+            foreach (var part in parts)
+            {
+                var outPowers = new Dictionary<AstIdx, ulong>();
+                foreach (var (factor, degree) in part.ConstantPowers)
+                {
+                    var unmerged = ApplyBackSubstitution(ctx, factor, rewriteMapping);
+                    outPowers.TryAdd(unmerged, 0);
+                    outPowers[unmerged] += degree;
+                }
+
+                output.Add(new PolynomialParts(part.width, part.coeffSum, outPowers, part.Others));
+            }
+
+            return output;
+        }
+
         // Rewrite factors of polynomials as linear MBAs(with substitution) with a canonical basis, expand & reduce, then back substitute.
-        private AstIdx? SimplifyParts(uint bitSize, IReadOnlyList<PolynomialParts> polyParts)
+        private AstIdx? SimplifyParts(uint bitSize, IReadOnlyList<PolynomialParts> polyParts, bool dbg = false)
         {
             var substMapping = new Dictionary<AstIdx, AstIdx>();
 
             // Rewrite as a sum of polynomial parts, where the factors are linear MBAs with substitution of nonlinear parts.
-            HashSet<AstIdx> varSet = new();
             var bannedParts = new List<PolynomialParts>();
             List<PolynomialParts> partsWithSubstitutions = new();
             foreach(var polyPart in polyParts)
@@ -576,7 +596,6 @@ namespace Mba.Simplifier.Pipeline
                 foreach(var factor in polyPart.ConstantPowers)
                 {
                     var withSubstitutions = GetAstWithSubstitutions(factor.Key, substMapping, ref isSemiLinear);
-                    varSet.AddRange(ctx.CollectVariables(withSubstitutions));
                     powers.TryAdd(withSubstitutions, 0);
                     powers[withSubstitutions] += factor.Value;
                 }
@@ -590,6 +609,15 @@ namespace Mba.Simplifier.Pipeline
 
                 partsWithSubstitutions.Add(new PolynomialParts(polyPart.width, polyPart.coeffSum, powers, polyPart.Others));
             }
+
+            // Unmerge polynomial parts that were substituted.
+            partsWithSubstitutions = UnmergePolynomialParts(substMapping, partsWithSubstitutions);
+
+            // Collect all variables.
+            var withVars = partsWithSubstitutions.SelectMany(x => x.ConstantPowers.Keys);
+            var varSet = new List<AstIdx>();
+            if (withVars.Any())
+                varSet = ctx.CollectVariables(ctx.Add(withVars));
 
             IReadOnlyList<AstIdx> allVars = varSet.OrderBy(x => ctx.GetSymbolName(x)).ToList();
             var numCombinations = (ulong)Math.Pow(2, allVars.Count);
@@ -665,6 +693,8 @@ namespace Mba.Simplifier.Pipeline
                     }
 
                     // Add this as a factor.
+                    if (terms.Count == 0)
+                        terms.Add(ctx.Constant(0, (byte)bitSize));
                     var sum = ctx.Add(terms);
                     factors.Add(ctx.Pow(sum, ctx.Constant(degree, (byte)bitSize)));
                 }
@@ -1062,6 +1092,9 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // Convert the reduced polynomial to an ast.
+            // If we have no terms then we have a zero.
+            if (terms.Count == 0)
+                terms.Add(ctx.Constant(0, width));
             var sum = ctx.Add(terms);
 
             // Back substitute the substitute variables.

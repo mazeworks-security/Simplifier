@@ -377,10 +377,6 @@ namespace Mba.Simplifier.Bindings
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextRecursiveSimplify(OpaqueAstCtx* ctx, AstIdx id);
-
-            // DELETEME:
-            [DllImport("eq_sat")]
-            public unsafe static extern AstIdx SetTruthTableElements(uint numVars, ulong* truthTable);
         }
     }
 }

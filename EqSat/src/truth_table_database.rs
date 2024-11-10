@@ -55,21 +55,6 @@ impl TruthTable {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn SetTruthTableElements(num_vars: u32, arr: *mut u64) {
-    let mut tt = TruthTable {
-        num_vars: num_vars,
-        arr: arr,
-    };
-
-    unsafe {
-        let casted = std::slice::from_raw_parts_mut(arr, tt.get_num_words());
-        for i in 0..tt.get_num_bits() {
-            tt.set_bit(casted, i, 1);
-        }
-    }
-}
-
 // Two, three, and four variable boolean truth table utility.
 impl TruthTableDatabase {
     pub fn new() -> Self {

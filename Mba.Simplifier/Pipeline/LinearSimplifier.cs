@@ -20,6 +20,7 @@ using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Minimization;
 using Mba.Common.Interop;
 using System.Runtime.CompilerServices;
+using System.Reflection.Metadata;
 
 
 
@@ -66,6 +67,8 @@ namespace Mba.Simplifier.Pipeline
 
         private readonly bool newLine = false;
 
+        private AstIdx? initialInput = null;
+
         public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx? ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
         {
             if (variables == null)
@@ -75,6 +78,7 @@ namespace Mba.Simplifier.Pipeline
 
         public LinearSimplifier(AstCtx ctx, AstIdx? ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
         {
+            this.initialInput = ast;
             this.ctx = ctx;
             this.variables = variables;
             width = bitSize;
@@ -106,7 +110,11 @@ namespace Mba.Simplifier.Pipeline
             }
 
             if (resultVectorHook != null)
+            {
                 resultVectorHook(resultVector, numCombinations);
+                return;
+            }
+
         }
 
         // Initialize the group sizes of the various variables, i.e., their numbers
@@ -147,16 +155,53 @@ namespace Mba.Simplifier.Pipeline
 
         private AstIdx Simplify(bool useZ3 = false, bool alreadySplit = false)
         {
-            if (multiBit)
-                return SimplifyMultibit();
+            // Remove the constant offset
+            var constant = SubtractConstantOffset(moduloMask, resultVector, (int)numCombinations);
+            if(multiBit)
+                TryMakeLinear();
 
-            return SimplifyOneBit(useZ3, alreadySplit);
+            if (multiBit)
+            {
+                return SimplifyMultibit(constant);
+            }
+
+            return SimplifyOneBit(constant, useZ3, alreadySplit);
         }
 
-        private AstIdx SimplifyMultibit()
+        // If we have a multi-bit result vector, try to rewrite as a linear result vector. If possible, update state accordingly.
+        private unsafe bool TryMakeLinear()
+        {
+            fixed (ApInt* ptr = &resultVector[0])
+            {
+                ushort bitIndex = 0;
+                for (int comb = 0; comb < resultVector.Length; comb += (int)numCombinations)
+                {
+                    ApInt mask = 1ul << bitIndex;
+                    for (int i = 0; i < (int)numCombinations; i++)
+                    {
+                        var bit0Coeff = ptr[i];
+                        var bitICoeff = ptr[comb + i];
+
+                        var op0 = moduloMask & (bit0Coeff * mask);
+                        var op1 = moduloMask & (bitICoeff * mask);
+                        if (op0 != op1)
+                            return false;
+                    }
+
+                    bitIndex += 1;
+                }
+            }
+
+            multiBit = false;
+            Array.Resize(ref resultVector, (int)numCombinations);
+
+            return true;
+        }
+
+        private AstIdx SimplifyMultibit(ApInt constant)
         {
             // Find an initial solution.
-            SimplifyGeneric();
+            SimplifyGeneric(constant);
 
             var solution = bestSolution;
             return bestSolution.Value;
@@ -186,8 +231,313 @@ namespace Mba.Simplifier.Pipeline
             return ctx.Or(t0.Value, t1.Value);
         }
 
-        private AstIdx SimplifyOneBit(bool useZ3 = false, bool alreadySplit = false)
+        private AstIdx SimplifyOneBitNew(ApInt constant, bool useZ3 = false, bool alreadySplit = false)
         {
+            // Group each unique coefficient to a truth table.
+            var coeffToTable = new Dictionary<ApInt, TruthTable>();
+            for (int i = 1; i < (int)numCombinations; i++)
+            {
+                var coeff = resultVector[i];
+                if (coeff == 0)
+                    continue;
+
+                if (!coeffToTable.TryGetValue(coeff, out var table))
+                {
+                    table = new TruthTable(variables.Count);
+                    coeffToTable[coeff] = table;
+                }
+
+                table.SetBit(i, true);
+            }
+
+            // If no terms exist, we have a constant.
+            if (coeffToTable.Count == 0)
+                return ctx.Constant(constant, width);
+            // If only a single term exists, we can immediately find the optimal solution.
+            // For more terms we need to take special care to eliminate dead variables, but the boolean minimizer will eliminate dead variables for the single term case!
+            if (coeffToTable.Count == 1)
+            {
+                var (coeff, truthTable) = coeffToTable.First();
+                var single = SimplifyOneTerm(constant, coeff, truthTable);
+                return single;
+            }
+
+            // (1) Construct a linear combination using ANF as the basis. This will roughly tell us which variables are dependent upon one another.
+            var (variableCombinations, linearCombinations) = GetAnf();
+
+            // (2) Try to partition the terms into disjoint variable sets.
+            int anfCost = constant == 0 ? 0 : 1;
+            ApInt demandedVariables = 0;
+            List<ApInt> disjointSets = new();
+            for(int i = linearCombinations.Count - 1; i >= 0; i--)
+            {
+                // Skip if this variable combination is not demanded.
+                var curr = linearCombinations[i];
+                if (curr.Count == 0)
+                    continue;
+
+                // Search through disjoint sets, checking if this variable combination has an intersection.
+                // Merge intersecting variable combinations, otherwise emplace in a new disjoint set.
+                var combMask = variableCombinations[i];
+                demandedVariables |= combMask;
+                var coeffCost = curr[0].coeff == 1 ? 0 : 1;
+                anfCost += 1 + coeffCost + BitOperations.PopCount(combMask);
+                anfCost += BitOperations.PopCount(combMask) - 1; // Account for the number of AND nodes.
+
+                bool found = false;
+                for(int setIdx = 0; setIdx < disjointSets.Count; setIdx++)
+                {
+                    var set = disjointSets[setIdx];
+                    if((set&combMask) != 0)
+                    {
+                        disjointSets[setIdx] |= combMask;
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if(!found)
+                {
+                    disjointSets.Add(combMask);
+                }
+            }
+
+            // Merge intersecting variable sets
+            for(int i = 0; i < disjointSets.Count; i++)
+            {
+                for(int j = i + 1; j < disjointSets.Count; j++)
+                {
+                    var jMask = disjointSets[j];
+                    if (jMask == 0)
+                        continue;
+
+                    var iMask = disjointSets[i];
+                    if ((jMask & iMask) == 0)
+                        continue;
+
+                    disjointSets[i] |= jMask;
+                    disjointSets[j] = 0;
+                }
+            }
+
+            // Remove empty sets.
+            disjointSets = disjointSets.Where(x => x != 0).ToList();
+
+            // If we have a single disjoint set, we can immediately yield a solution.
+            // TODO: Our cost function is not as good as the one in msimba.
+            // We use AST size because it's cheap to compute, but the original msimba accounts for both the AST size and the number of terms.
+            if(disjointSets.Count == 1)
+            {
+                // First try to reduce the number of terms.
+                EliminateUniqueValues(coeffToTable);
+                // Refine the linear combination if possible.
+                var dnf = TryRefineBitwiseCombination(constant, coeffToTable);
+                // If the bitwise combination is better than the anf combination, yield it.
+                var dnfCost = ctx.GetCost(dnf);
+
+                // Otherwise we want ANF. First append the constant offset.
+                var terms = new List<AstIdx>();
+                if (constant != 0)
+                    terms.Add(ctx.Constant(constant, width));
+                // Then append conjunctions of variables in increasing order.
+                for(int i = 0; i < linearCombinations.Count; i++)
+                {
+                    // Skip if this variable combination is not demanded.
+                    var curr = linearCombinations[i];
+                    if (curr.Count == 0)
+                        continue;
+
+                    // Search through disjoint sets, checking if this variable combination has an intersection.
+                    // Merge intersecting variable combinations, otherwise emplace in a new disjoint set.
+                    var combMask = variableCombinations[i];
+                    var coeff = curr[0].coeff;
+                    terms.Add(ConjunctionFromVarMask(coeff, combMask));
+                }
+
+                var anfSum = ctx.Add(terms);
+                var otherCost = ctx.GetCost(anfSum);
+                if (dnfCost < otherCost) // Our cost function is still not correct for ANF(at least it is not matching the DNF cost)
+                    return dnf;
+
+                return anfSum;
+            }
+
+
+            // Otherwise have multiple disjoint sets that we want to simplify individually.
+            // First put each disjoint set into algebraic normal form.
+            var disjointTerms = new List<AstIdx?>();
+            for (int i = 0; i < disjointSets.Count; i++)
+                disjointTerms.Add(null);
+            for(int i = 0; i < linearCombinations.Count; i++)
+            {
+                // Skip if this variable combination is not demanded.
+                var curr = linearCombinations[i];
+                if (curr.Count == 0)
+                    continue;
+
+                var mask = variableCombinations[i]; 
+                var coeff = curr[0].coeff;
+                // Find the index
+                var insertIdx = disjointSets.FindIndex(x => (x & mask) != 0);
+                var other = disjointSets.Single(x => (x & mask) != 0);
+                if (disjointTerms[insertIdx] == null)
+                    disjointTerms[insertIdx] = ConjunctionFromVarMask(coeff, mask);
+                else
+                    disjointTerms[insertIdx] = ctx.Add(disjointTerms[insertIdx].Value, ConjunctionFromVarMask(coeff, mask));
+            }
+
+            // Then recursively simplify the disjoint sets.
+            List<AstIdx> mutVars = new(variables.Count);
+            for(int i = 0; i < disjointTerms.Count; i++)
+            {
+                // Fetch the demanded variables. If only one variable is demanded in this term, it is already optimal.
+                var demandedMask = disjointSets[i];
+                if (BitOperations.PopCount(demandedVariables) == 1)
+                    continue;
+
+                // Collect all of the variables.
+                mutVars.Clear();
+                while(demandedMask != 0)
+                {
+                    var xorIdx = BitOperations.TrailingZeroCount(demandedMask);
+                    mutVars.Add(variables[xorIdx]);
+                    demandedMask &= ~(1ul << xorIdx);
+                }
+
+                // Recursively simplify.
+                var oldId = disjointTerms[i].Value;
+                var newId = Run(width, ctx, oldId, false, false, false, mutVars);
+                disjointTerms[i] = newId;
+            }
+
+            var sum = ctx.Add(disjointTerms.Select(x => x.Value));
+            if (constant != 0)
+                sum = ctx.Add(ctx.Constant(constant, width), sum);
+            return sum;
+        }
+
+        private AstIdx SimplifyOneTerm(ApInt constant, ApInt coeff, TruthTable truthTable)
+        {
+            // If there is no constant offset, we can just yield the boolean expression.
+            if(constant == 0)
+                return Term(GetBooleanTableAst(truthTable), coeff);
+            // If we have c1 + c1*x, we can rewrite as a single term solution of -c1*~x.
+            if(constant == coeff)
+            {
+                truthTable.Negate();
+                return Term(GetBooleanTableAst(truthTable), moduloMask & (moduloMask * coeff));
+            }
+
+            // If the constant offset is equal to -1, we want to embed it as a negation.
+            // We could leave it outside, but embedding it as a negation gives the rest of the simplification pipeline
+            // a stronger chance of identifying trivial negations of substituted parts.
+            else if(constant == moduloMask)
+            {
+                return ctx.Neg(Term(GetBooleanTableAst(truthTable), moduloMask & (moduloMask * coeff)));
+            }
+            
+            // If all else fails we have a two term solution.
+            return ctx.Add(ctx.Constant(constant, width), Term(GetBooleanTableAst(truthTable), coeff));
+        }
+
+        private void EliminateUniqueValues(Dictionary<ApInt, TruthTable> coeffToTable)
+        {
+            (ApInt coeff, TruthTable table)[] uniqueValues = coeffToTable.Select(x => (x.Key, x.Value)).ToArray();
+            var l = uniqueValues.Length;
+            if (l == 0)
+                return;
+
+            // Try to get rid of a value by representing it as a sum of the others.
+            foreach (var i in RangeUtil.Get(l - 1))
+            {
+                foreach (var j in RangeUtil.Get(i + 1, l))
+                {
+                    foreach (var k in RangeUtil.Get(l))
+                    {
+                        if (k == i || k == j)
+                            continue;
+
+                        // Skip any entries with zero coefficients.
+                        var op0 = uniqueValues[i];
+                        var op1 = uniqueValues[j];
+                        var op2 = uniqueValues[k];
+                        if (op0.coeff == 0 || op1.coeff == 0 || op2.coeff == 0)
+                            continue;
+
+                        // TODO: Use 2 sum + hashmap lookup instead of enumerating through all 3 pairs?
+                        if (TryEliminateTriple(uniqueValues, i, j, k))
+                            continue;
+                        if (TryEliminateTriple(uniqueValues, i, k, j))
+                            continue;
+                        if (TryEliminateTriple(uniqueValues, j, i, k))
+                            continue;
+                        if (TryEliminateTriple(uniqueValues, j, k, i))
+                            continue;
+                        if (TryEliminateTriple(uniqueValues, k, i, j))
+                            continue;
+                        if (TryEliminateTriple(uniqueValues, k, j, i))
+                            continue;
+                    }
+                }
+            }
+
+            coeffToTable.Clear();
+            foreach (var (coeff, table) in uniqueValues)
+            {
+                if (coeff == 0)
+                    continue;
+
+                coeffToTable[coeff] = table;
+            }
+        }
+
+        // If we have two terms and less than four variables, semi-exhaustively explore the search space of possible boolean expressions.
+        // Otherwise yield a linear combination
+        private AstIdx TryRefineBitwiseCombination(ApInt constantOffset, Dictionary<ApInt, TruthTable> coeffToTable)
+        {
+            // TODO: Exhaustively search bitwise expressions.
+            var terms = new List<AstIdx>();
+            if (constantOffset != 0)
+                terms.Add(ctx.Constant(constantOffset, width));
+            foreach(var (coeff, table) in coeffToTable)
+            {
+                var bitwise = GetBooleanTableAst(table);
+                terms.Add(Term(bitwise, coeff));
+            }
+
+            return ctx.Add(terms);
+        }
+
+        private bool TryEliminateTriple((ApInt coeff, TruthTable table)[] uniqueValues, int idx0, int idx1, int idx2)
+        {
+            var op0 = uniqueValues[idx0];
+            var op1 = uniqueValues[idx1];
+            var op2 = uniqueValues[idx2];
+
+            // The first two coefficients must sum up to the second coefficient.
+            var sum = moduloMask & (op1.coeff + op2.coeff);
+            if (sum != op0.coeff)
+                return false;
+
+            if (!op0.table.IsDisjoint(op1.table))
+                return false;
+            if (!op0.table.IsDisjoint(op2.table))
+                return false;
+            if(!op1.table.IsDisjoint(op2.table))
+                return false;
+
+            uniqueValues[idx0] = (0, op0.table);
+            op1.table.Or(op0.table);
+            op2.table.Or(op0.table);
+            op0.table.Clear();
+            return true;
+        }
+
+        private AstIdx SimplifyOneBit(ApInt constant, bool useZ3 = false, bool alreadySplit = false)
+        {
+            // TODO: Delete old simplification logic once we're confident that the new logic is better in all cases.
+            return SimplifyOneBitNew(constant, useZ3, alreadySplit);
+
             // Convert the result vector to a set.
             HashSet<ApInt> resultSet = null;
             resultSet = resultVector.ToHashSet();
@@ -200,7 +550,7 @@ namespace Mba.Simplifier.Pipeline
             // Simplify the generic part.
             // TODO: If (a) alreadySplit is false, (b) there are any terms with only a single variable, and (c) there is more than one term,
             // extract out those terms.
-            var (singleDemandedVars, univariateParts, otherParts) = SimplifyGeneric();
+            var (singleDemandedVars, univariateParts, otherParts) = SimplifyGeneric(constant);
 
             AstIdx? combined = null;
             if (otherParts != null)
@@ -342,12 +692,71 @@ namespace Mba.Simplifier.Pipeline
             return constant;
         }
 
-        // Find an initial linear combination of conjunctions.
-        private (ulong withNoConjunctions, AstIdx? univariateParts, AstIdx? otherParts) SimplifyGeneric()
+        private new (ApInt[], List<List<(ApInt coeff, ApInt bitMask)>>) GetAnf()
         {
-            // Remove the constant offset
-            var constant = SubtractConstantOffset(moduloMask, resultVector, (int)numCombinations);
+            // Get all combinations of variables.
+            var variableCombinations = GetVariableCombinations(variables.Count);
 
+            // Linear combination, where the index can be seen as an index into `variableCombinations`,
+            // and the element at that index is a list of terms operating over that boolean combination.
+            // Term = coeff*(bitMask&basisExpression).
+            var linearCombinations = new List<List<(ApInt coeff, ApInt bitMask)>>(variableCombinations.Length);
+            for (int i = 0; i < variableCombinations.Length; i++)
+                linearCombinations.Add(new((int)width));
+
+            // Keep track of which variables are demanded by which combination,
+            // as well as which result vector idx corresponds to which combination.
+            List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx = new();
+            for (int i = 0; i < variableCombinations.Length; i++)
+            {
+                var myMask = variableCombinations[i];
+                var myIndex = GetGroupSizeIndex(groupSizes, myMask);
+                combToMaskAndIdx.Add((myMask, (int)myIndex));
+            }
+
+            bool allZeroes = true;
+            var varCount = variables.Count;
+            bool onlyOneVar = varCount == 1;
+            int vecWidth = (int)(varCount == 1 ? 1 : 2u << (ushort)(varCount - 1));
+
+            unsafe
+            {
+                fixed (ApInt* ptr = &resultVector[0])
+                {
+                    for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
+                    {
+                        // If multi-bit simba is enabled, we need to take our base expression
+                        // and isolate only the bit at the current bit index.
+                        var maskForIndex = multiBit ? (ApInt)1 << bitIndex : moduloMask;
+                        // Offset the result vector index such that we are fetching entries for the current bit index.
+                        var offset = bitIndex * numCombinations;
+                        for (int i = 0; i < variableCombinations.Length; i++)
+                        {
+                            // Fetch the result vector index for this conjunction.
+                            // If the coefficient is zero, we can skip it.
+                            var comb = variableCombinations[i];
+                            var (trueMask, index) = combToMaskAndIdx[i];
+                            var coeff = ptr[(int)offset + index];
+                            if (coeff == 0)
+                                continue;
+
+                            // Subtract the coefficient from the result vector.
+                            allZeroes = false;
+                            MultibitSiMBA.SubtractCoeff(moduloMask, ptr, bitIndex, coeff, index, vecWidth, varCount, onlyOneVar, trueMask);
+
+                            // Add an entry to the linear combination list.
+                            linearCombinations[i].Add((coeff, maskForIndex));
+                        }
+                    }
+                }
+            }
+
+            return (variableCombinations, linearCombinations);
+        }
+
+        // Find an initial linear combination of conjunctions.
+        private (ulong withNoConjunctions, AstIdx? univariateParts, AstIdx? otherParts) SimplifyGeneric(ApInt constant)
+        {
             // Short circuit if we can find a single term solution.
             if (false)
             {
@@ -753,7 +1162,7 @@ namespace Mba.Simplifier.Pipeline
                     resultVector[i] = moduloMask & resultVector[i] - coeff;
                 }
 
-                terms.Add(Term(op, coeff).Value);
+                terms.Add(Term(op, coeff));
 
                 varsWithNoConjunctions ^= varMask;
             }
@@ -804,19 +1213,7 @@ namespace Mba.Simplifier.Pipeline
                 for (int i = 1; i < (int)numCombinations; i++)
                 {
                     var coeff = withoutConstant[(int)offset + i];
-
-                    
-                    var newCoeff = refiner.MinimizeCoeffOptimal(coeff, bitIndex);
-
-                    //var oldCoeff = refiner.FindMinimalCoeffSlow(coeff, mask, constant);
-                    /*
-                    var newCoeff = refiner.MinimizeCoeff(coeff, mask);
-                    var oldCoeff = refiner.MinimizeCoeffOptimal(coeff, bitIndex);
-                    if (oldCoeff != newCoeff)
-                        throw new InvalidOperationException();
-                    
-                   */
-                    coeff = newCoeff;
+                    coeff = refiner.MinimizeCoeffOptimal(coeff, bitIndex);
 
                     withoutConstant[(int)offset + i] = coeff;
 # if DBG
@@ -857,13 +1254,11 @@ namespace Mba.Simplifier.Pipeline
             ApInt onZero = 0;
             ApInt onOne = moduloMask & (coeff * mask);
 
-            //var tbl1 = new ApInt[] { onZero, onOne };
             var onZero1 = onZero;
             var onOne1 = onOne;
 
             var formula1 = moduloMask & (onOne + (targetCoeff * (mask)));
             var formula2 = moduloMask & (onOne + (targetCoeff * (0)));
-            //var tbl2 = new ApInt[] { formula1, formula2 };
             var onZero2 = formula1;
             var onOne2 = formula2;
 
@@ -1164,7 +1559,8 @@ namespace Mba.Simplifier.Pipeline
 
         private unsafe AstIdx GetBooleanTableAst(TruthTable table)
         {
-            return BooleanMinimizer.GetBitwise(ctx, variables, table);
+            var res = BooleanMinimizer.GetBitwise(ctx, variables, table.Clone());
+            return res;
         }
 
         private AstIdx MaskAndMinimize(AstIdx idx, AstOp opcode, ApInt mask)
@@ -1174,7 +1570,6 @@ namespace Mba.Simplifier.Pipeline
                 idx = ctx.And(maskId, idx);
             return ctx.Binop(opcode, maskId, idx);
         }
-
 
         // Convert a N-bit result vector into a linear combination.
         private (AstIdx expr, int termCount) SimplifyMultiBitGeneric(ApInt constantOffset, ulong[] variableCombinations, List<List<(ApInt coeff, ApInt bitMask)>> linearCombinations)
@@ -1395,7 +1790,7 @@ namespace Mba.Simplifier.Pipeline
                 var width = ctx.GetWidth(variables[0]);
                 conj = ctx.And(ctx.Constant(mask.Value, width), conj);
             }
-            return Term(ctx, conj, coeff).Value;
+            return Term(ctx, conj, coeff);
         }
 
         private AstIdx? Conjunction(ApInt coeff, AstIdx conj, ApInt? mask = null)
@@ -1409,10 +1804,10 @@ namespace Mba.Simplifier.Pipeline
             return Term(conj, coeff);
         }
 
-        private AstIdx? Term(AstIdx bitwise, ApInt coeff)
+        private AstIdx Term(AstIdx bitwise, ApInt coeff)
             => Term(ctx, bitwise, coeff);
 
-        public static AstIdx? Term(AstCtx ctx, AstIdx bitwise, ApInt coeff)
+        public static AstIdx Term(AstCtx ctx, AstIdx bitwise, ApInt coeff)
         {
             if (coeff == 1)
                 return bitwise;
@@ -1936,7 +2331,7 @@ namespace Mba.Simplifier.Pipeline
 
             var e = BooleanMinimizer.GetBitwise(ctx, variables, t, negate: true);
 
-            e = Term(e, NegateCoefficient(a)).Value;
+            e = Term(e, NegateCoefficient(a));
 
             CheckSolutionComplexity(e, 1);
         }
@@ -2133,7 +2528,7 @@ namespace Mba.Simplifier.Pipeline
             }
 
             var first = BooleanMinimizer.GetBitwise(ctx, variables, l);
-            l.SetAllZeroes();
+            l.Clear();
             // l = cases.Select(x => x == Decision.Second || x == Decision.Both ? 1 : 0).ToList();
             for (int i = 0; i < cases.Count; i++)
             {
@@ -2315,7 +2710,7 @@ namespace Mba.Simplifier.Pipeline
             var coeff2 = b;
             vec = RangeUtil.Get(vec.Count).Select(x => moduloMask & vec[x] - coeff1 * (ApInt)(l.GetBit(x) ? 1 : 0)).ToList();
             // l = vec.Select(x => x == coeff2 ? 1 : 0).ToList();
-            l.SetAllZeroes();
+            l.Clear();
             for(int i = 0; i < vec.Count; i++)
             {
                 if (vec[i] == coeff2)
@@ -2387,7 +2782,7 @@ namespace Mba.Simplifier.Pipeline
 
             // Return m1 * bitop.
             var bitwise = BooleanMinimizer.GetBitwise(ctx, variables, t);
-            return Term(bitwise, r1).Value;
+            return Term(bitwise, r1);
         }
 
         private void TryEliminateUniqueValue(List<ApInt> uniqueValues, AstIdx? constant = null)
