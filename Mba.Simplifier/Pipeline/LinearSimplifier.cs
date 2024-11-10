@@ -10,7 +10,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
 using ApInt = System.UInt64;
 using Mba.Common.MSiMBA;
 using Mba.Common.Utility;
@@ -21,8 +20,6 @@ using Mba.Simplifier.Minimization;
 using Mba.Common.Interop;
 using System.Runtime.CompilerServices;
 using System.Reflection.Metadata;
-
-
 
 namespace Mba.Simplifier.Pipeline
 {

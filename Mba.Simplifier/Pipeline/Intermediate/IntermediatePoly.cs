@@ -44,9 +44,7 @@ namespace Mba.Simplifier.Pipeline.Intermediate
         {
             var terms = new List<string>();
             foreach(var (monom, coeff) in coeffs)
-            {
                 terms.Add($"{coeff}*({monom})");
-            }
 
             return String.Join(" + ", terms);
         }
