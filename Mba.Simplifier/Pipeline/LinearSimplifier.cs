@@ -780,10 +780,10 @@ namespace Mba.Simplifier.Pipeline
 
             if (multiBit)
             {
-                var r = SimplifyOneValueMultibit(constant, resultVector.ToArray(), variableCombinations).Value;
+                var r = SimplifyOneValueMultibit(constant, resultVector.ToArray(), variableCombinations);
                 if (r != null)
                 {
-                    CheckSolutionComplexity(r, 1, null);
+                    CheckSolutionComplexity(r.Value, 1, null);
                     return (0, null, null);
                 }
             }
