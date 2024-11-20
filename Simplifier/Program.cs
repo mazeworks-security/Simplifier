@@ -15,6 +15,8 @@ bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
 
+inputText = "(a^b^c)|d";
+
 var printHelp = () =>
 {
     Console.WriteLine("Usage: Simplifier.exe");

@@ -35,6 +35,8 @@ namespace Mba.Simplifier.Minimization
                 return truthTable.GetBit(0) == false ? variables[0] : ctx.Neg(variables[0]);
             }
 
+            DnfMinimizer.Minimize(ctx, truthTable);
+
             // If there are four or less variables, we can pull the optimal representation from the truth table.
             // TODO: One could possibly construct a 5 variable truth table for all 5 variable NPN classes.
             if (variables.Count <= 4)
