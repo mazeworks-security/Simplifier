@@ -104,7 +104,11 @@ namespace Mba.Simplifier.Minimization
                 demandedVarsMap.Add(var, mask);
             }
 
+            // Yield a XOR of factored variable conjunctions
+            // e.g. e ^ (a&(b&c))
             var factored = Factor(terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
+
+            // TODO: Apply the identify a^(~a&b) => a|b
             var simplified = SimplifyRec(factored.Value);
 
             // The results are somewhat improved by running the simplifier a few times, but we don't want to pay this cost for now.

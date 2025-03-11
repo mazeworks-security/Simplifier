@@ -1582,7 +1582,6 @@ pub unsafe extern "C" fn ContextMinimizeAnf(
 }
 
 // Compute a minimized algebraic normal form.
-// pub fn minimize_anf(ctx: &mut Context, vars: *const AstIdx, table: &TruthTable) -> AstIdx {
 pub fn minimize_anf(
     ctx: &mut Context,
     db: &mut TruthTableDatabase,
