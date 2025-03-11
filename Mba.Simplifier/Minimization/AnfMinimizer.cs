@@ -20,31 +20,28 @@ namespace Mba.Simplifier.Minimization
 
         private readonly IReadOnlyList<AstIdx> variables;
 
-        private readonly TruthTable resultVector;
+        private readonly TruthTable truthTable;
 
         private readonly Dictionary<AstIdx, uint> demandedVarsMap = new();
 
         // Simplify the boolean expression as a 1-bit polynomial.
         // When the ground truth contains many XORs, this yields exponentially more compact results than DNF.
         // TODO: The result can be refined through factoring and other means.
-        public static unsafe AstIdx SimplifyBoolean(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable resultVector)
-            => new AnfMinimizer(ctx, variables, resultVector).SimplifyBoolean();
+        public static unsafe AstIdx SimplifyBoolean(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
+            => new AnfMinimizer(ctx, variables, truthTable).SimplifyBoolean();
 
-        private AnfMinimizer(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable resultVector)
+        private AnfMinimizer(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
         {
             this.ctx = ctx;
             this.variables = variables;
-            this.resultVector = resultVector;
+            this.truthTable = truthTable;
         }
 
         private unsafe AstIdx SimplifyBoolean()
         {
             // If the truth table has a positive constant offset, negate the result vector.
-            bool negated = resultVector.GetBit(0);
-            if (negated)
-                resultVector.Negate();
-
-            var resultVec = resultVector.AsList().Select(x => (ulong)(uint)x).ToArray();
+            bool negated = truthTable.GetBit(0);
+            var resultVec = truthTable.AsList().Select(x => negated ? Negate(x) : (uint)x).ToArray();
             var variableCombinations = MultibitSiMBA.GetVariableCombinations(variables.Count);
 
             // Keep track of which variables are demanded by which combination,
@@ -122,6 +119,11 @@ namespace Mba.Simplifier.Minimization
             */
 
             return negated ? ctx.Neg(simplified) : simplified;
+        }
+
+        private ulong Negate(int x)
+        {
+            return (uint)((~x) & 1);
         }
 
         // Apply greedy factoring over a sum of variable conjunctions
