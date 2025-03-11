@@ -117,5 +117,17 @@ namespace Mba.Simplifier.Minimization
 
             return vec;
         }
+
+        public int[] AsArray()
+        {
+            var arr = new int[NumBits];
+            for (ushort i = 0; i < (ushort)NumBits; i++)
+            {
+                var value = GetBit(i);
+                arr[i] = value ? 1 : 0;
+            }
+
+            return arr;
+        }
     }
 }

@@ -20,17 +20,17 @@ namespace Mba.Simplifier.Minimization
 
         private readonly IReadOnlyList<AstIdx> variables;
 
-        private readonly List<int> resultVector;
+        private readonly TruthTable resultVector;
 
         private readonly Dictionary<AstIdx, uint> demandedVarsMap = new();
 
         // Simplify the boolean expression as a 1-bit polynomial.
         // When the ground truth contains many XORs, this yields exponentially more compact results than DNF.
         // TODO: The result can be refined through factoring and other means.
-        public static unsafe AstIdx SimplifyBoolean(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector)
+        public static unsafe AstIdx SimplifyBoolean(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable resultVector)
             => new AnfMinimizer(ctx, variables, resultVector).SimplifyBoolean();
 
-        private AnfMinimizer(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<int> resultVector)
+        private AnfMinimizer(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable resultVector)
         {
             this.ctx = ctx;
             this.variables = variables;
@@ -39,7 +39,12 @@ namespace Mba.Simplifier.Minimization
 
         private unsafe AstIdx SimplifyBoolean()
         {
-            var resultVec = resultVector.Select(x => (ulong)x).ToArray();
+            // If the truth table has a positive constant offset, negate the result vector.
+            bool negated = resultVector.GetBit(0);
+            if (negated)
+                resultVector.Negate();
+
+            var resultVec = resultVector.AsList().Select(x => (ulong)(uint)x).ToArray();
             var variableCombinations = MultibitSiMBA.GetVariableCombinations(variables.Count);
 
             // Keep track of which variables are demanded by which combination,
@@ -89,7 +94,7 @@ namespace Mba.Simplifier.Minimization
             // It should return substantially better results for high variable counts, but it's not well tested (yet).
             bool newMinimizationAlgo = true;
             if(!newMinimizationAlgo)
-                return result.Value;
+                return negated ? ctx.Neg(result.Value) : result.Value;
             
             // Set the initial demanded variable masks.
             for (int i = 0; i < variables.Count; i++)
@@ -99,7 +104,11 @@ namespace Mba.Simplifier.Minimization
                 demandedVarsMap.Add(var, mask);
             }
 
+            // Yield a XOR of factored variable conjunctions
+            // e.g. e ^ (a&(b&c))
             var factored = Factor(terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
+
+            // TODO: Apply the identify a^(~a&b) => a|b
             var simplified = SimplifyRec(factored.Value);
 
             // The results are somewhat improved by running the simplifier a few times, but we don't want to pay this cost for now.
@@ -112,7 +121,7 @@ namespace Mba.Simplifier.Minimization
             }
             */
 
-            return simplified;
+            return negated ? ctx.Neg(simplified) : simplified;
         }
 
         // Apply greedy factoring over a sum of variable conjunctions

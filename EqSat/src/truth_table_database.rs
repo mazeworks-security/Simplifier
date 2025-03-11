@@ -34,6 +34,12 @@ impl TruthTable {
         }
     }
 
+    pub fn get_mut_arr(&self) -> &mut [u64] {
+        unsafe {
+            return std::slice::from_raw_parts_mut(self.arr, self.get_num_words());
+        }
+    }
+
     pub fn get_bit(&self, safe_arr: &mut [u64], index: u32) -> u8 {
         let word_idx = index >> 6;
         let bit_idx = index - (64 * word_idx);
@@ -51,6 +57,14 @@ impl TruthTable {
             let word = safe_arr.get_unchecked_mut(word_idx as usize);
             *word &= !(1 << bit_idx);
             *word |= (value as u64) << bit_idx;
+        }
+    }
+
+    pub fn negate(&self) {
+        let arr = self.get_mut_arr();
+        for i in 0..self.get_num_bits() {
+            let bit = self.get_bit(arr, i);
+            self.set_bit(arr, i, bit ^ 1);
         }
     }
 }
