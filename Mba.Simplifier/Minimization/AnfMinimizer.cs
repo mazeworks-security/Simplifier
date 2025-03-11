@@ -1,9 +1,11 @@
-﻿using Mba.Ast;
+﻿using Antlr4.Runtime.Tree;
+using Mba.Ast;
 using Mba.Common.MSiMBA;
 using Mba.Common.Utility;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Pipeline;
 using Mba.Utility;
+using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -42,40 +44,7 @@ namespace Mba.Simplifier.Minimization
             // If the truth table has a positive constant offset, negate the result vector.
             bool negated = truthTable.GetBit(0);
             var resultVec = truthTable.AsList().Select(x => negated ? Negate(x) : (uint)x).ToArray();
-            var variableCombinations = MultibitSiMBA.GetVariableCombinations(variables.Count);
-
-            // Keep track of which variables are demanded by which combination,
-            // as well as which result vector idx corresponds to which combination.
-            var groupSizes = MultibitSiMBA.GetGroupSizes(variables.Count);
-            List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx = new();
-            for (int i = 0; i < variableCombinations.Length; i++)
-            {
-                var comb = variableCombinations[i];
-                var myIndex = MultibitSiMBA.GetGroupSizeIndex(groupSizes, comb);
-                combToMaskAndIdx.Add((comb, (int)myIndex));
-            }
-
-            var varCount = variables.Count;
-            bool onlyOneVar = varCount == 1;
-            int width = (int)(varCount == 1 ? 1 : 2u << (ushort)(varCount - 1));
-            List<int> terms = new();
-            fixed (ulong* ptr = &resultVec[0])
-            {
-                for (int i = 0; i < variableCombinations.Length; i++)
-                {
-                    // Fetch the result vector index for this conjunction.
-                    // If the coefficient is zero, we can skip it.
-                    var comb = variableCombinations[i];
-                    var (trueMask, index) = combToMaskAndIdx[i];
-                    var coeff = ptr[index];
-                    if (coeff == 0)
-                        continue;
-
-                    // Subtract the coefficient from the result vector.
-                    MultibitSiMBA.SubtractCoeff(1, ptr, 0, coeff, index, width, varCount, onlyOneVar, trueMask);
-                    terms.Add(i);
-                }
-            }
+            var (terms, variableCombinations) = GetAnfTerms(ctx, variables, resultVec);
 
             AstIdx? result = null;
             foreach (var term in terms)
@@ -121,6 +90,46 @@ namespace Mba.Simplifier.Minimization
             */
 
             return negated ? ctx.Neg(simplified) : simplified;
+        }
+
+        private static unsafe (List<int> terms, ulong[] variableCombinations) GetAnfTerms(AstCtx ctx, IReadOnlyList<AstIdx> variables, ulong[] resultVec)
+        {
+            var variableCombinations = MultibitSiMBA.GetVariableCombinations(variables.Count);
+
+            // Keep track of which variables are demanded by which combination,
+            // as well as which result vector idx corresponds to which combination.
+            var groupSizes = MultibitSiMBA.GetGroupSizes(variables.Count);
+            List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx = new();
+            for (int i = 0; i < variableCombinations.Length; i++)
+            {
+                var comb = variableCombinations[i];
+                var myIndex = MultibitSiMBA.GetGroupSizeIndex(groupSizes, comb);
+                combToMaskAndIdx.Add((comb, (int)myIndex));
+            }
+
+            var varCount = variables.Count;
+            bool onlyOneVar = varCount == 1;
+            int width = (int)(varCount == 1 ? 1 : 2u << (ushort)(varCount - 1));
+            List<int> terms = new();
+            fixed (ulong* ptr = &resultVec[0])
+            {
+                for (int i = 0; i < variableCombinations.Length; i++)
+                {
+                    // Fetch the result vector index for this conjunction.
+                    // If the coefficient is zero, we can skip it.
+                    var comb = variableCombinations[i];
+                    var (trueMask, index) = combToMaskAndIdx[i];
+                    var coeff = ptr[index];
+                    if (coeff == 0)
+                        continue;
+
+                    // Subtract the coefficient from the result vector.
+                    MultibitSiMBA.SubtractCoeff(1, ptr, 0, coeff, index, width, varCount, onlyOneVar, trueMask);
+                    terms.Add(i);
+                }
+            }
+
+            return (terms, variableCombinations);
         }
 
         private ulong Negate(int x)
@@ -252,7 +261,7 @@ namespace Mba.Simplifier.Minimization
 
             var getCost = (AstIdx? idx) => idx == null ? uint.MaxValue : ctx.GetCost(idx.Value);
 
-            bool changed = false;
+            bool changed = true;
             while (changed)
             {
                 terms.Sort((AstIdx? a, AstIdx? b) => getCost(b).CompareTo(getCost(a)));
@@ -266,7 +275,8 @@ namespace Mba.Simplifier.Minimization
                             continue;
 
                         AstIdx? simplified = TryMatchOr(a.Value, b.Value);
-                        TryMatchOr(b.Value, a.Value);
+                        simplified = TryMatchOr(b.Value, a.Value);
+                        Console.WriteLine("");
                     }
                 }
             }
@@ -297,10 +307,40 @@ namespace Mba.Simplifier.Minimization
             if ((aTable & combinedTable) != aTable)
                 return null;
 
-            var bTable = combinedTable ^ aTable;
+            var bTable = combinedTable | aTable;
+
+            if ((aTable | bTable) != combinedTable)
+                Debugger.Break();
+
+            var ORed = aTable | bTable;
+            if (ORed != combinedTable)
+                Debugger.Break();
 
             // We found a match
-            return ctx
+            bool negated = bTable.GetBit(0);
+            var resultVec = bTable.AsList().Select(x => negated ? Negate(x) : (uint)x).ToArray();
+            var (bTerms, variableCombinations) = GetAnfTerms(ctx, varSet, resultVec);
+            if (negated)
+                Debugger.Break();
+
+            new BitwiseOrReconstructor(ctx, varSet, aTable, bTable).Match();
+
+            AstIdx? result = null;
+            foreach (var term in bTerms)
+            {
+                var conj = LinearSimplifier.ConjunctionFromVarMask(ctx, varSet, 1, variableCombinations[term], null);
+                if (result == null)
+                    result = conj;
+                else
+                    result = ctx.Xor(result.Value, conj);
+            }
+
+            // Yield a XOR of factored variable conjunctions
+            // e.g. e ^ (a&(b&c))
+            //var factored = Factor(bTerms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
+
+            return ctx.Or(term1, result.Value);
+            //return SimplifyRec(ctx.Or(term1, factored.Value));
         }
 
         private AstIdx SimplifyRec(AstIdx id)

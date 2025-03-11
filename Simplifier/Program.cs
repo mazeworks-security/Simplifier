@@ -17,6 +17,8 @@ string inputText = null;
 inputText = "a&(b|c|d|e)";
 inputText = "(a&b&c&d)|e";
 inputText = "a|b|c|d|e|f|g";
+inputText = "a|b";
+inputText = "a|b|c";
 //inputText = "((d&(-1^(((e&(-1^((f&(-1^g))^g)))^(f&(-1^g)))^g)))^(e&(-1^((f&(-1^g))^g))))";
 var printHelp = () =>
 {
