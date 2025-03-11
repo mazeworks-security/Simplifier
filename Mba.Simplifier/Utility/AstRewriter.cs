@@ -1,4 +1,5 @@
 ﻿using Mba.Simplifier.Bindings;
+using Mba.Utility;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,7 +23,7 @@ namespace Mba.Simplifier.Utility
                 AstOp.Or => binop(),
                 AstOp.Xor => binop(),
                 AstOp.Neg => ctx.Neg(ChangeBitwidth(ctx, ctx.GetOp0(node), newWidth)),
-                AstOp.Constant => ctx.Constant(ctx.GetConstantValue(node), newWidth),
+                AstOp.Constant => ctx.Constant(ctx.GetConstantValue(node) & (ulong)ModuloReducer.GetMask(newWidth), newWidth),
                 AstOp.Symbol => ctx.Symbol(ctx.GetSymbolName(node), (byte)newWidth),
                 _ => throw new InvalidOperationException($"Cannot change width of opcode {opcode}"),
             };

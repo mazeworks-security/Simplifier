@@ -47,6 +47,7 @@ namespace Mba.Simplifier.Bindings
 
         // Constructors
         public unsafe AstIdx Add(AstIdx a, AstIdx b) => Api.ContextAdd(this, a, b);
+        public unsafe AstIdx Sub(AstIdx a, AstIdx b) => Add(a, Mul(Constant(ulong.MaxValue, GetWidth(a)), b));
         public unsafe AstIdx Mul(AstIdx a, AstIdx b) => Api.ContextMul(this, a, b);
         public unsafe AstIdx Pow(AstIdx a, AstIdx b) => Api.ContextPow(this, a, b);
         public unsafe AstIdx And(AstIdx a, AstIdx b) => Api.ContextAnd(this, a, b);

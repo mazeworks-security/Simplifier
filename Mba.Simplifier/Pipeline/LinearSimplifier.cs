@@ -1496,10 +1496,11 @@ namespace Mba.Simplifier.Pipeline
             if (constant == signBit)
             {
                 var withoutSign = SubtractSignBit(coeff, bitwise);
-                if (withoutSign == null)
-                    throw new InvalidOperationException($"Failed to partition constant offset!");
-                var coeffId = ctx.Constant(coeff, width);
-                return ctx.Mul(coeffId, withoutSign.Value);
+                if (withoutSign != null)
+                {
+                    var coeffId = ctx.Constant(coeff, width);
+                    return ctx.Mul(coeffId, withoutSign.Value);
+                }
             }
 
             // Try to fit the constant offset into the undemanded bits.

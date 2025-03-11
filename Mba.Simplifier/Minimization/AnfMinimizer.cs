@@ -42,6 +42,12 @@ namespace Mba.Simplifier.Minimization
             var resultVec = resultVector.Select(x => (ulong)x).ToArray();
             var variableCombinations = MultibitSiMBA.GetVariableCombinations(variables.Count);
 
+            //var zeroConj = ctx.Neg(LinearSimplifier.ConjunctionFromVarMask(ctx, variables, 1, variableCombinations[variableCombinations.Length - 1]))
+            //
+            var zeroConj = ctx.Neg(ctx.Or(variables));
+            if (resultVec[0] != 0 && resultVec.Skip(1).All(x => x == 0))
+                return zeroConj;
+
             // Keep track of which variables are demanded by which combination,
             // as well as which result vector idx corresponds to which combination.
             var groupSizes = MultibitSiMBA.GetGroupSizes(variables.Count);
@@ -52,6 +58,8 @@ namespace Mba.Simplifier.Minimization
                 var myIndex = MultibitSiMBA.GetGroupSizeIndex(groupSizes, comb);
                 combToMaskAndIdx.Add((comb, (int)myIndex));
             }
+
+
 
             var varCount = variables.Count;
             bool onlyOneVar = varCount == 1;
@@ -100,17 +108,21 @@ namespace Mba.Simplifier.Minimization
             }
 
             var factored = Factor(terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
+            if (resultVec[0] != 0)
+                factored = ctx.Or(factored.Value, zeroConj);
             var simplified = SimplifyRec(factored.Value);
 
             // The results are somewhat improved by running the simplifier a few times, but we don't want to pay this cost for now.
-            /*
+            
             simplified = SimplifyRec(factored.Value);
             for (int i = 0; i < 3; i++)
             {
                 simplified = SimplifyRec(simplified);
                 simplified = ctx.RecursiveSimplify(simplified);
             }
-            */
+            
+
+            // Peephole rules: a^(b&~a) = a|b
 
             return simplified;
         }

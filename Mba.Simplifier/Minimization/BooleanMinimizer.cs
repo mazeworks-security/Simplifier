@@ -37,17 +37,23 @@ namespace Mba.Simplifier.Minimization
 
             // If there are four or less variables, we can pull the optimal representation from the truth table.
             // TODO: One could possibly construct a 5 variable truth table for all 5 variable NPN classes.
-            if (variables.Count <= 4)
+            if (false)
             {
                 return FromTruthTable(ctx, variables, truthTable);
             }
 
             // For debugging purposes we still want to keep the legacy boolean minimization logic around.
-            if (useLegacyMinimizer)
+            if (true)
             {
                 // Otherwise use Espresso to compute a semi optimal version of the boolean function.
-                var xnf = AnfMinimizer.SimplifyBoolean(ctx, variables, truthTable.AsList());
+                // return EspressoMinimizer.SimplifyBoolean(ctx, truthTable.AsList(), variables).ast;
                 var dnf = EspressoMinimizer.SimplifyBoolean(ctx, truthTable.AsList(), variables).ast;
+                //var dnfStr = ctx.GetAstString(dnf);
+                //if (dnfStr == "(((~v0)&(~v2))|(v0&v2))")
+                //    Debugger.Break();
+                var xnf = AnfMinimizer.SimplifyBoolean(ctx, variables, truthTable.AsList());
+                //var xnfStr = ctx.GetAstString(xnf);
+                //Console.WriteLine($"prove(({dnfStr}) == ({xnfStr})) ");
 
                 var c1 = LinearSimplifier.GetCost(ctx, xnf, false, 1);
                 var c2 = LinearSimplifier.GetCost(ctx, dnf, false, 1);
