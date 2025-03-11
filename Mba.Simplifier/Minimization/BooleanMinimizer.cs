@@ -15,7 +15,7 @@ namespace Mba.Simplifier.Minimization
 {
     public static class BooleanMinimizer
     {
-        private const bool useLegacyMinimizer = false;
+        private const bool useLegacyMinimizer = true;
 
         public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable, bool negate = false)
         {
@@ -46,7 +46,7 @@ namespace Mba.Simplifier.Minimization
             if (useLegacyMinimizer)
             {
                 // Otherwise use Espresso to compute a semi optimal version of the boolean function.
-                var xnf = AnfMinimizer.SimplifyBoolean(ctx, variables, truthTable.AsList());
+                var xnf = AnfMinimizer.SimplifyBoolean(ctx, variables, truthTable);
                 var dnf = EspressoMinimizer.SimplifyBoolean(ctx, truthTable.AsList(), variables).ast;
 
                 var c1 = LinearSimplifier.GetCost(ctx, xnf, false, 1);
