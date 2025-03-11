@@ -105,6 +105,8 @@ namespace Mba.Simplifier.Minimization
             // e.g. e ^ (a&(b&c))
             var factored = Factor(terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
 
+            TrySimplifyORs(factored.Value);
+
             // TODO: Apply the identify a^(~a&b) => a|b
             var simplified = SimplifyRec(factored.Value);
 
@@ -224,6 +226,81 @@ namespace Mba.Simplifier.Minimization
             }
 
             return xored;
+        }
+
+        private AstIdx TrySimplifyORs(AstIdx id)
+        {
+            var terms = new List<AstIdx?>();
+
+            var worklist = new Stack<AstIdx>();
+            worklist.Push(id);
+           
+            while (worklist.Any())
+            {
+                var curr = worklist.Pop();
+                if (ctx.GetOpcode(curr) == AstOp.Xor)
+                {
+                    worklist.Push(ctx.GetOp0(curr));
+                    worklist.Push(ctx.GetOp1(curr));
+                }
+
+                else
+                {
+                    terms.Add(curr);
+                }
+            }
+
+            var getCost = (AstIdx? idx) => idx == null ? uint.MaxValue : ctx.GetCost(idx.Value);
+
+            bool changed = false;
+            while (changed)
+            {
+                terms.Sort((AstIdx? a, AstIdx? b) => getCost(b).CompareTo(getCost(a)));
+                for (int aIndex = 0; aIndex < terms.Count; aIndex++)
+                {
+                    for (int bIndex = aIndex + 1; bIndex < terms.Count; bIndex++)
+                    {
+                        var a = terms[aIndex];
+                        var b = terms[bIndex];
+                        if (a == null || b == null)
+                            continue;
+
+                        AstIdx? simplified = TryMatchOr(a.Value, b.Value);
+                        TryMatchOr(b.Value, a.Value);
+                    }
+                }
+            }
+
+
+            return id;
+        }
+
+        private AstIdx? TryMatchOr(AstIdx term1, AstIdx term2)
+        {
+            // Given a^whatever, we are looking for a^(~a&b), where b is possibly unknown.
+            var a = term1;
+
+            var demandedMask = GetDemandedVarsMask(term1) | GetDemandedVarsMask(term2);
+            var varSet = new List<AstIdx>();
+            for (int i = 0; i < variables.Count; i++)
+            {
+                if ((demandedMask & (1u << i)) != 0)
+                    varSet.Add(variables[i]);
+            }
+
+            // Compute table for `a`, as well as what we think is a table for `a^(~a&b)`.
+            TruthTable aTable = GetTruthTable(term1, varSet);
+            var combinedTable = GetTruthTable(ctx.Xor(term1, term2), varSet);
+
+            // First variable that the combined table contains all of the set bits within the `a` table
+            // Then a|what == combinedTable
+            if ((aTable & combinedTable) != aTable)
+                return null;
+
+            var bTable = combinedTable ^ aTable;
+
+            // We found a match
+            return ctx
         }
 
         private AstIdx SimplifyRec(AstIdx id)
@@ -355,15 +432,21 @@ namespace Mba.Simplifier.Minimization
                     varSet.Add(variables[i]);
             }
 
+            var table = GetTruthTable(id, varSet);
+
+            return BooleanMinimizer.FromTruthTable(ctx, varSet, table);
+        }
+
+        private TruthTable GetTruthTable(AstIdx id, IReadOnlyList<AstIdx> varSet)
+        {
             // Build a result vector for the millionth time..
-            var w = ctx.GetWidth(id);
             var rv = LinearSimplifier.JitResultVector(ctx, 1, 1, varSet, id, false, (ulong)Math.Pow(2, varSet.Count));
 
             var table = new TruthTable(varSet.Count);
             for (int i = 0; i < rv.Length; i++)
                 table.SetBit(i, rv[i] != 0);
 
-            return BooleanMinimizer.FromTruthTable(ctx, varSet, table);
+            return table;
         }
     }
 }

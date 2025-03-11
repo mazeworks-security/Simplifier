@@ -15,7 +15,7 @@ namespace Mba.Simplifier.Minimization
 {
     public static class BooleanMinimizer
     {
-        private const bool useLegacyMinimizer = false;
+        private const bool useLegacyMinimizer = true;
 
         public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable, bool negate = false)
         {

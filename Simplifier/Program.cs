@@ -14,7 +14,10 @@ uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
-
+inputText = "a&(b|c|d|e)";
+inputText = "(a&b&c&d)|e";
+inputText = "a|b|c|d|e|f|g";
+//inputText = "((d&(-1^(((e&(-1^((f&(-1^g))^g)))^(f&(-1^g)))^g)))^(e&(-1^((f&(-1^g))^g))))";
 var printHelp = () =>
 {
     Console.WriteLine("Usage: Simplifier.exe");

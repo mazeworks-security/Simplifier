@@ -48,10 +48,22 @@ namespace Mba.Simplifier.Minimization
                 SetBit(i, GetBit(i) ? false : true);
         }
 
+        public void And(TruthTable other)
+        {
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] &= other.arr[i];
+        }
+
         public void Or(TruthTable other)
         {
             for (int i = 0; i < arr.Length; i++)
                 arr[i] |= other.arr[i];
+        }
+
+        public void Xor(TruthTable other)
+        {
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] ^= other.arr[i];
         }
 
         public void Clear()
@@ -69,6 +81,11 @@ namespace Mba.Simplifier.Minimization
             }
 
             return true;
+        }
+
+        public bool IsZero()
+        {
+            return arr.All(x => x == 0);
         }
 
         public TruthTable Clone()
@@ -128,6 +145,44 @@ namespace Mba.Simplifier.Minimization
             }
 
             return arr;
+        }
+
+        public static bool operator ==(TruthTable table1, TruthTable table2)
+        {
+            return table1.Equals(table2);
+        }
+
+        public static bool operator !=(TruthTable table1, TruthTable table2)
+        {
+            return !table1.Equals(table2);
+        }
+
+        public static TruthTable operator ~(TruthTable a)
+        {
+            var result = a.Clone();
+            result.Negate();
+            return result;
+        }
+
+        public static TruthTable operator &(TruthTable a, TruthTable b)
+        {
+            var result = a.Clone();
+            result.And(b);
+            return result;
+        }
+
+        public static TruthTable operator |(TruthTable a, TruthTable b)
+        {
+            var result = a.Clone();
+            result.Or(b);
+            return result;
+        }
+
+        public static TruthTable operator ^(TruthTable a, TruthTable b)
+        {
+            var result = a.Clone();
+            result.Xor(b);
+            return result;
         }
     }
 }
