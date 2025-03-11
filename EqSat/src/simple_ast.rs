@@ -1557,7 +1557,27 @@ pub unsafe extern "C" fn ContextMinimizeAnf(
 
         let mut table_deref: &mut TruthTableDatabase = &mut (*db);
 
-        return minimize_anf(ctx_deref, table_deref, &table, vars, variable_count, page);
+        // If the truth table has a positive constant offset, negate it.
+        // This is necessary because the ANF minimization algorithm does not support positive constants.
+        let negated = table.get_bit(table.get_mut_arr(), 0) != 0;
+        if negated {
+            table.negate();
+        }
+
+        // Minimize the boolean.
+        let result = minimize_anf(ctx_deref, table_deref, &table, vars, variable_count, page);
+
+        // We want to preserve the contents of the truth table, so we need to undo the negation.
+        if negated {
+            table.negate();
+        }
+
+        // If the truth table was negated, we need to negate the whole expression.
+        return if negated {
+            ctx_deref.arena.neg(result)
+        } else {
+            result
+        };
     }
 }
 
