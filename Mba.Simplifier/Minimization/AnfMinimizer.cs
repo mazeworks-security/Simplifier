@@ -74,7 +74,8 @@ namespace Mba.Simplifier.Minimization
             // e.g. e ^ (a&(b&c))
             var factored = Factor(ctx, variables, terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
 
-            factored = TrySimplifyORs(factored.Value);
+            factored = SimplifyORsRec(factored.Value);
+            //factored = TrySimplifyORs(factored.Value);
 
             // TODO: Apply the identify a^(~a&b) => a|b
             var simplified = SimplifyRec(factored.Value);
@@ -237,28 +238,50 @@ namespace Mba.Simplifier.Minimization
             return xored;
         }
 
-        private AstIdx TrySimplifyORs(AstIdx id)
+        private AstIdx SimplifyORsRec(AstIdx id)
         {
-            var terms = new List<AstIdx?>();
+            var op0 = () => SimplifyORsRec(ctx.GetOp0(id));
+            var op1 = () => SimplifyORsRec(ctx.GetOp1(id));
 
-            var worklist = new Stack<AstIdx>();
-            worklist.Push(id);
-           
-            while (worklist.Any())
+            var getTerms = (AstIdx id) =>
             {
-                var curr = worklist.Pop();
-                if (ctx.GetOpcode(curr) == AstOp.Xor)
+                var terms = new List<AstIdx?>();
+
+                var worklist = new Stack<AstIdx>();
+                worklist.Push(id);
+
+                while (worklist.Any())
                 {
-                    worklist.Push(ctx.GetOp0(curr));
-                    worklist.Push(ctx.GetOp1(curr));
+                    var curr = worklist.Pop();
+                    if (ctx.GetOpcode(curr) == AstOp.Xor)
+                    {
+                        worklist.Push(ctx.GetOp0(curr));
+                        worklist.Push(ctx.GetOp1(curr));
+                    }
+
+                    else
+                    {
+                        terms.Add(curr);
+                    }
                 }
 
-                else
-                {
-                    terms.Add(curr);
-                }
-            }
+                return terms;
+            };
 
+            var opcode = ctx.GetOpcode(id);
+            return opcode switch
+            {
+                AstOp.And or AstOp.Or => ctx.Binop(opcode, op0(), op1()),
+                AstOp.Xor => TrySimplifyORs(getTerms(id).Select(x => (AstIdx?)SimplifyORsRec(x.Value)).ToList()),
+                AstOp.Neg => ctx.Neg(op0()),
+                AstOp.Constant => id,
+                AstOp.Symbol => id,
+            };
+        }
+
+        private AstIdx TrySimplifyORs(List<AstIdx?> terms)
+        {
+            
             var getCost = (AstIdx? idx) => idx == null ? uint.MaxValue : ctx.GetCost(idx.Value);
 
             bool changed = true;
@@ -298,7 +321,7 @@ namespace Mba.Simplifier.Minimization
 
             var bar = ctx.Xor(terms.Where(x => x != null).Select(x => x.Value));
 
-            Console.WriteLine($"\n\n\n{ctx.GetAstString(bar)}");
+            //Console.WriteLine($"\n\n\n{ctx.GetAstString(bar)}");
 
             return bar;
         }
