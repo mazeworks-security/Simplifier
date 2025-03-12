@@ -80,6 +80,13 @@ namespace Mba.Simplifier.Minimization
             // TODO: Apply the identify a^(~a&b) => a|b
             var simplified = SimplifyRec(factored.Value);
 
+            for(int i = 0; i < 5; i++)
+            {
+                simplified = SimplifyORsRec(simplified);
+                simplified = SimplifyRec(simplified);
+                simplified = ctx.RecursiveSimplify(simplified);
+            }
+
             // The results are somewhat improved by running the simplifier a few times, but we don't want to pay this cost for now.
             /*
             simplified = SimplifyRec(factored.Value);
