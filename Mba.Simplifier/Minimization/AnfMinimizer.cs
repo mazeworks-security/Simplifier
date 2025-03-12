@@ -72,9 +72,9 @@ namespace Mba.Simplifier.Minimization
 
             // Yield a XOR of factored variable conjunctions
             // e.g. e ^ (a&(b&c))
-            var factored = Factor(terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
+            var factored = Factor(ctx, variables, terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
 
-            TrySimplifyORs(factored.Value);
+            factored = TrySimplifyORs(factored.Value);
 
             // TODO: Apply the identify a^(~a&b) => a|b
             var simplified = SimplifyRec(factored.Value);
@@ -89,7 +89,7 @@ namespace Mba.Simplifier.Minimization
             }
             */
 
-            return negated ? ctx.Neg(simplified) : simplified;
+             return negated ? ctx.Neg(simplified) : simplified;
         }
 
         private static unsafe (List<int> terms, ulong[] variableCombinations) GetAnfTerms(AstCtx ctx, IReadOnlyList<AstIdx> variables, ulong[] resultVec)
@@ -138,7 +138,7 @@ namespace Mba.Simplifier.Minimization
         }
 
         // Apply greedy factoring over a sum of variable conjunctions
-        private AstIdx? Factor(List<uint> conjs, Dictionary<AstIdx, uint> demandedVarsMap)
+        private static AstIdx? Factor(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<uint> conjs, Dictionary<AstIdx, uint> demandedVarsMap)
         {
             var getConjFromMask = (uint mask) => LinearSimplifier.ConjunctionFromVarMask(ctx, variables, 1, mask, null);
 
@@ -204,34 +204,34 @@ namespace Mba.Simplifier.Minimization
                     output.Add(conj);
 
                     mask |= 1u << varIdx;
-                    demandedVarsMap.TryAdd(conj, mask);
+                    //demandedVarsMap.TryAdd(conj, mask);
                     continue;
                 }
 
                 // Otherwise recursively factor
-                var other = Factor(elems, demandedVarsMap);
+                var other = Factor(ctx, variables, elems, demandedVarsMap);
                 var and = ctx.And(result, other.Value);
                 output.Add(and);
 
                 // Update the demanded mask.
-                var demanded = (1u << varIdx) | demandedVarsMap[other.Value];
-                demandedVarsMap.TryAdd(and, demanded);
+                //var demanded = (1u << varIdx) | demandedVarsMap[other.Value];
+                //demandedVarsMap.TryAdd(and, demanded);
             }
 
             // Compute the union of all demanded variables.
             var demandedSum = 0u;
-            foreach (var id in output)
-                demandedSum |= demandedVarsMap[id];
+            //foreach (var id in output)
+            //    demandedSum |= demandedVarsMap[id];
 
             // Compute the XOR of all the terms.
             var xored = ctx.Xor(output);
-            demandedVarsMap.TryAdd(xored, demandedSum);
+            //demandedVarsMap.TryAdd(xored, demandedSum);
 
             // If we have a constant offset of one, add it back.
             if (has)
             {
                 xored = ctx.Xor(ctx.Constant(ulong.MaxValue, ctx.GetWidth(variables[0])), xored);
-                demandedVarsMap.TryAdd(xored, demandedSum);
+                //demandedVarsMap.TryAdd(xored, demandedSum);
             }
 
             return xored;
@@ -264,7 +264,8 @@ namespace Mba.Simplifier.Minimization
             bool changed = true;
             while (changed)
             {
-                terms.Sort((AstIdx? a, AstIdx? b) => getCost(b).CompareTo(getCost(a)));
+                changed = false;
+                terms.Sort((AstIdx? a, AstIdx? b) => getCost(a).CompareTo(getCost(b)));
                 for (int aIndex = 0; aIndex < terms.Count; aIndex++)
                 {
                     for (int bIndex = aIndex + 1; bIndex < terms.Count; bIndex++)
@@ -275,14 +276,31 @@ namespace Mba.Simplifier.Minimization
                             continue;
 
                         AstIdx? simplified = TryMatchOr(a.Value, b.Value);
+                        if (simplified != null)
+                        {
+                            changed = true;
+                            terms[aIndex] = simplified;
+                            terms[bIndex] = null;
+                            continue;
+                        }
                         simplified = TryMatchOr(b.Value, a.Value);
-                        Console.WriteLine("");
+                        if (simplified != null)
+                        {
+                            changed = true;
+                            terms[aIndex] = simplified;
+                            terms[bIndex] = null;
+                            continue;
+                        }
                     }
                 }
             }
 
 
-            return id;
+            var bar = ctx.Xor(terms.Where(x => x != null).Select(x => x.Value));
+
+            Console.WriteLine($"\n\n\n{ctx.GetAstString(bar)}");
+
+            return bar;
         }
 
         private AstIdx? TryMatchOr(AstIdx term1, AstIdx term2)
@@ -316,6 +334,8 @@ namespace Mba.Simplifier.Minimization
             if (ORed != combinedTable)
                 Debugger.Break();
 
+            bTable = GetTruthTable(new BitwiseOrReconstructor(ctx, varSet, aTable, bTable).Match(), varSet);
+
             // We found a match
             bool negated = bTable.GetBit(0);
             var resultVec = bTable.AsList().Select(x => negated ? Negate(x) : (uint)x).ToArray();
@@ -323,8 +343,8 @@ namespace Mba.Simplifier.Minimization
             if (negated)
                 Debugger.Break();
 
-            new BitwiseOrReconstructor(ctx, varSet, aTable, bTable).Match();
 
+            
             AstIdx? result = null;
             foreach (var term in bTerms)
             {
@@ -334,12 +354,15 @@ namespace Mba.Simplifier.Minimization
                 else
                     result = ctx.Xor(result.Value, conj);
             }
+            
+
+            //var result = Factor(bTerms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
 
             // Yield a XOR of factored variable conjunctions
             // e.g. e ^ (a&(b&c))
-            //var factored = Factor(bTerms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
+            var factored = Factor(ctx, varSet, bTerms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
 
-            return ctx.Or(term1, result.Value);
+            return ctx.Or(term1, factored.Value);
             //return SimplifyRec(ctx.Or(term1, factored.Value));
         }
 
@@ -457,6 +480,7 @@ namespace Mba.Simplifier.Minimization
                 AstOp.Neg => op0(),
                 AstOp.Constant => 0,
                 AstOp.Symbol => 1u << variables.IndexOf(id), // N is generally so small (<= 8) that this is fine. 
+                _ => throw new InvalidOperationException("Unrecognized opcode")
             };
 
             demandedVarsMap.TryAdd(id, mask);
@@ -479,7 +503,19 @@ namespace Mba.Simplifier.Minimization
 
         private TruthTable GetTruthTable(AstIdx id, IReadOnlyList<AstIdx> varSet)
         {
+            /*
             // Build a result vector for the millionth time..
+            var cVars = ctx.CollectVariables(id);
+            var collected = String.Join(", ", cVars.Select(x => ctx.GetAstString(x)));
+            var given = String.Join(", ", varSet.Select(x => ctx.GetAstString(x)));
+            
+            Console.WriteLine($"collected vars: {collected} --- given: {given}, for string {ctx.GetAstString(id)}");
+
+
+            if (cVars.Any(x => !varSet.ToList().Contains(x)))
+                Debugger.Break();
+            */
+
             var rv = LinearSimplifier.JitResultVector(ctx, 1, 1, varSet, id, false, (ulong)Math.Pow(2, varSet.Count));
 
             var table = new TruthTable(varSet.Count);
