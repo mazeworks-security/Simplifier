@@ -39,12 +39,77 @@ namespace Mba.Simplifier.Minimization
             this.truthTable = truthTable;
         }
 
+        private void Groebner()
+        {
+            // Collect all dnf terms
+            var terms = new List<AstIdx>();
+            for (int i = 0; i < truthTable.NumBits; i++)
+            {
+                if (!truthTable.GetBit(i))
+                    continue;
+
+                // Construct dnf for this term
+                var bitwise = new List<AstIdx>();
+                for (ushort varIdx = 0; varIdx < truthTable.NumVars; varIdx++)
+                {
+                    var vMask = 1 << varIdx;
+                    var negated = (i & vMask) == 0;
+                    bitwise.Add(negated ? ctx.Neg(variables[varIdx]) : variables[varIdx]);
+                }
+
+                terms.Add(ctx.And(bitwise));
+            }
+            
+            foreach (var term in terms)
+            {
+                var table = GetTruthTable(term, variables);
+                bool negated = table.GetBit(0);
+                var resultVec = table.AsList().Select(x => negated ? Negate(x) : (uint)x).ToArray();
+                var (anfTerms, variableCombinations) = GetAnfTerms(ctx, variables, resultVec);
+
+                anfTerms.Reverse();
+
+                AstIdx? result = null;
+                foreach (var anfTerm in anfTerms)
+                {
+                    var conj = LinearSimplifier.ConjunctionFromVarMask(ctx, variables, 1, variableCombinations[anfTerm], null);
+                    if (result == null)
+                        result = conj;
+                    else
+                        result = ctx.Xor(result.Value, conj);
+                }
+
+              
+
+                if (negated)
+                    result = ctx.Xor(ctx.Constant(ulong.MaxValue, ctx.GetWidth(result.Value)), result.Value);
+
+                var normal = ctx.GetAstString(result.Value); 
+                var astStr = ctx.GetAstString(result.Value);
+                astStr = astStr.Replace("(", "");
+                astStr = astStr.Replace(")", "");
+                astStr = astStr.Replace("&", "*");
+                astStr = astStr.Replace("^", " + ");
+
+                normal = astStr.Replace("(", "");
+                normal = astStr.Replace(")", "");
+                //normal = astStr.Replace("&", "*");
+                //normal = astStr.Replace("^", " + ");
+                //Console.WriteLine($"{astStr} = 1");
+                Console.WriteLine($"{normal} = 1");
+            }
+
+            Debugger.Break();
+        }
+
         private unsafe AstIdx SimplifyBoolean()
         {
             // If the truth table has a positive constant offset, negate the result vector.
             bool negated = truthTable.GetBit(0);
             var resultVec = truthTable.AsList().Select(x => negated ? Negate(x) : (uint)x).ToArray();
             var (terms, variableCombinations) = GetAnfTerms(ctx, variables, resultVec);
+
+            Groebner();
 
             AstIdx? result = null;
             foreach (var term in terms)
