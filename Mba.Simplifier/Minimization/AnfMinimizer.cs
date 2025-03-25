@@ -109,7 +109,7 @@ namespace Mba.Simplifier.Minimization
             var resultVec = truthTable.AsList().Select(x => negated ? Negate(x) : (uint)x).ToArray();
             var (terms, variableCombinations) = GetAnfTerms(ctx, variables, resultVec);
 
-            Groebner();
+            //Groebner();
 
             AstIdx? result = null;
             foreach (var term in terms)
