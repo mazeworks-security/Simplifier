@@ -20,6 +20,7 @@ using Mba.Simplifier.Minimization;
 using Mba.Common.Interop;
 using System.Runtime.CompilerServices;
 using System.Reflection.Metadata;
+using static Antlr4.Runtime.Atn.SemanticContext;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -228,6 +229,19 @@ namespace Mba.Simplifier.Pipeline
             return ctx.Or(t0.Value, t1.Value);
         }
 
+        // Algorithm:
+        // (1) If the result vector is constant, we can immediately return this value.
+        // (2) If the result vector has one term, we can immediately find the optimal result.
+        // (3) If any variables are "dead", we we eliminate them and recursively simplify this reduced variable count version instead.
+        //      - But first we need to construct algebraic normal form to figure out which variables are dead... TODO: Find a better way to do this 
+        // (4) If the result vector has two terms (and optionally some constant offset), we can exhaustively enumerate all possible solutions.
+        //      - For t <= 3 we find the optimal result. 
+        //      - For t == 4 we find are guaranteed to find a result that is close to optimal.
+        //      - For t >= 5 we do not perform the exhaustive search(though we could, up to some limit). 
+        // (5) Try to split the result vector into linearly independent parts using based on the normal form. E.g. "a + b + c + (c&d)" gets partitioned into the groups ["a", "b", "c + c&d"],
+        //     then try to simplify the parts individually.
+        // (6) Combine all of the simplified parts together, yielding a final simplified result.
+        // (7) Return either the "combined" result, or the algebraic normal form, depending upon some cost function.
         private AstIdx SimplifyOneBitNew(ApInt constant, bool useZ3 = false, bool alreadySplit = false)
         {
             // Group each unique coefficient to a truth table.
@@ -247,10 +261,10 @@ namespace Mba.Simplifier.Pipeline
                 table.SetBit(i, true);
             }
 
-            // If no terms exist, we have a constant.
+            // (1) If no terms exist, we have a constant.
             if (coeffToTable.Count == 0)
                 return ctx.Constant(constant, width);
-            // If only a single term exists, we can immediately find the optimal solution.
+            // (2) If only a single term exists, we can immediately find the optimal solution.
             // For more terms we need to take special care to eliminate dead variables, but the boolean minimizer will eliminate dead variables for the single term case!
             if (coeffToTable.Count == 1)
             {
@@ -259,12 +273,37 @@ namespace Mba.Simplifier.Pipeline
                 return single;
             }
 
-            // (1) Construct a linear combination using ANF as the basis. This will roughly tell us which variables are dependent upon one another.
+            // (3) Construct a linear combination using ANF as the basis. This will roughly tell us which variables are dependent upon one another.
+            var copy = resultVector.ToArray();
             var (variableCombinations, linearCombinations) = GetAnf();
+            resultVector = copy;
+
+            // Identify the demanded(live) variables of the input expression
+            ApInt demandedVariables = 0;
+            for (int i = linearCombinations.Count - 1; i >= 0; i--)
+            {
+                // Skip if this variable combination is not demanded.
+                var curr = linearCombinations[i];
+                if (curr.Count == 0)
+                    continue;
+                demandedVariables |= variableCombinations[i];
+            }
+
+            // If the linear MBA has dead variables, eliminate them and recursively simplify this fewer variable count version.
+            if(BitOperations.PopCount(demandedVariables) < variables.Count)
+            {
+                return EliminateDeadVarsAndSimplify(constant, demandedVariables, variableCombinations, linearCombinations);
+            }
+
+            // (4) If the result vector has two terms and <= 4 variables we can find an optimal answer.
+            if(variables.Count <= 4 && coeffToTable.Count == 2)
+            {
+                return SimplifyTwoTerm(constant, coeffToTable);
+            }
 
             // (2) Try to partition the terms into disjoint variable sets.
+            // Note that we're iterating backwards to heuristically see terms with the most variables first.
             int anfCost = constant == 0 ? 0 : 1;
-            ApInt demandedVariables = 0;
             List<ApInt> disjointSets = new();
             for(int i = linearCombinations.Count - 1; i >= 0; i--)
             {
@@ -276,7 +315,6 @@ namespace Mba.Simplifier.Pipeline
                 // Search through disjoint sets, checking if this variable combination has an intersection.
                 // Merge intersecting variable combinations, otherwise emplace in a new disjoint set.
                 var combMask = variableCombinations[i];
-                demandedVariables |= combMask;
                 var coeffCost = curr[0].coeff == 1 ? 0 : 1;
                 anfCost += 1 + coeffCost + BitOperations.PopCount(combMask);
                 anfCost += BitOperations.PopCount(combMask) - 1; // Account for the number of AND nodes.
@@ -359,7 +397,6 @@ namespace Mba.Simplifier.Pipeline
                 return anfSum;
             }
 
-
             // Otherwise have multiple disjoint sets that we want to simplify individually.
             // First put each disjoint set into algebraic normal form.
             var disjointTerms = new List<AstIdx?>();
@@ -404,7 +441,7 @@ namespace Mba.Simplifier.Pipeline
                 // Recursively simplify.
                 var oldId = disjointTerms[i].Value;
                 var newId = Run(width, ctx, oldId, false, false, false, mutVars);
-                disjointTerms[i] = newId;
+                disjointTerms[i] = newId;   
             }
 
             var sum = ctx.Add(disjointTerms.Select(x => x.Value));
@@ -435,6 +472,101 @@ namespace Mba.Simplifier.Pipeline
             
             // If all else fails we have a two term solution.
             return ctx.Add(ctx.Constant(constant, width), Term(GetBooleanTableAst(truthTable), coeff));
+        }
+
+        private AstIdx SimplifyTwoTerm(ApInt constant, Dictionary<ApInt, TruthTable> coeffToTable)
+        {
+            Debug.Assert(coeffToTable.Count == 2);
+            // Get the first and second coefficient from the dictionary. 
+            ApInt a = 0;
+            ApInt b = 0;
+            foreach(var coeff in coeffToTable.Keys)
+            {
+                if (a == 0)
+                    a = coeff;
+                else
+                    b = coeff;
+            }
+
+            // Find two unnegated terms + some constant offset.
+            var cand1 = FindTwoTermsUnnegated(constant, a, b);
+            if (constant == 0)
+                return cand1;
+
+            var cand2 = TryFindTwoTermsNegatedAndUnnegated(constant, a, b);
+            return cand1;
+
+            // There is one more missing pattern, "TryFindTwoNegatedExpressions"...
+        }
+
+        // Find a two term linear combination + some constant offset
+        // This is guaranteed to always find a solution.
+        private AstIdx FindTwoTermsUnnegated(ApInt constant, ApInt a, ApInt b)
+        {
+            var cand1 = DetermineCombOfTwoFast(a, b).Value;
+            var cand2 = DetermineCombOfTwoFast(moduloMask & a - b, b).Value;
+            var cand3 = DetermineCombOfTwoFast(a, moduloMask & b - a).Value;
+
+            var min = new AstIdx[] { cand1, cand2, cand3 }.MinBy(x => ctx.GetCost(x));
+            if (constant == 0)
+                return min;
+            return ctx.Add(ctx.Constant(constant, (byte)width), min);
+        }
+
+        private AstIdx? TryFindTwoTermsNegatedAndUnnegated(ApInt constant, ApInt a, ApInt b)
+        {
+            if (a == constant || b == constant)
+            {
+                // TODO: Given "x + ~y", we are yielding "~y + x", when the result ideally should be canonicalized such that x is to the right.
+                var _a = a == constant ? b : a;
+                var cand1 = DetermineCombOfTwoFast(_a, constant, null, true).Value;
+                var cand2 = DetermineCombOfTwoFast((_a - constant) & moduloMask, constant, null, true).Value;
+                return new AstIdx[] { cand1, cand2 }.MinBy(x => ctx.GetCost(x));
+            }
+            
+            var negCoeff = constant;
+            if (((b - a - negCoeff) & moduloMask) != 0)
+            {
+                (a, b) = (b, a);
+                if (((b - a - negCoeff) & moduloMask) != 0)
+                    return null;
+            }
+
+            // TODO: Verify this version is correct!
+            Debugger.Break();
+            var option1 = DetermineCombOfTwoFast(a, constant, null, true).Value;
+            var option2 = DetermineCombOfTwoFast((a - constant) & moduloMask, constant, null, true).Value;
+            return new AstIdx[] { option1, option1 }.MinBy(x => ctx.GetCost(x));
+        }
+
+        private AstIdx EliminateDeadVarsAndSimplify(ApInt constantOffset, ApInt demandedMask, ApInt[] variableCombinations, List<List<(ApInt coeff, ApInt bitMask)>> linearCombinations)
+        {
+            // Collect all variables used in the output expression.
+            List<AstIdx> mutVars = new(variables.Count);
+            while (demandedMask != 0)
+            {
+                var xorIdx = BitOperations.TrailingZeroCount(demandedMask);
+                mutVars.Add(variables[xorIdx]);
+                demandedMask &= ~(1ul << xorIdx);
+            }
+
+            AstIdx sum = ctx.Constant(constantOffset, width);
+            for (int i = 0; i < linearCombinations.Count; i++)
+            {
+                // Skip if this variable combination is not demanded.
+                var curr = linearCombinations[i];
+                if (curr.Count == 0)
+                    continue;
+
+                var combMask = variableCombinations[i];
+                var vComb = ctx.GetConjunctionFromVarMask(mutVars, combMask);
+                var term = Term(vComb, curr[0].coeff);
+                sum = ctx.Add(sum, term);
+            }
+
+            // TODO: Instead of constructing a result vector inside the recursive linear simplifier call, we could instead convert the ANF vector back to DNF.
+            // This should be much more efficient than constructing a result vector via JITing and evaluating an AST representation of the ANF vector.
+            return LinearSimplifier.Run(width, ctx, sum, false, false, false, variables);
         }
 
         private void EliminateUniqueValues(Dictionary<ApInt, TruthTable> coeffToTable)
@@ -2229,8 +2361,9 @@ namespace Mba.Simplifier.Pipeline
             TryRefineSingleTerm(resultSet);
 
             // We cannot simplify the expression better.
-            if (CheckTermCount(2))
-                return;
+            //if(resultSet)
+            //if (CheckTermCount(2))
+            //    return;
 
             // (4-8) Try to find a sum of two terms that fits.
             TryRefineTwoTerms(resultSet);
@@ -2369,7 +2502,7 @@ namespace Mba.Simplifier.Pipeline
         private void FindTwoExpressionsByTwoValues()
         {
             // This step is disabled due to high performance overhead.
-            return;
+            //return;
 
             Debug.Assert(resultVector[0] == 0);
             var resultSet = resultVector.ToHashSet();
@@ -2413,12 +2546,93 @@ namespace Mba.Simplifier.Pipeline
             }
         }
 
-        public enum Decision
+        private AstIdx? DetermineCombOfTwoFast(ApInt coeff1, ApInt coeff2, ApInt[] vec = null, bool secNegated = false)
         {
-            None = 0,
-            First = 1,
-            Second = 2,
-            Both = 3,
+            if (vec == null)
+                vec = resultVector;
+
+            var tt1 = new TruthTable(variables.Count);
+            var tt2 = new TruthTable(variables.Count);
+
+
+            var d = GetDecisionVectorFast(coeff1, coeff2, vec);
+
+            int numSolutions = 0;
+            uint bestCost = uint.MaxValue;
+            AstIdx? bestSolution = null;
+
+            EnumerateTwoTermSolutions(ref numSolutions, ref bestCost, ref bestSolution, d, 0, coeff1, coeff2, tt1, tt2, secNegated);
+            return bestSolution;
+        }
+
+        private void EnumerateTwoTermSolutions(ref int numSolutions, ref uint bestCost, ref AstIdx? bestSolution, DecisionTable cases, int i, ApInt coeff1, ApInt coeff2, TruthTable tt1, TruthTable tt2, bool secNegated = false)
+        {
+            // Do not explore more than 32 solutions! 
+            if (numSolutions >= 32)
+                return;
+
+            // We found a solution, now handle it:
+            if (i >= cases.NumBits)
+            {
+                numSolutions += 1;
+
+                // Don't allocate an AST for this solution if it would be worse than the best result we found so far.
+                var firstCost = TableDatabase.Instance.GetTableEntryCost(ctx, variables.Count, (int)tt1.arr[0]);
+                var secondCost = TableDatabase.Instance.GetTableEntryCost(ctx, variables.Count, (int)tt2.arr[0]);
+                var newCost = firstCost + secondCost;
+                if (newCost >= bestCost)
+                    return;
+
+                var first = BooleanMinimizer.GetBitwise(ctx, variables, tt1);
+                var second = BooleanMinimizer.GetBitwise(ctx, variables, tt2, secNegated);
+
+                // Compose the terms together, optionally negating the second coefficient if requested.
+                var secondCoeff = secNegated ? NegateCoefficient(coeff2) : coeff2;
+                var e = Compose(new() { first, second }, new() { coeff1, secondCoeff });
+
+                bestSolution = e;
+                bestCost = newCost;
+                return;
+            }
+
+            var value = cases.GetDecision(i);
+            if (value.HasFlag(Decision.None))
+            {
+                var old1 = tt1.GetBit(i);
+                var old2 = tt2.GetBit(i);
+                tt1.SetBit(i, false);
+                tt2.SetBit(i, false);
+                EnumerateTwoTermSolutions(ref numSolutions, ref bestCost, ref bestSolution, cases, i + 1, coeff1, coeff2, tt1, tt2, secNegated);
+                tt1.SetBit(i, old1);
+                tt2.SetBit(i, old2);
+            }
+
+            if (value.HasFlag(Decision.First))
+            {
+                var old1 = tt1.GetBit(i);
+                tt1.SetBit(i, true);
+                EnumerateTwoTermSolutions(ref numSolutions, ref bestCost, ref bestSolution, cases, i + 1, coeff1, coeff2, tt1, tt2, secNegated);
+                tt1.SetBit(i, old1);
+            }
+
+            if (value.HasFlag(Decision.Second))
+            {
+                var old2 = tt2.GetBit(i);
+                tt2.SetBit(i, true);
+                EnumerateTwoTermSolutions(ref numSolutions, ref bestCost, ref bestSolution, cases, i + 1, coeff1, coeff2, tt1, tt2, secNegated);
+                tt2.SetBit(i, old2);
+            }
+
+            if (value.HasFlag(Decision.Both))
+            {
+                var old1 = tt1.GetBit(i);
+                var old2 = tt2.GetBit(i);
+                tt1.SetBit(i, true);
+                tt2.SetBit(i, true);
+                EnumerateTwoTermSolutions(ref numSolutions, ref bestCost, ref bestSolution, cases, i + 1, coeff1, coeff2, tt1, tt2, secNegated);
+                tt1.SetBit(i, old1);
+                tt2.SetBit(i, old2);
+            }
         }
 
         private List<List<Decision>> GetDecisionVector(ApInt coeff1, ApInt coeff2, ApInt[] vec)
@@ -2453,7 +2667,53 @@ namespace Mba.Simplifier.Pipeline
                 d.Add(e);
             }
 
+            var other = GetDecisionVectorFast(coeff1, coeff2, vec).AsList();
+            if (other.Count != d.Count)
+                throw new InvalidOperationException("Size mismatch!");
+            for(int i = 0; i < other.Count; i++)
+            {
+                if (!other[i].SequenceEqual(d[i]))
+                    throw new InvalidOperationException("Value mismatch!");
+            }
+
             return d;
+        }
+
+        private DecisionTable GetDecisionVectorFast(ApInt coeff1, ApInt coeff2, ApInt[] vec)
+        {
+            if (vec == null)
+                vec = resultVector;
+
+            var e = new DecisionTable(variables.Count);
+
+            for(int i = 0; i < vec.Length; i++)
+            {
+                var r = vec[i];
+
+                var f = (r - coeff1 & moduloMask) == 0;
+                var s = (r - coeff2 & moduloMask) == 0;
+                var b = (r - coeff1 - coeff2 & moduloMask) == 0;
+                // For more variables, this would take too long.
+                if (r == 0 && variables.Count > 4)
+                    b = false;
+                // Same.
+                if (f && s && variables.Count > 4)
+                    s = false;
+
+                if ((r & moduloMask) == 0)
+                    e.AddDecision(i, Decision.None);
+                if (b)
+                    e.AddDecision(i, Decision.Both);
+                if (f)
+                    e.AddDecision(i, Decision.First);
+                if (s)
+                    e.AddDecision(i, Decision.Second);
+
+                Debug.Assert((byte)e.arr[i] != 0);
+ 
+            }
+
+            return e;
         }
 
         private bool MustSplit(List<List<Decision>> d)
@@ -2602,8 +2862,6 @@ namespace Mba.Simplifier.Pipeline
         // representing the result vector.
         void TryFindNegatedAndUnnegatedExpression()
         {
-            return;
-
             // TODO: We can still try to find a solution with 2 terms if we already
             // have one with one terms, and then compare complexities.
             if (!HasOnlyThreeOrFourEntries(resultVector))
@@ -2651,7 +2909,6 @@ namespace Mba.Simplifier.Pipeline
 
         private void TryFindTwoNegatedExpressions()
         {
-            return;
 
             if (!HasOnlyThreeOrFourEntries(resultVector))
                 return;

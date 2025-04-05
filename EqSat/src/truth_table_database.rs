@@ -117,79 +117,83 @@ impl TruthTableDatabase {
         };
 
         // Compute the offset into the table.
-        let mut offset_idx = 4 * idx;
-        let mut constant: u64 = 0;
-        for c in 0..4 {
-            let byte = *table.get(offset_idx).unwrap();
-            offset_idx += 1;
-
-            constant |= ((byte as u64) << (c * 8));
-        }
+        let offset_idx = 8 * idx;
+        let constant = decode_u32(table, offset_idx);
 
         let mut i = constant as usize;
-        Self::parse_binary_boolean_func(ctx, vars, table, &mut i)
+        Self::parse_binary_boolean_func(ctx, vars, table, i)
     }
 
     fn parse_binary_boolean_func(
         ctx: &mut Context,
         vars: *const AstIdx,
         bytes: &Vec<u8>,
-        i: &mut usize,
+        start: usize,
     ) -> AstIdx {
+        let mut offset = start;
         let this_ctx = ctx;
-        let opcode = bytes.get(*i).unwrap();
-        *i += 1;
+        let opcode = *bytes.get(start).unwrap();
+        offset += 4;
 
         match opcode {
+            // Symbol
             2 => {
-                let var_index = *bytes.get(*i).unwrap();
-                *i += 1;
-
+                let var_index = *bytes.get(offset).unwrap();
                 unsafe { *vars.add(var_index as usize) }
             }
 
-            4 => {
-                let a = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                let b = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                this_ctx.arena.pow(a, b)
-            }
+            8 | 9 | 10 => {
+                let a_offset = decode_u32(bytes, offset);
+                offset += 4;
+                let b_offset = decode_u32(bytes, offset);
 
-            6 => {
-                let a = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                let b = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                this_ctx.arena.add(a, b)
-            }
+                let a = Self::parse_binary_boolean_func(this_ctx, vars, bytes, a_offset as usize);
+                let b = Self::parse_binary_boolean_func(this_ctx, vars, bytes, b_offset as usize);
 
-            7 => {
-                let a = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                let b = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                this_ctx.arena.mul(a, b)
-            }
-
-            8 => {
-                let a = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                let b = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                this_ctx.arena.and(a, b)
-            }
-
-            9 => {
-                let a = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                let b = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                this_ctx.arena.or(a, b)
-            }
-
-            10 => {
-                let a = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                let b = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
-                this_ctx.arena.xor(a, b)
+                match opcode {
+                    8 => this_ctx.arena.and(a, b),
+                    9 => this_ctx.arena.or(a, b),
+                    10 => this_ctx.arena.xor(a, b),
+                    _ => panic!("Not a valid boolean!"),
+                }
             }
 
             11 => {
-                let a = Self::parse_binary_boolean_func(this_ctx, vars, bytes, i);
+                let a_offset = decode_u32(bytes, offset);
+                let a = Self::parse_binary_boolean_func(this_ctx, vars, bytes, a_offset as usize);
                 this_ctx.arena.neg(a)
             }
 
-            _ => panic!("Unrecognized opcode: {}", opcode),
+            _ => panic!("Unsupported numeric opcode {}!", opcode),
         }
     }
+
+    pub fn get_boolean_cost(db: &mut TruthTableDatabase, var_count: u32, idx: usize) -> u32 {
+        let table = match var_count {
+            2 => &db.two_var_truth_table,
+            3 => &db.three_var_truth_table,
+            4 => &db.four_var_truth_table,
+            _ => panic!("truth table database only supports 2, 3, or 4 variables!"),
+        };
+
+        // Each boolean has a "header" consisting of (u32 file_offset, u32 cost).
+        // Here we dereference the cost.
+        let offset_idx = (8 * idx) + 4;
+        let constant = decode_u32(table, offset_idx);
+
+        constant
+    }
+}
+
+fn decode_u32(bytes: &Vec<u8>, offset: usize) -> u32 {
+    let mut offset_idx = offset;
+    let mut constant: u32 = 0;
+    for c in 0..4 {
+        let byte = *bytes.get(offset_idx).unwrap();
+        offset_idx += 1;
+
+        constant |= ((byte as u32) << (c * 8));
+    }
+
+    constant
 }

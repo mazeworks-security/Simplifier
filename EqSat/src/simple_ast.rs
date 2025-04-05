@@ -18,7 +18,7 @@ use crate::{
 pub struct AstIdx(pub u32);
 
 pub struct Arena {
-    elements: Vec<SimpleAst>,
+    pub elements: Vec<SimpleAst>,
     ast_to_idx: AHashMap<SimpleAst, AstIdx>,
 
     // Map a name to it's corresponds symbol index.
@@ -848,6 +848,19 @@ pub extern "C" fn GetTruthTableDbEntry(
 }
 
 #[no_mangle]
+pub extern "C" fn GetTruthTableDbEntryCost(
+    db: *mut TruthTableDatabase,
+    var_count: u32,
+    idx: usize,
+) -> u32 {
+    unsafe {
+        let mut table: &mut TruthTableDatabase = &mut (*db);
+
+        TruthTableDatabase::get_boolean_cost(table, var_count, idx)
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn CreateContext() -> *mut Context {
     let mut arena = Arena::new();
 
@@ -1138,10 +1151,12 @@ pub extern "C" fn ContextCollectVariables(
 pub extern "C" fn ContextGetBooleanForIndex(
     ctx: *mut Context,
     vars: *const AstIdx,
-    num_vars: u16,
+    var_count: u32,
     result_vec_idx: u32,
 ) -> AstIdx {
     let mut ast = None;
+
+    let num_vars = var_count as u16;
 
     unsafe {
         let mut deref: &mut Context = &mut (*ctx);

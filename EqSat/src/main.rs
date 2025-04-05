@@ -13,7 +13,7 @@ use std::{
 
 use crate::{
     mba::Context as MbaContext,
-    simple_ast::{recursive_simplify, Arena, AstPrinter, Context},
+    simple_ast::{recursive_simplify, Arena, AstPrinter, Context as Ctx},
     truth_table_database::TruthTableDatabase,
 };
 

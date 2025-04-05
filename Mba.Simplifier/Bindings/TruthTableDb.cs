@@ -33,6 +33,11 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
+        public unsafe uint GetBooleanCost(uint varCount, ulong idx)
+        {
+            return Api.GetTruthTableDbEntryCost(this,varCount, idx);
+        }
+
         public unsafe static implicit operator OpaqueTruthTableDb*(TruthTableDb ctx) => (OpaqueTruthTableDb*)ctx.handle;
 
         public unsafe static implicit operator TruthTableDb(OpaqueTruthTableDb* ctx) => new TruthTableDb((nint)ctx);
@@ -44,6 +49,9 @@ namespace Mba.Simplifier.Bindings
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx GetTruthTableDbEntry(OpaqueTruthTableDb* db, OpaqueAstCtx* ctx, uint varCount, AstIdx* variableArray, ulong idx);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern uint GetTruthTableDbEntryCost(OpaqueTruthTableDb* db, uint varCount, ulong idx);
         }
     }
 }
