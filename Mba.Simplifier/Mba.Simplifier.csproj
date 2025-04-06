@@ -15,9 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Minimization\TruthTables\1variable_truthtable.bc">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </EmbeddedResource>
     <EmbeddedResource Include="Minimization\TruthTables\2variable_truthtable.bc">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </EmbeddedResource>

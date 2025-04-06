@@ -22,7 +22,6 @@ namespace Mba.Simplifier.Minimization
         {
             Tables = new List<byte[]>()
             {
-                LoadTruthTableBinary(1),
                 LoadTruthTableBinary(2),
                 LoadTruthTableBinary(3),
                 LoadTruthTableBinary(4),
@@ -45,6 +44,11 @@ namespace Mba.Simplifier.Minimization
         public unsafe AstIdx GetTableEntry(AstCtx ctx, List<AstIdx> vars, int index)
         {
             return db.GetBoolean(ctx, (uint)vars.Count, vars, (ulong)index);
+        }
+
+        public unsafe uint GetTableEntryCost(AstCtx ctx, int varCount, int index)
+        {
+            return db.GetBooleanCost((uint)varCount, (ulong)index);
         }
 
         private static unsafe AstIdx ParseBinaryBooleanFunc(AstCtx ctx, IReadOnlyList<AstIdx> vars, byte* bytes, ref uint i)
