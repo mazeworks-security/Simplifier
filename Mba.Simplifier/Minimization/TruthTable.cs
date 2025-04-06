@@ -12,15 +12,15 @@ namespace Mba.Simplifier.Minimization
 {
     public struct TruthTable
     {
-        private readonly int numVars;
+        public int NumVars { get; }
 
-        public int NumBits => 1 << (ushort)numVars;
+        public int NumBits => 1 << (ushort)NumVars;
 
         public readonly ulong[] arr;
 
         public TruthTable(int numVars)
         {
-            this.numVars = numVars;
+            this.NumVars = numVars;
             int width = NumBits <= 64 ? 1 : (NumBits >> 6);
             arr = new ulong[width];
         }
@@ -48,10 +48,22 @@ namespace Mba.Simplifier.Minimization
                 SetBit(i, GetBit(i) ? false : true);
         }
 
+        public void And(TruthTable other)
+        {
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] &= other.arr[i];
+        }
+
         public void Or(TruthTable other)
         {
             for (int i = 0; i < arr.Length; i++)
                 arr[i] |= other.arr[i];
+        }
+
+        public void Xor(TruthTable other)
+        {
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] ^= other.arr[i];
         }
 
         public void Clear()
@@ -71,9 +83,14 @@ namespace Mba.Simplifier.Minimization
             return true;
         }
 
+        public bool IsZero()
+        {
+            return arr.All(x => x == 0);
+        }
+
         public TruthTable Clone()
         {
-            var table = new TruthTable(numVars);
+            var table = new TruthTable(NumVars);
             for(int i = 0; i < arr.Length ; i++)
                 table.arr[i] = arr[i];
             return table;
@@ -91,7 +108,7 @@ namespace Mba.Simplifier.Minimization
         {
             if(obj is not TruthTable table)
                 return false;
-            if (numVars != table.numVars)
+            if (NumVars != table.NumVars)
                 return false;
 
             for(int i = 0; i < arr.Length; i++)
@@ -128,6 +145,44 @@ namespace Mba.Simplifier.Minimization
             }
 
             return arr;
+        }
+
+        public static bool operator ==(TruthTable table1, TruthTable table2)
+        {
+            return table1.Equals(table2);
+        }
+
+        public static bool operator !=(TruthTable table1, TruthTable table2)
+        {
+            return !table1.Equals(table2);
+        }
+
+        public static TruthTable operator ~(TruthTable a)
+        {
+            var result = a.Clone();
+            result.Negate();
+            return result;
+        }
+
+        public static TruthTable operator &(TruthTable a, TruthTable b)
+        {
+            var result = a.Clone();
+            result.And(b);
+            return result;
+        }
+
+        public static TruthTable operator |(TruthTable a, TruthTable b)
+        {
+            var result = a.Clone();
+            result.Or(b);
+            return result;
+        }
+
+        public static TruthTable operator ^(TruthTable a, TruthTable b)
+        {
+            var result = a.Clone();
+            result.Xor(b);
+            return result;
         }
     }
 }

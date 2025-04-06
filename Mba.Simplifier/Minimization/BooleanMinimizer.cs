@@ -15,7 +15,7 @@ namespace Mba.Simplifier.Minimization
 {
     public static class BooleanMinimizer
     {
-        private const bool useLegacyMinimizer = false;
+        private const bool useLegacyMinimizer = true;
 
         public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable, bool negate = false)
         {
@@ -37,7 +37,8 @@ namespace Mba.Simplifier.Minimization
 
             // If there are four or less variables, we can pull the optimal representation from the truth table.
             // TODO: One could possibly construct a 5 variable truth table for all 5 variable NPN classes.
-            if (variables.Count <= 4)
+            //if (variables.Count <= 4)
+            if (false)
             {
                 return FromTruthTable(ctx, variables, truthTable);
             }
