@@ -12,15 +12,15 @@ namespace Mba.Simplifier.Minimization
 {
     public struct TruthTable
     {
-        private readonly int numVars;
+        public int NumVars { get; }
 
-        public int NumBits => 1 << (ushort)numVars;
+        public int NumBits => 1 << (ushort)NumVars;
 
         public readonly ulong[] arr;
 
         public TruthTable(int numVars)
         {
-            this.numVars = numVars;
+            this.NumVars = numVars;
             int width = NumBits <= 64 ? 1 : (NumBits >> 6);
             arr = new ulong[width];
         }
@@ -73,7 +73,7 @@ namespace Mba.Simplifier.Minimization
 
         public TruthTable Clone()
         {
-            var table = new TruthTable(numVars);
+            var table = new TruthTable(NumVars);
             for(int i = 0; i < arr.Length ; i++)
                 table.arr[i] = arr[i];
             return table;
@@ -91,7 +91,7 @@ namespace Mba.Simplifier.Minimization
         {
             if(obj is not TruthTable table)
                 return false;
-            if (numVars != table.numVars)
+            if (NumVars != table.NumVars)
                 return false;
 
             for(int i = 0; i < arr.Length; i++)

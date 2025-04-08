@@ -19,6 +19,9 @@ namespace Mba.Simplifier.Minimization
 
         public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable, bool negate = false)
         {
+            //new GroebnerBasis(truthTable).Compute();
+            GroebnerMinimizer.Run(ctx, variables, truthTable);
+
             // If requested, negate the result vector to find a negated expression.
             if (negate)
             {
