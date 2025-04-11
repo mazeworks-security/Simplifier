@@ -103,7 +103,7 @@ namespace Mba.Simplifier.Minimization
 
             // Yield a XOR of factored variable conjunctions
             // e.g. e ^ (a&(b&c))
-            var factored = Factor(terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
+            var factored = Factor(ctx, variables, terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
 
             // TODO: Apply the identify a^(~a&b) => a|b
             var simplified = SimplifyRec(factored.Value);
@@ -127,7 +127,7 @@ namespace Mba.Simplifier.Minimization
         }
 
         // Apply greedy factoring over a sum of variable conjunctions
-        private AstIdx? Factor(List<uint> conjs, Dictionary<AstIdx, uint> demandedVarsMap)
+        public static AstIdx? Factor(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<uint> conjs, Dictionary<AstIdx, uint> demandedVarsMap)
         {
             var getConjFromMask = (uint mask) => LinearSimplifier.ConjunctionFromVarMask(ctx, variables, 1, mask, null);
 
@@ -198,7 +198,7 @@ namespace Mba.Simplifier.Minimization
                 }
 
                 // Otherwise recursively factor
-                var other = Factor(elems, demandedVarsMap);
+                var other = Factor(ctx, variables, elems, demandedVarsMap);
                 var and = ctx.And(result, other.Value);
                 output.Add(and);
 
