@@ -1244,10 +1244,15 @@ pub extern "C" fn ContextEvaluateForAllZeroesAndOnes(
     }
 }
 
+const PUSH_RCX: u8 = 0x51;
+const PUSH_RDX: u8 = 0x52;
 const PUSH_RAX: u8 = 0x50;
 const PUSH_RBX: u8 = 0x53;
 const PUSH_RSI: u8 = 0x56;
 const PUSH_RDI: u8 = 0x57;
+
+const POP_RCX: u8 = 0x59;
+const POP_RDX: u8 = 0x5A;
 
 // return value
 const POP_RAX: u8 = 0x58;
@@ -1308,13 +1313,7 @@ unsafe fn jit_rec(
 
     match ctx.arena.get_node(node) {
         SimpleAst::Constant { c, data } => {
-            // mov rax, constant
-            emit_u8(page, offset, 0x48);
-            emit_u8(page, offset, 0xB8);
-            // Fill in the constant
-            emit_u64(page, offset, *c);
-            // Push rax
-            emit_u8(page, offset, PUSH_RAX);
+            jit_constant(*c, *data, page, offset);
         }
         SimpleAst::Neg { a, data } => {
             jit_rec(ctx, *a, node_to_var, page, offset);
@@ -1324,7 +1323,44 @@ unsafe fn jit_rec(
         }
         SimpleAst::Add { a, b, data } => binop(*a, *b, &[0x48, 0x01, 0xFE], offset),
         SimpleAst::Mul { a, b, data } => binop(*a, *b, &[0x48, 0x0F, 0xAF, 0xF7], offset),
-        SimpleAst::Pow { a, b, data } => binop(*a, *b, &[0x48, 0x01, 0xFE], offset),
+        SimpleAst::Pow { a, b, data } => {
+            // Save the value of rcx/rdx on the stack, because these are used throughout the rest of the jitted function.
+            emit_u8(page, offset, PUSH_RCX);
+            emit_u8(page, offset, PUSH_RDX);
+
+            // Push the base and exponent onto the stack.
+            jit_rec(ctx, *a, node_to_var, page, offset);
+            jit_rec(ctx, *b, node_to_var, page, offset);
+
+            emit_u8(page, offset, POP_RDX);
+            emit_u8(page, offset, POP_RCX);
+
+            // Problem starts here
+            // Convert the exponentiation stub to a u64
+            let pow_stub_addr = Pow as *const () as u64;
+            let pow_stub_data = AstData {
+                width: 64,
+                cost: 1,
+                has_poly: false,
+                class: AstClass::Bitwise,
+            };
+
+            // Push the address of the pow stub
+            jit_constant(pow_stub_addr, pow_stub_data, page, offset);
+            // Mov pow stub addr into rax
+            emit_u8(page, offset, POP_RAX);
+            // Align the stack before the call:
+            // emit(page, offset, &[0x55]); // push rbp
+            // emit(page, offset, &[0x48, 0x89, 0xE5]); // mov rbp, rsp
+            // emit(page, offset, &[0x48, 0x83, 0xE4, 0xF0 ]); // and rsp,0xFFFFFFFFFFFFFFF0
+            // Call rax (pow stub)
+            emit(page, offset, &[0xFF, 0xD0]);
+            // Restore rcx/rdx from the stack
+            emit_u8(page, offset, POP_RDX);
+            emit_u8(page, offset, POP_RCX);
+            // push rax
+            emit_u8(page, offset, PUSH_RAX);
+        }
         SimpleAst::And { a, b, data } => binop(*a, *b, &[0x48, 0x21, 0xFE], offset),
         SimpleAst::Or { a, b, data } => binop(*a, *b, &[0x48, 0x09, 0xFE], offset),
         SimpleAst::Xor { a, b, data } => binop(*a, *b, &[0x48, 0x31, 0xFE], offset),
@@ -1368,8 +1404,18 @@ unsafe fn jit_rec(
     };
 }
 
+unsafe fn jit_constant(c: u64, data: AstData, page: *mut u8, offset: &mut usize) {
+    // mov rax, constant
+    emit_u8(page, offset, 0x48);
+    emit_u8(page, offset, 0xB8);
+    // Fill in the constant
+    emit_u64(page, offset, c);
+    // Push rax
+    emit_u8(page, offset, PUSH_RAX);
+}
+
 #[no_mangle]
-pub unsafe extern "C" fn Pow(mut base: u64, mut exp: u64) -> u64 {
+pub extern "C" fn Pow(mut base: u64, mut exp: u64) -> u64 {
     let mut res: u64 = 1;
     while exp != 0 {
         if (exp & 1) != 0 {

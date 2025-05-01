@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use rand::Rng;
+
 // use egraph::simplify_via_eqsat;
 use libc::c_char;
 use std::{
@@ -51,6 +53,19 @@ fn read_expr_from_args() -> String {
     } else {
         std::fs::read_to_string("test-input.txt").unwrap()
     }
+}
+
+pub fn Pow2(mut base: u64, mut exp: u64) -> u64 {
+    let mut res: u64 = 1;
+    while exp != 0 {
+        if (exp & 1) != 0 {
+            res = res.wrapping_mul(base);
+        }
+        exp >>= 1;
+        base = base.wrapping_mul(base);
+    }
+
+    return res;
 }
 
 fn main() {}

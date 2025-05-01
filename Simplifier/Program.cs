@@ -13,7 +13,8 @@ bool printUsage = false;
 uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = false;
-string inputText = null;
+string inputText = "15278730769769689831     + 14978629467625226242*(x^y) + 11510514861540900868*(x|y) + 4021200127728287747*(x*y) + 11285426043689372953*x + 7161318030020178663*y + 14322636060040357326*(x|~y) + 11285426043689372953*(~x^y) + 3468114606084325376*(x^y)*x + 14978629467625226240*(x^y)*y + 11510514861540900864*(x^y)*(x|~y) + 3468114606084325376*(x^y)*(~x^y) + 6936229212168650752*(x|y)*x + 11510514861540900864*(x|y)*y + 4574285649372250112*(x|y)*(x|~y) + 6936229212168650752*(x|y)*(~x^y) + 14425543945981263872*(x*y)*x + 4021200127728287744*(x*y)*y + 8042400255456575488*(x*y)*(x|~y) + 14425543945981263872*(x*y)*(~x^y) + 10329331333960040448*(x**2) + 16234825479499022336*x*y + 14022906885288493056*x*(x|~y) + 2211918594210529280*x*(~x^y) + 10329331333960040448*(y**2) + 4423837188421058560*y*(x|~y) + 16234825479499022336*y*(~x^y) + 4423837188421058560*((x|~y)**2) + 14022906885288493056*(x|~y)*(~x^y) + 10329331333960040448*((~x^y)**2)";
+
 
 var printHelp = () =>
 {
@@ -68,6 +69,9 @@ AstIdx.ctx = ctx;
 var id = RustAstParser.Parse(ctx, inputText, bitWidth);
 
 Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n\n");
+
+var linear = LinearSimplifier.Run(64, ctx, id);
+Console.WriteLine($"Linear expr: {linear}");
 
 var input = id;
 id = ctx.RecursiveSimplify(id);
