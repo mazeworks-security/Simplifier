@@ -32,6 +32,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="DSL\simplification.rules">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Minimization\TruthTables\1variable_truthtable.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

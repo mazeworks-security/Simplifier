@@ -1,6 +1,7 @@
 ﻿using Mba.Common.MSiMBA;
 using Mba.Parsing;
 using Mba.Simplifier.Bindings;
+using Mba.Simplifier.DSL;
 using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
@@ -14,6 +15,8 @@ uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
+
+var rules = DslParser.Parse(File.ReadAllText(@"DSL\simplification.rules"));
 
 var printHelp = () =>
 {
