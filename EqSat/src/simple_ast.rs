@@ -1369,6 +1369,20 @@ unsafe fn jit_rec(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn Pow(mut base: u64, mut exp: u64) -> u64 {
+    let mut res: u64 = 1;
+    while exp != 0 {
+        if (exp & 1) != 0 {
+            res = res.wrapping_mul(base);
+        }
+        exp >>= 1;
+        base = base.wrapping_mul(base);
+    }
+
+    return res;
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn ContextJit(
     ctx_p: *mut Context,
     node: AstIdx,
