@@ -1349,10 +1349,7 @@ unsafe fn jit_rec(
             jit_constant(pow_stub_addr, pow_stub_data, page, offset);
             // Mov pow stub addr into rax
             emit_u8(page, offset, POP_RAX);
-            // Align the stack before the call:
-            // emit(page, offset, &[0x55]); // push rbp
-            // emit(page, offset, &[0x48, 0x89, 0xE5]); // mov rbp, rsp
-            // emit(page, offset, &[0x48, 0x83, 0xE4, 0xF0 ]); // and rsp,0xFFFFFFFFFFFFFFF0
+            // TODO: If the stack is not 16 byte aligned we may need to manually align it. AFAIK it should be aligned already though.
             // Call rax (pow stub)
             emit(page, offset, &[0xFF, 0xD0]);
             // Restore rcx/rdx from the stack

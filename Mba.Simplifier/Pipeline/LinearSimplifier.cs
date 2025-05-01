@@ -76,7 +76,6 @@ namespace Mba.Simplifier.Pipeline
 
         public LinearSimplifier(AstCtx ctx, AstIdx? ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
         {
-            Console.WriteLine("     ");
             this.initialInput = ast;
             this.ctx = ctx;
             this.variables = variables;
