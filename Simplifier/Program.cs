@@ -17,6 +17,8 @@ bool proveEquivalence = false;
 string inputText = null;
 
 var rules = DslParser.Parse(File.ReadAllText(@"DSL\simplification.rules"));
+var isle = IsleBackend.GenerateIsleDsl(rules);
+Console.WriteLine(isle);
 
 var printHelp = () =>
 {

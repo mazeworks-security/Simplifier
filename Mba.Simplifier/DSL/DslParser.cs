@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.DSL
 {
-    public record DslRule(string name, AstNode before, AstNode after);
+    public record DslRule(string Name, AstNode Before, AstNode After);
 
     public static class DslParser
     {
