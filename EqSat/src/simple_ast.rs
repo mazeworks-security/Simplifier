@@ -290,7 +290,7 @@ impl Arena {
     pub fn is_constant(&self, idx: AstIdx) -> bool {
         let ast = self.get_node(idx);
         match ast {
-            SimpleAst::Constant { c, width } => true,
+            SimpleAst::Constant { .. } => true,
             _ => false,
         }
     }
@@ -713,7 +713,7 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
         ast = result.unwrap();
     }
 
-    return ctx.arena.insert_ast_node(ast);
+    return ctx.arena.ast_to_idx[&ast];
 }
 
 // Evaluate the current AST for all possible combinations of zeroes and ones as inputs.
@@ -1505,7 +1505,7 @@ pub extern "C" fn ContextSingleSimplify(ctx: *mut Context, idx: AstIdx) -> AstId
             ast = result.unwrap();
         }
 
-        return deref.arena.insert_ast_node(ast);
+        return deref.arena.ast_to_idx[&ast];
     }
 }
 
