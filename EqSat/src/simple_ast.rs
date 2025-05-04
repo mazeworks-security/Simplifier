@@ -523,8 +523,8 @@ impl mba::Context for Context {
         return self.arena.get_node(neg).clone();
     }
 
-    fn zext(&mut self, arg0: AstIdx, data: AstData) -> SimpleAst {
-        let zext = self.arena.zext(arg0, data.width);
+    fn zext(&mut self, arg0: AstIdx, width: u8) -> SimpleAst {
+        let zext = self.arena.zext(arg0, width);
 
         self.arena.get_node(zext).clone()
     }
@@ -544,19 +544,23 @@ impl mba::Context for Context {
         //return self.arena.insert_ast_node(arg0.clone()); // TODO
     }
 
-    fn constant(&mut self, arg0: u64, data: AstData) -> SimpleAst {
-        let id = self.arena.constant(arg0, data.width);
+    fn constant(&mut self, arg0: u64, width: u8) -> SimpleAst {
+        let id = self.arena.constant(arg0, width);
         return self.arena.get_node(id).clone();
     }
 
-    fn symbol(&mut self, arg0: u32, data: AstData) -> SimpleAst {
-        let id = self.arena.symbol(arg0, data.width);
+    fn symbol(&mut self, arg0: u32, width: u8) -> SimpleAst {
+        let id = self.arena.symbol(arg0, width);
         self.arena.get_node(id).clone()
     }
 
     fn fold_add(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst {
         let add = |a: u64, b: u64| return a.wrapping_add(b);
         return fold_constant_binop(self, arg0, arg1, &add);
+    }
+
+    fn get_width(&mut self, arg0: AstIdx) -> u8 {
+        return self.arena.get_width(arg0);
     }
 }
 
