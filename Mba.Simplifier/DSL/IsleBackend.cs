@@ -21,7 +21,7 @@ namespace Mba.Simplifier.DSL
             int rc = 0;
             foreach (var rewrite in rules)
             {
-                // In the case of a rewrite rule like `x-x` => 0, we need to some way of telling what bit width to create `0` as.
+                // In the case of a rewrite rule like `x-x` => 0, we need to some way of telling ISLE what bit width to create `0` as.
                 // To solve this we keep track of variable and width occurrences during transpilation, then pick one of the occurrences to steal the width field from.
                 // Special care needs to be taken for zext/trunc instructions though.
                 HashSet<string> boundedIndices = new();
@@ -93,7 +93,6 @@ namespace Mba.Simplifier.DSL
 
             if (parens)
                 sb.Append(")");
-
         }
 
         private static void TranspileRhs(AstNode ast, StringBuilder sb, HashSet<string> boundedIndices, HashSet<string> boundedWidths)
@@ -111,10 +110,9 @@ namespace Mba.Simplifier.DSL
                 var child = ast.Children[i];
                 TranspileRhsInternal(child, sb, boundedIndices, boundedWidths);
                 if (i != ast.Children.Count - 1)
-                {
                     sb.Append(" ");
-                }
             }
+
             if (ast is ConstNode constNode)
             {
                 var width_field = boundedWidths.Any() ? boundedWidths.First() : $"(GetWidth {boundedIndices.First()})";
@@ -134,8 +132,6 @@ namespace Mba.Simplifier.DSL
             if (parens)
                 sb.Append(")");
         }
-
-
 
         private static string GetOperatorName(AstKind kind)
         {
