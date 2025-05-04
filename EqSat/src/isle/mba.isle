@@ -8,18 +8,18 @@
 (type SimpleAst extern
   (enum 
   ;; Arithmetic operators
-  (Add (a index) (b index) (data adata))
-  (Mul (a index) (b index) (data adata))
-  (Pow (a index) (b index) (data adata))
+  (Add (a index) (b index) )
+  (Mul (a index) (b index) )
+  (Pow (a index) (b index) )
   ;; Bitwise operators
-  (And (a index) (b index) (data adata))
-  (Or (a index) (b index) (data adata))
-  (Xor (a index) (b index) (data adata))
-  (Neg (a index) (data adata))
+  (And (a index) (b index) )
+  (Or (a index) (b index) )
+  (Xor (a index) (b index) )
+  (Neg (a index) (data adata) )
   ;; Special types
-  (Constant (c u64) (data adata))
-  (Symbol (id u32) (data adata))
-  (Zext (a index) (data adata))
+  (Constant (c u64) (width u8) )
+  (Symbol (id u32) (width u8) )
+  (Zext (a index) (to u8) )
   ))
 
 ;; Below are wrappers for constructing instances of the AST types.
