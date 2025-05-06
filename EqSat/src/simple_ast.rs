@@ -434,14 +434,6 @@ pub struct Context {
     pub(crate) arena: Arena,
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-pub enum ConstantWithExpectedValue {
-    Only {
-        input: SimpleAst,
-        expected_value: u64,
-    },
-}
-
 impl mba::Context for Context {
     fn add(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst {
         let op1 = self.arena.get_node(arg0);
@@ -1190,9 +1182,9 @@ pub extern "C" fn ContextGetBooleanForIndex(
         let mut deref: &mut Context = &mut (*ctx);
         for var_idx in 0..num_vars {
             let vmask: u32 = 1 << var_idx;
-            let isSet = (result_vec_idx & vmask) != 0;
+            let is_set = (result_vec_idx & vmask) != 0;
             let var = *vars.wrapping_add(var_idx as usize);
-            let term = if isSet { var } else { deref.arena.neg(var) };
+            let term = if is_set { var } else { deref.arena.neg(var) };
             if ast.is_none() {
                 ast = Some(term);
             } else {
