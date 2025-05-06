@@ -1,3 +1,5 @@
+type Unit = ();
+
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     f32::consts::PI,
@@ -12,6 +14,10 @@ use crate::{
     mba::{self, Context as MbaContext},
     truth_table_database::{TruthTable, TruthTableDatabase},
 };
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[repr(C)]
+pub struct Empty();
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 #[repr(C)]
@@ -428,6 +434,14 @@ pub struct Context {
     pub(crate) arena: Arena,
 }
 
+#[derive(Clone, Hash, PartialEq, Eq)]
+pub enum ConstantWithExpectedValue {
+    Only {
+        input: SimpleAst,
+        expected_value: u64,
+    },
+}
+
 impl mba::Context for Context {
     fn add(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst {
         let op1 = self.arena.get_node(arg0);
@@ -561,6 +575,12 @@ impl mba::Context for Context {
 
     fn get_width(&mut self, arg0: AstIdx) -> u8 {
         return self.arena.get_width(arg0);
+    }
+
+    fn is_constant_modulo(&mut self, arg0: u64, arg1: u64, arg2: u8) -> Option<Empty> {
+        let modulo_mask = get_modulo_mask(arg2);
+        let are_equal = (arg0 & modulo_mask) == (arg1 & modulo_mask);
+        return if are_equal { Some(Empty()) } else { None };
     }
 }
 

@@ -20,7 +20,7 @@ use crate::{
 };
 
 // use egg::*;
-use simple_ast::{marshal_string, AstData, AstIdx, SimpleAst};
+use simple_ast::{marshal_string, AstData, AstIdx, Empty, SimpleAst};
 
 use mimalloc::MiMalloc;
 

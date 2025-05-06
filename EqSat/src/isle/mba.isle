@@ -4,6 +4,7 @@
 (type str (primitive String))
 (type index (primitive AstIdx))
 (type adata (primitive AstData))
+(type empty (primitive Empty))
 
 (type SimpleAst extern
   (enum 
@@ -20,6 +21,12 @@
   (Constant (c u64) (width u8) )
   (Symbol (id u32) (width u8) )
   (Zext (a index) (to u8) )
+  ))
+
+(type ConstantWithExpectedValue extern
+  (enum 
+  ;; Arithmetic operators
+  (Only (input SimpleAst) (expected_value u64) )
   ))
 
 ;; Below are wrappers for constructing instances of the AST types.
@@ -61,742 +68,996 @@
 (decl GetWidth (index) u8)
 (extern constructor GetWidth get_width)
 
+(decl pure partial is_constant_modulo (u64 u64 u8) empty)
+(extern constructor is_constant_modulo is_constant_modulo)
+
 ;; Declare our top-level lowering function. We will attach rules to this
 ;; declaration for lowering various patterns of `SimpleAst` inputs.
 (decl partial lower (SimpleAst) SimpleAst)
 
-;; mul-constant-to-left-1
-(rule 0(lower (SimpleAst.Mul a (SimpleAst.Constant c1 width0)))
+;; mul-constant-to-left-1:
+;; (a*Const(c1)) => (Const(c1)*a)
+(rule 0 (lower (SimpleAst.Mul a (SimpleAst.Constant c1 width0)))
     (Mul (Constant c1 width0) (Any a))
 )
 
-;; mul-constant-to-left-2
-(rule 1(lower (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant c1 width0) a) b))
+;; mul-constant-to-left-2:
+;; ((Const(c1)*a)*b) => (Const(c1)*(a*b))
+(rule 1 (lower (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant c1 width0) a) b))
     (Mul (Constant c1 width0) (Mul (Any a) (Any b)))
 )
 
-;; mul-constant-to-left-3
-(rule 2(lower (SimpleAst.Mul (SimpleAst.Constant c1 width0) (SimpleAst.Mul (SimpleAst.Constant c2 width1) a)))
+;; mul-constant-to-left-3:
+;; (Const(c1)*(Const(c2)*a)) => ((Const(c1)*Const(c2))*a)
+(rule 2 (lower (SimpleAst.Mul (SimpleAst.Constant c1 width0) (SimpleAst.Mul (SimpleAst.Constant c2 width1) a)))
     (Mul (Mul (Constant c1 width0) (Constant c2 width0)) (Any a))
 )
 
-;; mul-constant-to-left-4
-(rule 3(lower (SimpleAst.Mul (SimpleAst.Constant c1 width0) (SimpleAst.Constant c2 width1)))
+;; mul-constant-to-left-4:
+;; (Const(c1)*Const(c2)) => (Const(c1)*Const(c2))
+(rule 3 (lower (SimpleAst.Mul (SimpleAst.Constant c1 width0) (SimpleAst.Constant c2 width1)))
     (Mul (Constant c1 width0) (Constant c2 width0))
 )
 
-;; add-constant-to-left-1
-(rule 4(lower (SimpleAst.Add a (SimpleAst.Constant c1 width0)))
+;; add-constant-to-left-1:
+;; (a+Const(c1)) => (Const(c1)+a)
+(rule 4 (lower (SimpleAst.Add a (SimpleAst.Constant c1 width0)))
     (Add (Constant c1 width0) (Any a))
 )
 
-;; add-constant-to-left-2
-(rule 5(lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Constant c1 width0) a) b))
+;; add-constant-to-left-2:
+;; ((Const(c1)+a)+b) => (Const(c1)+(a+b))
+(rule 5 (lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Constant c1 width0) a) b))
     (Add (Constant c1 width0) (Add (Any a) (Any b)))
 )
 
-;; add-constant-to-left-3
-(rule 6(lower (SimpleAst.Add (SimpleAst.Constant c1 width0) (SimpleAst.Add (SimpleAst.Constant c2 width1) a)))
+;; add-constant-to-left-3:
+;; (Const(c1)+(Const(c2)+a)) => ((Const(c1)+Const(c2))+a)
+(rule 6 (lower (SimpleAst.Add (SimpleAst.Constant c1 width0) (SimpleAst.Add (SimpleAst.Constant c2 width1) a)))
     (Add (Add (Constant c1 width0) (Constant c2 width0)) (Any a))
 )
 
-;; add-constant-to-left-4
-(rule 7(lower (SimpleAst.Add (SimpleAst.Constant c1 width0) (SimpleAst.Constant c2 width1)))
+;; add-constant-to-left-4:
+;; (Const(c1)+Const(c2)) => (Const(c1)+Const(c2))
+(rule 7 (lower (SimpleAst.Add (SimpleAst.Constant c1 width0) (SimpleAst.Constant c2 width1)))
     (Add (Constant c1 width0) (Constant c2 width0))
 )
 
-;; and-constant-to-left-1
-(rule 8(lower (SimpleAst.And a (SimpleAst.Constant c1 width0)))
+;; and-constant-to-left-1:
+;; (a&Const(c1)) => (Const(c1)&a)
+(rule 8 (lower (SimpleAst.And a (SimpleAst.Constant c1 width0)))
     (And (Constant c1 width0) (Any a))
 )
 
-;; and-constant-to-left-2
-(rule 9(lower (SimpleAst.And (SimpleAst.And (SimpleAst.Constant c1 width0) a) b))
+;; and-constant-to-left-2:
+;; ((Const(c1)&a)&b) => (Const(c1)&(a&b))
+(rule 9 (lower (SimpleAst.And (SimpleAst.And (SimpleAst.Constant c1 width0) a) b))
     (And (Constant c1 width0) (And (Any a) (Any b)))
 )
 
-;; and-constant-to-left-3
-(rule 10(lower (SimpleAst.And (SimpleAst.Constant c1 width0) (SimpleAst.And (SimpleAst.Constant c2 width1) a)))
+;; and-constant-to-left-3:
+;; (Const(c1)&(Const(c2)&a)) => ((Const(c1)&Const(c2))&a)
+(rule 10 (lower (SimpleAst.And (SimpleAst.Constant c1 width0) (SimpleAst.And (SimpleAst.Constant c2 width1) a)))
     (And (And (Constant c1 width0) (Constant c2 width0)) (Any a))
 )
 
-;; and-constant-to-left-4
-(rule 11(lower (SimpleAst.And (SimpleAst.Constant c1 width0) (SimpleAst.Constant c2 width1)))
+;; and-constant-to-left-4:
+;; (Const(c1)&Const(c2)) => (Const(c1)&Const(c2))
+(rule 11 (lower (SimpleAst.And (SimpleAst.Constant c1 width0) (SimpleAst.Constant c2 width1)))
     (And (Constant c1 width0) (Constant c2 width0))
 )
 
-;; or-constant-to-left-1
-(rule 12(lower (SimpleAst.Or a (SimpleAst.Constant c1 width0)))
+;; or-constant-to-left-1:
+;; (a|Const(c1)) => (Const(c1)|a)
+(rule 12 (lower (SimpleAst.Or a (SimpleAst.Constant c1 width0)))
     (Or (Constant c1 width0) (Any a))
 )
 
-;; or-constant-to-left-2
-(rule 13(lower (SimpleAst.Or (SimpleAst.Or (SimpleAst.Constant c1 width0) a) b))
+;; or-constant-to-left-2:
+;; ((Const(c1)|a)|b) => (Const(c1)|(a|b))
+(rule 13 (lower (SimpleAst.Or (SimpleAst.Or (SimpleAst.Constant c1 width0) a) b))
     (Or (Constant c1 width0) (Or (Any a) (Any b)))
 )
 
-;; or-constant-to-left-3
-(rule 14(lower (SimpleAst.Or (SimpleAst.Constant c1 width0) (SimpleAst.Or (SimpleAst.Constant c2 width1) a)))
+;; or-constant-to-left-3:
+;; (Const(c1)|(Const(c2)|a)) => ((Const(c1)|Const(c2))|a)
+(rule 14 (lower (SimpleAst.Or (SimpleAst.Constant c1 width0) (SimpleAst.Or (SimpleAst.Constant c2 width1) a)))
     (Or (Or (Constant c1 width0) (Constant c2 width0)) (Any a))
 )
 
-;; or-constant-to-left-4
-(rule 15(lower (SimpleAst.Or (SimpleAst.Constant c1 width0) (SimpleAst.Constant c2 width1)))
+;; or-constant-to-left-4:
+;; (Const(c1)|Const(c2)) => (Const(c1)|Const(c2))
+(rule 15 (lower (SimpleAst.Or (SimpleAst.Constant c1 width0) (SimpleAst.Constant c2 width1)))
     (Or (Constant c1 width0) (Constant c2 width0))
 )
 
-;; xor-constant-to-left-1
-(rule 16(lower (SimpleAst.Xor a (SimpleAst.Constant c1 width0)))
+;; xor-constant-to-left-1:
+;; (a^Const(c1)) => (Const(c1)^a)
+(rule 16 (lower (SimpleAst.Xor a (SimpleAst.Constant c1 width0)))
     (Xor (Constant c1 width0) (Any a))
 )
 
-;; xor-constant-to-left-2
-(rule 17(lower (SimpleAst.Xor (SimpleAst.Xor (SimpleAst.Constant c1 width0) a) b))
+;; xor-constant-to-left-2:
+;; ((Const(c1)^a)^b) => (Const(c1)^(a^b))
+(rule 17 (lower (SimpleAst.Xor (SimpleAst.Xor (SimpleAst.Constant c1 width0) a) b))
     (Xor (Constant c1 width0) (Xor (Any a) (Any b)))
 )
 
-;; xor-constant-to-left-3
-(rule 18(lower (SimpleAst.Xor (SimpleAst.Constant c1 width0) (SimpleAst.Xor (SimpleAst.Constant c2 width1) a)))
+;; xor-constant-to-left-3:
+;; (Const(c1)^(Const(c2)^a)) => ((Const(c1)^Const(c2))^a)
+(rule 18 (lower (SimpleAst.Xor (SimpleAst.Constant c1 width0) (SimpleAst.Xor (SimpleAst.Constant c2 width1) a)))
     (Xor (Xor (Constant c1 width0) (Constant c2 width0)) (Any a))
 )
 
-;; xor-constant-to-left-4
-(rule 19(lower (SimpleAst.Xor (SimpleAst.Constant c1 width0) (SimpleAst.Constant c2 width1)))
+;; xor-constant-to-left-4:
+;; (Const(c1)^Const(c2)) => (Const(c1)^Const(c2))
+(rule 19 (lower (SimpleAst.Xor (SimpleAst.Constant c1 width0) (SimpleAst.Constant c2 width1)))
     (Xor (Constant c1 width0) (Constant c2 width0))
 )
 
-;; neg-constant-to-left-1
-(rule 20(lower (SimpleAst.Neg (SimpleAst.Constant c1 width0)))
+;; neg-constant-to-left-1:
+;; (~Const(c1)) => (~Const(c1))
+(rule 20 (lower (SimpleAst.Neg (SimpleAst.Constant c1 width0)))
     (Neg (Constant c1 width0))
 )
 
-;; arith-to-negation
-(rule 21(lower (SimpleAst.Add (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a)))
+;; arith-to-negation:
+;; (-1+(-1*a)) => (~a)
+(rule 21 (lower (SimpleAst.Add (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) a)))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Neg (Any a))
 )
 
-;; add-negate-to-invert-sign
-(rule 22(lower (SimpleAst.Add (SimpleAst.Constant 1 width0) (SimpleAst.Neg a)))
+;; add-negate-to-invert-sign:
+;; (1+(~a)) => (-1*a)
+(rule 22 (lower (SimpleAst.Add (SimpleAst.Constant mconst0 width0) (SimpleAst.Neg a)))
+(if-let _ (is_constant_modulo mconst0 1 width0))
     (Mul (Constant 18446744073709551615 width0) (Any a))
 )
 
-;; head-scratcher
-(rule 23(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.And a d) (SimpleAst.Or a d)) (SimpleAst.Mul (SimpleAst.And a (SimpleAst.Neg d)) (SimpleAst.And (SimpleAst.Neg a) d))))
+;; head-scratcher:
+;; (((a&d)*(a|d))+((a&(~d))*((~a)&d))) => (a*d)
+(rule 23 (lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.And a d) (SimpleAst.Or a d)) (SimpleAst.Mul (SimpleAst.And a (SimpleAst.Neg d)) (SimpleAst.And (SimpleAst.Neg a) d))))
     (Mul (Any a) (Any d))
 )
 
-;; or-and-to-add
-(rule 24(lower (SimpleAst.Add (SimpleAst.Or x y) (SimpleAst.And x y)))
+;; or-and-to-add:
+;; ((x|y)+(x&y)) => (x+y)
+(rule 24 (lower (SimpleAst.Add (SimpleAst.Or x y) (SimpleAst.And x y)))
     (Add (Any x) (Any y))
 )
 
-;; qsynth-1
-(rule 25(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 2 width0) (SimpleAst.And a (SimpleAst.Neg d))) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) (SimpleAst.Xor a d))))
+;; qsynth-1:
+;; ((2*(a&(~d)))+(-1*(a^d))) => (a+(-1*d))
+(rule 25 (lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And a (SimpleAst.Neg d))) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) (SimpleAst.Xor a d))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
     (Add (Any a) (Mul (Constant 18446744073709551615 width0) (Any d)))
 )
 
-;; qsynth-2
-(rule 26(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 2 width0) (SimpleAst.And d v1)) (SimpleAst.Xor d v1)))
+;; qsynth-2:
+;; ((2*(d&v1))+(d^v1)) => (d+v1)
+(rule 26 (lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And d v1)) (SimpleAst.Xor d v1)))
+(if-let _ (is_constant_modulo mconst0 2 width0))
     (Add (Any d) (Any v1))
 )
 
-;; qsynth-2-commutative
-(rule 27(lower (SimpleAst.Add (SimpleAst.Xor d v1) (SimpleAst.Mul (SimpleAst.Constant 2 width0) (SimpleAst.And d v1))))
+;; qsynth-2-commutative:
+;; ((d^v1)+(2*(d&v1))) => (d+v1)
+(rule 27 (lower (SimpleAst.Add (SimpleAst.Xor d v1) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And d v1))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
     (Add (Any d) (Any v1))
 )
 
-;; or-zero
-(rule 28(lower (SimpleAst.Or (SimpleAst.Constant 0 width0) a))
+;; or-zero:
+;; (0|a) => a
+(rule 28 (lower (SimpleAst.Or (SimpleAst.Constant mconst0 width0) a))
+(if-let _ (is_constant_modulo mconst0 0 width0))
     (Any a)
 )
 
-;; or-maxint
-(rule 29(lower (SimpleAst.Or (SimpleAst.Constant 18446744073709551615 width0) a))
+;; or-maxint:
+;; (-1|a) => -1
+(rule 29 (lower (SimpleAst.Or (SimpleAst.Constant mconst0 width0) a))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Constant 18446744073709551615 width0)
 )
 
-;; or-itself
-(rule 30(lower (SimpleAst.Or a a))
+;; or-itself:
+;; (a|a) => a
+(rule 30 (lower (SimpleAst.Or a a))
     (Any a)
 )
 
-;; or-negated-itself
-(rule 31(lower (SimpleAst.Or a (SimpleAst.Neg a)))
+;; or-negated-itself:
+;; (a|(~a)) => -1
+(rule 31 (lower (SimpleAst.Or a (SimpleAst.Neg a)))
     (Constant 18446744073709551615 (GetWidth a))
 )
 
-;; xor-zero
-(rule 32(lower (SimpleAst.Xor (SimpleAst.Constant 0 width0) a))
+;; xor-zero:
+;; (0^a) => a
+(rule 32 (lower (SimpleAst.Xor (SimpleAst.Constant mconst0 width0) a))
+(if-let _ (is_constant_modulo mconst0 0 width0))
     (Any a)
 )
 
-;; xor-maxint
-(rule 33(lower (SimpleAst.Xor (SimpleAst.Constant 18446744073709551615 width0) a))
+;; xor-maxint:
+;; (-1^a) => (~a)
+(rule 33 (lower (SimpleAst.Xor (SimpleAst.Constant mconst0 width0) a))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Neg (Any a))
 )
 
-;; xor-itself
-(rule 34(lower (SimpleAst.Xor a a))
+;; xor-itself:
+;; (a^a) => 0
+(rule 34 (lower (SimpleAst.Xor a a))
     (Constant 0 (GetWidth a))
 )
 
-;; xor-reduce
-(rule 35(lower (SimpleAst.Or (SimpleAst.And (SimpleAst.Neg a) b) (SimpleAst.And a (SimpleAst.Neg b))))
+;; xor-reduce:
+;; (((~a)&b)|(a&(~b))) => (a^b)
+(rule 35 (lower (SimpleAst.Or (SimpleAst.And (SimpleAst.Neg a) b) (SimpleAst.And a (SimpleAst.Neg b))))
     (Xor (Any a) (Any b))
 )
 
-;; and-zero
-(rule 36(lower (SimpleAst.And (SimpleAst.Constant 0 width0) a))
+;; and-zero:
+;; (0&a) => 0
+(rule 36 (lower (SimpleAst.And (SimpleAst.Constant mconst0 width0) a))
+(if-let _ (is_constant_modulo mconst0 0 width0))
     (Constant 0 width0)
 )
 
-;; and-maxint
-(rule 37(lower (SimpleAst.And (SimpleAst.Constant 18446744073709551615 width0) a))
+;; and-maxint:
+;; (-1&a) => a
+(rule 37 (lower (SimpleAst.And (SimpleAst.Constant mconst0 width0) a))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any a)
 )
 
-;; and-itself
-(rule 38(lower (SimpleAst.And a a))
+;; and-itself:
+;; (a&a) => a
+(rule 38 (lower (SimpleAst.And a a))
     (Any a)
 )
 
-;; and-negated-itself
-(rule 39(lower (SimpleAst.And a (SimpleAst.Neg a)))
+;; and-negated-itself:
+;; (a&(~a)) => 0
+(rule 39 (lower (SimpleAst.And a (SimpleAst.Neg a)))
     (Constant 0 (GetWidth a))
 )
 
-;; add-itself
-(rule 40(lower (SimpleAst.Add a a))
+;; add-itself:
+;; (a+a) => (2*a)
+(rule 40 (lower (SimpleAst.Add a a))
     (Mul (Constant 2 (GetWidth a)) (Any a))
 )
 
-;; add-zero
-(rule 41(lower (SimpleAst.Add (SimpleAst.Constant 0 width0) a))
+;; add-zero:
+;; (0+a) => a
+(rule 41 (lower (SimpleAst.Add (SimpleAst.Constant mconst0 width0) a))
+(if-let _ (is_constant_modulo mconst0 0 width0))
     (Any a)
 )
 
-;; add-cancellation
-(rule 42(lower (SimpleAst.Add a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a)))
+;; add-cancellation:
+;; (a+(-1*a)) => 0
+(rule 42 (lower (SimpleAst.Add a (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a)))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Constant 0 width0)
 )
 
-;; mul-zero
-(rule 43(lower (SimpleAst.Mul (SimpleAst.Constant 0 width0) a))
+;; mul-zero:
+;; (0*a) => 0
+(rule 43 (lower (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a))
+(if-let _ (is_constant_modulo mconst0 0 width0))
     (Constant 0 width0)
 )
 
-;; mul-one
-(rule 44(lower (SimpleAst.Mul (SimpleAst.Constant 1 width0) a))
+;; mul-one:
+;; (1*a) => a
+(rule 44 (lower (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a))
+(if-let _ (is_constant_modulo mconst0 1 width0))
     (Any a)
 )
 
-;; power-zero
-(rule 45(lower (SimpleAst.Pow a (SimpleAst.Constant 0 width0)))
+;; power-zero:
+;; (a**0) => 1
+(rule 45 (lower (SimpleAst.Pow a (SimpleAst.Constant mconst0 width0)))
+(if-let _ (is_constant_modulo mconst0 0 width0))
     (Constant 1 width0)
 )
 
-;; power-one
-(rule 46(lower (SimpleAst.Pow a (SimpleAst.Constant 1 width0)))
+;; power-one:
+;; (a**1) => a
+(rule 46 (lower (SimpleAst.Pow a (SimpleAst.Constant mconst0 width0)))
+(if-let _ (is_constant_modulo mconst0 1 width0))
     (Any a)
 )
 
-;; minus-twice
-(rule 47(lower (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a)))
+;; minus-twice:
+;; (-1*(-1*a)) => a
+(rule 47 (lower (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) a)))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any a)
 )
 
-;; negate-twice
-(rule 48(lower (SimpleAst.Neg (SimpleAst.Neg a)))
+;; negate-twice:
+;; (~(~a)) => a
+(rule 48 (lower (SimpleAst.Neg (SimpleAst.Neg a)))
     (Any a)
 )
 
-;; and-bitwise-negation
-(rule 49(lower (SimpleAst.And (SimpleAst.Add (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a)) b))
+;; and-bitwise-negation:
+;; ((-1+(-1*a))&b) => ((~a)&b)
+(rule 49 (lower (SimpleAst.And (SimpleAst.Add (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) a)) b))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (And (Neg (Any a)) (Any b))
 )
 
-;; or-bitwise-negation
-(rule 50(lower (SimpleAst.Or (SimpleAst.Add (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a)) b))
+;; or-bitwise-negation:
+;; ((-1+(-1*a))|b) => ((~a)|b)
+(rule 50 (lower (SimpleAst.Or (SimpleAst.Add (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) a)) b))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Or (Neg (Any a)) (Any b))
 )
 
-;; xor-bitwise-negation
-(rule 51(lower (SimpleAst.Xor (SimpleAst.Add (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a)) b))
+;; xor-bitwise-negation:
+;; ((-1+(-1*a))^b) => ((~a)^b)
+(rule 51 (lower (SimpleAst.Xor (SimpleAst.Add (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) a)) b))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Xor (Neg (Any a)) (Any b))
 )
 
-;; __merge_inverse_bitwise_terms-19
-(rule 52(lower (SimpleAst.Add (SimpleAst.And x y) (SimpleAst.And (SimpleAst.Neg x) y)))
+;; __merge_inverse_bitwise_terms-19:
+;; ((x&y)+((~x)&y)) => y
+(rule 52 (lower (SimpleAst.Add (SimpleAst.And x y) (SimpleAst.And (SimpleAst.Neg x) y)))
     (Any y)
 )
 
-;; __merge_inverse_bitwise_terms-20
-(rule 53(lower (SimpleAst.Add (SimpleAst.Or x y) (SimpleAst.Or (SimpleAst.Neg x) y)))
+;; __merge_inverse_bitwise_terms-20:
+;; ((x|y)+((~x)|y)) => (-1+y)
+(rule 53 (lower (SimpleAst.Add (SimpleAst.Or x y) (SimpleAst.Or (SimpleAst.Neg x) y)))
     (Add (Constant 18446744073709551615 (GetWidth x)) (Any y))
 )
 
-;; __merge_inverse_bitwise_terms-21
-(rule 54(lower (SimpleAst.Add (SimpleAst.Xor x y) (SimpleAst.Xor (SimpleAst.Neg x) y)))
+;; __merge_inverse_bitwise_terms-21:
+;; ((x^y)+((~x)^y)) => -1
+(rule 54 (lower (SimpleAst.Add (SimpleAst.Xor x y) (SimpleAst.Xor (SimpleAst.Neg x) y)))
     (Constant 18446744073709551615 (GetWidth x))
 )
 
-;; __merge_inverse_bitwise_terms-22
-(rule 55(lower (SimpleAst.Add (SimpleAst.Or x y) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.And (SimpleAst.Neg x) y))))
+;; __merge_inverse_bitwise_terms-22:
+;; ((x|y)+(-1*((~x)&y))) => x
+(rule 55 (lower (SimpleAst.Add (SimpleAst.Or x y) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And (SimpleAst.Neg x) y))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any x)
 )
 
-;; __merge_inverse_bitwise_terms-23
-(rule 56(lower (SimpleAst.Add (SimpleAst.Xor x y) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul (SimpleAst.Constant 2 width1) (SimpleAst.And (SimpleAst.Neg x) y)))))
+;; __merge_inverse_bitwise_terms-23:
+;; ((x^y)+(-1*(2*((~x)&y)))) => (x+(-1*y))
+(rule 56 (lower (SimpleAst.Add (SimpleAst.Xor x y) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) (SimpleAst.And (SimpleAst.Neg x) y)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Add (Any x) (Mul (Constant 18446744073709551615 width0) (Any y)))
 )
 
-;; __merge_inverse_bitwise_terms-24
-(rule 57(lower (SimpleAst.Add (SimpleAst.Xor x y) (SimpleAst.Mul (SimpleAst.Constant 2 width0) (SimpleAst.Or (SimpleAst.Neg x) y))))
+;; __merge_inverse_bitwise_terms-24:
+;; ((x^y)+(2*((~x)|y))) => ((-2+(-1*x))+y)
+(rule 57 (lower (SimpleAst.Add (SimpleAst.Xor x y) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Or (SimpleAst.Neg x) y))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
     (Add (Add (Constant 18446744073709551614 width0) (Mul (Constant 18446744073709551615 width0) (Any x))) (Any y))
 )
 
-;; and-move-bitwise-negation-in
-(rule 58(lower (SimpleAst.Neg (SimpleAst.And (SimpleAst.Neg a) b)))
+;; and-move-bitwise-negation-in:
+;; (~((~a)&b)) => (a|(~b))
+(rule 58 (lower (SimpleAst.Neg (SimpleAst.And (SimpleAst.Neg a) b)))
     (Or (Any a) (Neg (Any b)))
 )
 
-;; or-move-bitwise-negation-in
-(rule 59(lower (SimpleAst.Neg (SimpleAst.Or (SimpleAst.Neg a) b)))
+;; or-move-bitwise-negation-in:
+;; (~((~a)|b)) => (a&(~b))
+(rule 59 (lower (SimpleAst.Neg (SimpleAst.Or (SimpleAst.Neg a) b)))
     (And (Any a) (Neg (Any b)))
 )
 
-;; xor-move-bitwise-negation-in
-(rule 60(lower (SimpleAst.Neg (SimpleAst.Xor (SimpleAst.Neg a) b)))
+;; xor-move-bitwise-negation-in:
+;; (~((~a)^b)) => (a^b)
+(rule 60 (lower (SimpleAst.Neg (SimpleAst.Xor (SimpleAst.Neg a) b)))
     (Xor (Any a) (Any b))
 )
 
-;; merge-power-same-base
-(rule 61(lower (SimpleAst.Mul (SimpleAst.Pow a b) (SimpleAst.Pow a c)))
+;; merge-power-same-base:
+;; ((a**b)*(a**c)) => (a**(b+c))
+(rule 61 (lower (SimpleAst.Mul (SimpleAst.Pow a b) (SimpleAst.Pow a c)))
     (Pow (Any a) (Add (Any b) (Any c)))
 )
 
-;; invert-add-bitwise-not-self
-(rule 62(lower (SimpleAst.Add a (SimpleAst.Neg a)))
+;; invert-add-bitwise-not-self:
+;; (a+(~a)) => -1
+(rule 62 (lower (SimpleAst.Add a (SimpleAst.Neg a)))
     (Constant 18446744073709551615 (GetWidth a))
 )
 
-;; invert-mul-bitwise-not-self
-(rule 63(lower (SimpleAst.Add (SimpleAst.Mul a (SimpleAst.Neg b)) (SimpleAst.Mul a b)))
+;; invert-mul-bitwise-not-self:
+;; ((a*(~b))+(a*b)) => (-1*a)
+(rule 63 (lower (SimpleAst.Add (SimpleAst.Mul a (SimpleAst.Neg b)) (SimpleAst.Mul a b)))
     (Mul (Constant 18446744073709551615 (GetWidth a)) (Any a))
 )
 
-;; __insert_fixed_in_conj-1
-(rule 64(lower (SimpleAst.And y (SimpleAst.Neg (SimpleAst.Or y x))))
+;; __insert_fixed_in_conj-1:
+;; (y&(~(y|x))) => 0
+(rule 64 (lower (SimpleAst.And y (SimpleAst.Neg (SimpleAst.Or y x))))
     (Constant 0 (GetWidth y))
 )
 
-;; xor_same_mult_by_minus_one_1
-(rule 65(lower (SimpleAst.Mul (SimpleAst.Constant 2 width0) (SimpleAst.Or a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a))))
+;; xor_same_mult_by_minus_one_1:
+;; (2*(a|(-1*a))) => (a^(-1*a))
+(rule 65 (lower (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Or a (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
     (Xor (Any a) (Mul (Constant 18446744073709551615 width0) (Any a)))
 )
 
-;; xor_same_mult_by_minus_one_2
-(rule 66(lower (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 width0) (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a))))
+;; xor_same_mult_by_minus_one_2:
+;; (-2*(a&(-1*a))) => (a^(-1*a))
+(rule 66 (lower (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551614 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
     (Xor (Any a) (Mul (Constant 18446744073709551615 width0) (Any a)))
 )
 
-;; conj_zero_rule
-(rule 67(lower (SimpleAst.And a (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a) (SimpleAst.Mul (SimpleAst.Constant 2 width1) a))))
+;; conj_zero_rule:
+;; (a&((-1*a)&(2*a))) => 0
+(rule 67 (lower (SimpleAst.And a (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Constant 0 width0)
 )
 
-;; conj_neg_xor_zero_rule
-(rule 68(lower (SimpleAst.And (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 2 width0) a)) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width2) a)))))
+;; conj_neg_xor_zero_rule:
+;; ((~(2*a))&(-1*(a^(-1*a)))) => 0
+(rule 68 (lower (SimpleAst.And (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a)) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant mconst1 width2) a)))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
     (Constant 0 width0)
 )
 
-;; conj_neg_xor_minus_one_rule
-(rule 69(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 2 width0) a) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width2) a))))))
+;; conj_neg_xor_minus_one_rule:
+;; ((2*a)|(~(-1*(a^(-1*a))))) => -1
+(rule 69 (lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant mconst1 width2) a))))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
     (Constant 18446744073709551615 width0)
 )
 
-;; conj_negated_xor_zero_rule
-(rule 70(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 2 width0) a) (SimpleAst.Neg (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a)))))
+;; conj_negated_xor_zero_rule:
+;; ((2*a)&(~(a^(-1*a)))) => 0
+(rule 70 (lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Neg (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a)))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
     (Constant 0 width0)
 )
 
-;; conj_xor_identity_rule
-(rule 71(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 2 width0) a) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a))))
+;; conj_xor_identity_rule:
+;; ((2*a)&(a^(-1*a))) => (2*a)
+(rule 71 (lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
     (Mul (Constant 2 width0) (Any a))
 )
 
-;; disj_xor_identity_rule
-(rule 72(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 2 width0) a) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width2) a)))))
+;; disj_xor_identity_rule:
+;; ((2*a)|(-1*(a^(-1*a)))) => (2*a)
+(rule 72 (lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) (SimpleAst.Xor a (SimpleAst.Mul (SimpleAst.Constant mconst1 width2) a)))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
     (Mul (Constant 2 width0) (Any a))
 )
 
-;; conj_neg_conj_identity_rule_1
-(rule 73(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a) (SimpleAst.Neg (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant 2 width1) a)))))
+;; conj_neg_conj_identity_rule_1:
+;; ((-1*a)&(~(a&(2*a)))) => (-1*a)
+(rule 73 (lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Neg (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Mul (Constant 18446744073709551615 width0) (Any a))
 )
 
-;; conj_neg_conj_identity_rule_2
-(rule 74(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a) (SimpleAst.Neg (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 width1) a)))))
+;; conj_neg_conj_identity_rule_2:
+;; ((-1*a)&(~(a&(-2*a)))) => (-1*a)
+(rule 74 (lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Neg (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551614 width0))
     (Mul (Constant 18446744073709551615 width0) (Any a))
 )
 
-;; conj_neg_conj_identity_rule_3
-(rule 75(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a) (SimpleAst.Or (SimpleAst.Neg a) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 2 width1) a)))))
+;; conj_neg_conj_identity_rule_3:
+;; ((-1*a)&((~a)|(~(2*a)))) => (-1*a)
+(rule 75 (lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Or (SimpleAst.Neg a) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Mul (Constant 18446744073709551615 width0) (Any a))
 )
 
-;; conj_neg_conj_identity_rule_4
-(rule 76(lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a) (SimpleAst.Or (SimpleAst.Neg a) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 width1) a)))))
+;; conj_neg_conj_identity_rule_4:
+;; ((-1*a)&((~a)|(~(-2*a)))) => (-1*a)
+(rule 76 (lower (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Or (SimpleAst.Neg a) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551614 width0))
     (Mul (Constant 18446744073709551615 width0) (Any a))
 )
 
-;; disj_disj_identity_rule
-(rule 77(lower (SimpleAst.Or a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Or a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a)))))
+;; disj_disj_identity_rule:
+;; (a|(-1*(a|(-1*a)))) => a
+(rule 77 (lower (SimpleAst.Or a (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Or a (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) a)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any a)
 )
 
-;; conj_conj_identity_rule
-(rule 78(lower (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) a)))))
+;; conj_conj_identity_rule:
+;; (a&(-1*(a&(-1*a)))) => a
+(rule 78 (lower (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And a (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) a)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any a)
 )
 
-;; disj_conj_identity_rule_1
-(rule 79(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a) (SimpleAst.And (SimpleAst.Neg a) (SimpleAst.Mul (SimpleAst.Constant 2 width1) a))))
+;; disj_conj_identity_rule_1:
+;; ((-1*a)|((~a)&(2*a))) => (-1*a)
+(rule 79 (lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.And (SimpleAst.Neg a) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Mul (Constant 18446744073709551615 width0) (Any a))
 )
 
-;; disj_conj_identity_rule_2
-(rule 80(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a) (SimpleAst.And (SimpleAst.Neg a) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 width1) a))))
+;; disj_conj_identity_rule_2:
+;; ((-1*a)|((~a)&(-2*a))) => (-1*a)
+(rule 80 (lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.And (SimpleAst.Neg a) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551614 width0))
     (Mul (Constant 18446744073709551615 width0) (Any a))
 )
 
-;; disj_conj_identity_rule_3
-(rule 81(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a) (SimpleAst.Neg (SimpleAst.Or a (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 2 width1) a))))))
+;; disj_conj_identity_rule_3:
+;; ((-1*a)|(~(a|(~(2*a))))) => (-1*a)
+(rule 81 (lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Neg (SimpleAst.Or a (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a))))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Mul (Constant 18446744073709551615 width0) (Any a))
 )
 
-;; disj_conj_identity_rule_4
-(rule 82(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a) (SimpleAst.Neg (SimpleAst.Or a (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 width1) a))))))
+;; disj_conj_identity_rule_4:
+;; ((-1*a)|(~(a|(~(-2*a))))) => (-1*a)
+(rule 82 (lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a) (SimpleAst.Neg (SimpleAst.Or a (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) a))))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551614 width0))
     (Mul (Constant 18446744073709551615 width0) (Any a))
 )
 
-;; disj_conj_identity_rule_2_1
-(rule 83(lower (SimpleAst.Or x (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Neg x)) (SimpleAst.Mul (SimpleAst.Constant 2 width1) (SimpleAst.Neg x)))))
+;; disj_conj_identity_rule_2_1:
+;; (x|((-1*(~x))&(2*(~x)))) => x
+(rule 83 (lower (SimpleAst.Or x (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Neg x)) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) (SimpleAst.Neg x)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Any x)
 )
 
-;; disj_conj_identity_rule_2_2
-(rule 84(lower (SimpleAst.Or x (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Neg x)) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) (SimpleAst.Constant 2 width2)) (SimpleAst.Neg x)))))
+;; disj_conj_identity_rule_2_2:
+;; (x|((-1*(~x))&((-1*2)*(~x)))) => x
+(rule 84 (lower (SimpleAst.Or x (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Neg x)) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) (SimpleAst.Constant mconst1 width2)) (SimpleAst.Neg x)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Any x)
 )
 
-;; conj_disj_identity_rule_1
-(rule 85(lower (SimpleAst.And x (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 2 width1) x))) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width2) (SimpleAst.Neg x)))))
+;; conj_disj_identity_rule_1:
+;; (x&((-1*(~(2*x)))|(-1*(~x)))) => x
+(rule 85 (lower (SimpleAst.And x (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) x))) (SimpleAst.Mul (SimpleAst.Constant mconst0 width2) (SimpleAst.Neg x)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Any x)
 )
 
-;; conj_disj_identity_rule_2
-(rule 86(lower (SimpleAst.And x (SimpleAst.Or (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant 2 width0) (SimpleAst.Neg x))) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) (SimpleAst.Neg x)))))
+;; conj_disj_identity_rule_2:
+;; (x&((~(2*(~x)))|(-1*(~x)))) => x
+(rule 86 (lower (SimpleAst.And x (SimpleAst.Or (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Neg x))) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) (SimpleAst.Neg x)))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
     (Any x)
 )
 
-;; conj_disj_identity_rule_3
-(rule 87(lower (SimpleAst.And x (SimpleAst.Or (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) y) (SimpleAst.Neg x))) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) (SimpleAst.Neg x)))))
+;; conj_disj_identity_rule_3:
+;; (x&((~((-1*y)*(~x)))|(-1*(~x)))) => x
+(rule 87 (lower (SimpleAst.And x (SimpleAst.Or (SimpleAst.Neg (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) y) (SimpleAst.Neg x))) (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) (SimpleAst.Neg x)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any x)
 )
 
-;; disj_neg_disj_identity_rule_1
-(rule 88(lower (SimpleAst.Or x (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) x) (SimpleAst.Mul y x)))))
+;; disj_neg_disj_identity_rule_1:
+;; (x|(-1*((-1*x)|(y*x)))) => x
+(rule 88 (lower (SimpleAst.Or x (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) x) (SimpleAst.Mul y x)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any x)
 )
 
-;; disj_neg_disj_identity_rule_2
-(rule 89(lower (SimpleAst.Or x (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) x) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width2) y) x)))))
+;; disj_neg_disj_identity_rule_2:
+;; (x|(-1*((-1*x)|((-1*y)*x)))) => x
+(rule 89 (lower (SimpleAst.Or x (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) x) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant mconst0 width2) y) x)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any x)
 )
 
-;; disj_sub_disj_identity_rule_1
-(rule 90(lower (SimpleAst.Or x (SimpleAst.Add (SimpleAst.Or x y) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) y))))
+;; disj_sub_disj_identity_rule_1:
+;; (x|((x|y)+(-1*y))) => x
+(rule 90 (lower (SimpleAst.Or x (SimpleAst.Add (SimpleAst.Or x y) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) y))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any x)
 )
 
-;; disj_sub_disj_identity_rule_2
-(rule 91(lower (SimpleAst.Or x (SimpleAst.Add x (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.And x y)))))
+;; disj_sub_disj_identity_rule_2:
+;; (x|(x+(-1*(x&y)))) => x
+(rule 91 (lower (SimpleAst.Or x (SimpleAst.Add x (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And x y)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any x)
 )
 
-;; conj_add_conj_identity_rule
-(rule 92(lower (SimpleAst.And x (SimpleAst.Add x (SimpleAst.And (SimpleAst.Neg x) y))))
+;; conj_add_conj_identity_rule:
+;; (x&(x+((~x)&y))) => x
+(rule 92 (lower (SimpleAst.And x (SimpleAst.Add x (SimpleAst.And (SimpleAst.Neg x) y))))
     (Any x)
 )
 
-;; disj_disj_conj_rule
-(rule 93(lower (SimpleAst.Or x (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) y) (SimpleAst.And x y)))))
+;; disj_disj_conj_rule:
+;; (x|(-1*((-1*y)|(x&y)))) => (x|y)
+(rule 93 (lower (SimpleAst.Or x (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) y) (SimpleAst.And x y)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Or (Any x) (Any y))
 )
 
-;; conj_conj_disj_rule
-(rule 94(lower (SimpleAst.And x (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) y) (SimpleAst.Or x y)))))
+;; conj_conj_disj_rule:
+;; (x&(-1*((-1*y)&(x|y)))) => (x&y)
+(rule 94 (lower (SimpleAst.And x (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) y) (SimpleAst.Or x y)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (And (Any x) (Any y))
 )
 
-;; disj_disj_conj_rule_2
-(rule 95(lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) x) (SimpleAst.And (SimpleAst.And x y) z))) (SimpleAst.And x y)))
+;; disj_disj_conj_rule_2:
+;; ((-1*((-1*x)|((x&y)&z)))|(x&y)) => x
+(rule 95 (lower (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Or (SimpleAst.Mul (SimpleAst.Constant mconst0 width1) x) (SimpleAst.And (SimpleAst.And x y) z))) (SimpleAst.And x y)))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any x)
 )
 
-;; __check_bitwise_in_sums_cancel_terms-4
-(rule 96(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 2 width0) (SimpleAst.Or x y)) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) x)))
+;; __check_bitwise_in_sums_cancel_terms-4:
+;; ((2*(x|y))+(-1*x)) => (y+(x^y))
+(rule 96 (lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Or x y)) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) x)))
+(if-let _ (is_constant_modulo mconst0 2 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
     (Add (Any y) (Xor (Any x) (Any y)))
 )
 
-;; __check_disj_involving_xor_in_sums_rule_1
-(rule 97(lower (SimpleAst.Or (SimpleAst.And x y) (SimpleAst.Xor x y)))
+;; __check_disj_involving_xor_in_sums_rule_1:
+;; ((x&y)|(x^y)) => ((x&y)+(x^y))
+(rule 97 (lower (SimpleAst.Or (SimpleAst.And x y) (SimpleAst.Xor x y)))
     (Add (And (Any x) (Any y)) (Xor (Any x) (Any y)))
 )
 
-;; __check_disj_involving_xor_in_sums_rule_2
-(rule 98(lower (SimpleAst.Or (SimpleAst.And (SimpleAst.And z x) y) (SimpleAst.Xor x y)))
+;; __check_disj_involving_xor_in_sums_rule_2:
+;; (((z&x)&y)|(x^y)) => (((z&x)&y)+(x^y))
+(rule 98 (lower (SimpleAst.Or (SimpleAst.And (SimpleAst.And z x) y) (SimpleAst.Xor x y)))
     (Add (And (And (Any z) (Any x)) (Any y)) (Xor (Any x) (Any y)))
 )
 
-;; __check_xor_involving_disj_rule
-(rule 99(lower (SimpleAst.Xor x (SimpleAst.Or x y)))
+;; __check_xor_involving_disj_rule:
+;; (x^(x|y)) => ((~x)&y)
+(rule 99 (lower (SimpleAst.Xor x (SimpleAst.Or x y)))
     (And (Neg (Any x)) (Any y))
 )
 
-;; add-negated-itself-by-two
-(rule 100(lower (SimpleAst.Add (SimpleAst.Mul a a) (SimpleAst.Mul a (SimpleAst.Neg a))))
+;; add-negated-itself-by-two:
+;; ((a*a)+(a*(~a))) => (-1*a)
+(rule 100 (lower (SimpleAst.Add (SimpleAst.Mul a a) (SimpleAst.Mul a (SimpleAst.Neg a))))
     (Mul (Constant 18446744073709551615 (GetWidth a)) (Any a))
 )
 
-;; or-mul-shrink
-(rule 101(lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Mul c x) (SimpleAst.Mul c y)) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul c (SimpleAst.And x y)))))
+;; or-mul-shrink:
+;; (((c*x)+(c*y))+(-1*(c*(x&y)))) => (c*(x|y))
+(rule 101 (lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Mul c x) (SimpleAst.Mul c y)) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul c (SimpleAst.And x y)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Mul (Any c) (Or (Any x) (Any y)))
 )
 
-;; or-shrink
-(rule 102(lower (SimpleAst.Add (SimpleAst.And a b) (SimpleAst.Xor a b)))
+;; or-shrink:
+;; ((a&b)+(a^b)) => (a|b)
+(rule 102 (lower (SimpleAst.Add (SimpleAst.And a b) (SimpleAst.Xor a b)))
     (Or (Any a) (Any b))
 )
 
-;; or-shrink-2
-(rule 103(lower (SimpleAst.Neg (SimpleAst.And (SimpleAst.Neg a) (SimpleAst.Neg b))))
+;; or-shrink-2:
+;; (~((~a)&(~b))) => (b|a)
+(rule 103 (lower (SimpleAst.Neg (SimpleAst.And (SimpleAst.Neg a) (SimpleAst.Neg b))))
     (Or (Any b) (Any a))
 )
 
-;; or-shrink-3
-(rule 104(lower (SimpleAst.Add x (SimpleAst.And y (SimpleAst.Neg x))))
+;; or-shrink-3:
+;; (x+(y&(~x))) => (x|y)
+(rule 104 (lower (SimpleAst.Add x (SimpleAst.And y (SimpleAst.Neg x))))
     (Or (Any x) (Any y))
 )
 
-;; or-shrink-4
-(rule 105(lower (SimpleAst.Or (SimpleAst.Xor a b) a))
+;; or-shrink-4:
+;; ((a^b)|a) => (a|b)
+(rule 105 (lower (SimpleAst.Or (SimpleAst.Xor a b) a))
     (Or (Any a) (Any b))
 )
 
-;; xor-mul-shrink
-(rule 106(lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Mul c x) (SimpleAst.Mul c y)) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant 2 width1) c) (SimpleAst.And x y)))))
+;; xor-mul-shrink:
+;; (((c*x)+(c*y))+(-1*((2*c)*(x&y)))) => (c*(x^y))
+(rule 106 (lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Mul c x) (SimpleAst.Mul c y)) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) c) (SimpleAst.And x y)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Mul (Any c) (Xor (Any x) (Any y)))
 )
 
-;; xor-shrink
-(rule 107(lower (SimpleAst.Add (SimpleAst.Add x y) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 width0) (SimpleAst.And x y))))
+;; xor-shrink:
+;; ((x+y)+(-2*(x&y))) => (x^y)
+(rule 107 (lower (SimpleAst.Add (SimpleAst.Add x y) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And x y))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551614 width0))
     (Xor (Any x) (Any y))
 )
 
-;; xor-shrink2
-(rule 108(lower (SimpleAst.Add (SimpleAst.Or a b) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.And a b))))
+;; xor-shrink2:
+;; ((a|b)+(-1*(a&b))) => (a^b)
+(rule 108 (lower (SimpleAst.Add (SimpleAst.Or a b) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And a b))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Xor (Any a) (Any b))
 )
 
-;; xor-shrink-3
-(rule 109(lower (SimpleAst.And (SimpleAst.Neg (SimpleAst.And (SimpleAst.Neg a) (SimpleAst.Neg b))) (SimpleAst.Neg (SimpleAst.And a b))))
+;; xor-shrink-3:
+;; ((~((~a)&(~b)))&(~(a&b))) => (b^a)
+(rule 109 (lower (SimpleAst.And (SimpleAst.Neg (SimpleAst.And (SimpleAst.Neg a) (SimpleAst.Neg b))) (SimpleAst.Neg (SimpleAst.And a b))))
     (Xor (Any b) (Any a))
 )
 
-;; negated-xor-shrink-4
-(rule 110(lower (SimpleAst.Add (SimpleAst.And x y) (SimpleAst.Neg (SimpleAst.Or x y))))
+;; negated-xor-shrink-4:
+;; ((x&y)+(~(x|y))) => (~(x^y))
+(rule 110 (lower (SimpleAst.Add (SimpleAst.And x y) (SimpleAst.Neg (SimpleAst.Or x y))))
     (Neg (Xor (Any x) (Any y)))
 )
 
-;; and-mul-shrink
-(rule 111(lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Mul a b) (SimpleAst.Mul a c)) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul a (SimpleAst.Or b c)))))
+;; and-mul-shrink:
+;; (((a*b)+(a*c))+(-1*(a*(b|c)))) => (a*(b&c))
+(rule 111 (lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.Mul a b) (SimpleAst.Mul a c)) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul a (SimpleAst.Or b c)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Mul (Any a) (And (Any b) (Any c)))
 )
 
-;; and-shrink
-(rule 112(lower (SimpleAst.Add (SimpleAst.Or a b) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Xor a b))))
+;; and-shrink:
+;; ((a|b)+(-1*(a^b))) => (a&b)
+(rule 112 (lower (SimpleAst.Add (SimpleAst.Or a b) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Xor a b))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (And (Any a) (Any b))
 )
 
-;; add-shrink
-(rule 113(lower (SimpleAst.Add (SimpleAst.And a b) (SimpleAst.Or a b)))
+;; add-shrink:
+;; ((a&b)+(a|b)) => (a+b)
+(rule 113 (lower (SimpleAst.Add (SimpleAst.And a b) (SimpleAst.Or a b)))
     (Add (Any a) (Any b))
 )
 
-;; cancel-and-reduce-bitwise-subtraction
-(rule 114(lower (SimpleAst.Add (SimpleAst.Mul b a) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul b (SimpleAst.And a d)))))
+;; cancel-and-reduce-bitwise-subtraction:
+;; ((b*a)+(-1*(b*(a&d)))) => (b*(a&(~d)))
+(rule 114 (lower (SimpleAst.Add (SimpleAst.Mul b a) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul b (SimpleAst.And a d)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Mul (Any b) (And (Any a) (Neg (Any d))))
 )
 
-;; merge-and-multipliers
-(rule 115(lower (SimpleAst.Add (SimpleAst.Mul x (SimpleAst.And a c)) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Mul y (SimpleAst.And a c)))))
+;; merge-and-multipliers:
+;; ((x*(a&c))+(-1*(y*(a&c)))) => ((x+(-1*y))*(a&c))
+(rule 115 (lower (SimpleAst.Add (SimpleAst.Mul x (SimpleAst.And a c)) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Mul y (SimpleAst.And a c)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Mul (Add (Any x) (Mul (Constant 18446744073709551615 width0) (Any y))) (And (Any a) (Any c)))
 )
 
-;; mba-1
-(rule 116(lower (SimpleAst.Add d (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.And d a))))
+;; mba-1:
+;; (d+(-1*(d&a))) => ((~a)&d)
+(rule 116 (lower (SimpleAst.Add d (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And d a))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (And (Neg (Any a)) (Any d))
 )
 
-;; mba-2
-(rule 117(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.And d a)) d))
+;; mba-2:
+;; ((-1*(d&a))+d) => ((~a)&d)
+(rule 117 (lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And d a)) d))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (And (Neg (Any a)) (Any d))
 )
 
-;; mba-4
-(rule 118(lower (SimpleAst.Add (SimpleAst.Or d a) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.And a (SimpleAst.Neg d)))))
+;; mba-4:
+;; ((d|a)+(-1*(a&(~d)))) => d
+(rule 118 (lower (SimpleAst.Add (SimpleAst.Or d a) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And a (SimpleAst.Neg d)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any d)
 )
 
-;; mba-5
-(rule 119(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.And a (SimpleAst.Neg d))) (SimpleAst.Or d a)))
+;; mba-5:
+;; ((-1*(a&(~d)))+(d|a)) => d
+(rule 119 (lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.And a (SimpleAst.Neg d))) (SimpleAst.Or d a)))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Any d)
 )
 
-;; mba-9
-(rule 120(lower (SimpleAst.Add (SimpleAst.Add a (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 width0) d)) (SimpleAst.Mul (SimpleAst.Constant 2 width1) (SimpleAst.And (SimpleAst.Neg a) (SimpleAst.Mul (SimpleAst.Constant 2 width2) d)))))
+;; mba-9:
+;; ((a+(-2*d))+(2*((~a)&(2*d)))) => (a^(2*d))
+(rule 120 (lower (SimpleAst.Add (SimpleAst.Add a (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) d)) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) (SimpleAst.And (SimpleAst.Neg a) (SimpleAst.Mul (SimpleAst.Constant mconst1 width2) d)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551614 width0))
+(if-let _ (is_constant_modulo mconst1 2 width0))
     (Xor (Any a) (Mul (Constant 2 width0) (Any d)))
 )
 
-;; new-2
-(rule 121(lower (SimpleAst.Add (SimpleAst.Xor x y) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Or x y))))
+;; new-2:
+;; ((x^y)+(-1*(x|y))) => (-1*(x&y))
+(rule 121 (lower (SimpleAst.Add (SimpleAst.Xor x y) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Or x y))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Mul (Constant 18446744073709551615 width0) (And (Any x) (Any y)))
 )
 
-;; new-3
-(rule 122(lower (SimpleAst.Add (SimpleAst.Or a b) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) a)))
+;; new-3:
+;; ((a|b)+(-1*a)) => ((~a)&b)
+(rule 122 (lower (SimpleAst.Add (SimpleAst.Or a b) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) a)))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (And (Neg (Any a)) (Any b))
 )
 
-;; new-16
-(rule 123(lower (SimpleAst.And (SimpleAst.Xor a b) a))
+;; new-16:
+;; ((a^b)&a) => (a&(~b))
+(rule 123 (lower (SimpleAst.And (SimpleAst.Xor a b) a))
     (And (Any a) (Neg (Any b)))
 )
 
-;; new-23
-(rule 124(lower (SimpleAst.Add (SimpleAst.And (SimpleAst.Neg x) y) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) y)))
+;; new-23:
+;; (((~x)&y)+(-1*y)) => (-1*(x&y))
+(rule 124 (lower (SimpleAst.Add (SimpleAst.And (SimpleAst.Neg x) y) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) y)))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Mul (Constant 18446744073709551615 width0) (And (Any x) (Any y)))
 )
 
-;; new-24
-(rule 125(lower (SimpleAst.Add (SimpleAst.And (SimpleAst.Neg x) y) (SimpleAst.Mul y (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Constant 1 width1)))))
+;; new-24:
+;; (((~x)&y)+(y*(-1*1))) => (-1*(x&y))
+(rule 125 (lower (SimpleAst.Add (SimpleAst.And (SimpleAst.Neg x) y) (SimpleAst.Mul y (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Constant mconst1 width1)))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 1 width0))
     (Mul (Constant 18446744073709551615 width0) (And (Any x) (Any y)))
 )
 
-;; opaque-constant-1
-(rule 126(lower (SimpleAst.And (SimpleAst.Constant 1 width0) (SimpleAst.Xor y (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width1) (SimpleAst.Constant 2 width2)) y))))
+;; opaque-constant-1:
+;; (1&(y^((-1*2)+y))) => 0
+(rule 126 (lower (SimpleAst.And (SimpleAst.Constant mconst0 width0) (SimpleAst.Xor y (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) (SimpleAst.Constant mconst2 width2)) y))))
+(if-let _ (is_constant_modulo mconst0 1 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst2 2 width0))
     (Constant 0 width0)
 )
 
-;; opaque-constant-1-again
-(rule 127(lower (SimpleAst.Add (SimpleAst.And x y) (SimpleAst.Neg (SimpleAst.And x y))))
+;; opaque-constant-1-again:
+;; ((x&y)+(~(x&y))) => -1
+(rule 127 (lower (SimpleAst.Add (SimpleAst.And x y) (SimpleAst.Neg (SimpleAst.And x y))))
     (Constant 18446744073709551615 (GetWidth x))
 )
 
-;; opaque-constant-two
-(rule 128(lower (SimpleAst.Xor (SimpleAst.And (SimpleAst.Constant 1 width0) y) (SimpleAst.And (SimpleAst.Constant 1 width1) (SimpleAst.Add y (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width2) (SimpleAst.Constant 2 width3))))))
+;; opaque-constant-two:
+;; ((1&y)^(1&(y+(-1*2)))) => 0
+(rule 128 (lower (SimpleAst.Xor (SimpleAst.And (SimpleAst.Constant mconst0 width0) y) (SimpleAst.And (SimpleAst.Constant mconst0 width1) (SimpleAst.Add y (SimpleAst.Mul (SimpleAst.Constant mconst1 width2) (SimpleAst.Constant mconst2 width3))))))
+(if-let _ (is_constant_modulo mconst0 1 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst2 2 width0))
     (Constant 0 width0)
 )
 
-;; opaque-variable-or
-(rule 129(lower (SimpleAst.Or (SimpleAst.And a b) a))
+;; opaque-variable-or:
+;; ((a&b)|a) => a
+(rule 129 (lower (SimpleAst.Or (SimpleAst.And a b) a))
     (Any a)
 )
 
-;; opaque-variable-add
-(rule 130(lower (SimpleAst.Add (SimpleAst.And a (SimpleAst.Neg d)) (SimpleAst.And d a)))
+;; opaque-variable-add:
+;; ((a&(~d))+(d&a)) => a
+(rule 130 (lower (SimpleAst.Add (SimpleAst.And a (SimpleAst.Neg d)) (SimpleAst.And d a)))
     (Any a)
 )
 
-;; reduce-and-xor-negated
-(rule 131(lower (SimpleAst.And (SimpleAst.Xor a b) (SimpleAst.Xor c (SimpleAst.Xor a (SimpleAst.Neg b)))))
+;; reduce-and-xor-negated:
+;; ((a^b)&(c^(a^(~b)))) => (c&(a^b))
+(rule 131 (lower (SimpleAst.And (SimpleAst.Xor a b) (SimpleAst.Xor c (SimpleAst.Xor a (SimpleAst.Neg b)))))
     (And (Any c) (Xor (Any a) (Any b)))
 )
 
-;; reduce-and-xor
-(rule 132(lower (SimpleAst.Xor (SimpleAst.And y (SimpleAst.Xor a1 c1)) (SimpleAst.And y x)))
+;; reduce-and-xor:
+;; ((y&(a1^c1))^(y&x)) => (y&(x^(a1^c1)))
+(rule 132 (lower (SimpleAst.Xor (SimpleAst.And y (SimpleAst.Xor a1 c1)) (SimpleAst.And y x)))
     (And (Any y) (Xor (Any x) (Xor (Any a1) (Any c1))))
 )
 
-;; reduced-or-or-xor
-(rule 133(lower (SimpleAst.Xor (SimpleAst.Or (SimpleAst.Xor y z) (SimpleAst.And y x)) y))
+;; reduced-or-or-xor:
+;; (((y^z)|(y&x))^y) => (z&(~(x&y)))
+(rule 133 (lower (SimpleAst.Xor (SimpleAst.Or (SimpleAst.Xor y z) (SimpleAst.And y x)) y))
     (And (Any z) (Neg (And (Any x) (Any y))))
 )
 
-;; combine-and-add-xor-or
-(rule 134(lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.And x y) (SimpleAst.Xor z (SimpleAst.Or x y))) (SimpleAst.Mul (SimpleAst.Constant 2 width0) (SimpleAst.Or z (SimpleAst.Neg (SimpleAst.And x y))))))
+;; combine-and-add-xor-or:
+;; (((x&y)+(z^(x|y)))+(2*(z|(~(x&y))))) => (-2+((z^x)^y))
+(rule 134 (lower (SimpleAst.Add (SimpleAst.Add (SimpleAst.And x y) (SimpleAst.Xor z (SimpleAst.Or x y))) (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Or z (SimpleAst.Neg (SimpleAst.And x y))))))
+(if-let _ (is_constant_modulo mconst0 2 width0))
     (Add (Constant 18446744073709551614 width0) (Xor (Xor (Any z) (Any x)) (Any y)))
 )
 
-;; combine-and-add-xor-or-2
-(rule 135(lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) (SimpleAst.Add (SimpleAst.And x y) (SimpleAst.Xor z (SimpleAst.Or x y)))) (SimpleAst.Mul (SimpleAst.Constant 18446744073709551614 width1) (SimpleAst.Or z (SimpleAst.Neg (SimpleAst.And x y))))))
+;; combine-and-add-xor-or-2:
+;; ((-1*((x&y)+(z^(x|y))))+(-2*(z|(~(x&y))))) => (2+(-1*((z^x)^y)))
+(rule 135 (lower (SimpleAst.Add (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) (SimpleAst.Add (SimpleAst.And x y) (SimpleAst.Xor z (SimpleAst.Or x y)))) (SimpleAst.Mul (SimpleAst.Constant mconst1 width1) (SimpleAst.Or z (SimpleAst.Neg (SimpleAst.And x y))))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
+(if-let _ (is_constant_modulo mconst1 18446744073709551614 width0))
     (Add (Constant 2 width0) (Mul (Constant 18446744073709551615 width0) (Xor (Xor (Any z) (Any x)) (Any y))))
 )
 
-;; pack-add-xor-or
-(rule 136(lower (SimpleAst.Add (SimpleAst.Xor y (SimpleAst.Xor x z)) (SimpleAst.Xor z (SimpleAst.And y x))))
+;; pack-add-xor-or:
+;; ((y^(x^z))+(z^(y&x))) => (z+(z^(x|y)))
+(rule 136 (lower (SimpleAst.Add (SimpleAst.Xor y (SimpleAst.Xor x z)) (SimpleAst.Xor z (SimpleAst.And y x))))
     (Add (Any z) (Xor (Any z) (Or (Any x) (Any y))))
 )
 
-;; pack-negated-xor
-(rule 137(lower (SimpleAst.And z (SimpleAst.Or y (SimpleAst.Xor z x))))
+;; pack-negated-xor:
+;; (z&(y|(z^x))) => (z&((~x)|y))
+(rule 137 (lower (SimpleAst.And z (SimpleAst.Or y (SimpleAst.Xor z x))))
     (And (Any z) (Or (Neg (Any x)) (Any y)))
 )
 
-;; negated-and-add
-(rule 138(lower (SimpleAst.Add (SimpleAst.And (SimpleAst.Neg x) y) (SimpleAst.And y x)))
+;; negated-and-add:
+;; (((~x)&y)+(y&x)) => y
+(rule 138 (lower (SimpleAst.Add (SimpleAst.And (SimpleAst.Neg x) y) (SimpleAst.And y x)))
     (Any y)
 )
 
-;; pack-negated-and-neg-into-xor
-(rule 139(lower (SimpleAst.Add (SimpleAst.And (SimpleAst.And a (SimpleAst.Neg b)) (SimpleAst.Neg c)) (SimpleAst.And (SimpleAst.And a b) c)))
+;; pack-negated-and-neg-into-xor:
+;; (((a&(~b))&(~c))+((a&b)&c)) => (a&(~(b^c)))
+(rule 139 (lower (SimpleAst.Add (SimpleAst.And (SimpleAst.And a (SimpleAst.Neg b)) (SimpleAst.Neg c)) (SimpleAst.And (SimpleAst.And a b) c)))
     (And (Any a) (Neg (Xor (Any b) (Any c))))
 )
 
-;; pack-neg-or-and-into-negated-xor
-(rule 140(lower (SimpleAst.Or (SimpleAst.Neg (SimpleAst.Or b c)) (SimpleAst.And b c)))
+;; pack-neg-or-and-into-negated-xor:
+;; ((~(b|c))|(b&c)) => (~(b^c))
+(rule 140 (lower (SimpleAst.Or (SimpleAst.Neg (SimpleAst.Or b c)) (SimpleAst.And b c)))
     (Neg (Xor (Any b) (Any c)))
 )
 
-;; combine-xor-or
-(rule 141(lower (SimpleAst.Xor z (SimpleAst.Or x (SimpleAst.Neg (SimpleAst.And y z)))))
+;; combine-xor-or:
+;; (z^(x|(~(y&z)))) => (~(z&(x|(~y))))
+(rule 141 (lower (SimpleAst.Xor z (SimpleAst.Or x (SimpleAst.Neg (SimpleAst.And y z)))))
     (Neg (And (Any z) (Or (Any x) (Neg (Any y)))))
 )
 
-;; pack-and-xor
-(rule 142(lower (SimpleAst.And (SimpleAst.And y x) (SimpleAst.Xor x z)))
+;; pack-and-xor:
+;; ((y&x)&(x^z)) => ((x&y)&(~z))
+(rule 142 (lower (SimpleAst.And (SimpleAst.And y x) (SimpleAst.Xor x z)))
     (And (And (Any x) (Any y)) (Neg (Any z)))
 )
 
-;; pack-into-negated-and-or-xor
-(rule 143(lower (SimpleAst.And (SimpleAst.Neg (SimpleAst.And y x)) (SimpleAst.Xor x (SimpleAst.Xor z (SimpleAst.Neg y)))))
+;; pack-into-negated-and-or-xor:
+;; ((~(y&x))&(x^(z^(~y)))) => (~((x&y)|((x^y)^z)))
+(rule 143 (lower (SimpleAst.And (SimpleAst.Neg (SimpleAst.And y x)) (SimpleAst.Xor x (SimpleAst.Xor z (SimpleAst.Neg y)))))
     (Neg (Or (And (Any x) (Any y)) (Xor (Xor (Any x) (Any y)) (Any z))))
 )
 
-;; linear-mba-1
-(rule 144(lower (SimpleAst.Add (SimpleAst.Xor y (SimpleAst.Or x (SimpleAst.And y (SimpleAst.Neg z)))) (SimpleAst.Or (SimpleAst.Xor z (SimpleAst.Xor x y)) (SimpleAst.And x y))))
+;; linear-mba-1:
+;; ((y^(x|(y&(~z))))+((z^(x^y))|(x&y))) => (x+(x^(y|z)))
+(rule 144 (lower (SimpleAst.Add (SimpleAst.Xor y (SimpleAst.Or x (SimpleAst.And y (SimpleAst.Neg z)))) (SimpleAst.Or (SimpleAst.Xor z (SimpleAst.Xor x y)) (SimpleAst.And x y))))
     (Add (Any x) (Xor (Any x) (Or (Any y) (Any z))))
 )
 
-;; linear-mba-2
-(rule 145(lower (SimpleAst.Add (SimpleAst.Mul c1 (SimpleAst.Xor z (SimpleAst.Neg (SimpleAst.Or x (SimpleAst.And z y))))) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant 18446744073709551615 width0) c1) (SimpleAst.Add (SimpleAst.And z x) (SimpleAst.Or y (SimpleAst.Or x (SimpleAst.Neg z)))))))
+;; linear-mba-2:
+;; ((c1*(z^(~(x|(z&y)))))+((-1*c1)*((z&x)+(y|(x|(~z)))))) => ((-1*c1)*x)
+(rule 145 (lower (SimpleAst.Add (SimpleAst.Mul c1 (SimpleAst.Xor z (SimpleAst.Neg (SimpleAst.Or x (SimpleAst.And z y))))) (SimpleAst.Mul (SimpleAst.Mul (SimpleAst.Constant mconst0 width0) c1) (SimpleAst.Add (SimpleAst.And z x) (SimpleAst.Or y (SimpleAst.Or x (SimpleAst.Neg z)))))))
+(if-let _ (is_constant_modulo mconst0 18446744073709551615 width0))
     (Mul (Mul (Constant 18446744073709551615 width0) (Any c1)) (Any x))
 )
-
-
-
 
 
 (convert SimpleAst index

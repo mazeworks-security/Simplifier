@@ -2,22 +2,20 @@
 using Mba.Common.MSiMBA;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace Mba.Simplifier.DSL
 {
+    // Class for lowering our term rewriting DSL down to ISLE definitions
     public static class IsleBackend
     {
-        const int HARDCODED_WIDTH = 64;
-
-        const string WIDTH_NAME = "width";
-
         public static string GenerateIsleDsl(IReadOnlyList<DslRule> rules)
         {
             var sb = new StringBuilder();
-
             int rc = 0;
             foreach (var rewrite in rules)
             {
@@ -26,15 +24,22 @@ namespace Mba.Simplifier.DSL
                 // Special care needs to be taken for zext/trunc instructions though.
                 HashSet<string> boundedIndices = new();
                 HashSet<string> boundedWidths = new();
+                Dictionary<ulong, string> modularConstants = new();
 
-                sb.Append($";; {rewrite.Name}\n");
-                sb.Append($"(rule {rc}");
+                sb.Append($";; {rewrite.Name}:\n;; {rewrite.Before.ToString()} => {rewrite.After.ToString()}\n");
+                sb.Append($"(rule {rc} ");
                 rc++;
 
-                TranspileLhs(rewrite.Before, sb, boundedIndices, boundedWidths);
+                TranspileLhs(rewrite.Before, sb, boundedIndices, boundedWidths, modularConstants);
                 sb.Append("\n");
-                sb.Append("    ");
 
+                // Lower condition
+                foreach(var (value, name) in modularConstants)
+                {
+                    sb.AppendLine($"(if-let _ (is_constant_modulo {name} {value} {boundedWidths.First()}))");
+                }
+
+                sb.Append("    ");
                 TranspileRhs(rewrite.After, sb, boundedIndices, boundedWidths);
                 sb.Append("\n)\n\n");
             }
@@ -42,16 +47,15 @@ namespace Mba.Simplifier.DSL
             return sb.ToString();
         }
 
-        private static void TranspileLhs(AstNode ast, StringBuilder sb, HashSet<string> boundedIndices, HashSet<string> boundedWidths)
+        private static void TranspileLhs(AstNode ast, StringBuilder sb, HashSet<string> boundedIndices, HashSet<string> boundedWidths, Dictionary<ulong, string> modularConstants)
         {
             int dataCount = 0;
             sb.Append("(lower ");
-            TranspileLhsInternal(ast, sb, boundedIndices, boundedWidths);
+            TranspileLhsInternal(ast, sb, boundedIndices, boundedWidths, modularConstants);
             sb.Append(")");
         }
 
-
-        private static void TranspileLhsInternal(AstNode ast, StringBuilder sb, HashSet<string> boundedIndices, HashSet<string> boundedWidths)
+        private static void TranspileLhsInternal(AstNode ast, StringBuilder sb, HashSet<string> boundedIndices, HashSet<string> boundedWidths, Dictionary<ulong, string> modularConstants)
         {
             bool parens = false;
             if (ast is VarNode varNode)
@@ -68,7 +72,7 @@ namespace Mba.Simplifier.DSL
             for (int i = 0; i < ast.Children.Count; i++)
             {
                 var child = ast.Children[i];
-                TranspileLhsInternal(child, sb, boundedIndices, boundedWidths);
+                TranspileLhsInternal(child, sb, boundedIndices, boundedWidths, modularConstants);
                 if (i != ast.Children.Count - 1)
                 {
                     sb.Append(" ");
@@ -77,17 +81,18 @@ namespace Mba.Simplifier.DSL
 
             if (ast is ConstNode constNode)
             {
-                var name = $"width{boundedWidths.Count}";
-                boundedWidths.Add(name);
+                var widthName = $"width{boundedWidths.Count}";
+                boundedWidths.Add(widthName);
 
-                sb.Append($"{(ulong)constNode.Value} {name}");
+                var constName = modularConstants.ContainsKey((ulong)constNode.Value) ? modularConstants[(ulong)constNode.Value] : $"mconst{modularConstants.Count}";
+                sb.Append($"{constName} {widthName}");
+                modularConstants.TryAdd((ulong)constNode.Value, constName);
             }
 
             if (ast is WildCardConstantNode wc)
             {
                 var name = $"width{boundedWidths.Count}";
                 boundedWidths.Add(name);
-
                 sb.Append($"{wc.Name} {name}"); // TODO: Maybe we need to specify the width here?
             }
 

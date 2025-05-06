@@ -11,7 +11,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 
 bool printUsage = false;
-uint bitWidth = 64;
+uint bitWidth = 8;
 bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
@@ -72,6 +72,7 @@ Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n\n");
 
 var input = id;
 id = ctx.RecursiveSimplify(id);
+
 for (int i = 0; i < 3; i++)
 {
     // Apply our simplification procedure.
