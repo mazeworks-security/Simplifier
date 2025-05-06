@@ -49,7 +49,6 @@ namespace Mba.Simplifier.DSL
 
         private static void TranspileLhs(AstNode ast, StringBuilder sb, HashSet<string> boundedIndices, HashSet<string> boundedWidths, Dictionary<ulong, string> modularConstants)
         {
-            int dataCount = 0;
             sb.Append("(lower ");
             TranspileLhsInternal(ast, sb, boundedIndices, boundedWidths, modularConstants);
             sb.Append(")");
@@ -69,6 +68,7 @@ namespace Mba.Simplifier.DSL
                 parens = true;
                 sb.Append($"(SimpleAst.{GetOperatorName(ast.Kind)} ");
             }
+
             for (int i = 0; i < ast.Children.Count; i++)
             {
                 var child = ast.Children[i];
@@ -107,7 +107,6 @@ namespace Mba.Simplifier.DSL
 
         private static void TranspileRhsInternal(AstNode ast, StringBuilder sb, HashSet<string> boundedIndices, HashSet<string> boundedWidths)
         {
-            bool parens = true;
             sb.Append($"({GetOperatorName(ast.Kind)} ");
 
             for (int i = 0; i < ast.Children.Count; i++)
@@ -134,8 +133,7 @@ namespace Mba.Simplifier.DSL
                 sb.Append($"{varNode.Name}");
             }
 
-            if (parens)
-                sb.Append(")");
+            sb.Append(")");
         }
 
         private static string GetOperatorName(AstKind kind)
