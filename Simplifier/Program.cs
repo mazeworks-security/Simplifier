@@ -1,6 +1,7 @@
 ﻿using Mba.Common.MSiMBA;
 using Mba.Parsing;
 using Mba.Simplifier.Bindings;
+using Mba.Simplifier.DSL;
 using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
@@ -10,10 +11,10 @@ using System.ComponentModel;
 using System.Diagnostics;
 
 bool printUsage = false;
-uint bitWidth = 64;
+uint bitWidth = 32;
 bool useEqsat = false;
 bool proveEquivalence = false;
-string inputText = null;
+string inputText = "(v2 & 0x9fd64269) ^ (v8 & 0x6029bd96) ^ (v2 & v6) ^ (v6 & v8)";
 
 var printHelp = () =>
 {

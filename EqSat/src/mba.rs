@@ -7,7 +7,7 @@
 #![allow(unused_imports, unused_variables, non_snake_case, unused_mut)]
 #![allow(irrefutable_let_patterns, unused_assignments, non_camel_case_types)]
 
-use super::*; // Pulls in all external types.
+use super::*;  // Pulls in all external types.
 use std::marker::PhantomData;
 
 /// Context during lowering: an implementation of this trait
@@ -24,19 +24,19 @@ pub trait Context {
     fn any(&mut self, arg0: AstIdx) -> SimpleAst;
     fn lookup_value(&mut self, arg0: AstIdx) -> Option<SimpleAst>;
     fn lookup_id(&mut self, arg0: &SimpleAst) -> AstIdx;
-    fn constant(&mut self, arg0: u64, arg1: AstData) -> SimpleAst;
-    fn symbol(&mut self, arg0: u32, arg1: AstData) -> SimpleAst;
-    fn zext(&mut self, arg0: AstIdx, arg1: AstData) -> SimpleAst;
+    fn constant(&mut self, arg0: u64, arg1: u8) -> SimpleAst;
+    fn symbol(&mut self, arg0: u32, arg1: u8) -> SimpleAst;
+    fn zext(&mut self, arg0: AstIdx, arg1: u8) -> SimpleAst;
     fn fold_add(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst;
+    fn get_width(&mut self, arg0: AstIdx) -> u8;
+    fn is_constant_modulo(&mut self, arg0: u64, arg1: u64, arg2: u8) -> Option<Empty>;
 }
 
 pub trait ContextIter {
     type Context;
     type Output;
     fn next(&mut self, ctx: &mut Self::Context) -> Option<Self::Output>;
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, None)
-    }
+    fn size_hint(&self) -> (usize, Option<usize>) { (0, None) }
 }
 
 pub trait IntoContextIter {
@@ -64,7 +64,7 @@ impl<I: Default, C> Default for ContextIterWrapper<I, C> {
     fn default() -> Self {
         ContextIterWrapper {
             iter: I::default(),
-            _ctx: std::marker::PhantomData,
+            _ctx: std::marker::PhantomData
         }
     }
 }
@@ -81,10 +81,7 @@ impl<I, C> std::ops::DerefMut for ContextIterWrapper<I, C> {
 }
 impl<I: Iterator, C: Context> From<I> for ContextIterWrapper<I, C> {
     fn from(iter: I) -> Self {
-        Self {
-            iter,
-            _ctx: std::marker::PhantomData,
-        }
+        Self { iter, _ctx: std::marker::PhantomData }
     }
 }
 impl<I: Iterator, C: Context> ContextIter for ContextIterWrapper<I, C> {
@@ -104,7 +101,7 @@ impl<I: IntoIterator, C: Context> IntoContextIter for ContextIterWrapper<I, C> {
     fn into_context_iter(self) -> Self::IntoIter {
         ContextIterWrapper {
             iter: self.iter.into_iter(),
-            _ctx: std::marker::PhantomData,
+            _ctx: std::marker::PhantomData
         }
     }
 }
@@ -118,102 +115,91 @@ impl<L: Length, C> Length for ContextIterWrapper<L, C> {
         self.iter.len()
     }
 }
+           
 
 // Generated as internal constructor for term lower.
-pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<SimpleAst> {
+pub fn constructor_lower<C: Context>(
+    ctx: &mut C,
+    arg0: &SimpleAst,
+) -> Option<SimpleAst> {
     match arg0 {
         &SimpleAst::Add {
-            a: v54,
-            b: v55,
-            data: v56,
+            a: v49,
+            b: v50,
         } => {
-            let v66 = &C::lookup_value(ctx, v54);
-            if let Some(v67) = v66 {
-                match v67 {
+            let v60 = &C::lookup_value(ctx, v49);
+            if let Some(v61) = v60 {
+                match v61 {
                     &SimpleAst::Add {
-                        a: v68,
-                        b: v69,
-                        data: v70,
+                        a: v62,
+                        b: v63,
                     } => {
-                        let v57 = &C::lookup_value(ctx, v55);
-                        if let Some(v58) = v57 {
+                        let v51 = &C::lookup_value(ctx, v50);
+                        if let Some(v52) = v51 {
                             if let &SimpleAst::Mul {
-                                a: v275,
-                                b: v276,
-                                data: v277,
-                            } = v58
-                            {
-                                let v278 = &C::lookup_value(ctx, v275);
-                                if let Some(v279) = v278 {
+                                a: v249,
+                                b: v250,
+                            } = v52 {
+                                let v251 = &C::lookup_value(ctx, v249);
+                                if let Some(v252) = v251 {
                                     if let &SimpleAst::Constant {
-                                        c: v280,
-                                        data: v281,
-                                    } = v279
-                                    {
-                                        if v280 == 0x2 {
-                                            let v313 = &C::lookup_value(ctx, v276);
-                                            if let Some(v314) = v313 {
-                                                match v314 {
-                                                    &SimpleAst::And {
-                                                        a: v315,
-                                                        b: v316,
-                                                        data: v317,
-                                                    } => {
-                                                        let v318 = &C::lookup_value(ctx, v315);
-                                                        if let Some(v319) = v318 {
-                                                            if let &SimpleAst::Neg {
-                                                                a: v320,
-                                                                data: v321,
-                                                            } = v319
-                                                            {
-                                                                if v68 == v320 {
-                                                                    let v1138 =
-                                                                        &C::lookup_value(ctx, v69);
-                                                                    if let Some(v1139) = v1138 {
-                                                                        if let &SimpleAst::Mul {
-                                                                            a: v1140,
-                                                                            b: v1141,
-                                                                            data: v1142,
-                                                                        } = v1139
-                                                                        {
-                                                                            let v1269 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v316,
-                                                                                );
-                                                                            if let Some(v1270) =
-                                                                                v1269
-                                                                            {
-                                                                                if let &SimpleAst::Mul {
-                                                                                    a: v1278,
-                                                                                    b: v1279,
-                                                                                    data: v1280,
-                                                                                } = v1270 {
-                                                                                    if v1141 == v1279 {
-                                                                                        let v1274 = &C::lookup_value(ctx, v1140);
-                                                                                        if let Some(v1275) = v1274 {
-                                                                                            if let &SimpleAst::Constant {
-                                                                                                c: v1276,
-                                                                                                data: v1277,
-                                                                                            } = v1275 {
-                                                                                                if v1276 == 0xFFFFFFFFFFFFFFFE {
-                                                                                                    let v1281 = &C::lookup_value(ctx, v1278);
-                                                                                                    if let Some(v1282) = v1281 {
-                                                                                                        if let &SimpleAst::Constant {
-                                                                                                            c: v1283,
-                                                                                                            data: v1284,
-                                                                                                        } = v1282 {
-                                                                                                            if v1283 == 0x2 {
-                                                                                                                let v1193 = &C::any(ctx, v68);
-                                                                                                                let v1194 = C::lookup_id(ctx, v1193);
-                                                                                                                let v1285 = &C::constant(ctx, 0x2, v1142);
-                                                                                                                let v1286 = C::lookup_id(ctx, v1285);
-                                                                                                                let v1147 = &C::any(ctx, v1141);
-                                                                                                                let v1148 = C::lookup_id(ctx, v1147);
-                                                                                                                let v1287 = &C::mul(ctx, v1286, v1148);
-                                                                                                                let v1288 = C::lookup_id(ctx, v1287);
-                                                                                                                let v1289 = &C::xor(ctx, v1194, v1288);
-                                                                                                                // Rule at .\isle\mba.isle line 1035.
-                                                                                                                return Some(v1289.clone());
+                                        c: v253,
+                                        width: v254,
+                                    } = v252 {
+                                        let v285 = &C::lookup_value(ctx, v250);
+                                        if let Some(v286) = v285 {
+                                            match v286 {
+                                                &SimpleAst::And {
+                                                    a: v287,
+                                                    b: v288,
+                                                } => {
+                                                    let v289 = &C::lookup_value(ctx, v287);
+                                                    if let Some(v290) = v289 {
+                                                        if let &SimpleAst::Neg {
+                                                            a: v291,
+                                                        } = v290 {
+                                                            if v62 == v291 {
+                                                                let v1110 = &C::lookup_value(ctx, v63);
+                                                                if let Some(v1111) = v1110 {
+                                                                    if let &SimpleAst::Mul {
+                                                                        a: v1112,
+                                                                        b: v1113,
+                                                                    } = v1111 {
+                                                                        let v1235 = &C::lookup_value(ctx, v288);
+                                                                        if let Some(v1236) = v1235 {
+                                                                            if let &SimpleAst::Mul {
+                                                                                a: v1243,
+                                                                                b: v1244,
+                                                                            } = v1236 {
+                                                                                if v1113 == v1244 {
+                                                                                    let v1239 = &C::lookup_value(ctx, v1112);
+                                                                                    if let Some(v1240) = v1239 {
+                                                                                        if let &SimpleAst::Constant {
+                                                                                            c: v1241,
+                                                                                            width: v1242,
+                                                                                        } = v1240 {
+                                                                                            let v1245 = &C::lookup_value(ctx, v1243);
+                                                                                            if let Some(v1246) = v1245 {
+                                                                                                if let &SimpleAst::Constant {
+                                                                                                    c: v1247,
+                                                                                                    width: v1248,
+                                                                                                } = v1246 {
+                                                                                                    if v253 == v1247 {
+                                                                                                        let v1249 = C::is_constant_modulo(ctx, v1241, 0xFFFFFFFFFFFFFFFE, v1242);
+                                                                                                        if let Some(v1250) = v1249 {
+                                                                                                            let v1251 = C::is_constant_modulo(ctx, v253, 0x2, v1242);
+                                                                                                            if let Some(v1252) = v1251 {
+                                                                                                                let v1164 = &C::any(ctx, v62);
+                                                                                                                let v1165 = C::lookup_id(ctx, v1164);
+                                                                                                                let v1253 = &C::constant(ctx, 0x2, v1242);
+                                                                                                                let v1254 = C::lookup_id(ctx, v1253);
+                                                                                                                let v1118 = &C::any(ctx, v1113);
+                                                                                                                let v1119 = C::lookup_id(ctx, v1118);
+                                                                                                                let v1255 = &C::mul(ctx, v1254, v1119);
+                                                                                                                let v1256 = C::lookup_id(ctx, v1255);
+                                                                                                                let v1257 = &C::xor(ctx, v1165, v1256);
+                                                                                                                // Rule at .\isle\mba.isle line 891.
+                                                                                                                return Some(v1257.clone());
                                                                                                             }
                                                                                                         }
                                                                                                     }
@@ -229,73 +215,62 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                             }
                                                         }
                                                     }
-                                                    &SimpleAst::Or {
-                                                        a: v561,
-                                                        b: v562,
-                                                        data: v563,
-                                                    } => {
-                                                        let v71 = &C::lookup_value(ctx, v68);
-                                                        if let Some(v72) = v71 {
-                                                            if let &SimpleAst::And {
-                                                                a: v1442,
-                                                                b: v1443,
-                                                                data: v1444,
-                                                            } = v72
-                                                            {
-                                                                let v1138 =
-                                                                    &C::lookup_value(ctx, v69);
-                                                                if let Some(v1139) = v1138 {
+                                                }
+                                                &SimpleAst::Or {
+                                                    a: v530,
+                                                    b: v531,
+                                                } => {
+                                                    let v64 = &C::lookup_value(ctx, v62);
+                                                    if let Some(v65) = v64 {
+                                                        if let &SimpleAst::And {
+                                                            a: v1412,
+                                                            b: v1413,
+                                                        } = v65 {
+                                                            let v336 = C::is_constant_modulo(ctx, v253, 0x2, v254);
+                                                            if let Some(v337) = v336 {
+                                                                let v1110 = &C::lookup_value(ctx, v63);
+                                                                if let Some(v1111) = v1110 {
                                                                     if let &SimpleAst::Xor {
-                                                                        a: v1445,
-                                                                        b: v1446,
-                                                                        data: v1447,
-                                                                    } = v1139
-                                                                    {
-                                                                        if v561 == v1445 {
-                                                                            let v1448 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v1446,
-                                                                                );
-                                                                            if let Some(v1449) =
-                                                                                v1448
-                                                                            {
+                                                                        a: v1414,
+                                                                        b: v1415,
+                                                                    } = v1111 {
+                                                                        if v530 == v1414 {
+                                                                            let v1416 = &C::lookup_value(ctx, v1415);
+                                                                            if let Some(v1417) = v1416 {
                                                                                 if let &SimpleAst::Or {
-                                                                                    a: v1450,
-                                                                                    b: v1451,
-                                                                                    data: v1452,
-                                                                                } = v1449 {
-                                                                                    if v1442 == v1450 {
-                                                                                        if v1443 == v1451 {
-                                                                                            let v1453 = &C::lookup_value(ctx, v562);
-                                                                                            if let Some(v1454) = v1453 {
+                                                                                    a: v1418,
+                                                                                    b: v1419,
+                                                                                } = v1417 {
+                                                                                    if v1412 == v1418 {
+                                                                                        if v1413 == v1419 {
+                                                                                            let v1420 = &C::lookup_value(ctx, v531);
+                                                                                            if let Some(v1421) = v1420 {
                                                                                                 if let &SimpleAst::Neg {
-                                                                                                    a: v1455,
-                                                                                                    data: v1456,
-                                                                                                } = v1454 {
-                                                                                                    let v1457 = &C::lookup_value(ctx, v1455);
-                                                                                                    if let Some(v1458) = v1457 {
+                                                                                                    a: v1422,
+                                                                                                } = v1421 {
+                                                                                                    let v1423 = &C::lookup_value(ctx, v1422);
+                                                                                                    if let Some(v1424) = v1423 {
                                                                                                         if let &SimpleAst::And {
-                                                                                                            a: v1459,
-                                                                                                            b: v1460,
-                                                                                                            data: v1461,
-                                                                                                        } = v1458 {
-                                                                                                            if v1442 == v1459 {
-                                                                                                                if v1443 == v1460 {
-                                                                                                                    let v1462 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFE, v1444);
-                                                                                                                    let v1463 = C::lookup_id(ctx, v1462);
-                                                                                                                    let v1464 = &C::any(ctx, v1445);
-                                                                                                                    let v1465 = C::lookup_id(ctx, v1464);
-                                                                                                                    let v1466 = &C::any(ctx, v1442);
-                                                                                                                    let v1467 = C::lookup_id(ctx, v1466);
-                                                                                                                    let v1468 = &C::xor(ctx, v1465, v1467);
-                                                                                                                    let v1469 = C::lookup_id(ctx, v1468);
-                                                                                                                    let v1470 = &C::any(ctx, v1443);
-                                                                                                                    let v1471 = C::lookup_id(ctx, v1470);
-                                                                                                                    let v1472 = &C::xor(ctx, v1469, v1471);
-                                                                                                                    let v1473 = C::lookup_id(ctx, v1472);
-                                                                                                                    let v1474 = &C::add(ctx, v1463, v1473);
-                                                                                                                    // Rule at .\isle\mba.isle line 1147.
-                                                                                                                    return Some(v1474.clone());
+                                                                                                            a: v1425,
+                                                                                                            b: v1426,
+                                                                                                        } = v1424 {
+                                                                                                            if v1412 == v1425 {
+                                                                                                                if v1413 == v1426 {
+                                                                                                                    let v536 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFE, v254);
+                                                                                                                    let v537 = C::lookup_id(ctx, v536);
+                                                                                                                    let v1427 = &C::any(ctx, v1414);
+                                                                                                                    let v1428 = C::lookup_id(ctx, v1427);
+                                                                                                                    let v1429 = &C::any(ctx, v1412);
+                                                                                                                    let v1430 = C::lookup_id(ctx, v1429);
+                                                                                                                    let v1431 = &C::xor(ctx, v1428, v1430);
+                                                                                                                    let v1432 = C::lookup_id(ctx, v1431);
+                                                                                                                    let v1433 = &C::any(ctx, v1413);
+                                                                                                                    let v1434 = C::lookup_id(ctx, v1433);
+                                                                                                                    let v1435 = &C::xor(ctx, v1432, v1434);
+                                                                                                                    let v1436 = C::lookup_id(ctx, v1435);
+                                                                                                                    let v1437 = &C::add(ctx, v537, v1436);
+                                                                                                                    // Rule at .\isle\mba.isle line 988.
+                                                                                                                    return Some(v1437.clone());
                                                                                                                 }
                                                                                                             }
                                                                                                         }
@@ -312,8 +287,8 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                             }
                                                         }
                                                     }
-                                                    _ => {}
                                                 }
+                                                _ => {}
                                             }
                                         }
                                     }
@@ -322,114 +297,97 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Mul {
-                        a: v293,
-                        b: v294,
-                        data: v295,
+                        a: v270,
+                        b: v271,
                     } => {
-                        let v301 = &C::lookup_value(ctx, v294);
-                        if let Some(v302) = v301 {
-                            match v302 {
+                        let v276 = &C::lookup_value(ctx, v271);
+                        if let Some(v277) = v276 {
+                            match v277 {
                                 &SimpleAst::Add {
-                                    a: v1475,
-                                    b: v1476,
-                                    data: v1477,
+                                    a: v1438,
+                                    b: v1439,
                                 } => {
-                                    let v57 = &C::lookup_value(ctx, v55);
-                                    if let Some(v58) = v57 {
+                                    let v51 = &C::lookup_value(ctx, v50);
+                                    if let Some(v52) = v51 {
                                         if let &SimpleAst::Mul {
-                                            a: v275,
-                                            b: v276,
-                                            data: v277,
-                                        } = v58
-                                        {
-                                            let v278 = &C::lookup_value(ctx, v275);
-                                            if let Some(v279) = v278 {
+                                            a: v249,
+                                            b: v250,
+                                        } = v52 {
+                                            let v251 = &C::lookup_value(ctx, v249);
+                                            if let Some(v252) = v251 {
                                                 if let &SimpleAst::Constant {
-                                                    c: v280,
-                                                    data: v281,
-                                                } = v279
-                                                {
-                                                    if v280 == 0xFFFFFFFFFFFFFFFE {
-                                                        let v296 = &C::lookup_value(ctx, v293);
-                                                        if let Some(v297) = v296 {
-                                                            if let &SimpleAst::Constant {
-                                                                c: v338,
-                                                                data: v339,
-                                                            } = v297
-                                                            {
-                                                                if v338 == 0xFFFFFFFFFFFFFFFF {
-                                                                    let v313 =
-                                                                        &C::lookup_value(ctx, v276);
-                                                                    if let Some(v314) = v313 {
-                                                                        if let &SimpleAst::Or {
-                                                                            a: v561,
-                                                                            b: v562,
-                                                                            data: v563,
-                                                                        } = v314
-                                                                        {
-                                                                            let v1453 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v562,
-                                                                                );
-                                                                            if let Some(v1454) =
-                                                                                v1453
-                                                                            {
-                                                                                if let &SimpleAst::Neg {
-                                                                                    a: v1455,
-                                                                                    data: v1456,
-                                                                                } = v1454 {
-                                                                                    let v1457 = &C::lookup_value(ctx, v1455);
-                                                                                    if let Some(v1458) = v1457 {
-                                                                                        if let &SimpleAst::And {
-                                                                                            a: v1459,
-                                                                                            b: v1460,
-                                                                                            data: v1461,
-                                                                                        } = v1458 {
-                                                                                            let v1478 = &C::lookup_value(ctx, v1475);
-                                                                                            if let Some(v1479) = v1478 {
-                                                                                                if let &SimpleAst::And {
-                                                                                                    a: v1480,
-                                                                                                    b: v1481,
-                                                                                                    data: v1482,
-                                                                                                } = v1479 {
-                                                                                                    if v1459 == v1480 {
-                                                                                                        if v1460 == v1481 {
-                                                                                                            let v1483 = &C::lookup_value(ctx, v1476);
-                                                                                                            if let Some(v1484) = v1483 {
-                                                                                                                if let &SimpleAst::Xor {
-                                                                                                                    a: v1485,
-                                                                                                                    b: v1486,
-                                                                                                                    data: v1487,
-                                                                                                                } = v1484 {
-                                                                                                                    if v561 == v1485 {
-                                                                                                                        let v1488 = &C::lookup_value(ctx, v1486);
-                                                                                                                        if let Some(v1489) = v1488 {
-                                                                                                                            if let &SimpleAst::Or {
-                                                                                                                                a: v1490,
-                                                                                                                                b: v1491,
-                                                                                                                                data: v1492,
-                                                                                                                            } = v1489 {
-                                                                                                                                if v1459 == v1490 {
-                                                                                                                                    if v1460 == v1491 {
-                                                                                                                                        let v1493 = &C::constant(ctx, 0x2, v1482);
-                                                                                                                                        let v1494 = C::lookup_id(ctx, v1493);
-                                                                                                                                        let v1495 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1482);
-                                                                                                                                        let v1496 = C::lookup_id(ctx, v1495);
-                                                                                                                                        let v1497 = &C::any(ctx, v1485);
-                                                                                                                                        let v1498 = C::lookup_id(ctx, v1497);
-                                                                                                                                        let v1499 = &C::any(ctx, v1480);
-                                                                                                                                        let v1500 = C::lookup_id(ctx, v1499);
-                                                                                                                                        let v1501 = &C::xor(ctx, v1498, v1500);
-                                                                                                                                        let v1502 = C::lookup_id(ctx, v1501);
-                                                                                                                                        let v1503 = &C::any(ctx, v1481);
-                                                                                                                                        let v1504 = C::lookup_id(ctx, v1503);
-                                                                                                                                        let v1505 = &C::xor(ctx, v1502, v1504);
-                                                                                                                                        let v1506 = C::lookup_id(ctx, v1505);
-                                                                                                                                        let v1507 = &C::mul(ctx, v1496, v1506);
-                                                                                                                                        let v1508 = C::lookup_id(ctx, v1507);
-                                                                                                                                        let v1509 = &C::add(ctx, v1494, v1508);
-                                                                                                                                        // Rule at .\isle\mba.isle line 1155.
-                                                                                                                                        return Some(v1509.clone());
+                                                    c: v253,
+                                                    width: v254,
+                                                } = v252 {
+                                                    let v272 = &C::lookup_value(ctx, v270);
+                                                    if let Some(v273) = v272 {
+                                                        if let &SimpleAst::Constant {
+                                                            c: v306,
+                                                            width: v307,
+                                                        } = v273 {
+                                                            let v285 = &C::lookup_value(ctx, v250);
+                                                            if let Some(v286) = v285 {
+                                                                if let &SimpleAst::Or {
+                                                                    a: v530,
+                                                                    b: v531,
+                                                                } = v286 {
+                                                                    let v1226 = C::is_constant_modulo(ctx, v306, 0xFFFFFFFFFFFFFFFF, v307);
+                                                                    if let Some(v1227) = v1226 {
+                                                                        let v1420 = &C::lookup_value(ctx, v531);
+                                                                        if let Some(v1421) = v1420 {
+                                                                            if let &SimpleAst::Neg {
+                                                                                a: v1422,
+                                                                            } = v1421 {
+                                                                                let v1423 = &C::lookup_value(ctx, v1422);
+                                                                                if let Some(v1424) = v1423 {
+                                                                                    if let &SimpleAst::And {
+                                                                                        a: v1425,
+                                                                                        b: v1426,
+                                                                                    } = v1424 {
+                                                                                        let v1440 = &C::lookup_value(ctx, v1438);
+                                                                                        if let Some(v1441) = v1440 {
+                                                                                            if let &SimpleAst::And {
+                                                                                                a: v1442,
+                                                                                                b: v1443,
+                                                                                            } = v1441 {
+                                                                                                if v1425 == v1442 {
+                                                                                                    if v1426 == v1443 {
+                                                                                                        let v1444 = &C::lookup_value(ctx, v1439);
+                                                                                                        if let Some(v1445) = v1444 {
+                                                                                                            if let &SimpleAst::Xor {
+                                                                                                                a: v1446,
+                                                                                                                b: v1447,
+                                                                                                            } = v1445 {
+                                                                                                                if v530 == v1446 {
+                                                                                                                    let v1448 = &C::lookup_value(ctx, v1447);
+                                                                                                                    if let Some(v1449) = v1448 {
+                                                                                                                        if let &SimpleAst::Or {
+                                                                                                                            a: v1450,
+                                                                                                                            b: v1451,
+                                                                                                                        } = v1449 {
+                                                                                                                            if v1425 == v1450 {
+                                                                                                                                if v1426 == v1451 {
+                                                                                                                                    let v1452 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFE, v307);
+                                                                                                                                    if let Some(v1453) = v1452 {
+                                                                                                                                        let v1454 = &C::constant(ctx, 0x2, v307);
+                                                                                                                                        let v1455 = C::lookup_id(ctx, v1454);
+                                                                                                                                        let v322 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v307);
+                                                                                                                                        let v323 = C::lookup_id(ctx, v322);
+                                                                                                                                        let v1456 = &C::any(ctx, v1446);
+                                                                                                                                        let v1457 = C::lookup_id(ctx, v1456);
+                                                                                                                                        let v1458 = &C::any(ctx, v1442);
+                                                                                                                                        let v1459 = C::lookup_id(ctx, v1458);
+                                                                                                                                        let v1460 = &C::xor(ctx, v1457, v1459);
+                                                                                                                                        let v1461 = C::lookup_id(ctx, v1460);
+                                                                                                                                        let v1462 = &C::any(ctx, v1443);
+                                                                                                                                        let v1463 = C::lookup_id(ctx, v1462);
+                                                                                                                                        let v1464 = &C::xor(ctx, v1461, v1463);
+                                                                                                                                        let v1465 = C::lookup_id(ctx, v1464);
+                                                                                                                                        let v1466 = &C::mul(ctx, v323, v1465);
+                                                                                                                                        let v1467 = C::lookup_id(ctx, v1466);
+                                                                                                                                        let v1468 = &C::add(ctx, v1455, v1467);
+                                                                                                                                        // Rule at .\isle\mba.isle line 995.
+                                                                                                                                        return Some(v1468.clone());
                                                                                                                                     }
                                                                                                                                 }
                                                                                                                             }
@@ -457,166 +415,142 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::And {
-                                    a: v340,
-                                    b: v341,
-                                    data: v342,
+                                    a: v308,
+                                    b: v309,
                                 } => {
-                                    let v296 = &C::lookup_value(ctx, v293);
-                                    if let Some(v297) = v296 {
+                                    let v272 = &C::lookup_value(ctx, v270);
+                                    if let Some(v273) = v272 {
                                         if let &SimpleAst::Constant {
-                                            c: v338,
-                                            data: v339,
-                                        } = v297
-                                        {
-                                            if v338 == 0xFFFFFFFFFFFFFFFF {
-                                                let v57 = &C::lookup_value(ctx, v55);
-                                                if let Some(v58) = v57 {
+                                            c: v306,
+                                            width: v307,
+                                        } = v273 {
+                                            let v1226 = C::is_constant_modulo(ctx, v306, 0xFFFFFFFFFFFFFFFF, v307);
+                                            if let Some(v1227) = v1226 {
+                                                let v51 = &C::lookup_value(ctx, v50);
+                                                if let Some(v52) = v51 {
                                                     if let &SimpleAst::Or {
-                                                        a: v523,
-                                                        b: v524,
-                                                        data: v525,
-                                                    } = v58
-                                                    {
-                                                        if v340 == v524 {
-                                                            let v343 = &C::lookup_value(ctx, v341);
-                                                            if let Some(v344) = v343 {
+                                                        a: v492,
+                                                        b: v493,
+                                                    } = v52 {
+                                                        if v308 == v493 {
+                                                            let v310 = &C::lookup_value(ctx, v309);
+                                                            if let Some(v311) = v310 {
                                                                 if let &SimpleAst::Neg {
-                                                                    a: v345,
-                                                                    data: v346,
-                                                                } = v344
-                                                                {
-                                                                    if v345 == v523 {
-                                                                        let v1273 =
-                                                                            &C::any(ctx, v345);
-                                                                        // Rule at .\isle\mba.isle line 1027.
-                                                                        return Some(v1273.clone());
+                                                                    a: v312,
+                                                                } = v311 {
+                                                                    if v312 == v492 {
+                                                                        let v1238 = &C::any(ctx, v312);
+                                                                        // Rule at .\isle\mba.isle line 884.
+                                                                        return Some(v1238.clone());
                                                                     }
                                                                 }
                                                             }
                                                         }
                                                     }
                                                 }
-                                                if v55 == v340 {
-                                                    let v1262 = &C::any(ctx, v341);
-                                                    let v1263 = C::lookup_id(ctx, v1262);
-                                                    let v1264 = &C::neg(ctx, v1263);
-                                                    let v1265 = C::lookup_id(ctx, v1264);
-                                                    let v1266 = &C::any(ctx, v340);
-                                                    let v1267 = C::lookup_id(ctx, v1266);
-                                                    let v1268 = &C::and(ctx, v1265, v1267);
-                                                    // Rule at .\isle\mba.isle line 1011.
-                                                    return Some(v1268.clone());
+                                                if v50 == v308 {
+                                                    let v1228 = &C::any(ctx, v309);
+                                                    let v1229 = C::lookup_id(ctx, v1228);
+                                                    let v1230 = &C::neg(ctx, v1229);
+                                                    let v1231 = C::lookup_id(ctx, v1230);
+                                                    let v1232 = &C::any(ctx, v308);
+                                                    let v1233 = C::lookup_id(ctx, v1232);
+                                                    let v1234 = &C::and(ctx, v1231, v1233);
+                                                    // Rule at .\isle\mba.isle line 870.
+                                                    return Some(v1234.clone());
                                                 }
                                             }
                                         }
                                     }
                                 }
                                 &SimpleAst::Xor {
-                                    a: v1666,
-                                    b: v1667,
-                                    data: v1668,
+                                    a: v1609,
+                                    b: v1610,
                                 } => {
-                                    let v57 = &C::lookup_value(ctx, v55);
-                                    if let Some(v58) = v57 {
+                                    let v51 = &C::lookup_value(ctx, v50);
+                                    if let Some(v52) = v51 {
                                         if let &SimpleAst::Mul {
-                                            a: v275,
-                                            b: v276,
-                                            data: v277,
-                                        } = v58
-                                        {
-                                            let v278 = &C::lookup_value(ctx, v275);
-                                            if let Some(v279) = v278 {
+                                            a: v249,
+                                            b: v250,
+                                        } = v52 {
+                                            let v251 = &C::lookup_value(ctx, v249);
+                                            if let Some(v252) = v251 {
                                                 if let &SimpleAst::Mul {
-                                                    a: v1683,
-                                                    b: v1684,
-                                                    data: v1685,
-                                                } = v279
-                                                {
-                                                    if v293 == v1684 {
-                                                        let v313 = &C::lookup_value(ctx, v276);
-                                                        if let Some(v314) = v313 {
+                                                    a: v1622,
+                                                    b: v1623,
+                                                } = v252 {
+                                                    if v270 == v1623 {
+                                                        let v285 = &C::lookup_value(ctx, v250);
+                                                        if let Some(v286) = v285 {
                                                             if let &SimpleAst::Add {
-                                                                a: v1690,
-                                                                b: v1691,
-                                                                data: v1692,
-                                                            } = v314
-                                                            {
-                                                                let v1669 =
-                                                                    &C::lookup_value(ctx, v1667);
-                                                                if let Some(v1670) = v1669 {
+                                                                a: v1628,
+                                                                b: v1629,
+                                                            } = v286 {
+                                                                let v1611 = &C::lookup_value(ctx, v1610);
+                                                                if let Some(v1612) = v1611 {
                                                                     if let &SimpleAst::Neg {
-                                                                        a: v1671,
-                                                                        data: v1672,
-                                                                    } = v1670
-                                                                    {
-                                                                        let v1673 =
-                                                                            &C::lookup_value(
-                                                                                ctx, v1671,
-                                                                            );
-                                                                        if let Some(v1674) = v1673 {
+                                                                        a: v1613,
+                                                                    } = v1612 {
+                                                                        let v1614 = &C::lookup_value(ctx, v1613);
+                                                                        if let Some(v1615) = v1614 {
                                                                             if let &SimpleAst::Or {
-                                                                                a: v1675,
-                                                                                b: v1676,
-                                                                                data: v1677,
-                                                                            } = v1674 {
-                                                                                let v1678 = &C::lookup_value(ctx, v1676);
-                                                                                if let Some(v1679) = v1678 {
+                                                                                a: v1616,
+                                                                                b: v1617,
+                                                                            } = v1615 {
+                                                                                let v1618 = &C::lookup_value(ctx, v1617);
+                                                                                if let Some(v1619) = v1618 {
                                                                                     if let &SimpleAst::And {
-                                                                                        a: v1680,
-                                                                                        b: v1681,
-                                                                                        data: v1682,
-                                                                                    } = v1679 {
-                                                                                        if v1666 == v1680 {
-                                                                                            let v1686 = &C::lookup_value(ctx, v1683);
-                                                                                            if let Some(v1687) = v1686 {
+                                                                                        a: v1620,
+                                                                                        b: v1621,
+                                                                                    } = v1619 {
+                                                                                        if v1609 == v1620 {
+                                                                                            let v1624 = &C::lookup_value(ctx, v1622);
+                                                                                            if let Some(v1625) = v1624 {
                                                                                                 if let &SimpleAst::Constant {
-                                                                                                    c: v1688,
-                                                                                                    data: v1689,
-                                                                                                } = v1687 {
-                                                                                                    if v1688 == 0xFFFFFFFFFFFFFFFF {
-                                                                                                        let v1693 = &C::lookup_value(ctx, v1690);
-                                                                                                        if let Some(v1694) = v1693 {
-                                                                                                            if let &SimpleAst::And {
-                                                                                                                a: v1695,
-                                                                                                                b: v1696,
-                                                                                                                data: v1697,
-                                                                                                            } = v1694 {
-                                                                                                                if v1666 == v1695 {
-                                                                                                                    if v1675 == v1696 {
-                                                                                                                        let v1698 = &C::lookup_value(ctx, v1691);
-                                                                                                                        if let Some(v1699) = v1698 {
-                                                                                                                            if let &SimpleAst::Or {
-                                                                                                                                a: v1700,
-                                                                                                                                b: v1701,
-                                                                                                                                data: v1702,
-                                                                                                                            } = v1699 {
-                                                                                                                                if v1681 == v1700 {
-                                                                                                                                    let v1703 = &C::lookup_value(ctx, v1701);
-                                                                                                                                    if let Some(v1704) = v1703 {
-                                                                                                                                        if let &SimpleAst::Or {
-                                                                                                                                            a: v1705,
-                                                                                                                                            b: v1706,
-                                                                                                                                            data: v1707,
-                                                                                                                                        } = v1704 {
-                                                                                                                                            if v1675 == v1705 {
-                                                                                                                                                let v1708 = &C::lookup_value(ctx, v1706);
-                                                                                                                                                if let Some(v1709) = v1708 {
-                                                                                                                                                    if let &SimpleAst::Neg {
-                                                                                                                                                        a: v1710,
-                                                                                                                                                        data: v1711,
-                                                                                                                                                    } = v1709 {
-                                                                                                                                                        if v1666 == v1710 {
-                                                                                                                                                            let v1712 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1682);
-                                                                                                                                                            let v1713 = C::lookup_id(ctx, v1712);
-                                                                                                                                                            let v639 = &C::any(ctx, v293);
-                                                                                                                                                            let v640 = C::lookup_id(ctx, v639);
-                                                                                                                                                            let v1714 = &C::mul(ctx, v1713, v640);
-                                                                                                                                                            let v1715 = C::lookup_id(ctx, v1714);
-                                                                                                                                                            let v1716 = &C::any(ctx, v1675);
-                                                                                                                                                            let v1717 = C::lookup_id(ctx, v1716);
-                                                                                                                                                            let v1718 = &C::mul(ctx, v1715, v1717);
-                                                                                                                                                            // Rule at .\isle\mba.isle line 1235.
-                                                                                                                                                            return Some(v1718.clone());
+                                                                                                    c: v1626,
+                                                                                                    width: v1627,
+                                                                                                } = v1625 {
+                                                                                                    let v1630 = &C::lookup_value(ctx, v1628);
+                                                                                                    if let Some(v1631) = v1630 {
+                                                                                                        if let &SimpleAst::And {
+                                                                                                            a: v1632,
+                                                                                                            b: v1633,
+                                                                                                        } = v1631 {
+                                                                                                            if v1609 == v1632 {
+                                                                                                                if v1616 == v1633 {
+                                                                                                                    let v1634 = &C::lookup_value(ctx, v1629);
+                                                                                                                    if let Some(v1635) = v1634 {
+                                                                                                                        if let &SimpleAst::Or {
+                                                                                                                            a: v1636,
+                                                                                                                            b: v1637,
+                                                                                                                        } = v1635 {
+                                                                                                                            if v1621 == v1636 {
+                                                                                                                                let v1638 = &C::lookup_value(ctx, v1637);
+                                                                                                                                if let Some(v1639) = v1638 {
+                                                                                                                                    if let &SimpleAst::Or {
+                                                                                                                                        a: v1640,
+                                                                                                                                        b: v1641,
+                                                                                                                                    } = v1639 {
+                                                                                                                                        if v1616 == v1640 {
+                                                                                                                                            let v1642 = &C::lookup_value(ctx, v1641);
+                                                                                                                                            if let Some(v1643) = v1642 {
+                                                                                                                                                if let &SimpleAst::Neg {
+                                                                                                                                                    a: v1644,
+                                                                                                                                                } = v1643 {
+                                                                                                                                                    if v1609 == v1644 {
+                                                                                                                                                        let v1645 = C::is_constant_modulo(ctx, v1626, 0xFFFFFFFFFFFFFFFF, v1627);
+                                                                                                                                                        if let Some(v1646) = v1645 {
+                                                                                                                                                            let v1647 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1627);
+                                                                                                                                                            let v1648 = C::lookup_id(ctx, v1647);
+                                                                                                                                                            let v1649 = &C::any(ctx, v270);
+                                                                                                                                                            let v1650 = C::lookup_id(ctx, v1649);
+                                                                                                                                                            let v1651 = &C::mul(ctx, v1648, v1650);
+                                                                                                                                                            let v1652 = C::lookup_id(ctx, v1651);
+                                                                                                                                                            let v1653 = &C::any(ctx, v1616);
+                                                                                                                                                            let v1654 = C::lookup_id(ctx, v1653);
+                                                                                                                                                            let v1655 = &C::mul(ctx, v1652, v1654);
+                                                                                                                                                            // Rule at .\isle\mba.isle line 1057.
+                                                                                                                                                            return Some(v1655.clone());
                                                                                                                                                         }
                                                                                                                                                     }
                                                                                                                                                 }
@@ -653,61 +587,55 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::And {
-                        a: v515,
-                        b: v516,
-                        data: v517,
+                        a: v486,
+                        b: v487,
                     } => {
-                        let v57 = &C::lookup_value(ctx, v55);
-                        if let Some(v58) = v57 {
-                            match v58 {
+                        let v51 = &C::lookup_value(ctx, v50);
+                        if let Some(v52) = v51 {
+                            match v52 {
                                 &SimpleAst::Mul {
-                                    a: v275,
-                                    b: v276,
-                                    data: v277,
+                                    a: v249,
+                                    b: v250,
                                 } => {
-                                    let v1311 = &C::lookup_value(ctx, v515);
-                                    if let Some(v1312) = v1311 {
+                                    let v1279 = &C::lookup_value(ctx, v486);
+                                    if let Some(v1280) = v1279 {
                                         if let &SimpleAst::Neg {
-                                            a: v1313,
-                                            data: v1314,
-                                        } = v1312
-                                        {
-                                            if v275 == v516 {
-                                                let v313 = &C::lookup_value(ctx, v276);
-                                                if let Some(v314) = v313 {
+                                            a: v1281,
+                                        } = v1280 {
+                                            if v249 == v487 {
+                                                let v285 = &C::lookup_value(ctx, v250);
+                                                if let Some(v286) = v285 {
                                                     if let &SimpleAst::Mul {
-                                                        a: v538,
-                                                        b: v539,
-                                                        data: v540,
-                                                    } = v314
-                                                    {
-                                                        let v541 = &C::lookup_value(ctx, v538);
-                                                        if let Some(v542) = v541 {
+                                                        a: v508,
+                                                        b: v509,
+                                                    } = v286 {
+                                                        let v510 = &C::lookup_value(ctx, v508);
+                                                        if let Some(v511) = v510 {
                                                             if let &SimpleAst::Constant {
-                                                                c: v543,
-                                                                data: v544,
-                                                            } = v542
-                                                            {
-                                                                if v543 == 0xFFFFFFFFFFFFFFFF {
-                                                                    let v545 =
-                                                                        &C::lookup_value(ctx, v539);
-                                                                    if let Some(v546) = v545 {
-                                                                        if let &SimpleAst::Constant {
-                                                                            c: v1324,
-                                                                            data: v1325,
-                                                                        } = v546 {
-                                                                            if v1324 == 0x1 {
-                                                                                let v1315 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1314);
-                                                                                let v1316 = C::lookup_id(ctx, v1315);
-                                                                                let v1317 = &C::any(ctx, v1313);
-                                                                                let v1318 = C::lookup_id(ctx, v1317);
-                                                                                let v1319 = &C::any(ctx, v516);
-                                                                                let v1320 = C::lookup_id(ctx, v1319);
-                                                                                let v1321 = &C::and(ctx, v1318, v1320);
-                                                                                let v1322 = C::lookup_id(ctx, v1321);
-                                                                                let v1323 = &C::mul(ctx, v1316, v1322);
-                                                                                // Rule at .\isle\mba.isle line 1075.
-                                                                                return Some(v1323.clone());
+                                                                c: v512,
+                                                                width: v513,
+                                                            } = v511 {
+                                                                let v514 = &C::lookup_value(ctx, v509);
+                                                                if let Some(v515) = v514 {
+                                                                    if let &SimpleAst::Constant {
+                                                                        c: v1289,
+                                                                        width: v1290,
+                                                                    } = v515 {
+                                                                        let v1291 = C::is_constant_modulo(ctx, v512, 0xFFFFFFFFFFFFFFFF, v513);
+                                                                        if let Some(v1292) = v1291 {
+                                                                            let v1293 = C::is_constant_modulo(ctx, v1289, 0x1, v513);
+                                                                            if let Some(v1294) = v1293 {
+                                                                                let v1295 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v513);
+                                                                                let v1296 = C::lookup_id(ctx, v1295);
+                                                                                let v1282 = &C::any(ctx, v1281);
+                                                                                let v1283 = C::lookup_id(ctx, v1282);
+                                                                                let v1284 = &C::any(ctx, v487);
+                                                                                let v1285 = C::lookup_id(ctx, v1284);
+                                                                                let v1286 = &C::and(ctx, v1283, v1285);
+                                                                                let v1287 = C::lookup_id(ctx, v1286);
+                                                                                let v1297 = &C::mul(ctx, v1296, v1287);
+                                                                                // Rule at .\isle\mba.isle line 926.
+                                                                                return Some(v1297.clone());
                                                                             }
                                                                         }
                                                                     }
@@ -717,30 +645,26 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                     }
                                                 }
                                             }
-                                            if v276 == v516 {
-                                                let v278 = &C::lookup_value(ctx, v275);
-                                                if let Some(v279) = v278 {
+                                            if v250 == v487 {
+                                                let v251 = &C::lookup_value(ctx, v249);
+                                                if let Some(v252) = v251 {
                                                     if let &SimpleAst::Constant {
-                                                        c: v280,
-                                                        data: v281,
-                                                    } = v279
-                                                    {
-                                                        if v280 == 0xFFFFFFFFFFFFFFFF {
-                                                            let v1315 = &C::constant(
-                                                                ctx,
-                                                                0xFFFFFFFFFFFFFFFF,
-                                                                v1314,
-                                                            );
-                                                            let v1316 = C::lookup_id(ctx, v1315);
-                                                            let v1317 = &C::any(ctx, v1313);
-                                                            let v1318 = C::lookup_id(ctx, v1317);
-                                                            let v1319 = &C::any(ctx, v516);
-                                                            let v1320 = C::lookup_id(ctx, v1319);
-                                                            let v1321 = &C::and(ctx, v1318, v1320);
-                                                            let v1322 = C::lookup_id(ctx, v1321);
-                                                            let v1323 = &C::mul(ctx, v1316, v1322);
-                                                            // Rule at .\isle\mba.isle line 1067.
-                                                            return Some(v1323.clone());
+                                                        c: v253,
+                                                        width: v254,
+                                                    } = v252 {
+                                                        let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
+                                                        if let Some(v398) = v397 {
+                                                            let v1258 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v254);
+                                                            let v1259 = C::lookup_id(ctx, v1258);
+                                                            let v1282 = &C::any(ctx, v1281);
+                                                            let v1283 = C::lookup_id(ctx, v1282);
+                                                            let v1284 = &C::any(ctx, v487);
+                                                            let v1285 = C::lookup_id(ctx, v1284);
+                                                            let v1286 = &C::and(ctx, v1283, v1285);
+                                                            let v1287 = C::lookup_id(ctx, v1286);
+                                                            let v1288 = &C::mul(ctx, v1259, v1287);
+                                                            // Rule at .\isle\mba.isle line 919.
+                                                            return Some(v1288.clone());
                                                         }
                                                     }
                                                 }
@@ -749,58 +673,48 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::And {
-                                    a: v330,
-                                    b: v331,
-                                    data: v332,
+                                    a: v299,
+                                    b: v300,
                                 } => {
-                                    let v1311 = &C::lookup_value(ctx, v515);
-                                    if let Some(v1312) = v1311 {
-                                        match v1312 {
+                                    let v1279 = &C::lookup_value(ctx, v486);
+                                    if let Some(v1280) = v1279 {
+                                        match v1280 {
                                             &SimpleAst::And {
-                                                a: v1545,
-                                                b: v1546,
-                                                data: v1547,
+                                                a: v1501,
+                                                b: v1502,
                                             } => {
-                                                let v518 = &C::lookup_value(ctx, v330);
-                                                if let Some(v519) = v518 {
+                                                let v488 = &C::lookup_value(ctx, v299);
+                                                if let Some(v489) = v488 {
                                                     if let &SimpleAst::And {
-                                                        a: v1552,
-                                                        b: v1553,
-                                                        data: v1554,
-                                                    } = v519
-                                                    {
-                                                        if v1545 == v1552 {
-                                                            let v1380 = &C::lookup_value(ctx, v516);
-                                                            if let Some(v1381) = v1380 {
+                                                        a: v1506,
+                                                        b: v1507,
+                                                    } = v489 {
+                                                        if v1501 == v1506 {
+                                                            let v1357 = &C::lookup_value(ctx, v487);
+                                                            if let Some(v1358) = v1357 {
                                                                 if let &SimpleAst::Neg {
-                                                                    a: v1382,
-                                                                    data: v1383,
-                                                                } = v1381
-                                                                {
-                                                                    if v331 == v1382 {
-                                                                        let v1548 =
-                                                                            &C::lookup_value(
-                                                                                ctx, v1546,
-                                                                            );
-                                                                        if let Some(v1549) = v1548 {
+                                                                    a: v1359,
+                                                                } = v1358 {
+                                                                    if v300 == v1359 {
+                                                                        let v1503 = &C::lookup_value(ctx, v1502);
+                                                                        if let Some(v1504) = v1503 {
                                                                             if let &SimpleAst::Neg {
-                                                                                a: v1550,
-                                                                                data: v1551,
-                                                                            } = v1549 {
-                                                                                if v1550 == v1553 {
-                                                                                    let v1555 = &C::any(ctx, v1545);
-                                                                                    let v1556 = C::lookup_id(ctx, v1555);
-                                                                                    let v1557 = &C::any(ctx, v1550);
-                                                                                    let v1558 = C::lookup_id(ctx, v1557);
-                                                                                    let v1559 = &C::any(ctx, v1382);
-                                                                                    let v1560 = C::lookup_id(ctx, v1559);
-                                                                                    let v1561 = &C::xor(ctx, v1558, v1560);
-                                                                                    let v1562 = C::lookup_id(ctx, v1561);
-                                                                                    let v1563 = &C::neg(ctx, v1562);
-                                                                                    let v1564 = C::lookup_id(ctx, v1563);
-                                                                                    let v1565 = &C::and(ctx, v1556, v1564);
-                                                                                    // Rule at .\isle\mba.isle line 1187.
-                                                                                    return Some(v1565.clone());
+                                                                                a: v1505,
+                                                                            } = v1504 {
+                                                                                if v1505 == v1507 {
+                                                                                    let v1508 = &C::any(ctx, v1501);
+                                                                                    let v1509 = C::lookup_id(ctx, v1508);
+                                                                                    let v1510 = &C::any(ctx, v1505);
+                                                                                    let v1511 = C::lookup_id(ctx, v1510);
+                                                                                    let v1512 = &C::any(ctx, v1359);
+                                                                                    let v1513 = C::lookup_id(ctx, v1512);
+                                                                                    let v1514 = &C::xor(ctx, v1511, v1513);
+                                                                                    let v1515 = C::lookup_id(ctx, v1514);
+                                                                                    let v1516 = &C::neg(ctx, v1515);
+                                                                                    let v1517 = C::lookup_id(ctx, v1516);
+                                                                                    let v1518 = &C::and(ctx, v1509, v1517);
+                                                                                    // Rule at .\isle\mba.isle line 1021.
+                                                                                    return Some(v1518.clone());
                                                                                 }
                                                                             }
                                                                         }
@@ -812,55 +726,49 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                 }
                                             }
                                             &SimpleAst::Neg {
-                                                a: v1313,
-                                                data: v1314,
+                                                a: v1281,
                                             } => {
-                                                if v330 == v516 {
-                                                    if v331 == v1313 {
-                                                        let v522 = &C::any(ctx, v516);
-                                                        // Rule at .\isle\mba.isle line 1179.
-                                                        return Some(v522.clone());
+                                                if v299 == v487 {
+                                                    if v300 == v1281 {
+                                                        let v491 = &C::any(ctx, v487);
+                                                        // Rule at .\isle\mba.isle line 1015.
+                                                        return Some(v491.clone());
                                                     }
                                                 }
                                             }
                                             _ => {}
                                         }
                                     }
-                                    if v331 == v515 {
-                                        let v1380 = &C::lookup_value(ctx, v516);
-                                        if let Some(v1381) = v1380 {
+                                    if v300 == v486 {
+                                        let v1357 = &C::lookup_value(ctx, v487);
+                                        if let Some(v1358) = v1357 {
                                             if let &SimpleAst::Neg {
-                                                a: v1382,
-                                                data: v1383,
-                                            } = v1381
-                                            {
-                                                if v330 == v1382 {
-                                                    let v1152 = &C::any(ctx, v515);
-                                                    // Rule at .\isle\mba.isle line 1115.
-                                                    return Some(v1152.clone());
+                                                a: v1359,
+                                            } = v1358 {
+                                                if v299 == v1359 {
+                                                    let v1123 = &C::any(ctx, v486);
+                                                    // Rule at .\isle\mba.isle line 964.
+                                                    return Some(v1123.clone());
                                                 }
                                             }
                                         }
                                     }
                                 }
                                 &SimpleAst::Neg {
-                                    a: v285,
-                                    data: v286,
+                                    a: v261,
                                 } => {
-                                    let v1213 = &C::lookup_value(ctx, v285);
-                                    if let Some(v1214) = v1213 {
+                                    let v1181 = &C::lookup_value(ctx, v261);
+                                    if let Some(v1182) = v1181 {
                                         if let &SimpleAst::And {
-                                            a: v1343,
-                                            b: v1344,
-                                            data: v1345,
-                                        } = v1214
-                                        {
-                                            if v515 == v1343 {
-                                                if v516 == v1344 {
-                                                    let v1346 =
-                                                        &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v517);
-                                                    // Rule at .\isle\mba.isle line 1091.
-                                                    return Some(v1346.clone());
+                                            a: v1318,
+                                            b: v1319,
+                                        } = v1182 {
+                                            if v486 == v1318 {
+                                                if v487 == v1319 {
+                                                    let v1320 = C::get_width(ctx, v486);
+                                                    let v1321 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1320);
+                                                    // Rule at .\isle\mba.isle line 943.
+                                                    return Some(v1321.clone());
                                                 }
                                             }
                                         }
@@ -871,57 +779,50 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Or {
-                        a: v327,
-                        b: v328,
-                        data: v329,
+                        a: v297,
+                        b: v298,
                     } => {
-                        let v57 = &C::lookup_value(ctx, v55);
-                        if let Some(v58) = v57 {
+                        let v51 = &C::lookup_value(ctx, v50);
+                        if let Some(v52) = v51 {
                             if let &SimpleAst::Mul {
-                                a: v275,
-                                b: v276,
-                                data: v277,
-                            } = v58
-                            {
-                                let v278 = &C::lookup_value(ctx, v275);
-                                if let Some(v279) = v278 {
+                                a: v249,
+                                b: v250,
+                            } = v52 {
+                                let v251 = &C::lookup_value(ctx, v249);
+                                if let Some(v252) = v251 {
                                     if let &SimpleAst::Constant {
-                                        c: v280,
-                                        data: v281,
-                                    } = v279
-                                    {
-                                        if v280 == 0xFFFFFFFFFFFFFFFF {
-                                            if v276 == v327 {
-                                                let v333 = &C::any(ctx, v327);
-                                                let v334 = C::lookup_id(ctx, v333);
-                                                let v1296 = &C::neg(ctx, v334);
-                                                let v1297 = C::lookup_id(ctx, v1296);
-                                                let v1298 = &C::any(ctx, v328);
-                                                let v1299 = C::lookup_id(ctx, v1298);
-                                                let v1300 = &C::and(ctx, v1297, v1299);
-                                                // Rule at .\isle\mba.isle line 1051.
-                                                return Some(v1300.clone());
+                                        c: v253,
+                                        width: v254,
+                                    } = v252 {
+                                        let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
+                                        if let Some(v398) = v397 {
+                                            if v250 == v297 {
+                                                let v301 = &C::any(ctx, v297);
+                                                let v302 = C::lookup_id(ctx, v301);
+                                                let v1265 = &C::neg(ctx, v302);
+                                                let v1266 = C::lookup_id(ctx, v1265);
+                                                let v1267 = &C::any(ctx, v298);
+                                                let v1268 = C::lookup_id(ctx, v1267);
+                                                let v1269 = &C::and(ctx, v1266, v1268);
+                                                // Rule at .\isle\mba.isle line 906.
+                                                return Some(v1269.clone());
                                             }
-                                            let v313 = &C::lookup_value(ctx, v276);
-                                            if let Some(v314) = v313 {
+                                            let v285 = &C::lookup_value(ctx, v250);
+                                            if let Some(v286) = v285 {
                                                 if let &SimpleAst::And {
-                                                    a: v315,
-                                                    b: v316,
-                                                    data: v317,
-                                                } = v314
-                                                {
-                                                    if v315 == v328 {
-                                                        let v1269 = &C::lookup_value(ctx, v316);
-                                                        if let Some(v1270) = v1269 {
+                                                    a: v287,
+                                                    b: v288,
+                                                } = v286 {
+                                                    if v287 == v298 {
+                                                        let v1235 = &C::lookup_value(ctx, v288);
+                                                        if let Some(v1236) = v1235 {
                                                             if let &SimpleAst::Neg {
-                                                                a: v1271,
-                                                                data: v1272,
-                                                            } = v1270
-                                                            {
-                                                                if v327 == v1271 {
-                                                                    let v333 = &C::any(ctx, v327);
-                                                                    // Rule at .\isle\mba.isle line 1019.
-                                                                    return Some(v333.clone());
+                                                                a: v1237,
+                                                            } = v1236 {
+                                                                if v297 == v1237 {
+                                                                    let v301 = &C::any(ctx, v297);
+                                                                    // Rule at .\isle\mba.isle line 877.
+                                                                    return Some(v301.clone());
                                                                 }
                                                             }
                                                         }
@@ -935,55 +836,43 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Xor {
-                        a: v365,
-                        b: v366,
-                        data: v367,
+                        a: v334,
+                        b: v335,
                     } => {
-                        let v57 = &C::lookup_value(ctx, v55);
-                        if let Some(v58) = v57 {
-                            match v58 {
+                        let v51 = &C::lookup_value(ctx, v50);
+                        if let Some(v52) = v51 {
+                            match v52 {
                                 &SimpleAst::Mul {
-                                    a: v275,
-                                    b: v276,
-                                    data: v277,
+                                    a: v249,
+                                    b: v250,
                                 } => {
-                                    let v278 = &C::lookup_value(ctx, v275);
-                                    if let Some(v279) = v278 {
+                                    let v251 = &C::lookup_value(ctx, v249);
+                                    if let Some(v252) = v251 {
                                         if let &SimpleAst::Constant {
-                                            c: v280,
-                                            data: v281,
-                                        } = v279
-                                        {
-                                            if v280 == 0xFFFFFFFFFFFFFFFF {
-                                                let v313 = &C::lookup_value(ctx, v276);
-                                                if let Some(v314) = v313 {
-                                                    if let &SimpleAst::Or {
-                                                        a: v561,
-                                                        b: v562,
-                                                        data: v563,
-                                                    } = v314
-                                                    {
-                                                        if v365 == v561 {
-                                                            if v366 == v562 {
-                                                                let v537 = &C::constant(
-                                                                    ctx,
-                                                                    0xFFFFFFFFFFFFFFFF,
-                                                                    v367,
-                                                                );
-                                                                let v1290 = C::lookup_id(ctx, v537);
-                                                                let v1291 = &C::any(ctx, v365);
-                                                                let v1292 =
-                                                                    C::lookup_id(ctx, v1291);
-                                                                let v556 = &C::any(ctx, v366);
-                                                                let v557 = C::lookup_id(ctx, v556);
-                                                                let v1293 =
-                                                                    &C::and(ctx, v1292, v557);
-                                                                let v1294 =
-                                                                    C::lookup_id(ctx, v1293);
-                                                                let v1295 =
-                                                                    &C::mul(ctx, v1290, v1294);
-                                                                // Rule at .\isle\mba.isle line 1043.
-                                                                return Some(v1295.clone());
+                                            c: v253,
+                                            width: v254,
+                                        } = v252 {
+                                            let v285 = &C::lookup_value(ctx, v250);
+                                            if let Some(v286) = v285 {
+                                                if let &SimpleAst::Or {
+                                                    a: v530,
+                                                    b: v531,
+                                                } = v286 {
+                                                    if v334 == v530 {
+                                                        if v335 == v531 {
+                                                            let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
+                                                            if let Some(v398) = v397 {
+                                                                let v1258 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v254);
+                                                                let v1259 = C::lookup_id(ctx, v1258);
+                                                                let v1260 = &C::any(ctx, v334);
+                                                                let v1261 = C::lookup_id(ctx, v1260);
+                                                                let v525 = &C::any(ctx, v335);
+                                                                let v526 = C::lookup_id(ctx, v525);
+                                                                let v1262 = &C::and(ctx, v1261, v526);
+                                                                let v1263 = C::lookup_id(ctx, v1262);
+                                                                let v1264 = &C::mul(ctx, v1259, v1263);
+                                                                // Rule at .\isle\mba.isle line 899.
+                                                                return Some(v1264.clone());
                                                             }
                                                         }
                                                     }
@@ -993,82 +882,65 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::Or {
-                                    a: v523,
-                                    b: v524,
-                                    data: v525,
+                                    a: v492,
+                                    b: v493,
                                 } => {
-                                    let v526 = &C::lookup_value(ctx, v523);
-                                    if let Some(v527) = v526 {
+                                    let v494 = &C::lookup_value(ctx, v492);
+                                    if let Some(v495) = v494 {
                                         if let &SimpleAst::Xor {
-                                            a: v1642,
-                                            b: v1643,
-                                            data: v1644,
-                                        } = v527
-                                        {
-                                            let v1510 = &C::lookup_value(ctx, v366);
-                                            if let Some(v1511) = v1510 {
+                                            a: v1588,
+                                            b: v1589,
+                                        } = v495 {
+                                            let v1469 = &C::lookup_value(ctx, v335);
+                                            if let Some(v1470) = v1469 {
                                                 if let &SimpleAst::Or {
-                                                    a: v1630,
-                                                    b: v1631,
-                                                    data: v1632,
-                                                } = v1511
-                                                {
-                                                    let v1633 = &C::lookup_value(ctx, v1631);
-                                                    if let Some(v1634) = v1633 {
+                                                    a: v1579,
+                                                    b: v1580,
+                                                } = v1470 {
+                                                    let v1581 = &C::lookup_value(ctx, v1580);
+                                                    if let Some(v1582) = v1581 {
                                                         if let &SimpleAst::And {
-                                                            a: v1635,
-                                                            b: v1636,
-                                                            data: v1637,
-                                                        } = v1634
-                                                        {
-                                                            if v365 == v1635 {
-                                                                let v1638 =
-                                                                    &C::lookup_value(ctx, v1636);
-                                                                if let Some(v1639) = v1638 {
+                                                            a: v1583,
+                                                            b: v1584,
+                                                        } = v1582 {
+                                                            if v334 == v1583 {
+                                                                let v1585 = &C::lookup_value(ctx, v1584);
+                                                                if let Some(v1586) = v1585 {
                                                                     if let &SimpleAst::Neg {
-                                                                        a: v1640,
-                                                                        data: v1641,
-                                                                    } = v1639
-                                                                    {
-                                                                        if v1640 == v1642 {
-                                                                            let v1645 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v1643,
-                                                                                );
-                                                                            if let Some(v1646) =
-                                                                                v1645
-                                                                            {
+                                                                        a: v1587,
+                                                                    } = v1586 {
+                                                                        if v1587 == v1588 {
+                                                                            let v1590 = &C::lookup_value(ctx, v1589);
+                                                                            if let Some(v1591) = v1590 {
                                                                                 if let &SimpleAst::Xor {
-                                                                                    a: v1647,
-                                                                                    b: v1648,
-                                                                                    data: v1649,
-                                                                                } = v1646 {
-                                                                                    if v365 == v1648 {
-                                                                                        if v1630 == v1647 {
-                                                                                            let v1650 = &C::lookup_value(ctx, v524);
-                                                                                            if let Some(v1651) = v1650 {
+                                                                                    a: v1592,
+                                                                                    b: v1593,
+                                                                                } = v1591 {
+                                                                                    if v334 == v1593 {
+                                                                                        if v1579 == v1592 {
+                                                                                            let v1594 = &C::lookup_value(ctx, v493);
+                                                                                            if let Some(v1595) = v1594 {
                                                                                                 if let &SimpleAst::And {
-                                                                                                    a: v1652,
-                                                                                                    b: v1653,
-                                                                                                    data: v1654,
-                                                                                                } = v1651 {
-                                                                                                    if v365 == v1653 {
-                                                                                                        if v1630 == v1652 {
-                                                                                                            let v1655 = &C::any(ctx, v1630);
-                                                                                                            let v1656 = C::lookup_id(ctx, v1655);
-                                                                                                            let v1657 = &C::any(ctx, v1630);
-                                                                                                            let v1658 = C::lookup_id(ctx, v1657);
-                                                                                                            let v571 = &C::any(ctx, v365);
-                                                                                                            let v572 = C::lookup_id(ctx, v571);
-                                                                                                            let v1659 = &C::any(ctx, v1640);
-                                                                                                            let v1660 = C::lookup_id(ctx, v1659);
-                                                                                                            let v1661 = &C::or(ctx, v572, v1660);
-                                                                                                            let v1662 = C::lookup_id(ctx, v1661);
-                                                                                                            let v1663 = &C::xor(ctx, v1658, v1662);
-                                                                                                            let v1664 = C::lookup_id(ctx, v1663);
-                                                                                                            let v1665 = &C::add(ctx, v1656, v1664);
-                                                                                                            // Rule at .\isle\mba.isle line 1227.
-                                                                                                            return Some(v1665.clone());
+                                                                                                    a: v1596,
+                                                                                                    b: v1597,
+                                                                                                } = v1595 {
+                                                                                                    if v334 == v1597 {
+                                                                                                        if v1579 == v1596 {
+                                                                                                            let v1598 = &C::any(ctx, v1579);
+                                                                                                            let v1599 = C::lookup_id(ctx, v1598);
+                                                                                                            let v1600 = &C::any(ctx, v1579);
+                                                                                                            let v1601 = C::lookup_id(ctx, v1600);
+                                                                                                            let v538 = &C::any(ctx, v334);
+                                                                                                            let v539 = C::lookup_id(ctx, v538);
+                                                                                                            let v1602 = &C::any(ctx, v1587);
+                                                                                                            let v1603 = C::lookup_id(ctx, v1602);
+                                                                                                            let v1604 = &C::or(ctx, v539, v1603);
+                                                                                                            let v1605 = C::lookup_id(ctx, v1604);
+                                                                                                            let v1606 = &C::xor(ctx, v1601, v1605);
+                                                                                                            let v1607 = C::lookup_id(ctx, v1606);
+                                                                                                            let v1608 = &C::add(ctx, v1599, v1607);
+                                                                                                            // Rule at .\isle\mba.isle line 1051.
+                                                                                                            return Some(v1608.clone());
                                                                                                         }
                                                                                                     }
                                                                                                 }
@@ -1089,53 +961,39 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::Xor {
-                                    a: v359,
-                                    b: v360,
-                                    data: v361,
+                                    a: v329,
+                                    b: v330,
                                 } => {
-                                    let v1510 = &C::lookup_value(ctx, v366);
-                                    if let Some(v1511) = v1510 {
+                                    let v1469 = &C::lookup_value(ctx, v335);
+                                    if let Some(v1470) = v1469 {
                                         if let &SimpleAst::Xor {
-                                            a: v1512,
-                                            b: v1513,
-                                            data: v1514,
-                                        } = v1511
-                                        {
-                                            if v359 == v1513 {
-                                                let v1515 = &C::lookup_value(ctx, v360);
-                                                if let Some(v1516) = v1515 {
+                                            a: v1471,
+                                            b: v1472,
+                                        } = v1470 {
+                                            if v329 == v1472 {
+                                                let v1473 = &C::lookup_value(ctx, v330);
+                                                if let Some(v1474) = v1473 {
                                                     if let &SimpleAst::And {
-                                                        a: v1517,
-                                                        b: v1518,
-                                                        data: v1519,
-                                                    } = v1516
-                                                    {
-                                                        if v365 == v1517 {
-                                                            if v1512 == v1518 {
-                                                                let v1520 = &C::any(ctx, v1513);
-                                                                let v1521 =
-                                                                    C::lookup_id(ctx, v1520);
-                                                                let v1522 = &C::any(ctx, v1513);
-                                                                let v1523 =
-                                                                    C::lookup_id(ctx, v1522);
-                                                                let v1524 = &C::any(ctx, v1512);
-                                                                let v1525 =
-                                                                    C::lookup_id(ctx, v1524);
-                                                                let v1526 = &C::any(ctx, v365);
-                                                                let v1527 =
-                                                                    C::lookup_id(ctx, v1526);
-                                                                let v1528 =
-                                                                    &C::or(ctx, v1525, v1527);
-                                                                let v1529 =
-                                                                    C::lookup_id(ctx, v1528);
-                                                                let v1530 =
-                                                                    &C::xor(ctx, v1523, v1529);
-                                                                let v1531 =
-                                                                    C::lookup_id(ctx, v1530);
-                                                                let v1532 =
-                                                                    &C::add(ctx, v1521, v1531);
-                                                                // Rule at .\isle\mba.isle line 1163.
-                                                                return Some(v1532.clone());
+                                                        a: v1475,
+                                                        b: v1476,
+                                                    } = v1474 {
+                                                        if v334 == v1475 {
+                                                            if v1471 == v1476 {
+                                                                let v1477 = &C::any(ctx, v1472);
+                                                                let v1478 = C::lookup_id(ctx, v1477);
+                                                                let v1479 = &C::any(ctx, v1472);
+                                                                let v1480 = C::lookup_id(ctx, v1479);
+                                                                let v1481 = &C::any(ctx, v1471);
+                                                                let v1482 = C::lookup_id(ctx, v1481);
+                                                                let v1483 = &C::any(ctx, v334);
+                                                                let v1484 = C::lookup_id(ctx, v1483);
+                                                                let v1485 = &C::or(ctx, v1482, v1484);
+                                                                let v1486 = C::lookup_id(ctx, v1485);
+                                                                let v1487 = &C::xor(ctx, v1480, v1486);
+                                                                let v1488 = C::lookup_id(ctx, v1487);
+                                                                let v1489 = &C::add(ctx, v1478, v1488);
+                                                                // Rule at .\isle\mba.isle line 1003.
+                                                                return Some(v1489.clone());
                                                             }
                                                         }
                                                     }
@@ -1151,111 +1009,100 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     _ => {}
                 }
             }
-            let v57 = &C::lookup_value(ctx, v55);
-            if let Some(v58) = v57 {
-                match v58 {
+            let v51 = &C::lookup_value(ctx, v50);
+            if let Some(v52) = v51 {
+                match v52 {
                     &SimpleAst::Mul {
-                        a: v275,
-                        b: v276,
-                        data: v277,
+                        a: v249,
+                        b: v250,
                     } => {
-                        let v313 = &C::lookup_value(ctx, v276);
-                        if let Some(v314) = v313 {
-                            match v314 {
+                        let v285 = &C::lookup_value(ctx, v250);
+                        if let Some(v286) = v285 {
+                            match v286 {
                                 &SimpleAst::Mul {
-                                    a: v538,
-                                    b: v539,
-                                    data: v540,
+                                    a: v508,
+                                    b: v509,
                                 } => {
-                                    if let Some(v67) = v66 {
-                                        match v67 {
+                                    if let Some(v61) = v60 {
+                                        match v61 {
                                             &SimpleAst::Add {
-                                                a: v68,
-                                                b: v69,
-                                                data: v70,
+                                                a: v62,
+                                                b: v63,
                                             } => {
-                                                let v71 = &C::lookup_value(ctx, v68);
-                                                if let Some(v72) = v71 {
+                                                let v64 = &C::lookup_value(ctx, v62);
+                                                if let Some(v65) = v64 {
                                                     if let &SimpleAst::Mul {
-                                                        a: v1135,
-                                                        b: v1136,
-                                                        data: v1137,
-                                                    } = v72
-                                                    {
-                                                        let v278 = &C::lookup_value(ctx, v275);
-                                                        if let Some(v279) = v278 {
+                                                        a: v1108,
+                                                        b: v1109,
+                                                    } = v65 {
+                                                        let v251 = &C::lookup_value(ctx, v249);
+                                                        if let Some(v252) = v251 {
                                                             if let &SimpleAst::Constant {
-                                                                c: v280,
-                                                                data: v281,
-                                                            } = v279
-                                                            {
-                                                                if v280 == 0xFFFFFFFFFFFFFFFF {
-                                                                    let v545 =
-                                                                        &C::lookup_value(ctx, v539);
-                                                                    if let Some(v546) = v545 {
-                                                                        match v546 {
+                                                                c: v253,
+                                                                width: v254,
+                                                            } = v252 {
+                                                                let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
+                                                                if let Some(v398) = v397 {
+                                                                    let v514 = &C::lookup_value(ctx, v509);
+                                                                    if let Some(v515) = v514 {
+                                                                        match v515 {
                                                                             &SimpleAst::And {
-                                                                                a: v547,
-                                                                                b: v548,
-                                                                                data: v549,
+                                                                                a: v516,
+                                                                                b: v517,
                                                                             } => {
-                                                                                if v547 == v1136 {
-                                                                                    let v1138 = &C::lookup_value(ctx, v69);
-                                                                                    if let Some(
-                                                                                        v1139,
-                                                                                    ) = v1138
-                                                                                    {
+                                                                                if v516 == v1109 {
+                                                                                    let v1110 = &C::lookup_value(ctx, v63);
+                                                                                    if let Some(v1111) = v1110 {
                                                                                         if let &SimpleAst::Mul {
-                                                                                            a: v1140,
-                                                                                            b: v1141,
-                                                                                            data: v1142,
-                                                                                        } = v1139 {
-                                                                                            if v548 == v1141 {
-                                                                                                if v1135 == v1140 {
-                                                                                                    let v541 = &C::lookup_value(ctx, v538);
-                                                                                                    if let Some(v542) = v541 {
+                                                                                            a: v1112,
+                                                                                            b: v1113,
+                                                                                        } = v1111 {
+                                                                                            if v517 == v1113 {
+                                                                                                if v1108 == v1112 {
+                                                                                                    let v510 = &C::lookup_value(ctx, v508);
+                                                                                                    if let Some(v511) = v510 {
                                                                                                         if let &SimpleAst::Mul {
-                                                                                                            a: v1183,
-                                                                                                            b: v1184,
-                                                                                                            data: v1185,
-                                                                                                        } = v542 {
-                                                                                                            if v1135 == v1184 {
-                                                                                                                let v1186 = &C::lookup_value(ctx, v1183);
-                                                                                                                if let Some(v1187) = v1186 {
+                                                                                                            a: v1151,
+                                                                                                            b: v1152,
+                                                                                                        } = v511 {
+                                                                                                            if v1108 == v1152 {
+                                                                                                                let v1153 = &C::lookup_value(ctx, v1151);
+                                                                                                                if let Some(v1154) = v1153 {
                                                                                                                     if let &SimpleAst::Constant {
-                                                                                                                        c: v1188,
-                                                                                                                        data: v1189,
-                                                                                                                    } = v1187 {
-                                                                                                                        if v1188 == 0x2 {
-                                                                                                                            let v1143 = &C::any(ctx, v1135);
-                                                                                                                            let v1144 = C::lookup_id(ctx, v1143);
-                                                                                                                            let v1145 = &C::any(ctx, v1136);
-                                                                                                                            let v1146 = C::lookup_id(ctx, v1145);
-                                                                                                                            let v1147 = &C::any(ctx, v1141);
-                                                                                                                            let v1148 = C::lookup_id(ctx, v1147);
-                                                                                                                            let v1190 = &C::xor(ctx, v1146, v1148);
-                                                                                                                            let v1191 = C::lookup_id(ctx, v1190);
-                                                                                                                            let v1192 = &C::mul(ctx, v1144, v1191);
-                                                                                                                            // Rule at .\isle\mba.isle line 923.
-                                                                                                                            return Some(v1192.clone());
+                                                                                                                        c: v1155,
+                                                                                                                        width: v1156,
+                                                                                                                    } = v1154 {
+                                                                                                                        let v1157 = C::is_constant_modulo(ctx, v1155, 0x2, v254);
+                                                                                                                        if let Some(v1158) = v1157 {
+                                                                                                                            let v1114 = &C::any(ctx, v1108);
+                                                                                                                            let v1115 = C::lookup_id(ctx, v1114);
+                                                                                                                            let v1116 = &C::any(ctx, v1109);
+                                                                                                                            let v1117 = C::lookup_id(ctx, v1116);
+                                                                                                                            let v1118 = &C::any(ctx, v1113);
+                                                                                                                            let v1119 = C::lookup_id(ctx, v1118);
+                                                                                                                            let v1159 = &C::xor(ctx, v1117, v1119);
+                                                                                                                            let v1160 = C::lookup_id(ctx, v1159);
+                                                                                                                            let v1161 = &C::mul(ctx, v1115, v1160);
+                                                                                                                            // Rule at .\isle\mba.isle line 795.
+                                                                                                                            return Some(v1161.clone());
                                                                                                                         }
                                                                                                                     }
                                                                                                                 }
                                                                                                             }
                                                                                                         }
                                                                                                     }
-                                                                                                    if v538 == v1135 {
-                                                                                                        let v1143 = &C::any(ctx, v1135);
-                                                                                                        let v1144 = C::lookup_id(ctx, v1143);
-                                                                                                        let v1145 = &C::any(ctx, v1136);
-                                                                                                        let v1146 = C::lookup_id(ctx, v1145);
-                                                                                                        let v1147 = &C::any(ctx, v1141);
-                                                                                                        let v1148 = C::lookup_id(ctx, v1147);
-                                                                                                        let v1149 = &C::or(ctx, v1146, v1148);
-                                                                                                        let v1150 = C::lookup_id(ctx, v1149);
-                                                                                                        let v1151 = &C::mul(ctx, v1144, v1150);
-                                                                                                        // Rule at .\isle\mba.isle line 883.
-                                                                                                        return Some(v1151.clone());
+                                                                                                    if v508 == v1108 {
+                                                                                                        let v1114 = &C::any(ctx, v1108);
+                                                                                                        let v1115 = C::lookup_id(ctx, v1114);
+                                                                                                        let v1116 = &C::any(ctx, v1109);
+                                                                                                        let v1117 = C::lookup_id(ctx, v1116);
+                                                                                                        let v1118 = &C::any(ctx, v1113);
+                                                                                                        let v1119 = C::lookup_id(ctx, v1118);
+                                                                                                        let v1120 = &C::or(ctx, v1117, v1119);
+                                                                                                        let v1121 = C::lookup_id(ctx, v1120);
+                                                                                                        let v1122 = &C::mul(ctx, v1115, v1121);
+                                                                                                        // Rule at .\isle\mba.isle line 764.
+                                                                                                        return Some(v1122.clone());
                                                                                                     }
                                                                                                 }
                                                                                             }
@@ -1264,34 +1111,30 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                                                 }
                                                                             }
                                                                             &SimpleAst::Or {
-                                                                                a: v1221,
-                                                                                b: v1222,
-                                                                                data: v1223,
+                                                                                a: v1188,
+                                                                                b: v1189,
                                                                             } => {
-                                                                                if v538 == v1135 {
-                                                                                    if v1136
-                                                                                        == v1221
-                                                                                    {
-                                                                                        let v1138 = &C::lookup_value(ctx, v69);
-                                                                                        if let Some(v1139) = v1138 {
+                                                                                if v508 == v1108 {
+                                                                                    if v1109 == v1188 {
+                                                                                        let v1110 = &C::lookup_value(ctx, v63);
+                                                                                        if let Some(v1111) = v1110 {
                                                                                             if let &SimpleAst::Mul {
-                                                                                                a: v1140,
-                                                                                                b: v1141,
-                                                                                                data: v1142,
-                                                                                            } = v1139 {
-                                                                                                if v538 == v1140 {
-                                                                                                    if v1141 == v1222 {
-                                                                                                        let v1143 = &C::any(ctx, v1135);
-                                                                                                        let v1144 = C::lookup_id(ctx, v1143);
-                                                                                                        let v1145 = &C::any(ctx, v1136);
-                                                                                                        let v1146 = C::lookup_id(ctx, v1145);
-                                                                                                        let v1147 = &C::any(ctx, v1141);
-                                                                                                        let v1148 = C::lookup_id(ctx, v1147);
-                                                                                                        let v1224 = &C::and(ctx, v1146, v1148);
-                                                                                                        let v1225 = C::lookup_id(ctx, v1224);
-                                                                                                        let v1226 = &C::mul(ctx, v1144, v1225);
-                                                                                                        // Rule at .\isle\mba.isle line 963.
-                                                                                                        return Some(v1226.clone());
+                                                                                                a: v1112,
+                                                                                                b: v1113,
+                                                                                            } = v1111 {
+                                                                                                if v508 == v1112 {
+                                                                                                    if v1113 == v1189 {
+                                                                                                        let v1114 = &C::any(ctx, v1108);
+                                                                                                        let v1115 = C::lookup_id(ctx, v1114);
+                                                                                                        let v1116 = &C::any(ctx, v1109);
+                                                                                                        let v1117 = C::lookup_id(ctx, v1116);
+                                                                                                        let v1118 = &C::any(ctx, v1113);
+                                                                                                        let v1119 = C::lookup_id(ctx, v1118);
+                                                                                                        let v1190 = &C::and(ctx, v1117, v1119);
+                                                                                                        let v1191 = C::lookup_id(ctx, v1190);
+                                                                                                        let v1192 = &C::mul(ctx, v1115, v1191);
+                                                                                                        // Rule at .\isle\mba.isle line 829.
+                                                                                                        return Some(v1192.clone());
                                                                                                     }
                                                                                                 }
                                                                                             }
@@ -1309,140 +1152,69 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                 }
                                             }
                                             &SimpleAst::Mul {
-                                                a: v293,
-                                                b: v294,
-                                                data: v295,
+                                                a: v270,
+                                                b: v271,
                                             } => {
-                                                let v278 = &C::lookup_value(ctx, v275);
-                                                if let Some(v279) = v278 {
+                                                let v251 = &C::lookup_value(ctx, v249);
+                                                if let Some(v252) = v251 {
                                                     if let &SimpleAst::Constant {
-                                                        c: v280,
-                                                        data: v281,
-                                                    } = v279
-                                                    {
-                                                        if v280 == 0xFFFFFFFFFFFFFFFF {
-                                                            let v545 = &C::lookup_value(ctx, v539);
-                                                            if let Some(v546) = v545 {
+                                                        c: v253,
+                                                        width: v254,
+                                                    } = v252 {
+                                                        let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
+                                                        if let Some(v398) = v397 {
+                                                            let v514 = &C::lookup_value(ctx, v509);
+                                                            if let Some(v515) = v514 {
                                                                 if let &SimpleAst::And {
-                                                                    a: v547,
-                                                                    b: v548,
-                                                                    data: v549,
-                                                                } = v546
-                                                                {
-                                                                    let v301 =
-                                                                        &C::lookup_value(ctx, v294);
-                                                                    if let Some(v302) = v301 {
+                                                                    a: v516,
+                                                                    b: v517,
+                                                                } = v515 {
+                                                                    let v276 = &C::lookup_value(ctx, v271);
+                                                                    if let Some(v277) = v276 {
                                                                         if let &SimpleAst::And {
-                                                                            a: v340,
-                                                                            b: v341,
-                                                                            data: v342,
-                                                                        } = v302
-                                                                        {
-                                                                            if v340 == v547 {
-                                                                                if v341 == v548 {
-                                                                                    let v1229 =
-                                                                                        &C::any(
-                                                                                            ctx,
-                                                                                            v293,
-                                                                                        );
-                                                                                    let v1230 = C::lookup_id(ctx, v1229);
-                                                                                    let v1240 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v342);
-                                                                                    let v1241 = C::lookup_id(ctx, v1240);
-                                                                                    let v1242 =
-                                                                                        &C::any(
-                                                                                            ctx,
-                                                                                            v538,
-                                                                                        );
-                                                                                    let v1243 = C::lookup_id(ctx, v1242);
-                                                                                    let v1244 =
-                                                                                        &C::mul(
-                                                                                            ctx,
-                                                                                            v1241,
-                                                                                            v1243,
-                                                                                        );
-                                                                                    let v1245 = C::lookup_id(ctx, v1244);
-                                                                                    let v1246 =
-                                                                                        &C::add(
-                                                                                            ctx,
-                                                                                            v1230,
-                                                                                            v1245,
-                                                                                        );
-                                                                                    let v1247 = C::lookup_id(ctx, v1246);
-                                                                                    let v1248 =
-                                                                                        &C::any(
-                                                                                            ctx,
-                                                                                            v340,
-                                                                                        );
-                                                                                    let v1249 = C::lookup_id(ctx, v1248);
-                                                                                    let v1250 =
-                                                                                        &C::any(
-                                                                                            ctx,
-                                                                                            v341,
-                                                                                        );
-                                                                                    let v1251 = C::lookup_id(ctx, v1250);
-                                                                                    let v1252 =
-                                                                                        &C::and(
-                                                                                            ctx,
-                                                                                            v1249,
-                                                                                            v1251,
-                                                                                        );
-                                                                                    let v1253 = C::lookup_id(ctx, v1252);
-                                                                                    let v1254 =
-                                                                                        &C::mul(
-                                                                                            ctx,
-                                                                                            v1247,
-                                                                                            v1253,
-                                                                                        );
-                                                                                    // Rule at .\isle\mba.isle line 995.
-                                                                                    return Some(
-                                                                                        v1254
-                                                                                            .clone(
-                                                                                            ),
-                                                                                    );
+                                                                            a: v308,
+                                                                            b: v309,
+                                                                        } = v277 {
+                                                                            if v308 == v516 {
+                                                                                if v309 == v517 {
+                                                                                    let v1195 = &C::any(ctx, v270);
+                                                                                    let v1196 = C::lookup_id(ctx, v1195);
+                                                                                    let v523 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v254);
+                                                                                    let v524 = C::lookup_id(ctx, v523);
+                                                                                    let v1206 = &C::any(ctx, v508);
+                                                                                    let v1207 = C::lookup_id(ctx, v1206);
+                                                                                    let v1208 = &C::mul(ctx, v524, v1207);
+                                                                                    let v1209 = C::lookup_id(ctx, v1208);
+                                                                                    let v1210 = &C::add(ctx, v1196, v1209);
+                                                                                    let v1211 = C::lookup_id(ctx, v1210);
+                                                                                    let v1212 = &C::any(ctx, v308);
+                                                                                    let v1213 = C::lookup_id(ctx, v1212);
+                                                                                    let v1214 = &C::any(ctx, v309);
+                                                                                    let v1215 = C::lookup_id(ctx, v1214);
+                                                                                    let v1216 = &C::and(ctx, v1213, v1215);
+                                                                                    let v1217 = C::lookup_id(ctx, v1216);
+                                                                                    let v1218 = &C::mul(ctx, v1211, v1217);
+                                                                                    // Rule at .\isle\mba.isle line 856.
+                                                                                    return Some(v1218.clone());
                                                                                 }
                                                                             }
                                                                         }
                                                                     }
-                                                                    if v293 == v538 {
-                                                                        if v294 == v547 {
-                                                                            let v1229 =
-                                                                                &C::any(ctx, v293);
-                                                                            let v1230 =
-                                                                                C::lookup_id(
-                                                                                    ctx, v1229,
-                                                                                );
-                                                                            let v1231 =
-                                                                                &C::any(ctx, v294);
-                                                                            let v1232 =
-                                                                                C::lookup_id(
-                                                                                    ctx, v1231,
-                                                                                );
-                                                                            let v1233 =
-                                                                                &C::any(ctx, v548);
-                                                                            let v1234 =
-                                                                                C::lookup_id(
-                                                                                    ctx, v1233,
-                                                                                );
-                                                                            let v1235 =
-                                                                                &C::neg(ctx, v1234);
-                                                                            let v1236 =
-                                                                                C::lookup_id(
-                                                                                    ctx, v1235,
-                                                                                );
-                                                                            let v1237 = &C::and(
-                                                                                ctx, v1232, v1236,
-                                                                            );
-                                                                            let v1238 =
-                                                                                C::lookup_id(
-                                                                                    ctx, v1237,
-                                                                                );
-                                                                            let v1239 = &C::mul(
-                                                                                ctx, v1230, v1238,
-                                                                            );
-                                                                            // Rule at .\isle\mba.isle line 987.
-                                                                            return Some(
-                                                                                v1239.clone(),
-                                                                            );
+                                                                    if v270 == v508 {
+                                                                        if v271 == v516 {
+                                                                            let v1195 = &C::any(ctx, v270);
+                                                                            let v1196 = C::lookup_id(ctx, v1195);
+                                                                            let v1197 = &C::any(ctx, v271);
+                                                                            let v1198 = C::lookup_id(ctx, v1197);
+                                                                            let v1199 = &C::any(ctx, v517);
+                                                                            let v1200 = C::lookup_id(ctx, v1199);
+                                                                            let v1201 = &C::neg(ctx, v1200);
+                                                                            let v1202 = C::lookup_id(ctx, v1201);
+                                                                            let v1203 = &C::and(ctx, v1198, v1202);
+                                                                            let v1204 = C::lookup_id(ctx, v1203);
+                                                                            let v1205 = &C::mul(ctx, v1196, v1204);
+                                                                            // Rule at .\isle\mba.isle line 849.
+                                                                            return Some(v1205.clone());
                                                                         }
                                                                     }
                                                                 }
@@ -1456,114 +1228,97 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::And {
-                                    a: v315,
-                                    b: v316,
-                                    data: v317,
+                                    a: v287,
+                                    b: v288,
                                 } => {
-                                    let v278 = &C::lookup_value(ctx, v275);
-                                    if let Some(v279) = v278 {
+                                    let v251 = &C::lookup_value(ctx, v249);
+                                    if let Some(v252) = v251 {
                                         if let &SimpleAst::Constant {
-                                            c: v280,
-                                            data: v281,
-                                        } = v279
-                                        {
-                                            match v280 {
-                                                0xFFFFFFFFFFFFFFFE => {
-                                                    if let Some(v67) = v66 {
-                                                        if let &SimpleAst::Add {
-                                                            a: v68,
-                                                            b: v69,
-                                                            data: v70,
-                                                        } = v67
-                                                        {
-                                                            if v68 == v315 {
-                                                                if v69 == v316 {
-                                                                    let v1193 = &C::any(ctx, v68);
-                                                                    let v1194 =
-                                                                        C::lookup_id(ctx, v1193);
-                                                                    let v77 = &C::any(ctx, v69);
-                                                                    let v78 =
-                                                                        C::lookup_id(ctx, v77);
-                                                                    let v1195 =
-                                                                        &C::xor(ctx, v1194, v78);
-                                                                    // Rule at .\isle\mba.isle line 931.
-                                                                    return Some(v1195.clone());
-                                                                }
+                                            c: v253,
+                                            width: v254,
+                                        } = v252 {
+                                            let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
+                                            if let Some(v398) = v397 {
+                                                if v49 == v287 {
+                                                    let v1219 = &C::any(ctx, v288);
+                                                    let v1220 = C::lookup_id(ctx, v1219);
+                                                    let v1221 = &C::neg(ctx, v1220);
+                                                    let v1222 = C::lookup_id(ctx, v1221);
+                                                    let v1223 = &C::any(ctx, v49);
+                                                    let v1224 = C::lookup_id(ctx, v1223);
+                                                    let v1225 = &C::and(ctx, v1222, v1224);
+                                                    // Rule at .\isle\mba.isle line 863.
+                                                    return Some(v1225.clone());
+                                                }
+                                                if let Some(v61) = v60 {
+                                                    if let &SimpleAst::Or {
+                                                        a: v297,
+                                                        b: v298,
+                                                    } = v61 {
+                                                        if v287 == v297 {
+                                                            if v288 == v298 {
+                                                                let v301 = &C::any(ctx, v297);
+                                                                let v302 = C::lookup_id(ctx, v301);
+                                                                let v303 = &C::any(ctx, v298);
+                                                                let v304 = C::lookup_id(ctx, v303);
+                                                                let v1167 = &C::xor(ctx, v302, v304);
+                                                                // Rule at .\isle\mba.isle line 810.
+                                                                return Some(v1167.clone());
                                                             }
                                                         }
                                                     }
                                                 }
-                                                0xFFFFFFFFFFFFFFFF => {
-                                                    if v54 == v315 {
-                                                        let v1255 = &C::any(ctx, v316);
-                                                        let v1256 = C::lookup_id(ctx, v1255);
-                                                        let v1257 = &C::neg(ctx, v1256);
-                                                        let v1258 = C::lookup_id(ctx, v1257);
-                                                        let v1259 = &C::any(ctx, v54);
-                                                        let v1260 = C::lookup_id(ctx, v1259);
-                                                        let v1261 = &C::and(ctx, v1258, v1260);
-                                                        // Rule at .\isle\mba.isle line 1003.
-                                                        return Some(v1261.clone());
-                                                    }
-                                                    if let Some(v67) = v66 {
-                                                        if let &SimpleAst::Or {
-                                                            a: v327,
-                                                            b: v328,
-                                                            data: v329,
-                                                        } = v67
-                                                        {
-                                                            if v315 == v327 {
-                                                                if v316 == v328 {
-                                                                    let v333 = &C::any(ctx, v327);
-                                                                    let v334 =
-                                                                        C::lookup_id(ctx, v333);
-                                                                    let v335 = &C::any(ctx, v328);
-                                                                    let v336 =
-                                                                        C::lookup_id(ctx, v335);
-                                                                    let v1196 =
-                                                                        &C::xor(ctx, v334, v336);
-                                                                    // Rule at .\isle\mba.isle line 939.
-                                                                    return Some(v1196.clone());
-                                                                }
+                                            }
+                                            if let Some(v61) = v60 {
+                                                if let &SimpleAst::Add {
+                                                    a: v62,
+                                                    b: v63,
+                                                } = v61 {
+                                                    if v62 == v287 {
+                                                        if v63 == v288 {
+                                                            let v1162 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFE, v254);
+                                                            if let Some(v1163) = v1162 {
+                                                                let v1164 = &C::any(ctx, v62);
+                                                                let v1165 = C::lookup_id(ctx, v1164);
+                                                                let v70 = &C::any(ctx, v63);
+                                                                let v71 = C::lookup_id(ctx, v70);
+                                                                let v1166 = &C::xor(ctx, v1165, v71);
+                                                                // Rule at .\isle\mba.isle line 803.
+                                                                return Some(v1166.clone());
                                                             }
                                                         }
                                                     }
                                                 }
-                                                _ => {}
                                             }
                                         }
                                     }
                                 }
                                 &SimpleAst::Xor {
-                                    a: v347,
-                                    b: v348,
-                                    data: v349,
+                                    a: v313,
+                                    b: v314,
                                 } => {
-                                    if let Some(v67) = v66 {
+                                    if let Some(v61) = v60 {
                                         if let &SimpleAst::Or {
-                                            a: v327,
-                                            b: v328,
-                                            data: v329,
-                                        } = v67
-                                        {
-                                            if v327 == v347 {
-                                                if v328 == v348 {
-                                                    let v278 = &C::lookup_value(ctx, v275);
-                                                    if let Some(v279) = v278 {
+                                            a: v297,
+                                            b: v298,
+                                        } = v61 {
+                                            if v297 == v313 {
+                                                if v298 == v314 {
+                                                    let v251 = &C::lookup_value(ctx, v249);
+                                                    if let Some(v252) = v251 {
                                                         if let &SimpleAst::Constant {
-                                                            c: v280,
-                                                            data: v281,
-                                                        } = v279
-                                                        {
-                                                            if v280 == 0xFFFFFFFFFFFFFFFF {
-                                                                let v333 = &C::any(ctx, v327);
-                                                                let v334 = C::lookup_id(ctx, v333);
-                                                                let v335 = &C::any(ctx, v328);
-                                                                let v336 = C::lookup_id(ctx, v335);
-                                                                let v1227 =
-                                                                    &C::and(ctx, v334, v336);
-                                                                // Rule at .\isle\mba.isle line 971.
-                                                                return Some(v1227.clone());
+                                                            c: v253,
+                                                            width: v254,
+                                                        } = v252 {
+                                                            let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
+                                                            if let Some(v398) = v397 {
+                                                                let v301 = &C::any(ctx, v297);
+                                                                let v302 = C::lookup_id(ctx, v301);
+                                                                let v303 = &C::any(ctx, v298);
+                                                                let v304 = C::lookup_id(ctx, v303);
+                                                                let v1193 = &C::and(ctx, v302, v304);
+                                                                // Rule at .\isle\mba.isle line 836.
+                                                                return Some(v1193.clone());
                                                             }
                                                         }
                                                     }
@@ -1573,30 +1328,24 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::Neg {
-                                    a: v1130,
-                                    data: v1131,
+                                    a: v1107,
                                 } => {
-                                    if let Some(v67) = v66 {
+                                    if let Some(v61) = v60 {
                                         if let &SimpleAst::Mul {
-                                            a: v293,
-                                            b: v294,
-                                            data: v295,
-                                        } = v67
-                                        {
-                                            if v275 == v293 {
-                                                if v275 == v294 {
-                                                    if v275 == v1130 {
-                                                        let v1132 = &C::constant(
-                                                            ctx,
-                                                            0xFFFFFFFFFFFFFFFF,
-                                                            v295,
-                                                        );
-                                                        let v1133 = C::lookup_id(ctx, v1132);
-                                                        let v639 = &C::any(ctx, v293);
-                                                        let v640 = C::lookup_id(ctx, v639);
-                                                        let v1134 = &C::mul(ctx, v1133, v640);
-                                                        // Rule at .\isle\mba.isle line 875.
-                                                        return Some(v1134.clone());
+                                            a: v270,
+                                            b: v271,
+                                        } = v61 {
+                                            if v249 == v270 {
+                                                if v249 == v271 {
+                                                    if v249 == v1107 {
+                                                        let v596 = C::get_width(ctx, v270);
+                                                        let v597 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v596);
+                                                        let v598 = C::lookup_id(ctx, v597);
+                                                        let v599 = &C::any(ctx, v270);
+                                                        let v600 = C::lookup_id(ctx, v599);
+                                                        let v601 = &C::mul(ctx, v598, v600);
+                                                        // Rule at .\isle\mba.isle line 758.
+                                                        return Some(v601.clone());
                                                     }
                                                 }
                                             }
@@ -1606,71 +1355,47 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                 _ => {}
                             }
                         }
-                        if let Some(v67) = v66 {
-                            match v67 {
+                        if let Some(v61) = v60 {
+                            match v61 {
                                 &SimpleAst::Mul {
-                                    a: v293,
-                                    b: v294,
-                                    data: v295,
+                                    a: v270,
+                                    b: v271,
                                 } => {
-                                    let v301 = &C::lookup_value(ctx, v294);
-                                    if let Some(v302) = v301 {
-                                        match v302 {
+                                    let v276 = &C::lookup_value(ctx, v271);
+                                    if let Some(v277) = v276 {
+                                        match v277 {
                                             &SimpleAst::Or {
-                                                a: v303,
-                                                b: v304,
-                                                data: v305,
+                                                a: v278,
+                                                b: v279,
                                             } => {
-                                                if v276 == v303 {
-                                                    let v278 = &C::lookup_value(ctx, v275);
-                                                    if let Some(v279) = v278 {
+                                                if v250 == v278 {
+                                                    let v251 = &C::lookup_value(ctx, v249);
+                                                    if let Some(v252) = v251 {
                                                         if let &SimpleAst::Constant {
-                                                            c: v280,
-                                                            data: v281,
-                                                        } = v279
-                                                        {
-                                                            if v280 == 0xFFFFFFFFFFFFFFFF {
-                                                                let v296 =
-                                                                    &C::lookup_value(ctx, v293);
-                                                                if let Some(v297) = v296 {
-                                                                    if let &SimpleAst::Constant {
-                                                                        c: v338,
-                                                                        data: v339,
-                                                                    } = v297
-                                                                    {
-                                                                        if v338 == 0x2 {
-                                                                            let v1077 =
-                                                                                &C::any(ctx, v304);
-                                                                            let v1078 =
-                                                                                C::lookup_id(
-                                                                                    ctx, v1077,
-                                                                                );
-                                                                            let v1079 =
-                                                                                &C::any(ctx, v303);
-                                                                            let v1080 =
-                                                                                C::lookup_id(
-                                                                                    ctx, v1079,
-                                                                                );
-                                                                            let v1081 =
-                                                                                &C::any(ctx, v304);
-                                                                            let v1082 =
-                                                                                C::lookup_id(
-                                                                                    ctx, v1081,
-                                                                                );
-                                                                            let v1083 = &C::xor(
-                                                                                ctx, v1080, v1082,
-                                                                            );
-                                                                            let v1084 =
-                                                                                C::lookup_id(
-                                                                                    ctx, v1083,
-                                                                                );
-                                                                            let v1085 = &C::add(
-                                                                                ctx, v1078, v1084,
-                                                                            );
-                                                                            // Rule at .\isle\mba.isle line 843.
-                                                                            return Some(
-                                                                                v1085.clone(),
-                                                                            );
+                                                            c: v253,
+                                                            width: v254,
+                                                        } = v252 {
+                                                            let v272 = &C::lookup_value(ctx, v270);
+                                                            if let Some(v273) = v272 {
+                                                                if let &SimpleAst::Constant {
+                                                                    c: v306,
+                                                                    width: v307,
+                                                                } = v273 {
+                                                                    let v316 = C::is_constant_modulo(ctx, v306, 0x2, v307);
+                                                                    if let Some(v317) = v316 {
+                                                                        let v318 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v307);
+                                                                        if let Some(v319) = v318 {
+                                                                            let v1057 = &C::any(ctx, v279);
+                                                                            let v1058 = C::lookup_id(ctx, v1057);
+                                                                            let v1059 = &C::any(ctx, v278);
+                                                                            let v1060 = C::lookup_id(ctx, v1059);
+                                                                            let v1061 = &C::any(ctx, v279);
+                                                                            let v1062 = C::lookup_id(ctx, v1061);
+                                                                            let v1063 = &C::xor(ctx, v1060, v1062);
+                                                                            let v1064 = C::lookup_id(ctx, v1063);
+                                                                            let v1065 = &C::add(ctx, v1058, v1064);
+                                                                            // Rule at .\isle\mba.isle line 732.
+                                                                            return Some(v1065.clone());
                                                                         }
                                                                     }
                                                                 }
@@ -1680,22 +1405,18 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                 }
                                             }
                                             &SimpleAst::Neg {
-                                                a: v635,
-                                                data: v636,
+                                                a: v595,
                                             } => {
-                                                if v275 == v293 {
-                                                    if v276 == v635 {
-                                                        let v637 = &C::constant(
-                                                            ctx,
-                                                            0xFFFFFFFFFFFFFFFF,
-                                                            v636,
-                                                        );
-                                                        let v638 = C::lookup_id(ctx, v637);
-                                                        let v639 = &C::any(ctx, v293);
-                                                        let v640 = C::lookup_id(ctx, v639);
-                                                        let v641 = &C::mul(ctx, v638, v640);
-                                                        // Rule at .\isle\mba.isle line 579.
-                                                        return Some(v641.clone());
+                                                if v249 == v270 {
+                                                    if v250 == v595 {
+                                                        let v596 = C::get_width(ctx, v270);
+                                                        let v597 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v596);
+                                                        let v598 = C::lookup_id(ctx, v597);
+                                                        let v599 = &C::any(ctx, v270);
+                                                        let v600 = C::lookup_id(ctx, v599);
+                                                        let v601 = &C::mul(ctx, v598, v600);
+                                                        // Rule at .\isle\mba.isle line 484.
+                                                        return Some(v601.clone());
                                                     }
                                                 }
                                             }
@@ -1704,38 +1425,32 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::Or {
-                                    a: v327,
-                                    b: v328,
-                                    data: v329,
+                                    a: v297,
+                                    b: v298,
                                 } => {
-                                    if let Some(v314) = v313 {
+                                    if let Some(v286) = v285 {
                                         if let &SimpleAst::And {
-                                            a: v315,
-                                            b: v316,
-                                            data: v317,
-                                        } = v314
-                                        {
-                                            if v316 == v328 {
-                                                let v278 = &C::lookup_value(ctx, v275);
-                                                if let Some(v279) = v278 {
+                                            a: v287,
+                                            b: v288,
+                                        } = v286 {
+                                            if v288 == v298 {
+                                                let v251 = &C::lookup_value(ctx, v249);
+                                                if let Some(v252) = v251 {
                                                     if let &SimpleAst::Constant {
-                                                        c: v280,
-                                                        data: v281,
-                                                    } = v279
-                                                    {
-                                                        if v280 == 0xFFFFFFFFFFFFFFFF {
-                                                            let v318 = &C::lookup_value(ctx, v315);
-                                                            if let Some(v319) = v318 {
-                                                                if let &SimpleAst::Neg {
-                                                                    a: v320,
-                                                                    data: v321,
-                                                                } = v319
-                                                                {
-                                                                    if v320 == v327 {
-                                                                        let v333 =
-                                                                            &C::any(ctx, v327);
-                                                                        // Rule at .\isle\mba.isle line 515.
-                                                                        return Some(v333.clone());
+                                                        c: v253,
+                                                        width: v254,
+                                                    } = v252 {
+                                                        let v289 = &C::lookup_value(ctx, v287);
+                                                        if let Some(v290) = v289 {
+                                                            if let &SimpleAst::Neg {
+                                                                a: v291,
+                                                            } = v290 {
+                                                                if v291 == v297 {
+                                                                    let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
+                                                                    if let Some(v398) = v397 {
+                                                                        let v301 = &C::any(ctx, v297);
+                                                                        // Rule at .\isle\mba.isle line 432.
+                                                                        return Some(v301.clone());
                                                                     }
                                                                 }
                                                             }
@@ -1747,61 +1462,55 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::Xor {
-                                    a: v365,
-                                    b: v366,
-                                    data: v367,
+                                    a: v334,
+                                    b: v335,
                                 } => {
-                                    if let Some(v314) = v313 {
-                                        match v314 {
+                                    if let Some(v286) = v285 {
+                                        match v286 {
                                             &SimpleAst::Mul {
-                                                a: v538,
-                                                b: v539,
-                                                data: v540,
+                                                a: v508,
+                                                b: v509,
                                             } => {
-                                                let v278 = &C::lookup_value(ctx, v275);
-                                                if let Some(v279) = v278 {
+                                                let v251 = &C::lookup_value(ctx, v249);
+                                                if let Some(v252) = v251 {
                                                     if let &SimpleAst::Constant {
-                                                        c: v280,
-                                                        data: v281,
-                                                    } = v279
-                                                    {
-                                                        if v280 == 0xFFFFFFFFFFFFFFFF {
-                                                            let v541 = &C::lookup_value(ctx, v538);
-                                                            if let Some(v542) = v541 {
+                                                        c: v253,
+                                                        width: v254,
+                                                    } = v252 {
+                                                        let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
+                                                        if let Some(v398) = v397 {
+                                                            let v510 = &C::lookup_value(ctx, v508);
+                                                            if let Some(v511) = v510 {
                                                                 if let &SimpleAst::Constant {
-                                                                    c: v543,
-                                                                    data: v544,
-                                                                } = v542
-                                                                {
-                                                                    if v543 == 0x2 {
-                                                                        let v545 = &C::lookup_value(
-                                                                            ctx, v539,
-                                                                        );
-                                                                        if let Some(v546) = v545 {
-                                                                            if let &SimpleAst::And {
-                                                                                a: v547,
-                                                                                b: v548,
-                                                                                data: v549,
-                                                                            } = v546 {
-                                                                                if v366 == v548 {
-                                                                                    let v550 = &C::lookup_value(ctx, v547);
-                                                                                    if let Some(v551) = v550 {
-                                                                                        if let &SimpleAst::Neg {
-                                                                                            a: v552,
-                                                                                            data: v553,
-                                                                                        } = v551 {
-                                                                                            if v365 == v552 {
-                                                                                                let v368 = &C::any(ctx, v365);
-                                                                                                let v369 = C::lookup_id(ctx, v368);
-                                                                                                let v554 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v367);
-                                                                                                let v555 = C::lookup_id(ctx, v554);
-                                                                                                let v556 = &C::any(ctx, v366);
-                                                                                                let v557 = C::lookup_id(ctx, v556);
-                                                                                                let v558 = &C::mul(ctx, v555, v557);
-                                                                                                let v559 = C::lookup_id(ctx, v558);
-                                                                                                let v560 = &C::add(ctx, v369, v559);
-                                                                                                // Rule at .\isle\mba.isle line 523.
-                                                                                                return Some(v560.clone());
+                                                                    c: v512,
+                                                                    width: v513,
+                                                                } = v511 {
+                                                                    let v514 = &C::lookup_value(ctx, v509);
+                                                                    if let Some(v515) = v514 {
+                                                                        if let &SimpleAst::And {
+                                                                            a: v516,
+                                                                            b: v517,
+                                                                        } = v515 {
+                                                                            if v335 == v517 {
+                                                                                let v518 = &C::lookup_value(ctx, v516);
+                                                                                if let Some(v519) = v518 {
+                                                                                    if let &SimpleAst::Neg {
+                                                                                        a: v520,
+                                                                                    } = v519 {
+                                                                                        if v334 == v520 {
+                                                                                            let v521 = C::is_constant_modulo(ctx, v512, 0x2, v254);
+                                                                                            if let Some(v522) = v521 {
+                                                                                                let v338 = &C::any(ctx, v334);
+                                                                                                let v339 = C::lookup_id(ctx, v338);
+                                                                                                let v523 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v254);
+                                                                                                let v524 = C::lookup_id(ctx, v523);
+                                                                                                let v525 = &C::any(ctx, v335);
+                                                                                                let v526 = C::lookup_id(ctx, v525);
+                                                                                                let v527 = &C::mul(ctx, v524, v526);
+                                                                                                let v528 = C::lookup_id(ctx, v527);
+                                                                                                let v529 = &C::add(ctx, v339, v528);
+                                                                                                // Rule at .\isle\mba.isle line 439.
+                                                                                                return Some(v529.clone());
                                                                                             }
                                                                                         }
                                                                                     }
@@ -1816,73 +1525,39 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                 }
                                             }
                                             &SimpleAst::Or {
-                                                a: v561,
-                                                b: v562,
-                                                data: v563,
+                                                a: v530,
+                                                b: v531,
                                             } => {
-                                                if v366 == v562 {
-                                                    let v278 = &C::lookup_value(ctx, v275);
-                                                    if let Some(v279) = v278 {
+                                                if v335 == v531 {
+                                                    let v251 = &C::lookup_value(ctx, v249);
+                                                    if let Some(v252) = v251 {
                                                         if let &SimpleAst::Constant {
-                                                            c: v280,
-                                                            data: v281,
-                                                        } = v279
-                                                        {
-                                                            if v280 == 0x2 {
-                                                                let v564 =
-                                                                    &C::lookup_value(ctx, v561);
-                                                                if let Some(v565) = v564 {
+                                                            c: v253,
+                                                            width: v254,
+                                                        } = v252 {
+                                                            let v336 = C::is_constant_modulo(ctx, v253, 0x2, v254);
+                                                            if let Some(v337) = v336 {
+                                                                let v532 = &C::lookup_value(ctx, v530);
+                                                                if let Some(v533) = v532 {
                                                                     if let &SimpleAst::Neg {
-                                                                        a: v566,
-                                                                        data: v567,
-                                                                    } = v565
-                                                                    {
-                                                                        if v365 == v566 {
-                                                                            let v569 = &C::constant(
-                                                                                ctx,
-                                                                                0xFFFFFFFFFFFFFFFE,
-                                                                                v367,
-                                                                            );
-                                                                            let v570 = C::lookup_id(
-                                                                                ctx, v569,
-                                                                            );
-                                                                            let v554 = &C::constant(
-                                                                                ctx,
-                                                                                0xFFFFFFFFFFFFFFFF,
-                                                                                v367,
-                                                                            );
-                                                                            let v555 = C::lookup_id(
-                                                                                ctx, v554,
-                                                                            );
-                                                                            let v571 =
-                                                                                &C::any(ctx, v365);
-                                                                            let v572 = C::lookup_id(
-                                                                                ctx, v571,
-                                                                            );
-                                                                            let v573 = &C::mul(
-                                                                                ctx, v555, v572,
-                                                                            );
-                                                                            let v574 = C::lookup_id(
-                                                                                ctx, v573,
-                                                                            );
-                                                                            let v575 = &C::add(
-                                                                                ctx, v570, v574,
-                                                                            );
-                                                                            let v576 = C::lookup_id(
-                                                                                ctx, v575,
-                                                                            );
-                                                                            let v577 =
-                                                                                &C::any(ctx, v366);
-                                                                            let v578 = C::lookup_id(
-                                                                                ctx, v577,
-                                                                            );
-                                                                            let v579 = &C::add(
-                                                                                ctx, v576, v578,
-                                                                            );
-                                                                            // Rule at .\isle\mba.isle line 531.
-                                                                            return Some(
-                                                                                v579.clone(),
-                                                                            );
+                                                                        a: v534,
+                                                                    } = v533 {
+                                                                        if v334 == v534 {
+                                                                            let v536 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFE, v254);
+                                                                            let v537 = C::lookup_id(ctx, v536);
+                                                                            let v523 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v254);
+                                                                            let v524 = C::lookup_id(ctx, v523);
+                                                                            let v538 = &C::any(ctx, v334);
+                                                                            let v539 = C::lookup_id(ctx, v538);
+                                                                            let v540 = &C::mul(ctx, v524, v539);
+                                                                            let v541 = C::lookup_id(ctx, v540);
+                                                                            let v542 = &C::add(ctx, v537, v541);
+                                                                            let v543 = C::lookup_id(ctx, v542);
+                                                                            let v544 = &C::any(ctx, v335);
+                                                                            let v545 = C::lookup_id(ctx, v544);
+                                                                            let v546 = &C::add(ctx, v543, v545);
+                                                                            // Rule at .\isle\mba.isle line 447.
+                                                                            return Some(v546.clone());
                                                                         }
                                                                     }
                                                                 }
@@ -1898,65 +1573,58 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                 _ => {}
                             }
                         }
-                        if v54 == v276 {
-                            let v278 = &C::lookup_value(ctx, v275);
-                            if let Some(v279) = v278 {
+                        if v49 == v250 {
+                            let v251 = &C::lookup_value(ctx, v249);
+                            if let Some(v252) = v251 {
                                 if let &SimpleAst::Constant {
-                                    c: v280,
-                                    data: v281,
-                                } = v279
-                                {
-                                    if v280 == 0xFFFFFFFFFFFFFFFF {
-                                        let v435 = &C::constant(ctx, 0x0, v277);
-                                        // Rule at .\isle\mba.isle line 411.
-                                        return Some(v435.clone());
+                                    c: v253,
+                                    width: v254,
+                                } = v252 {
+                                    let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
+                                    if let Some(v398) = v397 {
+                                        let v399 = &C::constant(ctx, 0x0, v254);
+                                        // Rule at .\isle\mba.isle line 345.
+                                        return Some(v399.clone());
                                     }
                                 }
                             }
                         }
                     }
                     &SimpleAst::And {
-                        a: v330,
-                        b: v331,
-                        data: v332,
+                        a: v299,
+                        b: v300,
                     } => {
-                        let v1166 = &C::lookup_value(ctx, v331);
-                        if let Some(v1167) = v1166 {
+                        let v1136 = &C::lookup_value(ctx, v300);
+                        if let Some(v1137) = v1136 {
                             if let &SimpleAst::Neg {
-                                a: v1168,
-                                data: v1169,
-                            } = v1167
-                            {
-                                if v54 == v1168 {
-                                    let v1170 = &C::any(ctx, v54);
-                                    let v1171 = C::lookup_id(ctx, v1170);
-                                    let v1172 = &C::any(ctx, v330);
-                                    let v1173 = C::lookup_id(ctx, v1172);
-                                    let v1174 = &C::or(ctx, v1171, v1173);
-                                    // Rule at .\isle\mba.isle line 907.
-                                    return Some(v1174.clone());
+                                a: v1138,
+                            } = v1137 {
+                                if v49 == v1138 {
+                                    let v1139 = &C::any(ctx, v49);
+                                    let v1140 = C::lookup_id(ctx, v1139);
+                                    let v1141 = &C::any(ctx, v299);
+                                    let v1142 = C::lookup_id(ctx, v1141);
+                                    let v1143 = &C::or(ctx, v1140, v1142);
+                                    // Rule at .\isle\mba.isle line 783.
+                                    return Some(v1143.clone());
                                 }
                             }
                         }
-                        if let Some(v67) = v66 {
+                        if let Some(v61) = v60 {
                             if let &SimpleAst::And {
-                                a: v515,
-                                b: v516,
-                                data: v517,
-                            } = v67
-                            {
-                                if v331 == v516 {
-                                    let v518 = &C::lookup_value(ctx, v330);
-                                    if let Some(v519) = v518 {
+                                a: v486,
+                                b: v487,
+                            } = v61 {
+                                if v300 == v487 {
+                                    let v488 = &C::lookup_value(ctx, v299);
+                                    if let Some(v489) = v488 {
                                         if let &SimpleAst::Neg {
-                                            a: v520,
-                                            data: v521,
-                                        } = v519
-                                        {
-                                            if v515 == v520 {
-                                                let v522 = &C::any(ctx, v516);
-                                                // Rule at .\isle\mba.isle line 491.
-                                                return Some(v522.clone());
+                                            a: v490,
+                                        } = v489 {
+                                            if v486 == v490 {
+                                                let v491 = &C::any(ctx, v487);
+                                                // Rule at .\isle\mba.isle line 414.
+                                                return Some(v491.clone());
                                             }
                                         }
                                     }
@@ -1965,51 +1633,46 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Or {
-                        a: v523,
-                        b: v524,
-                        data: v525,
+                        a: v492,
+                        b: v493,
                     } => {
-                        if let Some(v67) = v66 {
-                            match v67 {
+                        if let Some(v61) = v60 {
+                            match v61 {
                                 &SimpleAst::And {
-                                    a: v515,
-                                    b: v516,
-                                    data: v517,
+                                    a: v486,
+                                    b: v487,
                                 } => {
-                                    if v515 == v523 {
-                                        if v516 == v524 {
-                                            let v1152 = &C::any(ctx, v515);
-                                            let v1153 = C::lookup_id(ctx, v1152);
-                                            let v1154 = &C::any(ctx, v516);
-                                            let v1155 = C::lookup_id(ctx, v1154);
-                                            let v1228 = &C::add(ctx, v1153, v1155);
-                                            // Rule at .\isle\mba.isle line 979.
-                                            return Some(v1228.clone());
+                                    if v486 == v492 {
+                                        if v487 == v493 {
+                                            let v1123 = &C::any(ctx, v486);
+                                            let v1124 = C::lookup_id(ctx, v1123);
+                                            let v1125 = &C::any(ctx, v487);
+                                            let v1126 = C::lookup_id(ctx, v1125);
+                                            let v1194 = &C::add(ctx, v1124, v1126);
+                                            // Rule at .\isle\mba.isle line 843.
+                                            return Some(v1194.clone());
                                         }
                                     }
                                 }
                                 &SimpleAst::Or {
-                                    a: v327,
-                                    b: v328,
-                                    data: v329,
+                                    a: v297,
+                                    b: v298,
                                 } => {
-                                    if v328 == v524 {
-                                        let v526 = &C::lookup_value(ctx, v523);
-                                        if let Some(v527) = v526 {
+                                    if v298 == v493 {
+                                        let v494 = &C::lookup_value(ctx, v492);
+                                        if let Some(v495) = v494 {
                                             if let &SimpleAst::Neg {
-                                                a: v528,
-                                                data: v529,
-                                            } = v527
-                                            {
-                                                if v327 == v528 {
-                                                    let v530 =
-                                                        &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v329);
-                                                    let v531 = C::lookup_id(ctx, v530);
-                                                    let v335 = &C::any(ctx, v328);
-                                                    let v336 = C::lookup_id(ctx, v335);
-                                                    let v532 = &C::add(ctx, v531, v336);
-                                                    // Rule at .\isle\mba.isle line 499.
-                                                    return Some(v532.clone());
+                                                a: v496,
+                                            } = v495 {
+                                                if v297 == v496 {
+                                                    let v497 = C::get_width(ctx, v297);
+                                                    let v498 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v497);
+                                                    let v499 = C::lookup_id(ctx, v498);
+                                                    let v500 = &C::any(ctx, v298);
+                                                    let v501 = C::lookup_id(ctx, v500);
+                                                    let v502 = &C::add(ctx, v499, v501);
+                                                    // Rule at .\isle\mba.isle line 420.
+                                                    return Some(v502.clone());
                                                 }
                                             }
                                         }
@@ -2020,47 +1683,42 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Xor {
-                        a: v359,
-                        b: v360,
-                        data: v361,
+                        a: v329,
+                        b: v330,
                     } => {
-                        if let Some(v67) = v66 {
-                            match v67 {
+                        if let Some(v61) = v60 {
+                            match v61 {
                                 &SimpleAst::And {
-                                    a: v515,
-                                    b: v516,
-                                    data: v517,
+                                    a: v486,
+                                    b: v487,
                                 } => {
-                                    if v359 == v515 {
-                                        if v360 == v516 {
-                                            let v1152 = &C::any(ctx, v515);
-                                            let v1153 = C::lookup_id(ctx, v1152);
-                                            let v1154 = &C::any(ctx, v516);
-                                            let v1155 = C::lookup_id(ctx, v1154);
-                                            let v1156 = &C::or(ctx, v1153, v1155);
-                                            // Rule at .\isle\mba.isle line 891.
-                                            return Some(v1156.clone());
+                                    if v329 == v486 {
+                                        if v330 == v487 {
+                                            let v1123 = &C::any(ctx, v486);
+                                            let v1124 = C::lookup_id(ctx, v1123);
+                                            let v1125 = &C::any(ctx, v487);
+                                            let v1126 = C::lookup_id(ctx, v1125);
+                                            let v1127 = &C::or(ctx, v1124, v1126);
+                                            // Rule at .\isle\mba.isle line 771.
+                                            return Some(v1127.clone());
                                         }
                                     }
                                 }
                                 &SimpleAst::Xor {
-                                    a: v365,
-                                    b: v366,
-                                    data: v367,
+                                    a: v334,
+                                    b: v335,
                                 } => {
-                                    if v360 == v366 {
-                                        let v533 = &C::lookup_value(ctx, v359);
-                                        if let Some(v534) = v533 {
+                                    if v330 == v335 {
+                                        let v503 = &C::lookup_value(ctx, v329);
+                                        if let Some(v504) = v503 {
                                             if let &SimpleAst::Neg {
-                                                a: v535,
-                                                data: v536,
-                                            } = v534
-                                            {
-                                                if v365 == v535 {
-                                                    let v537 =
-                                                        &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v367);
-                                                    // Rule at .\isle\mba.isle line 507.
-                                                    return Some(v537.clone());
+                                                a: v505,
+                                            } = v504 {
+                                                if v334 == v505 {
+                                                    let v506 = C::get_width(ctx, v334);
+                                                    let v507 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v506);
+                                                    // Rule at .\isle\mba.isle line 426.
+                                                    return Some(v507.clone());
                                                 }
                                             }
                                         }
@@ -2071,164 +1729,153 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Neg {
-                        a: v285,
-                        data: v286,
+                        a: v261,
                     } => {
-                        if let Some(v67) = v66 {
+                        if let Some(v61) = v60 {
                             if let &SimpleAst::And {
-                                a: v515,
-                                b: v516,
-                                data: v517,
-                            } = v67
-                            {
-                                let v1213 = &C::lookup_value(ctx, v285);
-                                if let Some(v1214) = v1213 {
+                                a: v486,
+                                b: v487,
+                            } = v61 {
+                                let v1181 = &C::lookup_value(ctx, v261);
+                                if let Some(v1182) = v1181 {
                                     if let &SimpleAst::Or {
-                                        a: v1215,
-                                        b: v1216,
-                                        data: v1217,
-                                    } = v1214
-                                    {
-                                        if v515 == v1215 {
-                                            if v516 == v1216 {
-                                                let v1152 = &C::any(ctx, v515);
-                                                let v1153 = C::lookup_id(ctx, v1152);
-                                                let v1154 = &C::any(ctx, v516);
-                                                let v1155 = C::lookup_id(ctx, v1154);
-                                                let v1218 = &C::xor(ctx, v1153, v1155);
-                                                let v1219 = C::lookup_id(ctx, v1218);
-                                                let v1220 = &C::neg(ctx, v1219);
-                                                // Rule at .\isle\mba.isle line 955.
-                                                return Some(v1220.clone());
+                                        a: v1183,
+                                        b: v1184,
+                                    } = v1182 {
+                                        if v486 == v1183 {
+                                            if v487 == v1184 {
+                                                let v1123 = &C::any(ctx, v486);
+                                                let v1124 = C::lookup_id(ctx, v1123);
+                                                let v1125 = &C::any(ctx, v487);
+                                                let v1126 = C::lookup_id(ctx, v1125);
+                                                let v1185 = &C::xor(ctx, v1124, v1126);
+                                                let v1186 = C::lookup_id(ctx, v1185);
+                                                let v1187 = &C::neg(ctx, v1186);
+                                                // Rule at .\isle\mba.isle line 823.
+                                                return Some(v1187.clone());
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                        if v54 == v285 {
-                            let v288 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v286);
-                            // Rule at .\isle\mba.isle line 571.
-                            return Some(v288.clone());
+                        if v49 == v261 {
+                            let v388 = C::get_width(ctx, v49);
+                            let v594 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v388);
+                            // Rule at .\isle\mba.isle line 478.
+                            return Some(v594.clone());
                         }
                     }
                     _ => {}
                 }
             }
-            if let Some(v67) = v66 {
-                if let &SimpleAst::Constant { c: v84, data: v85 } = v67 {
-                    if v84 == 0x0 {
-                        let v434 = &C::any(ctx, v55);
-                        // Rule at .\isle\mba.isle line 403.
-                        return Some(v434.clone());
+            if let Some(v61) = v60 {
+                if let &SimpleAst::Constant {
+                    c: v77,
+                    width: v78,
+                } = v61 {
+                    let v394 = C::is_constant_modulo(ctx, v77, 0x0, v78);
+                    if let Some(v395) = v394 {
+                        let v396 = &C::any(ctx, v50);
+                        // Rule at .\isle\mba.isle line 338.
+                        return Some(v396.clone());
                     }
                 }
             }
-            if v54 == v55 {
-                let v431 = &C::constant(ctx, 0x2, v56);
-                let v432 = C::lookup_id(ctx, v431);
-                let v63 = &C::any(ctx, v54);
-                let v64 = C::lookup_id(ctx, v63);
-                let v433 = &C::mul(ctx, v432, v64);
-                // Rule at .\isle\mba.isle line 395.
-                return Some(v433.clone());
+            if v49 == v50 {
+                let v388 = C::get_width(ctx, v49);
+                let v389 = &C::constant(ctx, 0x2, v388);
+                let v390 = C::lookup_id(ctx, v389);
+                let v391 = &C::any(ctx, v49);
+                let v392 = C::lookup_id(ctx, v391);
+                let v393 = &C::mul(ctx, v390, v392);
+                // Rule at .\isle\mba.isle line 332.
+                return Some(v393.clone());
             }
-            if let Some(v67) = v66 {
-                match v67 {
+            if let Some(v61) = v60 {
+                match v61 {
                     &SimpleAst::Add {
-                        a: v68,
-                        b: v69,
-                        data: v70,
+                        a: v62,
+                        b: v63,
                     } => {
-                        let v71 = &C::lookup_value(ctx, v68);
-                        if let Some(v72) = v71 {
-                            if let &SimpleAst::Constant { c: v73, data: v74 } = v72 {
-                                let v75 = &C::constant(ctx, v73, v70);
-                                let v76 = C::lookup_id(ctx, v75);
-                                let v77 = &C::any(ctx, v69);
-                                let v78 = C::lookup_id(ctx, v77);
-                                let v79 = &C::any(ctx, v55);
-                                let v80 = C::lookup_id(ctx, v79);
-                                let v81 = &C::add(ctx, v78, v80);
-                                let v82 = C::lookup_id(ctx, v81);
-                                let v83 = &C::add(ctx, v76, v82);
-                                // Rule at .\isle\mba.isle line 107.
-                                return Some(v83.clone());
+                        let v64 = &C::lookup_value(ctx, v62);
+                        if let Some(v65) = v64 {
+                            if let &SimpleAst::Constant {
+                                c: v66,
+                                width: v67,
+                            } = v65 {
+                                let v68 = &C::constant(ctx, v66, v67);
+                                let v69 = C::lookup_id(ctx, v68);
+                                let v70 = &C::any(ctx, v63);
+                                let v71 = C::lookup_id(ctx, v70);
+                                let v72 = &C::any(ctx, v50);
+                                let v73 = C::lookup_id(ctx, v72);
+                                let v74 = &C::add(ctx, v71, v73);
+                                let v75 = C::lookup_id(ctx, v74);
+                                let v76 = &C::add(ctx, v69, v75);
+                                // Rule at .\isle\mba.isle line 110.
+                                return Some(v76.clone());
                             }
                         }
                     }
                     &SimpleAst::Mul {
-                        a: v293,
-                        b: v294,
-                        data: v295,
+                        a: v270,
+                        b: v271,
                     } => {
-                        if let Some(v58) = v57 {
-                            match v58 {
+                        if let Some(v52) = v51 {
+                            match v52 {
                                 &SimpleAst::Mul {
-                                    a: v275,
-                                    b: v276,
-                                    data: v277,
+                                    a: v249,
+                                    b: v250,
                                 } => {
-                                    let v278 = &C::lookup_value(ctx, v275);
-                                    if let Some(v279) = v278 {
-                                        match v279 {
+                                    let v251 = &C::lookup_value(ctx, v249);
+                                    if let Some(v252) = v251 {
+                                        match v252 {
                                             &SimpleAst::And {
-                                                a: v306,
-                                                b: v307,
-                                                data: v308,
+                                                a: v280,
+                                                b: v281,
                                             } => {
-                                                let v296 = &C::lookup_value(ctx, v293);
-                                                if let Some(v297) = v296 {
+                                                let v272 = &C::lookup_value(ctx, v270);
+                                                if let Some(v273) = v272 {
                                                     if let &SimpleAst::And {
-                                                        a: v298,
-                                                        b: v299,
-                                                        data: v300,
-                                                    } = v297
-                                                    {
-                                                        if v298 == v306 {
-                                                            let v301 = &C::lookup_value(ctx, v294);
-                                                            if let Some(v302) = v301 {
+                                                        a: v274,
+                                                        b: v275,
+                                                    } = v273 {
+                                                        if v274 == v280 {
+                                                            let v276 = &C::lookup_value(ctx, v271);
+                                                            if let Some(v277) = v276 {
                                                                 if let &SimpleAst::Or {
-                                                                    a: v303,
-                                                                    b: v304,
-                                                                    data: v305,
-                                                                } = v302
-                                                                {
-                                                                    if v298 == v303 {
-                                                                        if v299 == v304 {
-                                                                            let v309 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v307,
-                                                                                );
-                                                                            if let Some(v310) = v309
-                                                                            {
+                                                                    a: v278,
+                                                                    b: v279,
+                                                                } = v277 {
+                                                                    if v274 == v278 {
+                                                                        if v275 == v279 {
+                                                                            let v282 = &C::lookup_value(ctx, v281);
+                                                                            if let Some(v283) = v282 {
                                                                                 if let &SimpleAst::Neg {
-                                                                                    a: v311,
-                                                                                    data: v312,
-                                                                                } = v310 {
-                                                                                    if v299 == v311 {
-                                                                                        let v313 = &C::lookup_value(ctx, v276);
-                                                                                        if let Some(v314) = v313 {
+                                                                                    a: v284,
+                                                                                } = v283 {
+                                                                                    if v275 == v284 {
+                                                                                        let v285 = &C::lookup_value(ctx, v250);
+                                                                                        if let Some(v286) = v285 {
                                                                                             if let &SimpleAst::And {
-                                                                                                a: v315,
-                                                                                                b: v316,
-                                                                                                data: v317,
-                                                                                            } = v314 {
-                                                                                                if v299 == v316 {
-                                                                                                    let v318 = &C::lookup_value(ctx, v315);
-                                                                                                    if let Some(v319) = v318 {
+                                                                                                a: v287,
+                                                                                                b: v288,
+                                                                                            } = v286 {
+                                                                                                if v275 == v288 {
+                                                                                                    let v289 = &C::lookup_value(ctx, v287);
+                                                                                                    if let Some(v290) = v289 {
                                                                                                         if let &SimpleAst::Neg {
-                                                                                                            a: v320,
-                                                                                                            data: v321,
-                                                                                                        } = v319 {
-                                                                                                            if v298 == v320 {
-                                                                                                                let v322 = &C::any(ctx, v298);
-                                                                                                                let v323 = C::lookup_id(ctx, v322);
-                                                                                                                let v324 = &C::any(ctx, v299);
-                                                                                                                let v325 = C::lookup_id(ctx, v324);
-                                                                                                                let v326 = &C::mul(ctx, v323, v325);
-                                                                                                                // Rule at .\isle\mba.isle line 251.
-                                                                                                                return Some(v326.clone());
+                                                                                                            a: v291,
+                                                                                                        } = v290 {
+                                                                                                            if v274 == v291 {
+                                                                                                                let v292 = &C::any(ctx, v274);
+                                                                                                                let v293 = C::lookup_id(ctx, v292);
+                                                                                                                let v294 = &C::any(ctx, v275);
+                                                                                                                let v295 = C::lookup_id(ctx, v294);
+                                                                                                                let v296 = &C::mul(ctx, v293, v295);
+                                                                                                                // Rule at .\isle\mba.isle line 220.
+                                                                                                                return Some(v296.clone());
                                                                                                             }
                                                                                                         }
                                                                                                     }
@@ -2247,55 +1894,49 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                 }
                                             }
                                             &SimpleAst::Constant {
-                                                c: v280,
-                                                data: v281,
+                                                c: v253,
+                                                width: v254,
                                             } => {
-                                                if v280 == 0xFFFFFFFFFFFFFFFF {
-                                                    let v296 = &C::lookup_value(ctx, v293);
-                                                    if let Some(v297) = v296 {
-                                                        if let &SimpleAst::Constant {
-                                                            c: v338,
-                                                            data: v339,
-                                                        } = v297
-                                                        {
-                                                            if v338 == 0x2 {
-                                                                let v301 =
-                                                                    &C::lookup_value(ctx, v294);
-                                                                if let Some(v302) = v301 {
-                                                                    if let &SimpleAst::And {
-                                                                        a: v340,
-                                                                        b: v341,
-                                                                        data: v342,
-                                                                    } = v302
-                                                                    {
-                                                                        let v313 = &C::lookup_value(
-                                                                            ctx, v276,
-                                                                        );
-                                                                        if let Some(v314) = v313 {
-                                                                            if let &SimpleAst::Xor {
-                                                                                a: v347,
-                                                                                b: v348,
-                                                                                data: v349,
-                                                                            } = v314 {
-                                                                                if v340 == v347 {
-                                                                                    let v343 = &C::lookup_value(ctx, v341);
-                                                                                    if let Some(v344) = v343 {
-                                                                                        if let &SimpleAst::Neg {
-                                                                                            a: v345,
-                                                                                            data: v346,
-                                                                                        } = v344 {
-                                                                                            if v345 == v348 {
-                                                                                                let v350 = &C::any(ctx, v340);
-                                                                                                let v351 = C::lookup_id(ctx, v350);
-                                                                                                let v352 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v346);
-                                                                                                let v353 = C::lookup_id(ctx, v352);
-                                                                                                let v354 = &C::any(ctx, v345);
-                                                                                                let v355 = C::lookup_id(ctx, v354);
-                                                                                                let v356 = &C::mul(ctx, v353, v355);
-                                                                                                let v357 = C::lookup_id(ctx, v356);
-                                                                                                let v358 = &C::add(ctx, v351, v357);
-                                                                                                // Rule at .\isle\mba.isle line 267.
-                                                                                                return Some(v358.clone());
+                                                let v272 = &C::lookup_value(ctx, v270);
+                                                if let Some(v273) = v272 {
+                                                    if let &SimpleAst::Constant {
+                                                        c: v306,
+                                                        width: v307,
+                                                    } = v273 {
+                                                        let v276 = &C::lookup_value(ctx, v271);
+                                                        if let Some(v277) = v276 {
+                                                            if let &SimpleAst::And {
+                                                                a: v308,
+                                                                b: v309,
+                                                            } = v277 {
+                                                                let v285 = &C::lookup_value(ctx, v250);
+                                                                if let Some(v286) = v285 {
+                                                                    if let &SimpleAst::Xor {
+                                                                        a: v313,
+                                                                        b: v314,
+                                                                    } = v286 {
+                                                                        if v308 == v313 {
+                                                                            let v310 = &C::lookup_value(ctx, v309);
+                                                                            if let Some(v311) = v310 {
+                                                                                if let &SimpleAst::Neg {
+                                                                                    a: v312,
+                                                                                } = v311 {
+                                                                                    if v312 == v314 {
+                                                                                        let v316 = C::is_constant_modulo(ctx, v306, 0x2, v307);
+                                                                                        if let Some(v317) = v316 {
+                                                                                            let v318 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v307);
+                                                                                            if let Some(v319) = v318 {
+                                                                                                let v320 = &C::any(ctx, v308);
+                                                                                                let v321 = C::lookup_id(ctx, v320);
+                                                                                                let v322 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v307);
+                                                                                                let v323 = C::lookup_id(ctx, v322);
+                                                                                                let v324 = &C::any(ctx, v312);
+                                                                                                let v325 = C::lookup_id(ctx, v324);
+                                                                                                let v326 = &C::mul(ctx, v323, v325);
+                                                                                                let v327 = C::lookup_id(ctx, v326);
+                                                                                                let v328 = &C::add(ctx, v321, v327);
+                                                                                                // Rule at .\isle\mba.isle line 232.
+                                                                                                return Some(v328.clone());
                                                                                             }
                                                                                         }
                                                                                     }
@@ -2314,35 +1955,32 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::Xor {
-                                    a: v359,
-                                    b: v360,
-                                    data: v361,
+                                    a: v329,
+                                    b: v330,
                                 } => {
-                                    let v296 = &C::lookup_value(ctx, v293);
-                                    if let Some(v297) = v296 {
+                                    let v272 = &C::lookup_value(ctx, v270);
+                                    if let Some(v273) = v272 {
                                         if let &SimpleAst::Constant {
-                                            c: v338,
-                                            data: v339,
-                                        } = v297
-                                        {
-                                            if v338 == 0x2 {
-                                                let v301 = &C::lookup_value(ctx, v294);
-                                                if let Some(v302) = v301 {
-                                                    if let &SimpleAst::And {
-                                                        a: v340,
-                                                        b: v341,
-                                                        data: v342,
-                                                    } = v302
-                                                    {
-                                                        if v340 == v359 {
-                                                            if v341 == v360 {
-                                                                let v350 = &C::any(ctx, v340);
-                                                                let v351 = C::lookup_id(ctx, v350);
-                                                                let v362 = &C::any(ctx, v341);
-                                                                let v363 = C::lookup_id(ctx, v362);
-                                                                let v364 = &C::add(ctx, v351, v363);
-                                                                // Rule at .\isle\mba.isle line 275.
-                                                                return Some(v364.clone());
+                                            c: v306,
+                                            width: v307,
+                                        } = v273 {
+                                            let v276 = &C::lookup_value(ctx, v271);
+                                            if let Some(v277) = v276 {
+                                                if let &SimpleAst::And {
+                                                    a: v308,
+                                                    b: v309,
+                                                } = v277 {
+                                                    if v308 == v329 {
+                                                        if v309 == v330 {
+                                                            let v316 = C::is_constant_modulo(ctx, v306, 0x2, v307);
+                                                            if let Some(v317) = v316 {
+                                                                let v320 = &C::any(ctx, v308);
+                                                                let v321 = C::lookup_id(ctx, v320);
+                                                                let v331 = &C::any(ctx, v309);
+                                                                let v332 = C::lookup_id(ctx, v331);
+                                                                let v333 = &C::add(ctx, v321, v332);
+                                                                // Rule at .\isle\mba.isle line 240.
+                                                                return Some(v333.clone());
                                                             }
                                                         }
                                                     }
@@ -2356,68 +1994,60 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Or {
-                        a: v327,
-                        b: v328,
-                        data: v329,
+                        a: v297,
+                        b: v298,
                     } => {
-                        if let Some(v58) = v57 {
+                        if let Some(v52) = v51 {
                             if let &SimpleAst::And {
-                                a: v330,
-                                b: v331,
-                                data: v332,
-                            } = v58
-                            {
-                                if v327 == v330 {
-                                    if v328 == v331 {
-                                        let v333 = &C::any(ctx, v327);
-                                        let v334 = C::lookup_id(ctx, v333);
-                                        let v335 = &C::any(ctx, v328);
-                                        let v336 = C::lookup_id(ctx, v335);
-                                        let v337 = &C::add(ctx, v334, v336);
-                                        // Rule at .\isle\mba.isle line 259.
-                                        return Some(v337.clone());
+                                a: v299,
+                                b: v300,
+                            } = v52 {
+                                if v297 == v299 {
+                                    if v298 == v300 {
+                                        let v301 = &C::any(ctx, v297);
+                                        let v302 = C::lookup_id(ctx, v301);
+                                        let v303 = &C::any(ctx, v298);
+                                        let v304 = C::lookup_id(ctx, v303);
+                                        let v305 = &C::add(ctx, v302, v304);
+                                        // Rule at .\isle\mba.isle line 226.
+                                        return Some(v305.clone());
                                     }
                                 }
                             }
                         }
                     }
                     &SimpleAst::Xor {
-                        a: v365,
-                        b: v366,
-                        data: v367,
+                        a: v334,
+                        b: v335,
                     } => {
-                        if let Some(v58) = v57 {
+                        if let Some(v52) = v51 {
                             if let &SimpleAst::Mul {
-                                a: v275,
-                                b: v276,
-                                data: v277,
-                            } = v58
-                            {
-                                let v278 = &C::lookup_value(ctx, v275);
-                                if let Some(v279) = v278 {
+                                a: v249,
+                                b: v250,
+                            } = v52 {
+                                let v251 = &C::lookup_value(ctx, v249);
+                                if let Some(v252) = v251 {
                                     if let &SimpleAst::Constant {
-                                        c: v280,
-                                        data: v281,
-                                    } = v279
-                                    {
-                                        if v280 == 0x2 {
-                                            let v313 = &C::lookup_value(ctx, v276);
-                                            if let Some(v314) = v313 {
-                                                if let &SimpleAst::And {
-                                                    a: v315,
-                                                    b: v316,
-                                                    data: v317,
-                                                } = v314
-                                                {
-                                                    if v315 == v365 {
-                                                        if v316 == v366 {
-                                                            let v368 = &C::any(ctx, v365);
-                                                            let v369 = C::lookup_id(ctx, v368);
-                                                            let v370 = &C::any(ctx, v366);
-                                                            let v371 = C::lookup_id(ctx, v370);
-                                                            let v372 = &C::add(ctx, v369, v371);
-                                                            // Rule at .\isle\mba.isle line 283.
-                                                            return Some(v372.clone());
+                                        c: v253,
+                                        width: v254,
+                                    } = v252 {
+                                        let v285 = &C::lookup_value(ctx, v250);
+                                        if let Some(v286) = v285 {
+                                            if let &SimpleAst::And {
+                                                a: v287,
+                                                b: v288,
+                                            } = v286 {
+                                                if v287 == v334 {
+                                                    if v288 == v335 {
+                                                        let v336 = C::is_constant_modulo(ctx, v253, 0x2, v254);
+                                                        if let Some(v337) = v336 {
+                                                            let v338 = &C::any(ctx, v334);
+                                                            let v339 = C::lookup_id(ctx, v338);
+                                                            let v340 = &C::any(ctx, v335);
+                                                            let v341 = C::lookup_id(ctx, v340);
+                                                            let v342 = &C::add(ctx, v339, v341);
+                                                            // Rule at .\isle\mba.isle line 247.
+                                                            return Some(v342.clone());
                                                         }
                                                     }
                                                 }
@@ -2428,77 +2058,84 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                             }
                         }
                     }
-                    &SimpleAst::Constant { c: v84, data: v85 } => {
-                        if let Some(v58) = v57 {
-                            match v58 {
+                    &SimpleAst::Constant {
+                        c: v77,
+                        width: v78,
+                    } => {
+                        if let Some(v52) = v51 {
+                            match v52 {
                                 &SimpleAst::Add {
-                                    a: v86,
-                                    b: v87,
-                                    data: v88,
+                                    a: v79,
+                                    b: v80,
                                 } => {
-                                    let v89 = &C::lookup_value(ctx, v86);
-                                    if let Some(v90) = v89 {
-                                        if let &SimpleAst::Constant { c: v91, data: v92 } = v90 {
-                                            let v93 = &C::constant(ctx, v84, v88);
-                                            let v94 = C::lookup_id(ctx, v93);
-                                            let v95 = &C::constant(ctx, v91, v88);
-                                            let v96 = C::lookup_id(ctx, v95);
-                                            let v97 = &C::add(ctx, v94, v96);
-                                            let v98 = C::lookup_id(ctx, v97);
-                                            let v99 = &C::any(ctx, v87);
-                                            let v100 = C::lookup_id(ctx, v99);
-                                            let v101 = &C::add(ctx, v98, v100);
-                                            // Rule at .\isle\mba.isle line 115.
-                                            return Some(v101.clone());
+                                    let v81 = &C::lookup_value(ctx, v79);
+                                    if let Some(v82) = v81 {
+                                        if let &SimpleAst::Constant {
+                                            c: v83,
+                                            width: v84,
+                                        } = v82 {
+                                            let v85 = &C::constant(ctx, v77, v78);
+                                            let v86 = C::lookup_id(ctx, v85);
+                                            let v87 = &C::constant(ctx, v83, v78);
+                                            let v88 = C::lookup_id(ctx, v87);
+                                            let v89 = &C::add(ctx, v86, v88);
+                                            let v90 = C::lookup_id(ctx, v89);
+                                            let v91 = &C::any(ctx, v80);
+                                            let v92 = C::lookup_id(ctx, v91);
+                                            let v93 = &C::add(ctx, v90, v92);
+                                            // Rule at .\isle\mba.isle line 116.
+                                            return Some(v93.clone());
                                         }
                                     }
                                 }
                                 &SimpleAst::Mul {
-                                    a: v275,
-                                    b: v276,
-                                    data: v277,
+                                    a: v249,
+                                    b: v250,
                                 } => {
-                                    if v84 == 0xFFFFFFFFFFFFFFFF {
-                                        let v278 = &C::lookup_value(ctx, v275);
-                                        if let Some(v279) = v278 {
-                                            if let &SimpleAst::Constant {
-                                                c: v280,
-                                                data: v281,
-                                            } = v279
-                                            {
-                                                if v280 == 0xFFFFFFFFFFFFFFFF {
-                                                    let v282 = &C::any(ctx, v276);
-                                                    let v283 = C::lookup_id(ctx, v282);
-                                                    let v284 = &C::neg(ctx, v283);
-                                                    // Rule at .\isle\mba.isle line 235.
-                                                    return Some(v284.clone());
+                                    let v251 = &C::lookup_value(ctx, v249);
+                                    if let Some(v252) = v251 {
+                                        if let &SimpleAst::Constant {
+                                            c: v253,
+                                            width: v254,
+                                        } = v252 {
+                                            if v77 == v253 {
+                                                let v256 = C::is_constant_modulo(ctx, v77, 0xFFFFFFFFFFFFFFFF, v78);
+                                                if let Some(v257) = v256 {
+                                                    let v258 = &C::any(ctx, v250);
+                                                    let v259 = C::lookup_id(ctx, v258);
+                                                    let v260 = &C::neg(ctx, v259);
+                                                    // Rule at .\isle\mba.isle line 206.
+                                                    return Some(v260.clone());
                                                 }
                                             }
                                         }
                                     }
                                 }
                                 &SimpleAst::Neg {
-                                    a: v285,
-                                    data: v286,
+                                    a: v261,
                                 } => {
-                                    if v84 == 0x1 {
-                                        let v288 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v286);
-                                        let v289 = C::lookup_id(ctx, v288);
-                                        let v290 = &C::any(ctx, v285);
-                                        let v291 = C::lookup_id(ctx, v290);
-                                        let v292 = &C::mul(ctx, v289, v291);
-                                        // Rule at .\isle\mba.isle line 243.
-                                        return Some(v292.clone());
+                                    let v263 = C::is_constant_modulo(ctx, v77, 0x1, v78);
+                                    if let Some(v264) = v263 {
+                                        let v265 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v78);
+                                        let v266 = C::lookup_id(ctx, v265);
+                                        let v267 = &C::any(ctx, v261);
+                                        let v268 = C::lookup_id(ctx, v267);
+                                        let v269 = &C::mul(ctx, v266, v268);
+                                        // Rule at .\isle\mba.isle line 213.
+                                        return Some(v269.clone());
                                     }
                                 }
-                                &SimpleAst::Constant { c: v59, data: v60 } => {
-                                    let v102 = &C::constant(ctx, v84, v56);
-                                    let v103 = C::lookup_id(ctx, v102);
-                                    let v104 = &C::constant(ctx, v59, v56);
-                                    let v105 = C::lookup_id(ctx, v104);
-                                    let v106 = &C::add(ctx, v103, v105);
-                                    // Rule at .\isle\mba.isle line 123.
-                                    return Some(v106.clone());
+                                &SimpleAst::Constant {
+                                    c: v53,
+                                    width: v54,
+                                } => {
+                                    let v85 = &C::constant(ctx, v77, v78);
+                                    let v86 = C::lookup_id(ctx, v85);
+                                    let v94 = &C::constant(ctx, v53, v78);
+                                    let v95 = C::lookup_id(ctx, v94);
+                                    let v96 = &C::add(ctx, v86, v95);
+                                    // Rule at .\isle\mba.isle line 122.
+                                    return Some(v96.clone());
                                 }
                                 _ => {}
                             }
@@ -2507,130 +2144,138 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     _ => {}
                 }
             }
-            if let Some(v58) = v57 {
-                if let &SimpleAst::Constant { c: v59, data: v60 } = v58 {
-                    let v61 = &C::constant(ctx, v59, v56);
-                    let v62 = C::lookup_id(ctx, v61);
-                    let v63 = &C::any(ctx, v54);
-                    let v64 = C::lookup_id(ctx, v63);
-                    let v65 = &C::add(ctx, v62, v64);
-                    // Rule at .\isle\mba.isle line 99.
-                    return Some(v65.clone());
+            if let Some(v52) = v51 {
+                if let &SimpleAst::Constant {
+                    c: v53,
+                    width: v54,
+                } = v52 {
+                    let v55 = &C::constant(ctx, v53, v54);
+                    let v56 = C::lookup_id(ctx, v55);
+                    let v57 = &C::any(ctx, v49);
+                    let v58 = C::lookup_id(ctx, v57);
+                    let v59 = &C::add(ctx, v56, v58);
+                    // Rule at .\isle\mba.isle line 104.
+                    return Some(v59.clone());
                 }
             }
         }
         &SimpleAst::Mul {
             a: v1,
             b: v2,
-            data: v3,
         } => {
-            let v13 = &C::lookup_value(ctx, v1);
-            if let Some(v14) = v13 {
-                match v14 {
+            let v12 = &C::lookup_value(ctx, v1);
+            if let Some(v13) = v12 {
+                match v13 {
                     &SimpleAst::Mul {
-                        a: v15,
-                        b: v16,
-                        data: v17,
+                        a: v14,
+                        b: v15,
                     } => {
-                        let v18 = &C::lookup_value(ctx, v15);
-                        if let Some(v19) = v18 {
-                            if let &SimpleAst::Constant { c: v20, data: v21 } = v19 {
-                                let v22 = &C::constant(ctx, v20, v17);
+                        let v16 = &C::lookup_value(ctx, v14);
+                        if let Some(v17) = v16 {
+                            if let &SimpleAst::Constant {
+                                c: v18,
+                                width: v19,
+                            } = v17 {
+                                let v20 = &C::constant(ctx, v18, v19);
+                                let v21 = C::lookup_id(ctx, v20);
+                                let v22 = &C::any(ctx, v15);
                                 let v23 = C::lookup_id(ctx, v22);
-                                let v24 = &C::any(ctx, v16);
+                                let v24 = &C::any(ctx, v2);
                                 let v25 = C::lookup_id(ctx, v24);
-                                let v26 = &C::any(ctx, v2);
+                                let v26 = &C::mul(ctx, v23, v25);
                                 let v27 = C::lookup_id(ctx, v26);
-                                let v28 = &C::mul(ctx, v25, v27);
-                                let v29 = C::lookup_id(ctx, v28);
-                                let v30 = &C::mul(ctx, v23, v29);
-                                // Rule at .\isle\mba.isle line 75.
-                                return Some(v30.clone());
+                                let v28 = &C::mul(ctx, v21, v27);
+                                // Rule at .\isle\mba.isle line 86.
+                                return Some(v28.clone());
                             }
                         }
                     }
                     &SimpleAst::Pow {
-                        a: v620,
-                        b: v621,
-                        data: v622,
+                        a: v581,
+                        b: v582,
                     } => {
-                        let v4 = &C::lookup_value(ctx, v2);
-                        if let Some(v5) = v4 {
+                        let v3 = &C::lookup_value(ctx, v2);
+                        if let Some(v4) = v3 {
                             if let &SimpleAst::Pow {
-                                a: v623,
-                                b: v624,
-                                data: v625,
-                            } = v5
-                            {
-                                if v620 == v623 {
-                                    let v626 = &C::any(ctx, v620);
-                                    let v627 = C::lookup_id(ctx, v626);
-                                    let v628 = &C::any(ctx, v621);
-                                    let v629 = C::lookup_id(ctx, v628);
-                                    let v630 = &C::any(ctx, v624);
-                                    let v631 = C::lookup_id(ctx, v630);
-                                    let v632 = &C::add(ctx, v629, v631);
-                                    let v633 = C::lookup_id(ctx, v632);
-                                    let v634 = &C::pow(ctx, v627, v633);
-                                    // Rule at .\isle\mba.isle line 563.
-                                    return Some(v634.clone());
+                                a: v583,
+                                b: v584,
+                            } = v4 {
+                                if v581 == v583 {
+                                    let v585 = &C::any(ctx, v581);
+                                    let v586 = C::lookup_id(ctx, v585);
+                                    let v587 = &C::any(ctx, v582);
+                                    let v588 = C::lookup_id(ctx, v587);
+                                    let v589 = &C::any(ctx, v584);
+                                    let v590 = C::lookup_id(ctx, v589);
+                                    let v591 = &C::add(ctx, v588, v590);
+                                    let v592 = C::lookup_id(ctx, v591);
+                                    let v593 = &C::pow(ctx, v586, v592);
+                                    // Rule at .\isle\mba.isle line 472.
+                                    return Some(v593.clone());
                                 }
                             }
                         }
                     }
-                    &SimpleAst::Constant { c: v31, data: v32 } => {
-                        match v31 {
-                            0x0 => {
-                                let v436 = &C::constant(ctx, 0x0, v3);
-                                // Rule at .\isle\mba.isle line 419.
-                                return Some(v436.clone());
-                            }
-                            0x1 => {
-                                let v437 = &C::any(ctx, v2);
-                                // Rule at .\isle\mba.isle line 427.
-                                return Some(v437.clone());
-                            }
-                            0x2 => {
-                                let v4 = &C::lookup_value(ctx, v2);
-                                if let Some(v5) = v4 {
-                                    if let &SimpleAst::Or {
-                                        a: v648,
-                                        b: v649,
-                                        data: v650,
-                                    } = v5
-                                    {
-                                        let v651 = &C::lookup_value(ctx, v649);
-                                        if let Some(v652) = v651 {
-                                            if let &SimpleAst::Mul {
-                                                a: v653,
-                                                b: v654,
-                                                data: v655,
-                                            } = v652
-                                            {
-                                                if v648 == v654 {
-                                                    let v656 = &C::lookup_value(ctx, v653);
-                                                    if let Some(v657) = v656 {
-                                                        if let &SimpleAst::Constant {
-                                                            c: v658,
-                                                            data: v659,
-                                                        } = v657
-                                                        {
-                                                            if v658 == 0xFFFFFFFFFFFFFFFF {
-                                                                let v660 = &C::any(ctx, v648);
-                                                                let v661 = C::lookup_id(ctx, v660);
-                                                                let v662 = &C::constant(
-                                                                    ctx,
-                                                                    0xFFFFFFFFFFFFFFFF,
-                                                                    v655,
-                                                                );
-                                                                let v663 = C::lookup_id(ctx, v662);
-                                                                let v664 = &C::any(ctx, v648);
-                                                                let v665 = C::lookup_id(ctx, v664);
-                                                                let v666 = &C::mul(ctx, v663, v665);
-                                                                let v667 = C::lookup_id(ctx, v666);
-                                                                let v668 = &C::xor(ctx, v661, v667);
-                                                                // Rule at .\isle\mba.isle line 595.
-                                                                return Some(v668.clone());
+                    &SimpleAst::Constant {
+                        c: v29,
+                        width: v30,
+                    } => {
+                        let v3 = &C::lookup_value(ctx, v2);
+                        if let Some(v4) = v3 {
+                            match v4 {
+                                &SimpleAst::Mul {
+                                    a: v31,
+                                    b: v32,
+                                } => {
+                                    let v33 = &C::lookup_value(ctx, v31);
+                                    if let Some(v34) = v33 {
+                                        if let &SimpleAst::Constant {
+                                            c: v35,
+                                            width: v36,
+                                        } = v34 {
+                                            if v29 == v35 {
+                                                let v418 = C::is_constant_modulo(ctx, v29, 0xFFFFFFFFFFFFFFFF, v30);
+                                                if let Some(v419) = v418 {
+                                                    let v420 = &C::any(ctx, v32);
+                                                    // Rule at .\isle\mba.isle line 380.
+                                                    return Some(v420.clone());
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                &SimpleAst::And {
+                                    a: v629,
+                                    b: v630,
+                                } => {
+                                    let v631 = &C::lookup_value(ctx, v630);
+                                    if let Some(v632) = v631 {
+                                        if let &SimpleAst::Mul {
+                                            a: v633,
+                                            b: v634,
+                                        } = v632 {
+                                            if v629 == v634 {
+                                                let v635 = &C::lookup_value(ctx, v633);
+                                                if let Some(v636) = v635 {
+                                                    if let &SimpleAst::Constant {
+                                                        c: v637,
+                                                        width: v638,
+                                                    } = v636 {
+                                                        let v639 = C::is_constant_modulo(ctx, v29, 0xFFFFFFFFFFFFFFFE, v30);
+                                                        if let Some(v640) = v639 {
+                                                            let v641 = C::is_constant_modulo(ctx, v637, 0xFFFFFFFFFFFFFFFF, v30);
+                                                            if let Some(v642) = v641 {
+                                                                let v643 = &C::any(ctx, v629);
+                                                                let v644 = C::lookup_id(ctx, v643);
+                                                                let v622 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v30);
+                                                                let v623 = C::lookup_id(ctx, v622);
+                                                                let v645 = &C::any(ctx, v629);
+                                                                let v646 = C::lookup_id(ctx, v645);
+                                                                let v647 = &C::mul(ctx, v623, v646);
+                                                                let v648 = C::lookup_id(ctx, v647);
+                                                                let v649 = &C::xor(ctx, v644, v648);
+                                                                // Rule at .\isle\mba.isle line 504.
+                                                                return Some(v649.clone());
                                                             }
                                                         }
                                                     }
@@ -2639,48 +2284,38 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                         }
                                     }
                                 }
-                            }
-                            0xFFFFFFFFFFFFFFFE => {
-                                let v4 = &C::lookup_value(ctx, v2);
-                                if let Some(v5) = v4 {
-                                    if let &SimpleAst::And {
-                                        a: v373,
-                                        b: v374,
-                                        data: v375,
-                                    } = v5
-                                    {
-                                        let v376 = &C::lookup_value(ctx, v374);
-                                        if let Some(v377) = v376 {
-                                            if let &SimpleAst::Mul {
-                                                a: v378,
-                                                b: v379,
-                                                data: v380,
-                                            } = v377
-                                            {
-                                                if v373 == v379 {
-                                                    let v381 = &C::lookup_value(ctx, v378);
-                                                    if let Some(v382) = v381 {
-                                                        if let &SimpleAst::Constant {
-                                                            c: v383,
-                                                            data: v384,
-                                                        } = v382
-                                                        {
-                                                            if v383 == 0xFFFFFFFFFFFFFFFF {
-                                                                let v385 = &C::any(ctx, v373);
-                                                                let v386 = C::lookup_id(ctx, v385);
-                                                                let v387 = &C::constant(
-                                                                    ctx,
-                                                                    0xFFFFFFFFFFFFFFFF,
-                                                                    v380,
-                                                                );
-                                                                let v388 = C::lookup_id(ctx, v387);
-                                                                let v389 = &C::any(ctx, v373);
-                                                                let v390 = C::lookup_id(ctx, v389);
-                                                                let v391 = &C::mul(ctx, v388, v390);
-                                                                let v392 = C::lookup_id(ctx, v391);
-                                                                let v669 = &C::xor(ctx, v386, v392);
-                                                                // Rule at .\isle\mba.isle line 603.
-                                                                return Some(v669.clone());
+                                &SimpleAst::Or {
+                                    a: v606,
+                                    b: v607,
+                                } => {
+                                    let v608 = &C::lookup_value(ctx, v607);
+                                    if let Some(v609) = v608 {
+                                        if let &SimpleAst::Mul {
+                                            a: v610,
+                                            b: v611,
+                                        } = v609 {
+                                            if v606 == v611 {
+                                                let v612 = &C::lookup_value(ctx, v610);
+                                                if let Some(v613) = v612 {
+                                                    if let &SimpleAst::Constant {
+                                                        c: v614,
+                                                        width: v615,
+                                                    } = v613 {
+                                                        let v616 = C::is_constant_modulo(ctx, v29, 0x2, v30);
+                                                        if let Some(v617) = v616 {
+                                                            let v618 = C::is_constant_modulo(ctx, v614, 0xFFFFFFFFFFFFFFFF, v30);
+                                                            if let Some(v619) = v618 {
+                                                                let v620 = &C::any(ctx, v606);
+                                                                let v621 = C::lookup_id(ctx, v620);
+                                                                let v622 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v30);
+                                                                let v623 = C::lookup_id(ctx, v622);
+                                                                let v624 = &C::any(ctx, v606);
+                                                                let v625 = C::lookup_id(ctx, v624);
+                                                                let v626 = &C::mul(ctx, v623, v625);
+                                                                let v627 = C::lookup_id(ctx, v626);
+                                                                let v628 = &C::xor(ctx, v621, v627);
+                                                                // Rule at .\isle\mba.isle line 496.
+                                                                return Some(v628.clone());
                                                             }
                                                         }
                                                     }
@@ -2689,72 +2324,553 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                         }
                                     }
                                 }
+                                _ => {}
                             }
-                            0xFFFFFFFFFFFFFFFF => {
-                                let v4 = &C::lookup_value(ctx, v2);
-                                if let Some(v5) = v4 {
-                                    match v5 {
-                                        &SimpleAst::Mul {
-                                            a: v33,
-                                            b: v34,
-                                            data: v35,
-                                        } => {
-                                            let v36 = &C::lookup_value(ctx, v33);
-                                            if let Some(v37) = v36 {
-                                                if let &SimpleAst::Constant { c: v38, data: v39 } =
-                                                    v37
-                                                {
-                                                    if v38 == 0xFFFFFFFFFFFFFFFF {
-                                                        let v448 = &C::any(ctx, v34);
-                                                        // Rule at .\isle\mba.isle line 451.
-                                                        return Some(v448.clone());
+                        }
+                        let v403 = C::is_constant_modulo(ctx, v29, 0x1, v30);
+                        if let Some(v404) = v403 {
+                            let v405 = &C::any(ctx, v2);
+                            // Rule at .\isle\mba.isle line 359.
+                            return Some(v405.clone());
+                        }
+                        let v400 = C::is_constant_modulo(ctx, v29, 0x0, v30);
+                        if let Some(v401) = v400 {
+                            let v402 = &C::constant(ctx, 0x0, v30);
+                            // Rule at .\isle\mba.isle line 352.
+                            return Some(v402.clone());
+                        }
+                        if let Some(v4) = v3 {
+                            match v4 {
+                                &SimpleAst::Mul {
+                                    a: v31,
+                                    b: v32,
+                                } => {
+                                    let v33 = &C::lookup_value(ctx, v31);
+                                    if let Some(v34) = v33 {
+                                        if let &SimpleAst::Constant {
+                                            c: v35,
+                                            width: v36,
+                                        } = v34 {
+                                            let v37 = &C::constant(ctx, v29, v30);
+                                            let v38 = C::lookup_id(ctx, v37);
+                                            let v39 = &C::constant(ctx, v35, v30);
+                                            let v40 = C::lookup_id(ctx, v39);
+                                            let v41 = &C::mul(ctx, v38, v40);
+                                            let v42 = C::lookup_id(ctx, v41);
+                                            let v43 = &C::any(ctx, v32);
+                                            let v44 = C::lookup_id(ctx, v43);
+                                            let v45 = &C::mul(ctx, v42, v44);
+                                            // Rule at .\isle\mba.isle line 92.
+                                            return Some(v45.clone());
+                                        }
+                                    }
+                                }
+                                &SimpleAst::Constant {
+                                    c: v5,
+                                    width: v6,
+                                } => {
+                                    let v37 = &C::constant(ctx, v29, v30);
+                                    let v38 = C::lookup_id(ctx, v37);
+                                    let v46 = &C::constant(ctx, v5, v30);
+                                    let v47 = C::lookup_id(ctx, v46);
+                                    let v48 = &C::mul(ctx, v38, v47);
+                                    // Rule at .\isle\mba.isle line 98.
+                                    return Some(v48.clone());
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let v3 = &C::lookup_value(ctx, v2);
+            if let Some(v4) = v3 {
+                if let &SimpleAst::Constant {
+                    c: v5,
+                    width: v6,
+                } = v4 {
+                    let v7 = &C::constant(ctx, v5, v6);
+                    let v8 = C::lookup_id(ctx, v7);
+                    let v9 = &C::any(ctx, v1);
+                    let v10 = C::lookup_id(ctx, v9);
+                    let v11 = &C::mul(ctx, v8, v10);
+                    // Rule at .\isle\mba.isle line 80.
+                    return Some(v11.clone());
+                }
+            }
+        }
+        &SimpleAst::Pow {
+            a: v406,
+            b: v407,
+        } => {
+            let v408 = &C::lookup_value(ctx, v407);
+            if let Some(v409) = v408 {
+                if let &SimpleAst::Constant {
+                    c: v410,
+                    width: v411,
+                } = v409 {
+                    let v415 = C::is_constant_modulo(ctx, v410, 0x1, v411);
+                    if let Some(v416) = v415 {
+                        let v417 = &C::any(ctx, v406);
+                        // Rule at .\isle\mba.isle line 373.
+                        return Some(v417.clone());
+                    }
+                    let v412 = C::is_constant_modulo(ctx, v410, 0x0, v411);
+                    if let Some(v413) = v412 {
+                        let v414 = &C::constant(ctx, 0x1, v411);
+                        // Rule at .\isle\mba.isle line 366.
+                        return Some(v414.clone());
+                    }
+                }
+            }
+        }
+        &SimpleAst::And {
+            a: v97,
+            b: v98,
+        } => {
+            let v99 = &C::lookup_value(ctx, v98);
+            if let Some(v100) = v99 {
+                match v100 {
+                    &SimpleAst::Or {
+                        a: v814,
+                        b: v815,
+                    } => {
+                        let v819 = &C::lookup_value(ctx, v815);
+                        if let Some(v820) = v819 {
+                            if let &SimpleAst::Xor {
+                                a: v1490,
+                                b: v1491,
+                            } = v820 {
+                                if v97 == v1490 {
+                                    let v384 = &C::any(ctx, v97);
+                                    let v1032 = C::lookup_id(ctx, v384);
+                                    let v1492 = &C::any(ctx, v1491);
+                                    let v1493 = C::lookup_id(ctx, v1492);
+                                    let v1494 = &C::neg(ctx, v1493);
+                                    let v1495 = C::lookup_id(ctx, v1494);
+                                    let v1496 = &C::any(ctx, v814);
+                                    let v1497 = C::lookup_id(ctx, v1496);
+                                    let v1498 = &C::or(ctx, v1495, v1497);
+                                    let v1499 = C::lookup_id(ctx, v1498);
+                                    let v1500 = &C::and(ctx, v1032, v1499);
+                                    // Rule at .\isle\mba.isle line 1009.
+                                    return Some(v1500.clone());
+                                }
+                            }
+                        }
+                    }
+                    &SimpleAst::Xor {
+                        a: v753,
+                        b: v754,
+                    } => {
+                        let v108 = &C::lookup_value(ctx, v97);
+                        if let Some(v109) = v108 {
+                            match v109 {
+                                &SimpleAst::And {
+                                    a: v110,
+                                    b: v111,
+                                } => {
+                                    if v111 == v753 {
+                                        let v1549 = &C::any(ctx, v111);
+                                        let v1550 = C::lookup_id(ctx, v1549);
+                                        let v1551 = &C::any(ctx, v110);
+                                        let v1552 = C::lookup_id(ctx, v1551);
+                                        let v1553 = &C::and(ctx, v1550, v1552);
+                                        let v1554 = C::lookup_id(ctx, v1553);
+                                        let v1555 = &C::any(ctx, v754);
+                                        let v1556 = C::lookup_id(ctx, v1555);
+                                        let v1557 = &C::neg(ctx, v1556);
+                                        let v1558 = C::lookup_id(ctx, v1557);
+                                        let v1559 = &C::and(ctx, v1554, v1558);
+                                        // Rule at .\isle\mba.isle line 1039.
+                                        return Some(v1559.clone());
+                                    }
+                                }
+                                &SimpleAst::Xor {
+                                    a: v1270,
+                                    b: v1271,
+                                } => {
+                                    let v755 = &C::lookup_value(ctx, v754);
+                                    if let Some(v756) = v755 {
+                                        if let &SimpleAst::Xor {
+                                            a: v1360,
+                                            b: v1361,
+                                        } = v756 {
+                                            if v1270 == v1360 {
+                                                let v1362 = &C::lookup_value(ctx, v1361);
+                                                if let Some(v1363) = v1362 {
+                                                    if let &SimpleAst::Neg {
+                                                        a: v1364,
+                                                    } = v1363 {
+                                                        if v1271 == v1364 {
+                                                            let v1365 = &C::any(ctx, v753);
+                                                            let v1366 = C::lookup_id(ctx, v1365);
+                                                            let v1367 = &C::any(ctx, v1270);
+                                                            let v1368 = C::lookup_id(ctx, v1367);
+                                                            let v1369 = &C::any(ctx, v1271);
+                                                            let v1370 = C::lookup_id(ctx, v1369);
+                                                            let v1371 = &C::xor(ctx, v1368, v1370);
+                                                            let v1372 = C::lookup_id(ctx, v1371);
+                                                            let v1373 = &C::and(ctx, v1366, v1372);
+                                                            // Rule at .\isle\mba.isle line 970.
+                                                            return Some(v1373.clone());
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
-                                        &SimpleAst::And {
-                                            a: v373,
-                                            b: v374,
-                                            data: v375,
-                                        } => {
-                                            let v376 = &C::lookup_value(ctx, v374);
-                                            if let Some(v377) = v376 {
-                                                if let &SimpleAst::Mul {
-                                                    a: v378,
-                                                    b: v379,
-                                                    data: v380,
-                                                } = v377
-                                                {
-                                                    if v373 == v379 {
-                                                        let v381 = &C::lookup_value(ctx, v378);
-                                                        if let Some(v382) = v381 {
+                                    }
+                                }
+                                &SimpleAst::Neg {
+                                    a: v669,
+                                } => {
+                                    let v670 = &C::lookup_value(ctx, v669);
+                                    if let Some(v671) = v670 {
+                                        if let &SimpleAst::And {
+                                            a: v1168,
+                                            b: v1169,
+                                        } = v671 {
+                                            if v753 == v1169 {
+                                                let v755 = &C::lookup_value(ctx, v754);
+                                                if let Some(v756) = v755 {
+                                                    if let &SimpleAst::Xor {
+                                                        a: v1360,
+                                                        b: v1361,
+                                                    } = v756 {
+                                                        let v1362 = &C::lookup_value(ctx, v1361);
+                                                        if let Some(v1363) = v1362 {
+                                                            if let &SimpleAst::Neg {
+                                                                a: v1364,
+                                                            } = v1363 {
+                                                                if v1168 == v1364 {
+                                                                    let v1560 = &C::any(ctx, v1169);
+                                                                    let v1561 = C::lookup_id(ctx, v1560);
+                                                                    let v1562 = &C::any(ctx, v1168);
+                                                                    let v1563 = C::lookup_id(ctx, v1562);
+                                                                    let v1564 = &C::and(ctx, v1561, v1563);
+                                                                    let v1565 = C::lookup_id(ctx, v1564);
+                                                                    let v1566 = &C::any(ctx, v1169);
+                                                                    let v1567 = C::lookup_id(ctx, v1566);
+                                                                    let v1568 = &C::any(ctx, v1168);
+                                                                    let v1569 = C::lookup_id(ctx, v1568);
+                                                                    let v1570 = &C::xor(ctx, v1567, v1569);
+                                                                    let v1571 = C::lookup_id(ctx, v1570);
+                                                                    let v1572 = &C::any(ctx, v1360);
+                                                                    let v1573 = C::lookup_id(ctx, v1572);
+                                                                    let v1574 = &C::xor(ctx, v1571, v1573);
+                                                                    let v1575 = C::lookup_id(ctx, v1574);
+                                                                    let v1576 = &C::or(ctx, v1565, v1575);
+                                                                    let v1577 = C::lookup_id(ctx, v1576);
+                                                                    let v1578 = &C::neg(ctx, v1577);
+                                                                    // Rule at .\isle\mba.isle line 1045.
+                                                                    return Some(v1578.clone());
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                &SimpleAst::Constant {
+                                    c: v125,
+                                    width: v126,
+                                } => {
+                                    let v755 = &C::lookup_value(ctx, v754);
+                                    if let Some(v756) = v755 {
+                                        if let &SimpleAst::Add {
+                                            a: v1298,
+                                            b: v1299,
+                                        } = v756 {
+                                            if v753 == v1299 {
+                                                let v1300 = &C::lookup_value(ctx, v1298);
+                                                if let Some(v1301) = v1300 {
+                                                    if let &SimpleAst::Mul {
+                                                        a: v1302,
+                                                        b: v1303,
+                                                    } = v1301 {
+                                                        let v1304 = &C::lookup_value(ctx, v1302);
+                                                        if let Some(v1305) = v1304 {
                                                             if let &SimpleAst::Constant {
-                                                                c: v383,
-                                                                data: v384,
-                                                            } = v382
-                                                            {
-                                                                if v383 == 0xFFFFFFFFFFFFFFFF {
-                                                                    let v385 = &C::any(ctx, v373);
-                                                                    let v386 =
-                                                                        C::lookup_id(ctx, v385);
-                                                                    let v387 = &C::constant(
-                                                                        ctx,
-                                                                        0xFFFFFFFFFFFFFFFF,
-                                                                        v380,
-                                                                    );
-                                                                    let v388 =
-                                                                        C::lookup_id(ctx, v387);
-                                                                    let v389 = &C::any(ctx, v373);
-                                                                    let v390 =
-                                                                        C::lookup_id(ctx, v389);
-                                                                    let v391 =
-                                                                        &C::mul(ctx, v388, v390);
-                                                                    let v392 =
-                                                                        C::lookup_id(ctx, v391);
-                                                                    let v393 =
-                                                                        &C::or(ctx, v386, v392);
-                                                                    // Rule at .\isle\mba.isle line 291.
-                                                                    return Some(v393.clone());
+                                                                c: v1306,
+                                                                width: v1307,
+                                                            } = v1305 {
+                                                                let v1308 = &C::lookup_value(ctx, v1303);
+                                                                if let Some(v1309) = v1308 {
+                                                                    if let &SimpleAst::Constant {
+                                                                        c: v1310,
+                                                                        width: v1311,
+                                                                    } = v1309 {
+                                                                        let v1312 = C::is_constant_modulo(ctx, v125, 0x1, v126);
+                                                                        if let Some(v1313) = v1312 {
+                                                                            let v1314 = C::is_constant_modulo(ctx, v1306, 0xFFFFFFFFFFFFFFFF, v126);
+                                                                            if let Some(v1315) = v1314 {
+                                                                                let v1316 = C::is_constant_modulo(ctx, v1310, 0x2, v126);
+                                                                                if let Some(v1317) = v1316 {
+                                                                                    let v380 = &C::constant(ctx, 0x0, v126);
+                                                                                    // Rule at .\isle\mba.isle line 934.
+                                                                                    return Some(v380.clone());
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let v108 = &C::lookup_value(ctx, v97);
+            if let Some(v109) = v108 {
+                match v109 {
+                    &SimpleAst::Xor {
+                        a: v1270,
+                        b: v1271,
+                    } => {
+                        if v98 == v1270 {
+                            let v1272 = &C::any(ctx, v1270);
+                            let v1273 = C::lookup_id(ctx, v1272);
+                            let v1274 = &C::any(ctx, v1271);
+                            let v1275 = C::lookup_id(ctx, v1274);
+                            let v1276 = &C::neg(ctx, v1275);
+                            let v1277 = C::lookup_id(ctx, v1276);
+                            let v1278 = &C::and(ctx, v1273, v1277);
+                            // Rule at .\isle\mba.isle line 913.
+                            return Some(v1278.clone());
+                        }
+                    }
+                    &SimpleAst::Neg {
+                        a: v669,
+                    } => {
+                        if let Some(v100) = v99 {
+                            if let &SimpleAst::Neg {
+                                a: v385,
+                            } = v100 {
+                                let v602 = &C::lookup_value(ctx, v385);
+                                if let Some(v603) = v602 {
+                                    if let &SimpleAst::And {
+                                        a: v795,
+                                        b: v796,
+                                    } = v603 {
+                                        let v670 = &C::lookup_value(ctx, v669);
+                                        if let Some(v671) = v670 {
+                                            if let &SimpleAst::And {
+                                                a: v1168,
+                                                b: v1169,
+                                            } = v671 {
+                                                let v1170 = &C::lookup_value(ctx, v1168);
+                                                if let Some(v1171) = v1170 {
+                                                    if let &SimpleAst::Neg {
+                                                        a: v1172,
+                                                    } = v1171 {
+                                                        if v795 == v1172 {
+                                                            let v1173 = &C::lookup_value(ctx, v1169);
+                                                            if let Some(v1174) = v1173 {
+                                                                if let &SimpleAst::Neg {
+                                                                    a: v1175,
+                                                                } = v1174 {
+                                                                    if v796 == v1175 {
+                                                                        let v1176 = &C::any(ctx, v1175);
+                                                                        let v1177 = C::lookup_id(ctx, v1176);
+                                                                        let v1178 = &C::any(ctx, v1172);
+                                                                        let v1179 = C::lookup_id(ctx, v1178);
+                                                                        let v1180 = &C::xor(ctx, v1177, v1179);
+                                                                        // Rule at .\isle\mba.isle line 817.
+                                                                        return Some(v1180.clone());
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(v100) = v99 {
+                match v100 {
+                    &SimpleAst::Add {
+                        a: v1007,
+                        b: v1008,
+                    } => {
+                        if v97 == v1007 {
+                            let v1009 = &C::lookup_value(ctx, v1008);
+                            if let Some(v1010) = v1009 {
+                                if let &SimpleAst::And {
+                                    a: v1011,
+                                    b: v1012,
+                                } = v1010 {
+                                    let v1013 = &C::lookup_value(ctx, v1011);
+                                    if let Some(v1014) = v1013 {
+                                        if let &SimpleAst::Neg {
+                                            a: v1015,
+                                        } = v1014 {
+                                            if v97 == v1015 {
+                                                let v384 = &C::any(ctx, v97);
+                                                // Rule at .\isle\mba.isle line 705.
+                                                return Some(v384.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    &SimpleAst::Mul {
+                        a: v678,
+                        b: v679,
+                    } => {
+                        let v680 = &C::lookup_value(ctx, v678);
+                        if let Some(v681) = v680 {
+                            if let &SimpleAst::Constant {
+                                c: v682,
+                                width: v683,
+                            } = v681 {
+                                let v684 = &C::lookup_value(ctx, v679);
+                                if let Some(v685) = v684 {
+                                    match v685 {
+                                        &SimpleAst::And {
+                                            a: v846,
+                                            b: v847,
+                                        } => {
+                                            let v848 = &C::lookup_value(ctx, v847);
+                                            if let Some(v849) = v848 {
+                                                match v849 {
+                                                    &SimpleAst::Mul {
+                                                        a: v850,
+                                                        b: v851,
+                                                    } => {
+                                                        if v97 == v846 {
+                                                            if v97 == v851 {
+                                                                let v852 = &C::lookup_value(ctx, v850);
+                                                                if let Some(v853) = v852 {
+                                                                    if let &SimpleAst::Constant {
+                                                                        c: v854,
+                                                                        width: v855,
+                                                                    } = v853 {
+                                                                        if v682 == v854 {
+                                                                            let v856 = C::is_constant_modulo(ctx, v682, 0xFFFFFFFFFFFFFFFF, v683);
+                                                                            if let Some(v857) = v856 {
+                                                                                let v384 = &C::any(ctx, v97);
+                                                                                // Rule at .\isle\mba.isle line 599.
+                                                                                return Some(v384.clone());
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    &SimpleAst::Or {
+                                                        a: v1030,
+                                                        b: v1031,
+                                                    } => {
+                                                        if v97 == v1030 {
+                                                            let v856 = C::is_constant_modulo(ctx, v682, 0xFFFFFFFFFFFFFFFF, v683);
+                                                            if let Some(v857) = v856 {
+                                                                let v1022 = &C::lookup_value(ctx, v846);
+                                                                if let Some(v1023) = v1022 {
+                                                                    if let &SimpleAst::Mul {
+                                                                        a: v1024,
+                                                                        b: v1025,
+                                                                    } = v1023 {
+                                                                        if v1025 == v1031 {
+                                                                            let v1026 = &C::lookup_value(ctx, v1024);
+                                                                            if let Some(v1027) = v1026 {
+                                                                                if let &SimpleAst::Constant {
+                                                                                    c: v1028,
+                                                                                    width: v1029,
+                                                                                } = v1027 {
+                                                                                    if v682 == v1028 {
+                                                                                        let v384 = &C::any(ctx, v97);
+                                                                                        let v1032 = C::lookup_id(ctx, v384);
+                                                                                        let v1033 = &C::any(ctx, v1025);
+                                                                                        let v1034 = C::lookup_id(ctx, v1033);
+                                                                                        let v1035 = &C::and(ctx, v1032, v1034);
+                                                                                        // Rule at .\isle\mba.isle line 718.
+                                                                                        return Some(v1035.clone());
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                        }
+                                        &SimpleAst::Xor {
+                                            a: v686,
+                                            b: v687,
+                                        } => {
+                                            if let Some(v109) = v108 {
+                                                if let &SimpleAst::Neg {
+                                                    a: v669,
+                                                } = v109 {
+                                                    let v670 = &C::lookup_value(ctx, v669);
+                                                    if let Some(v671) = v670 {
+                                                        if let &SimpleAst::Mul {
+                                                            a: v672,
+                                                            b: v673,
+                                                        } = v671 {
+                                                            if v673 == v686 {
+                                                                let v674 = &C::lookup_value(ctx, v672);
+                                                                if let Some(v675) = v674 {
+                                                                    if let &SimpleAst::Constant {
+                                                                        c: v676,
+                                                                        width: v677,
+                                                                    } = v675 {
+                                                                        let v688 = &C::lookup_value(ctx, v687);
+                                                                        if let Some(v689) = v688 {
+                                                                            if let &SimpleAst::Mul {
+                                                                                a: v690,
+                                                                                b: v691,
+                                                                            } = v689 {
+                                                                                if v673 == v691 {
+                                                                                    let v692 = &C::lookup_value(ctx, v690);
+                                                                                    if let Some(v693) = v692 {
+                                                                                        if let &SimpleAst::Constant {
+                                                                                            c: v694,
+                                                                                            width: v695,
+                                                                                        } = v693 {
+                                                                                            if v682 == v694 {
+                                                                                                let v696 = C::is_constant_modulo(ctx, v676, 0x2, v677);
+                                                                                                if let Some(v697) = v696 {
+                                                                                                    let v698 = C::is_constant_modulo(ctx, v682, 0xFFFFFFFFFFFFFFFF, v677);
+                                                                                                    if let Some(v699) = v698 {
+                                                                                                        let v700 = &C::constant(ctx, 0x0, v677);
+                                                                                                        // Rule at .\isle\mba.isle line 520.
+                                                                                                        return Some(v700.clone());
+                                                                                                    }
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
                                                                 }
                                                             }
                                                         }
@@ -2766,669 +2882,45 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                             }
-                            _ => {}
-                        }
-                        let v4 = &C::lookup_value(ctx, v2);
-                        if let Some(v5) = v4 {
-                            match v5 {
-                                &SimpleAst::Mul {
-                                    a: v33,
-                                    b: v34,
-                                    data: v35,
-                                } => {
-                                    let v36 = &C::lookup_value(ctx, v33);
-                                    if let Some(v37) = v36 {
-                                        if let &SimpleAst::Constant { c: v38, data: v39 } = v37 {
-                                            let v40 = &C::constant(ctx, v31, v35);
-                                            let v41 = C::lookup_id(ctx, v40);
-                                            let v42 = &C::constant(ctx, v38, v35);
-                                            let v43 = C::lookup_id(ctx, v42);
-                                            let v44 = &C::mul(ctx, v41, v43);
-                                            let v45 = C::lookup_id(ctx, v44);
-                                            let v46 = &C::any(ctx, v34);
-                                            let v47 = C::lookup_id(ctx, v46);
-                                            let v48 = &C::mul(ctx, v45, v47);
-                                            // Rule at .\isle\mba.isle line 83.
-                                            return Some(v48.clone());
-                                        }
-                                    }
-                                }
-                                &SimpleAst::Constant { c: v6, data: v7 } => {
-                                    let v49 = &C::constant(ctx, v31, v3);
-                                    let v50 = C::lookup_id(ctx, v49);
-                                    let v51 = &C::constant(ctx, v6, v3);
-                                    let v52 = C::lookup_id(ctx, v51);
-                                    let v53 = &C::mul(ctx, v50, v52);
-                                    // Rule at .\isle\mba.isle line 91.
-                                    return Some(v53.clone());
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            let v4 = &C::lookup_value(ctx, v2);
-            if let Some(v5) = v4 {
-                if let &SimpleAst::Constant { c: v6, data: v7 } = v5 {
-                    let v8 = &C::constant(ctx, v6, v3);
-                    let v9 = C::lookup_id(ctx, v8);
-                    let v10 = &C::any(ctx, v1);
-                    let v11 = C::lookup_id(ctx, v10);
-                    let v12 = &C::mul(ctx, v9, v11);
-                    // Rule at .\isle\mba.isle line 67.
-                    return Some(v12.clone());
-                }
-            }
-        }
-        &SimpleAst::Pow {
-            a: v438,
-            b: v439,
-            data: v440,
-        } => {
-            let v441 = &C::lookup_value(ctx, v439);
-            if let Some(v442) = v441 {
-                if let &SimpleAst::Constant {
-                    c: v443,
-                    data: v444,
-                } = v442
-                {
-                    match v443 {
-                        0x0 => {
-                            let v446 = &C::constant(ctx, 0x1, v440);
-                            // Rule at .\isle\mba.isle line 435.
-                            return Some(v446.clone());
-                        }
-                        0x1 => {
-                            let v447 = &C::any(ctx, v438);
-                            // Rule at .\isle\mba.isle line 443.
-                            return Some(v447.clone());
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-        &SimpleAst::And {
-            a: v107,
-            b: v108,
-            data: v109,
-        } => {
-            let v110 = &C::lookup_value(ctx, v108);
-            if let Some(v111) = v110 {
-                match v111 {
-                    &SimpleAst::Or {
-                        a: v829,
-                        b: v830,
-                        data: v831,
-                    } => {
-                        let v836 = &C::lookup_value(ctx, v830);
-                        if let Some(v837) = v836 {
-                            if let &SimpleAst::Xor {
-                                a: v1533,
-                                b: v1534,
-                                data: v1535,
-                            } = v837
-                            {
-                                if v107 == v1533 {
-                                    let v426 = &C::any(ctx, v107);
-                                    let v1048 = C::lookup_id(ctx, v426);
-                                    let v1536 = &C::any(ctx, v1534);
-                                    let v1537 = C::lookup_id(ctx, v1536);
-                                    let v1538 = &C::neg(ctx, v1537);
-                                    let v1539 = C::lookup_id(ctx, v1538);
-                                    let v1540 = &C::any(ctx, v829);
-                                    let v1541 = C::lookup_id(ctx, v1540);
-                                    let v1542 = &C::or(ctx, v1539, v1541);
-                                    let v1543 = C::lookup_id(ctx, v1542);
-                                    let v1544 = &C::and(ctx, v1048, v1543);
-                                    // Rule at .\isle\mba.isle line 1171.
-                                    return Some(v1544.clone());
-                                }
-                            }
-                        }
-                    }
-                    &SimpleAst::Xor {
-                        a: v771,
-                        b: v772,
-                        data: v773,
-                    } => {
-                        let v119 = &C::lookup_value(ctx, v107);
-                        if let Some(v120) = v119 {
-                            match v120 {
-                                &SimpleAst::And {
-                                    a: v121,
-                                    b: v122,
-                                    data: v123,
-                                } => {
-                                    if v122 == v771 {
-                                        let v1600 = &C::any(ctx, v122);
-                                        let v1601 = C::lookup_id(ctx, v1600);
-                                        let v1602 = &C::any(ctx, v121);
-                                        let v1603 = C::lookup_id(ctx, v1602);
-                                        let v1604 = &C::and(ctx, v1601, v1603);
-                                        let v1605 = C::lookup_id(ctx, v1604);
-                                        let v1606 = &C::any(ctx, v772);
-                                        let v1607 = C::lookup_id(ctx, v1606);
-                                        let v1608 = &C::neg(ctx, v1607);
-                                        let v1609 = C::lookup_id(ctx, v1608);
-                                        let v1610 = &C::and(ctx, v1605, v1609);
-                                        // Rule at .\isle\mba.isle line 1211.
-                                        return Some(v1610.clone());
-                                    }
-                                }
-                                &SimpleAst::Xor {
-                                    a: v1301,
-                                    b: v1302,
-                                    data: v1303,
-                                } => {
-                                    let v774 = &C::lookup_value(ctx, v772);
-                                    if let Some(v775) = v774 {
-                                        if let &SimpleAst::Xor {
-                                            a: v1384,
-                                            b: v1385,
-                                            data: v1386,
-                                        } = v775
-                                        {
-                                            if v1301 == v1384 {
-                                                let v1387 = &C::lookup_value(ctx, v1385);
-                                                if let Some(v1388) = v1387 {
-                                                    if let &SimpleAst::Neg {
-                                                        a: v1389,
-                                                        data: v1390,
-                                                    } = v1388
-                                                    {
-                                                        if v1302 == v1389 {
-                                                            let v1391 = &C::any(ctx, v771);
-                                                            let v1392 = C::lookup_id(ctx, v1391);
-                                                            let v1393 = &C::any(ctx, v1301);
-                                                            let v1394 = C::lookup_id(ctx, v1393);
-                                                            let v1395 = &C::any(ctx, v1302);
-                                                            let v1396 = C::lookup_id(ctx, v1395);
-                                                            let v1397 = &C::xor(ctx, v1394, v1396);
-                                                            let v1398 = C::lookup_id(ctx, v1397);
-                                                            let v1399 = &C::and(ctx, v1392, v1398);
-                                                            // Rule at .\isle\mba.isle line 1123.
-                                                            return Some(v1399.clone());
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                &SimpleAst::Neg {
-                                    a: v687,
-                                    data: v688,
-                                } => {
-                                    let v689 = &C::lookup_value(ctx, v687);
-                                    if let Some(v690) = v689 {
-                                        if let &SimpleAst::And {
-                                            a: v1197,
-                                            b: v1198,
-                                            data: v1199,
-                                        } = v690
-                                        {
-                                            if v771 == v1198 {
-                                                let v774 = &C::lookup_value(ctx, v772);
-                                                if let Some(v775) = v774 {
-                                                    if let &SimpleAst::Xor {
-                                                        a: v1384,
-                                                        b: v1385,
-                                                        data: v1386,
-                                                    } = v775
-                                                    {
-                                                        let v1387 = &C::lookup_value(ctx, v1385);
-                                                        if let Some(v1388) = v1387 {
-                                                            if let &SimpleAst::Neg {
-                                                                a: v1389,
-                                                                data: v1390,
-                                                            } = v1388
-                                                            {
-                                                                if v1197 == v1389 {
-                                                                    let v1611 = &C::any(ctx, v1198);
-                                                                    let v1612 =
-                                                                        C::lookup_id(ctx, v1611);
-                                                                    let v1613 = &C::any(ctx, v1197);
-                                                                    let v1614 =
-                                                                        C::lookup_id(ctx, v1613);
-                                                                    let v1615 =
-                                                                        &C::and(ctx, v1612, v1614);
-                                                                    let v1616 =
-                                                                        C::lookup_id(ctx, v1615);
-                                                                    let v1617 = &C::any(ctx, v1198);
-                                                                    let v1618 =
-                                                                        C::lookup_id(ctx, v1617);
-                                                                    let v1619 = &C::any(ctx, v1197);
-                                                                    let v1620 =
-                                                                        C::lookup_id(ctx, v1619);
-                                                                    let v1621 =
-                                                                        &C::xor(ctx, v1618, v1620);
-                                                                    let v1622 =
-                                                                        C::lookup_id(ctx, v1621);
-                                                                    let v1623 = &C::any(ctx, v1384);
-                                                                    let v1624 =
-                                                                        C::lookup_id(ctx, v1623);
-                                                                    let v1625 =
-                                                                        &C::xor(ctx, v1622, v1624);
-                                                                    let v1626 =
-                                                                        C::lookup_id(ctx, v1625);
-                                                                    let v1627 =
-                                                                        &C::or(ctx, v1616, v1626);
-                                                                    let v1628 =
-                                                                        C::lookup_id(ctx, v1627);
-                                                                    let v1629 = &C::neg(ctx, v1628);
-                                                                    // Rule at .\isle\mba.isle line 1219.
-                                                                    return Some(v1629.clone());
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                &SimpleAst::Constant {
-                                    c: v137,
-                                    data: v138,
-                                } => {
-                                    if v137 == 0x1 {
-                                        let v774 = &C::lookup_value(ctx, v772);
-                                        if let Some(v775) = v774 {
-                                            if let &SimpleAst::Add {
-                                                a: v1326,
-                                                b: v1327,
-                                                data: v1328,
-                                            } = v775
-                                            {
-                                                if v771 == v1327 {
-                                                    let v1329 = &C::lookup_value(ctx, v1326);
-                                                    if let Some(v1330) = v1329 {
-                                                        if let &SimpleAst::Mul {
-                                                            a: v1331,
-                                                            b: v1332,
-                                                            data: v1333,
-                                                        } = v1330
-                                                        {
-                                                            let v1334 =
-                                                                &C::lookup_value(ctx, v1331);
-                                                            if let Some(v1335) = v1334 {
-                                                                if let &SimpleAst::Constant {
-                                                                    c: v1336,
-                                                                    data: v1337,
-                                                                } = v1335
-                                                                {
-                                                                    if v1336 == 0xFFFFFFFFFFFFFFFF {
-                                                                        let v1338 =
-                                                                            &C::lookup_value(
-                                                                                ctx, v1332,
-                                                                            );
-                                                                        if let Some(v1339) = v1338 {
-                                                                            if let &SimpleAst::Constant {
-                                                                                c: v1340,
-                                                                                data: v1341,
-                                                                            } = v1339 {
-                                                                                if v1340 == 0x2 {
-                                                                                    let v1342 = &C::constant(ctx, 0x0, v1333);
-                                                                                    // Rule at .\isle\mba.isle line 1083.
-                                                                                    return Some(v1342.clone());
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            let v119 = &C::lookup_value(ctx, v107);
-            if let Some(v120) = v119 {
-                match v120 {
-                    &SimpleAst::Xor {
-                        a: v1301,
-                        b: v1302,
-                        data: v1303,
-                    } => {
-                        if v108 == v1301 {
-                            let v1304 = &C::any(ctx, v1301);
-                            let v1305 = C::lookup_id(ctx, v1304);
-                            let v1306 = &C::any(ctx, v1302);
-                            let v1307 = C::lookup_id(ctx, v1306);
-                            let v1308 = &C::neg(ctx, v1307);
-                            let v1309 = C::lookup_id(ctx, v1308);
-                            let v1310 = &C::and(ctx, v1305, v1309);
-                            // Rule at .\isle\mba.isle line 1059.
-                            return Some(v1310.clone());
-                        }
-                    }
-                    &SimpleAst::Neg {
-                        a: v687,
-                        data: v688,
-                    } => {
-                        if let Some(v111) = v110 {
-                            if let &SimpleAst::Neg {
-                                a: v427,
-                                data: v428,
-                            } = v111
-                            {
-                                let v642 = &C::lookup_value(ctx, v427);
-                                if let Some(v643) = v642 {
-                                    if let &SimpleAst::And {
-                                        a: v814,
-                                        b: v815,
-                                        data: v816,
-                                    } = v643
-                                    {
-                                        let v689 = &C::lookup_value(ctx, v687);
-                                        if let Some(v690) = v689 {
-                                            if let &SimpleAst::And {
-                                                a: v1197,
-                                                b: v1198,
-                                                data: v1199,
-                                            } = v690
-                                            {
-                                                let v1200 = &C::lookup_value(ctx, v1197);
-                                                if let Some(v1201) = v1200 {
-                                                    if let &SimpleAst::Neg {
-                                                        a: v1202,
-                                                        data: v1203,
-                                                    } = v1201
-                                                    {
-                                                        if v814 == v1202 {
-                                                            let v1204 =
-                                                                &C::lookup_value(ctx, v1198);
-                                                            if let Some(v1205) = v1204 {
-                                                                if let &SimpleAst::Neg {
-                                                                    a: v1206,
-                                                                    data: v1207,
-                                                                } = v1205
-                                                                {
-                                                                    if v815 == v1206 {
-                                                                        let v1208 =
-                                                                            &C::any(ctx, v1206);
-                                                                        let v1209 = C::lookup_id(
-                                                                            ctx, v1208,
-                                                                        );
-                                                                        let v1210 =
-                                                                            &C::any(ctx, v1202);
-                                                                        let v1211 = C::lookup_id(
-                                                                            ctx, v1210,
-                                                                        );
-                                                                        let v1212 = &C::xor(
-                                                                            ctx, v1209, v1211,
-                                                                        );
-                                                                        // Rule at .\isle\mba.isle line 947.
-                                                                        return Some(v1212.clone());
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if let Some(v111) = v110 {
-                match v111 {
-                    &SimpleAst::Add {
-                        a: v1017,
-                        b: v1018,
-                        data: v1019,
-                    } => {
-                        if v107 == v1017 {
-                            let v1020 = &C::lookup_value(ctx, v1018);
-                            if let Some(v1021) = v1020 {
-                                if let &SimpleAst::And {
-                                    a: v1022,
-                                    b: v1023,
-                                    data: v1024,
-                                } = v1021
-                                {
-                                    let v1025 = &C::lookup_value(ctx, v1022);
-                                    if let Some(v1026) = v1025 {
-                                        if let &SimpleAst::Neg {
-                                            a: v1027,
-                                            data: v1028,
-                                        } = v1026
-                                        {
-                                            if v107 == v1027 {
-                                                let v426 = &C::any(ctx, v107);
-                                                // Rule at .\isle\mba.isle line 811.
-                                                return Some(v426.clone());
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    &SimpleAst::Mul {
-                        a: v698,
-                        b: v699,
-                        data: v700,
-                    } => {
-                        let v701 = &C::lookup_value(ctx, v698);
-                        if let Some(v702) = v701 {
-                            if let &SimpleAst::Constant {
-                                c: v703,
-                                data: v704,
-                            } = v702
-                            {
-                                if v703 == 0xFFFFFFFFFFFFFFFF {
-                                    let v705 = &C::lookup_value(ctx, v699);
-                                    if let Some(v706) = v705 {
-                                        match v706 {
-                                            &SimpleAst::And {
-                                                a: v861,
-                                                b: v862,
-                                                data: v863,
-                                            } => {
-                                                let v864 = &C::lookup_value(ctx, v862);
-                                                if let Some(v865) = v864 {
-                                                    match v865 {
-                                                        &SimpleAst::Mul {
-                                                            a: v866,
-                                                            b: v867,
-                                                            data: v868,
-                                                        } => {
-                                                            if v107 == v861 {
-                                                                if v107 == v867 {
-                                                                    let v869 =
-                                                                        &C::lookup_value(ctx, v866);
-                                                                    if let Some(v870) = v869 {
-                                                                        if let &SimpleAst::Constant {
-                                                                            c: v871,
-                                                                            data: v872,
-                                                                        } = v870 {
-                                                                            if v871 == 0xFFFFFFFFFFFFFFFF {
-                                                                                let v426 = &C::any(ctx, v107);
-                                                                                // Rule at .\isle\mba.isle line 699.
-                                                                                return Some(v426.clone());
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                        &SimpleAst::Or {
-                                                            a: v1045,
-                                                            b: v1046,
-                                                            data: v1047,
-                                                        } => {
-                                                            if v107 == v1045 {
-                                                                let v1036 =
-                                                                    &C::lookup_value(ctx, v861);
-                                                                if let Some(v1037) = v1036 {
-                                                                    if let &SimpleAst::Mul {
-                                                                        a: v1038,
-                                                                        b: v1039,
-                                                                        data: v1040,
-                                                                    } = v1037
-                                                                    {
-                                                                        if v1039 == v1046 {
-                                                                            let v1041 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v1038,
-                                                                                );
-                                                                            if let Some(v1042) =
-                                                                                v1041
-                                                                            {
-                                                                                if let &SimpleAst::Constant {
-                                                                                    c: v1043,
-                                                                                    data: v1044,
-                                                                                } = v1042 {
-                                                                                    if v1043 == 0xFFFFFFFFFFFFFFFF {
-                                                                                        let v426 = &C::any(ctx, v107);
-                                                                                        let v1048 = C::lookup_id(ctx, v426);
-                                                                                        let v1049 = &C::any(ctx, v1039);
-                                                                                        let v1050 = C::lookup_id(ctx, v1049);
-                                                                                        let v1051 = &C::and(ctx, v1048, v1050);
-                                                                                        // Rule at .\isle\mba.isle line 827.
-                                                                                        return Some(v1051.clone());
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                        _ => {}
-                                                    }
-                                                }
-                                            }
-                                            &SimpleAst::Xor {
-                                                a: v707,
-                                                b: v708,
-                                                data: v709,
-                                            } => {
-                                                if let Some(v120) = v119 {
-                                                    if let &SimpleAst::Neg {
-                                                        a: v687,
-                                                        data: v688,
-                                                    } = v120
-                                                    {
-                                                        let v689 = &C::lookup_value(ctx, v687);
-                                                        if let Some(v690) = v689 {
-                                                            if let &SimpleAst::Mul {
-                                                                a: v691,
-                                                                b: v692,
-                                                                data: v693,
-                                                            } = v690
-                                                            {
-                                                                if v692 == v707 {
-                                                                    let v694 =
-                                                                        &C::lookup_value(ctx, v691);
-                                                                    if let Some(v695) = v694 {
-                                                                        if let &SimpleAst::Constant {
-                                                                            c: v696,
-                                                                            data: v697,
-                                                                        } = v695 {
-                                                                            if v696 == 0x2 {
-                                                                                let v710 = &C::lookup_value(ctx, v708);
-                                                                                if let Some(v711) = v710 {
-                                                                                    if let &SimpleAst::Mul {
-                                                                                        a: v712,
-                                                                                        b: v713,
-                                                                                        data: v714,
-                                                                                    } = v711 {
-                                                                                        if v692 == v713 {
-                                                                                            let v715 = &C::lookup_value(ctx, v712);
-                                                                                            if let Some(v716) = v715 {
-                                                                                                if let &SimpleAst::Constant {
-                                                                                                    c: v717,
-                                                                                                    data: v718,
-                                                                                                } = v716 {
-                                                                                                    if v717 == 0xFFFFFFFFFFFFFFFF {
-                                                                                                        let v719 = &C::constant(ctx, 0x0, v693);
-                                                                                                        // Rule at .\isle\mba.isle line 619.
-                                                                                                        return Some(v719.clone());
-                                                                                                    }
-                                                                                                }
-                                                                                            }
-                                                                                        }
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            _ => {}
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                     &SimpleAst::And {
-                        a: v139,
-                        b: v140,
-                        data: v141,
+                        a: v127,
+                        b: v128,
                     } => {
-                        let v142 = &C::lookup_value(ctx, v139);
-                        if let Some(v143) = v142 {
+                        let v129 = &C::lookup_value(ctx, v127);
+                        if let Some(v130) = v129 {
                             if let &SimpleAst::Mul {
-                                a: v670,
-                                b: v671,
-                                data: v672,
-                            } = v143
-                            {
-                                if v107 == v671 {
-                                    let v673 = &C::lookup_value(ctx, v670);
-                                    if let Some(v674) = v673 {
+                                a: v650,
+                                b: v651,
+                            } = v130 {
+                                if v97 == v651 {
+                                    let v652 = &C::lookup_value(ctx, v650);
+                                    if let Some(v653) = v652 {
                                         if let &SimpleAst::Constant {
-                                            c: v675,
-                                            data: v676,
-                                        } = v674
-                                        {
-                                            if v675 == 0xFFFFFFFFFFFFFFFF {
-                                                let v677 = &C::lookup_value(ctx, v140);
-                                                if let Some(v678) = v677 {
-                                                    if let &SimpleAst::Mul {
-                                                        a: v679,
-                                                        b: v680,
-                                                        data: v681,
-                                                    } = v678
-                                                    {
-                                                        if v107 == v680 {
-                                                            let v682 = &C::lookup_value(ctx, v679);
-                                                            if let Some(v683) = v682 {
-                                                                if let &SimpleAst::Constant {
-                                                                    c: v684,
-                                                                    data: v685,
-                                                                } = v683
-                                                                {
-                                                                    if v684 == 0x2 {
-                                                                        let v686 = &C::constant(
-                                                                            ctx, 0x0, v672,
-                                                                        );
-                                                                        // Rule at .\isle\mba.isle line 611.
-                                                                        return Some(v686.clone());
+                                            c: v654,
+                                            width: v655,
+                                        } = v653 {
+                                            let v656 = &C::lookup_value(ctx, v128);
+                                            if let Some(v657) = v656 {
+                                                if let &SimpleAst::Mul {
+                                                    a: v658,
+                                                    b: v659,
+                                                } = v657 {
+                                                    if v97 == v659 {
+                                                        let v660 = &C::lookup_value(ctx, v658);
+                                                        if let Some(v661) = v660 {
+                                                            if let &SimpleAst::Constant {
+                                                                c: v662,
+                                                                width: v663,
+                                                            } = v661 {
+                                                                let v664 = C::is_constant_modulo(ctx, v654, 0xFFFFFFFFFFFFFFFF, v655);
+                                                                if let Some(v665) = v664 {
+                                                                    let v666 = C::is_constant_modulo(ctx, v662, 0x2, v655);
+                                                                    if let Some(v667) = v666 {
+                                                                        let v668 = &C::constant(ctx, 0x0, v655);
+                                                                        // Rule at .\isle\mba.isle line 512.
+                                                                        return Some(v668.clone());
                                                                     }
                                                                 }
                                                             }
@@ -3443,79 +2935,66 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Or {
-                        a: v829,
-                        b: v830,
-                        data: v831,
+                        a: v814,
+                        b: v815,
                     } => {
-                        let v832 = &C::lookup_value(ctx, v829);
-                        if let Some(v833) = v832 {
-                            match v833 {
+                        let v816 = &C::lookup_value(ctx, v814);
+                        if let Some(v817) = v816 {
+                            match v817 {
                                 &SimpleAst::Mul {
-                                    a: v928,
-                                    b: v929,
-                                    data: v930,
+                                    a: v920,
+                                    b: v921,
                                 } => {
-                                    let v836 = &C::lookup_value(ctx, v830);
-                                    if let Some(v837) = v836 {
+                                    let v819 = &C::lookup_value(ctx, v815);
+                                    if let Some(v820) = v819 {
                                         if let &SimpleAst::Mul {
-                                            a: v948,
-                                            b: v949,
-                                            data: v950,
-                                        } = v837
-                                        {
-                                            let v931 = &C::lookup_value(ctx, v928);
-                                            if let Some(v932) = v931 {
+                                            a: v937,
+                                            b: v938,
+                                        } = v820 {
+                                            let v922 = &C::lookup_value(ctx, v920);
+                                            if let Some(v923) = v922 {
                                                 if let &SimpleAst::Constant {
-                                                    c: v933,
-                                                    data: v934,
-                                                } = v932
-                                                {
-                                                    if v933 == 0xFFFFFFFFFFFFFFFF {
-                                                        let v935 = &C::lookup_value(ctx, v929);
-                                                        if let Some(v936) = v935 {
-                                                            if let &SimpleAst::Neg {
-                                                                a: v937,
-                                                                data: v938,
-                                                            } = v936
-                                                            {
-                                                                let v939 =
-                                                                    &C::lookup_value(ctx, v937);
-                                                                if let Some(v940) = v939 {
-                                                                    if let &SimpleAst::Mul {
-                                                                        a: v941,
-                                                                        b: v942,
-                                                                        data: v943,
-                                                                    } = v940
-                                                                    {
-                                                                        if v107 == v942 {
-                                                                            let v944 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v941,
-                                                                                );
-                                                                            if let Some(v945) = v944
-                                                                            {
-                                                                                if let &SimpleAst::Constant {
-                                                                                    c: v946,
-                                                                                    data: v947,
-                                                                                } = v945 {
-                                                                                    if v946 == 0x2 {
-                                                                                        let v951 = &C::lookup_value(ctx, v948);
-                                                                                        if let Some(v952) = v951 {
-                                                                                            if let &SimpleAst::Constant {
-                                                                                                c: v953,
-                                                                                                data: v954,
-                                                                                            } = v952 {
-                                                                                                if v953 == 0xFFFFFFFFFFFFFFFF {
-                                                                                                    let v955 = &C::lookup_value(ctx, v949);
-                                                                                                    if let Some(v956) = v955 {
-                                                                                                        if let &SimpleAst::Neg {
-                                                                                                            a: v957,
-                                                                                                            data: v958,
-                                                                                                        } = v956 {
-                                                                                                            if v107 == v957 {
-                                                                                                                let v426 = &C::any(ctx, v107);
-                                                                                                                // Rule at .\isle\mba.isle line 755.
-                                                                                                                return Some(v426.clone());
+                                                    c: v924,
+                                                    width: v925,
+                                                } = v923 {
+                                                    let v926 = &C::lookup_value(ctx, v921);
+                                                    if let Some(v927) = v926 {
+                                                        if let &SimpleAst::Neg {
+                                                            a: v928,
+                                                        } = v927 {
+                                                            let v929 = &C::lookup_value(ctx, v928);
+                                                            if let Some(v930) = v929 {
+                                                                if let &SimpleAst::Mul {
+                                                                    a: v931,
+                                                                    b: v932,
+                                                                } = v930 {
+                                                                    if v97 == v932 {
+                                                                        let v933 = &C::lookup_value(ctx, v931);
+                                                                        if let Some(v934) = v933 {
+                                                                            if let &SimpleAst::Constant {
+                                                                                c: v935,
+                                                                                width: v936,
+                                                                            } = v934 {
+                                                                                let v939 = &C::lookup_value(ctx, v937);
+                                                                                if let Some(v940) = v939 {
+                                                                                    if let &SimpleAst::Constant {
+                                                                                        c: v941,
+                                                                                        width: v942,
+                                                                                    } = v940 {
+                                                                                        if v924 == v941 {
+                                                                                            let v943 = &C::lookup_value(ctx, v938);
+                                                                                            if let Some(v944) = v943 {
+                                                                                                if let &SimpleAst::Neg {
+                                                                                                    a: v945,
+                                                                                                } = v944 {
+                                                                                                    if v97 == v945 {
+                                                                                                        let v946 = C::is_constant_modulo(ctx, v924, 0xFFFFFFFFFFFFFFFF, v925);
+                                                                                                        if let Some(v947) = v946 {
+                                                                                                            let v948 = C::is_constant_modulo(ctx, v935, 0x2, v925);
+                                                                                                            if let Some(v949) = v948 {
+                                                                                                                let v384 = &C::any(ctx, v97);
+                                                                                                                // Rule at .\isle\mba.isle line 654.
+                                                                                                                return Some(v384.clone());
                                                                                                             }
                                                                                                         }
                                                                                                     }
@@ -3537,67 +3016,58 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::Neg {
-                                    a: v834,
-                                    data: v835,
+                                    a: v818,
                                 } => {
-                                    let v836 = &C::lookup_value(ctx, v830);
-                                    if let Some(v837) = v836 {
-                                        match v837 {
+                                    let v819 = &C::lookup_value(ctx, v815);
+                                    if let Some(v820) = v819 {
+                                        match v820 {
                                             &SimpleAst::Mul {
-                                                a: v948,
-                                                b: v949,
-                                                data: v950,
+                                                a: v937,
+                                                b: v938,
                                             } => {
-                                                let v951 = &C::lookup_value(ctx, v948);
-                                                if let Some(v952) = v951 {
+                                                let v939 = &C::lookup_value(ctx, v937);
+                                                if let Some(v940) = v939 {
                                                     if let &SimpleAst::Constant {
-                                                        c: v953,
-                                                        data: v954,
-                                                    } = v952
-                                                    {
-                                                        if v953 == 0xFFFFFFFFFFFFFFFF {
-                                                            let v955 = &C::lookup_value(ctx, v949);
-                                                            if let Some(v956) = v955 {
-                                                                if let &SimpleAst::Neg {
-                                                                    a: v957,
-                                                                    data: v958,
-                                                                } = v956
-                                                                {
-                                                                    if v107 == v957 {
-                                                                        let v959 = &C::lookup_value(
-                                                                            ctx, v834,
-                                                                        );
-                                                                        if let Some(v960) = v959 {
-                                                                            if let &SimpleAst::Mul {
-                                                                                a: v961,
-                                                                                b: v962,
-                                                                                data: v963,
-                                                                            } = v960 {
-                                                                                let v964 = &C::lookup_value(ctx, v961);
-                                                                                if let Some(v965) = v964 {
-                                                                                    match v965 {
-                                                                                        &SimpleAst::Mul {
-                                                                                            a: v972,
-                                                                                            b: v973,
-                                                                                            data: v974,
-                                                                                        } => {
-                                                                                            let v968 = &C::lookup_value(ctx, v962);
-                                                                                            if let Some(v969) = v968 {
-                                                                                                if let &SimpleAst::Neg {
-                                                                                                    a: v970,
-                                                                                                    data: v971,
-                                                                                                } = v969 {
-                                                                                                    if v107 == v970 {
-                                                                                                        let v975 = &C::lookup_value(ctx, v972);
-                                                                                                        if let Some(v976) = v975 {
-                                                                                                            if let &SimpleAst::Constant {
-                                                                                                                c: v977,
-                                                                                                                data: v978,
-                                                                                                            } = v976 {
-                                                                                                                if v977 == 0xFFFFFFFFFFFFFFFF {
-                                                                                                                    let v426 = &C::any(ctx, v107);
-                                                                                                                    // Rule at .\isle\mba.isle line 771.
-                                                                                                                    return Some(v426.clone());
+                                                        c: v941,
+                                                        width: v942,
+                                                    } = v940 {
+                                                        let v943 = &C::lookup_value(ctx, v938);
+                                                        if let Some(v944) = v943 {
+                                                            if let &SimpleAst::Neg {
+                                                                a: v945,
+                                                            } = v944 {
+                                                                if v97 == v945 {
+                                                                    let v950 = &C::lookup_value(ctx, v818);
+                                                                    if let Some(v951) = v950 {
+                                                                        if let &SimpleAst::Mul {
+                                                                            a: v952,
+                                                                            b: v953,
+                                                                        } = v951 {
+                                                                            let v954 = &C::lookup_value(ctx, v952);
+                                                                            if let Some(v955) = v954 {
+                                                                                match v955 {
+                                                                                    &SimpleAst::Mul {
+                                                                                        a: v965,
+                                                                                        b: v966,
+                                                                                    } => {
+                                                                                        let v958 = &C::lookup_value(ctx, v953);
+                                                                                        if let Some(v959) = v958 {
+                                                                                            if let &SimpleAst::Neg {
+                                                                                                a: v960,
+                                                                                            } = v959 {
+                                                                                                if v97 == v960 {
+                                                                                                    let v967 = &C::lookup_value(ctx, v965);
+                                                                                                    if let Some(v968) = v967 {
+                                                                                                        if let &SimpleAst::Constant {
+                                                                                                            c: v969,
+                                                                                                            width: v970,
+                                                                                                        } = v968 {
+                                                                                                            if v941 == v969 {
+                                                                                                                let v971 = C::is_constant_modulo(ctx, v969, 0xFFFFFFFFFFFFFFFF, v970);
+                                                                                                                if let Some(v972) = v971 {
+                                                                                                                    let v384 = &C::any(ctx, v97);
+                                                                                                                    // Rule at .\isle\mba.isle line 670.
+                                                                                                                    return Some(v384.clone());
                                                                                                                 }
                                                                                                             }
                                                                                                         }
@@ -3605,28 +3075,31 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                                                                 }
                                                                                             }
                                                                                         }
-                                                                                        &SimpleAst::Constant {
-                                                                                            c: v966,
-                                                                                            data: v967,
-                                                                                        } => {
-                                                                                            if v966 == 0x2 {
-                                                                                                let v968 = &C::lookup_value(ctx, v962);
-                                                                                                if let Some(v969) = v968 {
-                                                                                                    if let &SimpleAst::Neg {
-                                                                                                        a: v970,
-                                                                                                        data: v971,
-                                                                                                    } = v969 {
-                                                                                                        if v107 == v970 {
-                                                                                                            let v426 = &C::any(ctx, v107);
-                                                                                                            // Rule at .\isle\mba.isle line 763.
-                                                                                                            return Some(v426.clone());
+                                                                                    }
+                                                                                    &SimpleAst::Constant {
+                                                                                        c: v956,
+                                                                                        width: v957,
+                                                                                    } => {
+                                                                                        let v958 = &C::lookup_value(ctx, v953);
+                                                                                        if let Some(v959) = v958 {
+                                                                                            if let &SimpleAst::Neg {
+                                                                                                a: v960,
+                                                                                            } = v959 {
+                                                                                                if v97 == v960 {
+                                                                                                    let v961 = C::is_constant_modulo(ctx, v956, 0x2, v957);
+                                                                                                    if let Some(v962) = v961 {
+                                                                                                        let v963 = C::is_constant_modulo(ctx, v941, 0xFFFFFFFFFFFFFFFF, v957);
+                                                                                                        if let Some(v964) = v963 {
+                                                                                                            let v384 = &C::any(ctx, v97);
+                                                                                                            // Rule at .\isle\mba.isle line 662.
+                                                                                                            return Some(v384.clone());
                                                                                                         }
                                                                                                     }
                                                                                                 }
                                                                                             }
                                                                                         }
-                                                                                        _ => {}
                                                                                     }
+                                                                                    _ => {}
                                                                                 }
                                                                             }
                                                                         }
@@ -3638,61 +3111,54 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                 }
                                             }
                                             &SimpleAst::Neg {
-                                                a: v838,
-                                                data: v839,
+                                                a: v821,
                                             } => {
-                                                if let Some(v120) = v119 {
+                                                if let Some(v109) = v108 {
                                                     if let &SimpleAst::Mul {
-                                                        a: v751,
-                                                        b: v752,
-                                                        data: v753,
-                                                    } = v120
-                                                    {
-                                                        if v752 == v834 {
-                                                            let v754 = &C::lookup_value(ctx, v751);
-                                                            if let Some(v755) = v754 {
+                                                        a: v732,
+                                                        b: v733,
+                                                    } = v109 {
+                                                        if v733 == v818 {
+                                                            let v734 = &C::lookup_value(ctx, v732);
+                                                            if let Some(v735) = v734 {
                                                                 if let &SimpleAst::Constant {
-                                                                    c: v756,
-                                                                    data: v757,
-                                                                } = v755
-                                                                {
-                                                                    if v756 == 0xFFFFFFFFFFFFFFFF {
-                                                                        let v840 = &C::lookup_value(
-                                                                            ctx, v838,
-                                                                        );
-                                                                        if let Some(v841) = v840 {
+                                                                    c: v736,
+                                                                    width: v737,
+                                                                } = v735 {
+                                                                    let v805 = C::is_constant_modulo(ctx, v736, 0xFFFFFFFFFFFFFFFF, v737);
+                                                                    if let Some(v806) = v805 {
+                                                                        let v822 = &C::lookup_value(ctx, v821);
+                                                                        if let Some(v823) = v822 {
                                                                             if let &SimpleAst::Mul {
-                                                                                a: v842,
-                                                                                b: v843,
-                                                                                data: v844,
-                                                                            } = v841 {
-                                                                                if v752 == v843 {
-                                                                                    let v845 = &C::lookup_value(ctx, v842);
-                                                                                    if let Some(v846) = v845 {
+                                                                                a: v824,
+                                                                                b: v825,
+                                                                            } = v823 {
+                                                                                if v733 == v825 {
+                                                                                    let v826 = &C::lookup_value(ctx, v824);
+                                                                                    if let Some(v827) = v826 {
                                                                                         if let &SimpleAst::Constant {
-                                                                                            c: v847,
-                                                                                            data: v848,
-                                                                                        } = v846 {
-                                                                                            match v847 {
-                                                                                                0x2 => {
-                                                                                                    let v826 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v753);
-                                                                                                    let v827 = C::lookup_id(ctx, v826);
-                                                                                                    let v785 = &C::any(ctx, v752);
-                                                                                                    let v786 = C::lookup_id(ctx, v785);
-                                                                                                    let v828 = &C::mul(ctx, v827, v786);
-                                                                                                    // Rule at .\isle\mba.isle line 675.
-                                                                                                    return Some(v828.clone());
-                                                                                                }
-                                                                                                0xFFFFFFFFFFFFFFFE => {
-                                                                                                    let v826 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v753);
-                                                                                                    let v827 = C::lookup_id(ctx, v826);
-                                                                                                    let v785 = &C::any(ctx, v752);
-                                                                                                    let v786 = C::lookup_id(ctx, v785);
-                                                                                                    let v828 = &C::mul(ctx, v827, v786);
-                                                                                                    // Rule at .\isle\mba.isle line 683.
-                                                                                                    return Some(v828.clone());
-                                                                                                }
-                                                                                                _ => {}
+                                                                                            c: v828,
+                                                                                            width: v829,
+                                                                                        } = v827 {
+                                                                                            let v832 = C::is_constant_modulo(ctx, v828, 0xFFFFFFFFFFFFFFFE, v737);
+                                                                                            if let Some(v833) = v832 {
+                                                                                                let v809 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v737);
+                                                                                                let v810 = C::lookup_id(ctx, v809);
+                                                                                                let v767 = &C::any(ctx, v733);
+                                                                                                let v768 = C::lookup_id(ctx, v767);
+                                                                                                let v811 = &C::mul(ctx, v810, v768);
+                                                                                                // Rule at .\isle\mba.isle line 584.
+                                                                                                return Some(v811.clone());
+                                                                                            }
+                                                                                            let v830 = C::is_constant_modulo(ctx, v828, 0x2, v737);
+                                                                                            if let Some(v831) = v830 {
+                                                                                                let v809 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v737);
+                                                                                                let v810 = C::lookup_id(ctx, v809);
+                                                                                                let v767 = &C::any(ctx, v733);
+                                                                                                let v768 = C::lookup_id(ctx, v767);
+                                                                                                let v811 = &C::mul(ctx, v810, v768);
+                                                                                                // Rule at .\isle\mba.isle line 576.
+                                                                                                return Some(v811.clone());
                                                                                             }
                                                                                         }
                                                                                     }
@@ -3715,57 +3181,45 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Xor {
-                        a: v771,
-                        b: v772,
-                        data: v773,
+                        a: v753,
+                        b: v754,
                     } => {
-                        if let Some(v120) = v119 {
+                        if let Some(v109) = v108 {
                             if let &SimpleAst::Mul {
-                                a: v751,
-                                b: v752,
-                                data: v753,
-                            } = v120
-                            {
-                                if v752 == v771 {
-                                    let v754 = &C::lookup_value(ctx, v751);
-                                    if let Some(v755) = v754 {
+                                a: v732,
+                                b: v733,
+                            } = v109 {
+                                if v733 == v753 {
+                                    let v734 = &C::lookup_value(ctx, v732);
+                                    if let Some(v735) = v734 {
                                         if let &SimpleAst::Constant {
-                                            c: v756,
-                                            data: v757,
-                                        } = v755
-                                        {
-                                            if v756 == 0x2 {
-                                                let v774 = &C::lookup_value(ctx, v772);
-                                                if let Some(v775) = v774 {
+                                            c: v736,
+                                            width: v737,
+                                        } = v735 {
+                                            let v748 = C::is_constant_modulo(ctx, v736, 0x2, v737);
+                                            if let Some(v749) = v748 {
+                                                let v755 = &C::lookup_value(ctx, v754);
+                                                if let Some(v756) = v755 {
                                                     if let &SimpleAst::Mul {
-                                                        a: v776,
-                                                        b: v777,
-                                                        data: v778,
-                                                    } = v775
-                                                    {
-                                                        if v752 == v777 {
-                                                            let v779 = &C::lookup_value(ctx, v776);
-                                                            if let Some(v780) = v779 {
+                                                        a: v757,
+                                                        b: v758,
+                                                    } = v756 {
+                                                        if v733 == v758 {
+                                                            let v759 = &C::lookup_value(ctx, v757);
+                                                            if let Some(v760) = v759 {
                                                                 if let &SimpleAst::Constant {
-                                                                    c: v781,
-                                                                    data: v782,
-                                                                } = v780
-                                                                {
-                                                                    if v781 == 0xFFFFFFFFFFFFFFFF {
-                                                                        let v783 = &C::constant(
-                                                                            ctx, 0x2, v753,
-                                                                        );
-                                                                        let v784 =
-                                                                            C::lookup_id(ctx, v783);
-                                                                        let v785 =
-                                                                            &C::any(ctx, v752);
-                                                                        let v786 =
-                                                                            C::lookup_id(ctx, v785);
-                                                                        let v787 = &C::mul(
-                                                                            ctx, v784, v786,
-                                                                        );
-                                                                        // Rule at .\isle\mba.isle line 643.
-                                                                        return Some(v787.clone());
+                                                                    c: v761,
+                                                                    width: v762,
+                                                                } = v760 {
+                                                                    let v763 = C::is_constant_modulo(ctx, v761, 0xFFFFFFFFFFFFFFFF, v737);
+                                                                    if let Some(v764) = v763 {
+                                                                        let v765 = &C::constant(ctx, 0x2, v737);
+                                                                        let v766 = C::lookup_id(ctx, v765);
+                                                                        let v767 = &C::any(ctx, v733);
+                                                                        let v768 = C::lookup_id(ctx, v767);
+                                                                        let v769 = &C::mul(ctx, v766, v768);
+                                                                        // Rule at .\isle\mba.isle line 544.
+                                                                        return Some(v769.clone());
                                                                     }
                                                                 }
                                                             }
@@ -3780,70 +3234,61 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Neg {
-                        a: v427,
-                        data: v428,
+                        a: v385,
                     } => {
-                        let v642 = &C::lookup_value(ctx, v427);
-                        if let Some(v643) = v642 {
-                            match v643 {
+                        let v602 = &C::lookup_value(ctx, v385);
+                        if let Some(v603) = v602 {
+                            match v603 {
                                 &SimpleAst::And {
-                                    a: v814,
-                                    b: v815,
-                                    data: v816,
+                                    a: v795,
+                                    b: v796,
                                 } => {
-                                    if let Some(v120) = v119 {
+                                    if let Some(v109) = v108 {
                                         if let &SimpleAst::Mul {
-                                            a: v751,
-                                            b: v752,
-                                            data: v753,
-                                        } = v120
-                                        {
-                                            if v752 == v814 {
-                                                let v754 = &C::lookup_value(ctx, v751);
-                                                if let Some(v755) = v754 {
+                                            a: v732,
+                                            b: v733,
+                                        } = v109 {
+                                            if v733 == v795 {
+                                                let v734 = &C::lookup_value(ctx, v732);
+                                                if let Some(v735) = v734 {
                                                     if let &SimpleAst::Constant {
-                                                        c: v756,
-                                                        data: v757,
-                                                    } = v755
-                                                    {
-                                                        if v756 == 0xFFFFFFFFFFFFFFFF {
-                                                            let v817 = &C::lookup_value(ctx, v815);
-                                                            if let Some(v818) = v817 {
-                                                                if let &SimpleAst::Mul {
-                                                                    a: v819,
-                                                                    b: v820,
-                                                                    data: v821,
-                                                                } = v818
-                                                                {
-                                                                    if v752 == v820 {
-                                                                        let v822 = &C::lookup_value(
-                                                                            ctx, v819,
-                                                                        );
-                                                                        if let Some(v823) = v822 {
-                                                                            if let &SimpleAst::Constant {
-                                                                                c: v824,
-                                                                                data: v825,
-                                                                            } = v823 {
-                                                                                match v824 {
-                                                                                    0x2 => {
-                                                                                        let v826 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v753);
-                                                                                        let v827 = C::lookup_id(ctx, v826);
-                                                                                        let v785 = &C::any(ctx, v752);
-                                                                                        let v786 = C::lookup_id(ctx, v785);
-                                                                                        let v828 = &C::mul(ctx, v827, v786);
-                                                                                        // Rule at .\isle\mba.isle line 659.
-                                                                                        return Some(v828.clone());
-                                                                                    }
-                                                                                    0xFFFFFFFFFFFFFFFE => {
-                                                                                        let v826 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v753);
-                                                                                        let v827 = C::lookup_id(ctx, v826);
-                                                                                        let v785 = &C::any(ctx, v752);
-                                                                                        let v786 = C::lookup_id(ctx, v785);
-                                                                                        let v828 = &C::mul(ctx, v827, v786);
-                                                                                        // Rule at .\isle\mba.isle line 667.
-                                                                                        return Some(v828.clone());
-                                                                                    }
-                                                                                    _ => {}
+                                                        c: v736,
+                                                        width: v737,
+                                                    } = v735 {
+                                                        let v797 = &C::lookup_value(ctx, v796);
+                                                        if let Some(v798) = v797 {
+                                                            if let &SimpleAst::Mul {
+                                                                a: v799,
+                                                                b: v800,
+                                                            } = v798 {
+                                                                if v733 == v800 {
+                                                                    let v801 = &C::lookup_value(ctx, v799);
+                                                                    if let Some(v802) = v801 {
+                                                                        if let &SimpleAst::Constant {
+                                                                            c: v803,
+                                                                            width: v804,
+                                                                        } = v802 {
+                                                                            let v805 = C::is_constant_modulo(ctx, v736, 0xFFFFFFFFFFFFFFFF, v737);
+                                                                            if let Some(v806) = v805 {
+                                                                                let v812 = C::is_constant_modulo(ctx, v803, 0xFFFFFFFFFFFFFFFE, v737);
+                                                                                if let Some(v813) = v812 {
+                                                                                    let v809 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v737);
+                                                                                    let v810 = C::lookup_id(ctx, v809);
+                                                                                    let v767 = &C::any(ctx, v733);
+                                                                                    let v768 = C::lookup_id(ctx, v767);
+                                                                                    let v811 = &C::mul(ctx, v810, v768);
+                                                                                    // Rule at .\isle\mba.isle line 568.
+                                                                                    return Some(v811.clone());
+                                                                                }
+                                                                                let v807 = C::is_constant_modulo(ctx, v803, 0x2, v737);
+                                                                                if let Some(v808) = v807 {
+                                                                                    let v809 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v737);
+                                                                                    let v810 = C::lookup_id(ctx, v809);
+                                                                                    let v767 = &C::any(ctx, v733);
+                                                                                    let v768 = C::lookup_id(ctx, v767);
+                                                                                    let v811 = &C::mul(ctx, v810, v768);
+                                                                                    // Rule at .\isle\mba.isle line 560.
+                                                                                    return Some(v811.clone());
                                                                                 }
                                                                             }
                                                                         }
@@ -3858,58 +3303,52 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                     }
                                 }
                                 &SimpleAst::Or {
-                                    a: v644,
-                                    b: v645,
-                                    data: v646,
+                                    a: v604,
+                                    b: v605,
                                 } => {
-                                    if v107 == v644 {
-                                        let v647 = &C::constant(ctx, 0x0, v646);
-                                        // Rule at .\isle\mba.isle line 587.
-                                        return Some(v647.clone());
+                                    if v97 == v604 {
+                                        let v386 = C::get_width(ctx, v97);
+                                        let v387 = &C::constant(ctx, 0x0, v386);
+                                        // Rule at .\isle\mba.isle line 490.
+                                        return Some(v387.clone());
                                     }
                                 }
                                 &SimpleAst::Xor {
-                                    a: v758,
-                                    b: v759,
-                                    data: v760,
+                                    a: v738,
+                                    b: v739,
                                 } => {
-                                    if let Some(v120) = v119 {
+                                    if let Some(v109) = v108 {
                                         if let &SimpleAst::Mul {
-                                            a: v751,
-                                            b: v752,
-                                            data: v753,
-                                        } = v120
-                                        {
-                                            if v752 == v758 {
-                                                let v754 = &C::lookup_value(ctx, v751);
-                                                if let Some(v755) = v754 {
+                                            a: v732,
+                                            b: v733,
+                                        } = v109 {
+                                            if v733 == v738 {
+                                                let v734 = &C::lookup_value(ctx, v732);
+                                                if let Some(v735) = v734 {
                                                     if let &SimpleAst::Constant {
-                                                        c: v756,
-                                                        data: v757,
-                                                    } = v755
-                                                    {
-                                                        if v756 == 0x2 {
-                                                            let v761 = &C::lookup_value(ctx, v759);
-                                                            if let Some(v762) = v761 {
-                                                                if let &SimpleAst::Mul {
-                                                                    a: v763,
-                                                                    b: v764,
-                                                                    data: v765,
-                                                                } = v762
-                                                                {
-                                                                    if v752 == v764 {
-                                                                        let v766 = &C::lookup_value(
-                                                                            ctx, v763,
-                                                                        );
-                                                                        if let Some(v767) = v766 {
-                                                                            if let &SimpleAst::Constant {
-                                                                                c: v768,
-                                                                                data: v769,
-                                                                            } = v767 {
-                                                                                if v768 == 0xFFFFFFFFFFFFFFFF {
-                                                                                    let v770 = &C::constant(ctx, 0x0, v753);
-                                                                                    // Rule at .\isle\mba.isle line 635.
-                                                                                    return Some(v770.clone());
+                                                        c: v736,
+                                                        width: v737,
+                                                    } = v735 {
+                                                        let v740 = &C::lookup_value(ctx, v739);
+                                                        if let Some(v741) = v740 {
+                                                            if let &SimpleAst::Mul {
+                                                                a: v742,
+                                                                b: v743,
+                                                            } = v741 {
+                                                                if v733 == v743 {
+                                                                    let v744 = &C::lookup_value(ctx, v742);
+                                                                    if let Some(v745) = v744 {
+                                                                        if let &SimpleAst::Constant {
+                                                                            c: v746,
+                                                                            width: v747,
+                                                                        } = v745 {
+                                                                            let v748 = C::is_constant_modulo(ctx, v736, 0x2, v737);
+                                                                            if let Some(v749) = v748 {
+                                                                                let v750 = C::is_constant_modulo(ctx, v746, 0xFFFFFFFFFFFFFFFF, v737);
+                                                                                if let Some(v751) = v750 {
+                                                                                    let v752 = &C::constant(ctx, 0x0, v737);
+                                                                                    // Rule at .\isle\mba.isle line 536.
+                                                                                    return Some(v752.clone());
                                                                                 }
                                                                             }
                                                                         }
@@ -3930,46 +3369,41 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     _ => {}
                 }
             }
-            if let Some(v120) = v119 {
+            if let Some(v109) = v108 {
                 if let &SimpleAst::Add {
-                    a: v452,
-                    b: v453,
-                    data: v454,
-                } = v120
-                {
-                    let v455 = &C::lookup_value(ctx, v452);
-                    if let Some(v456) = v455 {
+                    a: v423,
+                    b: v424,
+                } = v109 {
+                    let v425 = &C::lookup_value(ctx, v423);
+                    if let Some(v426) = v425 {
                         if let &SimpleAst::Constant {
-                            c: v457,
-                            data: v458,
-                        } = v456
-                        {
-                            if v457 == 0xFFFFFFFFFFFFFFFF {
-                                let v459 = &C::lookup_value(ctx, v453);
-                                if let Some(v460) = v459 {
-                                    if let &SimpleAst::Mul {
-                                        a: v461,
-                                        b: v462,
-                                        data: v463,
-                                    } = v460
-                                    {
-                                        let v464 = &C::lookup_value(ctx, v461);
-                                        if let Some(v465) = v464 {
-                                            if let &SimpleAst::Constant {
-                                                c: v466,
-                                                data: v467,
-                                            } = v465
-                                            {
-                                                if v466 == 0xFFFFFFFFFFFFFFFF {
-                                                    let v468 = &C::any(ctx, v462);
-                                                    let v469 = C::lookup_id(ctx, v468);
-                                                    let v470 = &C::neg(ctx, v469);
-                                                    let v471 = C::lookup_id(ctx, v470);
-                                                    let v132 = &C::any(ctx, v108);
-                                                    let v133 = C::lookup_id(ctx, v132);
-                                                    let v472 = &C::and(ctx, v471, v133);
-                                                    // Rule at .\isle\mba.isle line 467.
-                                                    return Some(v472.clone());
+                            c: v427,
+                            width: v428,
+                        } = v426 {
+                            let v429 = &C::lookup_value(ctx, v424);
+                            if let Some(v430) = v429 {
+                                if let &SimpleAst::Mul {
+                                    a: v431,
+                                    b: v432,
+                                } = v430 {
+                                    let v433 = &C::lookup_value(ctx, v431);
+                                    if let Some(v434) = v433 {
+                                        if let &SimpleAst::Constant {
+                                            c: v435,
+                                            width: v436,
+                                        } = v434 {
+                                            if v427 == v435 {
+                                                let v437 = C::is_constant_modulo(ctx, v427, 0xFFFFFFFFFFFFFFFF, v428);
+                                                if let Some(v438) = v437 {
+                                                    let v439 = &C::any(ctx, v432);
+                                                    let v440 = C::lookup_id(ctx, v439);
+                                                    let v441 = &C::neg(ctx, v440);
+                                                    let v442 = C::lookup_id(ctx, v441);
+                                                    let v120 = &C::any(ctx, v98);
+                                                    let v121 = C::lookup_id(ctx, v120);
+                                                    let v443 = &C::and(ctx, v442, v121);
+                                                    // Rule at .\isle\mba.isle line 393.
+                                                    return Some(v443.clone());
                                                 }
                                             }
                                         }
@@ -3980,108 +3414,102 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     }
                 }
             }
-            if let Some(v111) = v110 {
+            if let Some(v100) = v99 {
                 if let &SimpleAst::Neg {
-                    a: v427,
-                    data: v428,
-                } = v111
-                {
-                    if v107 == v427 {
-                        let v429 = &C::constant(ctx, 0x0, v428);
-                        // Rule at .\isle\mba.isle line 387.
-                        return Some(v429.clone());
+                    a: v385,
+                } = v100 {
+                    if v97 == v385 {
+                        let v386 = C::get_width(ctx, v97);
+                        let v387 = &C::constant(ctx, 0x0, v386);
+                        // Rule at .\isle\mba.isle line 326.
+                        return Some(v387.clone());
                     }
                 }
             }
-            if v107 == v108 {
-                let v426 = &C::any(ctx, v107);
-                // Rule at .\isle\mba.isle line 379.
-                return Some(v426.clone());
+            if v97 == v98 {
+                let v384 = &C::any(ctx, v97);
+                // Rule at .\isle\mba.isle line 320.
+                return Some(v384.clone());
             }
-            if let Some(v120) = v119 {
-                match v120 {
+            if let Some(v109) = v108 {
+                match v109 {
                     &SimpleAst::And {
-                        a: v121,
-                        b: v122,
-                        data: v123,
+                        a: v110,
+                        b: v111,
                     } => {
-                        let v124 = &C::lookup_value(ctx, v121);
-                        if let Some(v125) = v124 {
+                        let v112 = &C::lookup_value(ctx, v110);
+                        if let Some(v113) = v112 {
                             if let &SimpleAst::Constant {
-                                c: v126,
-                                data: v127,
-                            } = v125
-                            {
-                                let v128 = &C::constant(ctx, v126, v123);
-                                let v129 = C::lookup_id(ctx, v128);
-                                let v130 = &C::any(ctx, v122);
-                                let v131 = C::lookup_id(ctx, v130);
-                                let v132 = &C::any(ctx, v108);
-                                let v133 = C::lookup_id(ctx, v132);
-                                let v134 = &C::and(ctx, v131, v133);
-                                let v135 = C::lookup_id(ctx, v134);
-                                let v136 = &C::and(ctx, v129, v135);
-                                // Rule at .\isle\mba.isle line 139.
-                                return Some(v136.clone());
+                                c: v114,
+                                width: v115,
+                            } = v113 {
+                                let v116 = &C::constant(ctx, v114, v115);
+                                let v117 = C::lookup_id(ctx, v116);
+                                let v118 = &C::any(ctx, v111);
+                                let v119 = C::lookup_id(ctx, v118);
+                                let v120 = &C::any(ctx, v98);
+                                let v121 = C::lookup_id(ctx, v120);
+                                let v122 = &C::and(ctx, v119, v121);
+                                let v123 = C::lookup_id(ctx, v122);
+                                let v124 = &C::and(ctx, v117, v123);
+                                // Rule at .\isle\mba.isle line 134.
+                                return Some(v124.clone());
                             }
                         }
                     }
                     &SimpleAst::Constant {
-                        c: v137,
-                        data: v138,
+                        c: v125,
+                        width: v126,
                     } => {
-                        match v137 {
-                            0x0 => {
-                                let v424 = &C::constant(ctx, 0x0, v109);
-                                // Rule at .\isle\mba.isle line 363.
-                                return Some(v424.clone());
-                            }
-                            0xFFFFFFFFFFFFFFFF => {
-                                let v425 = &C::any(ctx, v108);
-                                // Rule at .\isle\mba.isle line 371.
-                                return Some(v425.clone());
-                            }
-                            _ => {}
+                        let v381 = C::is_constant_modulo(ctx, v125, 0xFFFFFFFFFFFFFFFF, v126);
+                        if let Some(v382) = v381 {
+                            let v383 = &C::any(ctx, v98);
+                            // Rule at .\isle\mba.isle line 313.
+                            return Some(v383.clone());
                         }
-                        if let Some(v111) = v110 {
-                            match v111 {
+                        let v378 = C::is_constant_modulo(ctx, v125, 0x0, v126);
+                        if let Some(v379) = v378 {
+                            let v380 = &C::constant(ctx, 0x0, v126);
+                            // Rule at .\isle\mba.isle line 306.
+                            return Some(v380.clone());
+                        }
+                        if let Some(v100) = v99 {
+                            match v100 {
                                 &SimpleAst::And {
-                                    a: v139,
-                                    b: v140,
-                                    data: v141,
+                                    a: v127,
+                                    b: v128,
                                 } => {
-                                    let v142 = &C::lookup_value(ctx, v139);
-                                    if let Some(v143) = v142 {
+                                    let v129 = &C::lookup_value(ctx, v127);
+                                    if let Some(v130) = v129 {
                                         if let &SimpleAst::Constant {
-                                            c: v144,
-                                            data: v145,
-                                        } = v143
-                                        {
-                                            let v146 = &C::constant(ctx, v137, v141);
-                                            let v147 = C::lookup_id(ctx, v146);
-                                            let v148 = &C::constant(ctx, v144, v141);
-                                            let v149 = C::lookup_id(ctx, v148);
-                                            let v150 = &C::and(ctx, v147, v149);
-                                            let v151 = C::lookup_id(ctx, v150);
-                                            let v152 = &C::any(ctx, v140);
-                                            let v153 = C::lookup_id(ctx, v152);
-                                            let v154 = &C::and(ctx, v151, v153);
-                                            // Rule at .\isle\mba.isle line 147.
-                                            return Some(v154.clone());
+                                            c: v131,
+                                            width: v132,
+                                        } = v130 {
+                                            let v133 = &C::constant(ctx, v125, v126);
+                                            let v134 = C::lookup_id(ctx, v133);
+                                            let v135 = &C::constant(ctx, v131, v126);
+                                            let v136 = C::lookup_id(ctx, v135);
+                                            let v137 = &C::and(ctx, v134, v136);
+                                            let v138 = C::lookup_id(ctx, v137);
+                                            let v139 = &C::any(ctx, v128);
+                                            let v140 = C::lookup_id(ctx, v139);
+                                            let v141 = &C::and(ctx, v138, v140);
+                                            // Rule at .\isle\mba.isle line 140.
+                                            return Some(v141.clone());
                                         }
                                     }
                                 }
                                 &SimpleAst::Constant {
-                                    c: v112,
-                                    data: v113,
+                                    c: v101,
+                                    width: v102,
                                 } => {
-                                    let v155 = &C::constant(ctx, v137, v109);
-                                    let v156 = C::lookup_id(ctx, v155);
-                                    let v157 = &C::constant(ctx, v112, v109);
-                                    let v158 = C::lookup_id(ctx, v157);
-                                    let v159 = &C::and(ctx, v156, v158);
-                                    // Rule at .\isle\mba.isle line 155.
-                                    return Some(v159.clone());
+                                    let v133 = &C::constant(ctx, v125, v126);
+                                    let v134 = C::lookup_id(ctx, v133);
+                                    let v142 = &C::constant(ctx, v101, v126);
+                                    let v143 = C::lookup_id(ctx, v142);
+                                    let v144 = &C::and(ctx, v134, v143);
+                                    // Rule at .\isle\mba.isle line 146.
+                                    return Some(v144.clone());
                                 }
                                 _ => {}
                             }
@@ -4090,103 +3518,83 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     _ => {}
                 }
             }
-            if let Some(v111) = v110 {
+            if let Some(v100) = v99 {
                 if let &SimpleAst::Constant {
-                    c: v112,
-                    data: v113,
-                } = v111
-                {
-                    let v114 = &C::constant(ctx, v112, v109);
-                    let v115 = C::lookup_id(ctx, v114);
-                    let v116 = &C::any(ctx, v107);
-                    let v117 = C::lookup_id(ctx, v116);
-                    let v118 = &C::and(ctx, v115, v117);
-                    // Rule at .\isle\mba.isle line 131.
-                    return Some(v118.clone());
+                    c: v101,
+                    width: v102,
+                } = v100 {
+                    let v103 = &C::constant(ctx, v101, v102);
+                    let v104 = C::lookup_id(ctx, v103);
+                    let v105 = &C::any(ctx, v97);
+                    let v106 = C::lookup_id(ctx, v105);
+                    let v107 = &C::and(ctx, v104, v106);
+                    // Rule at .\isle\mba.isle line 128.
+                    return Some(v107.clone());
                 }
             }
         }
         &SimpleAst::Or {
-            a: v160,
-            b: v161,
-            data: v162,
+            a: v145,
+            b: v146,
         } => {
-            let v172 = &C::lookup_value(ctx, v160);
-            if let Some(v173) = v172 {
-                match v173 {
+            let v156 = &C::lookup_value(ctx, v145);
+            if let Some(v157) = v156 {
+                match v157 {
                     &SimpleAst::Mul {
-                        a: v720,
-                        b: v721,
-                        data: v722,
+                        a: v701,
+                        b: v702,
                     } => {
-                        let v163 = &C::lookup_value(ctx, v161);
-                        if let Some(v164) = v163 {
+                        let v147 = &C::lookup_value(ctx, v146);
+                        if let Some(v148) = v147 {
                             if let &SimpleAst::And {
-                                a: v412,
-                                b: v413,
-                                data: v414,
-                            } = v164
-                            {
-                                let v723 = &C::lookup_value(ctx, v720);
-                                if let Some(v724) = v723 {
+                                a: v368,
+                                b: v369,
+                            } = v148 {
+                                let v703 = &C::lookup_value(ctx, v701);
+                                if let Some(v704) = v703 {
                                     if let &SimpleAst::Constant {
-                                        c: v725,
-                                        data: v726,
-                                    } = v724
-                                    {
-                                        if v725 == 0xFFFFFFFFFFFFFFFF {
-                                            let v1052 = &C::lookup_value(ctx, v721);
-                                            if let Some(v1053) = v1052 {
+                                        c: v705,
+                                        width: v706,
+                                    } = v704 {
+                                        let v867 = C::is_constant_modulo(ctx, v705, 0xFFFFFFFFFFFFFFFF, v706);
+                                        if let Some(v868) = v867 {
+                                            let v1036 = &C::lookup_value(ctx, v702);
+                                            if let Some(v1037) = v1036 {
                                                 if let &SimpleAst::Or {
-                                                    a: v1054,
-                                                    b: v1055,
-                                                    data: v1056,
-                                                } = v1053
-                                                {
-                                                    let v1057 = &C::lookup_value(ctx, v1054);
-                                                    if let Some(v1058) = v1057 {
+                                                    a: v1038,
+                                                    b: v1039,
+                                                } = v1037 {
+                                                    let v1040 = &C::lookup_value(ctx, v1038);
+                                                    if let Some(v1041) = v1040 {
                                                         if let &SimpleAst::Mul {
-                                                            a: v1059,
-                                                            b: v1060,
-                                                            data: v1061,
-                                                        } = v1058
-                                                        {
-                                                            if v412 == v1060 {
-                                                                let v1062 =
-                                                                    &C::lookup_value(ctx, v1059);
-                                                                if let Some(v1063) = v1062 {
+                                                            a: v1042,
+                                                            b: v1043,
+                                                        } = v1041 {
+                                                            if v368 == v1043 {
+                                                                let v1044 = &C::lookup_value(ctx, v1042);
+                                                                if let Some(v1045) = v1044 {
                                                                     if let &SimpleAst::Constant {
-                                                                        c: v1064,
-                                                                        data: v1065,
-                                                                    } = v1063
-                                                                    {
-                                                                        if v1064
-                                                                            == 0xFFFFFFFFFFFFFFFF
-                                                                        {
-                                                                            let v1066 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v1055,
-                                                                                );
-                                                                            if let Some(v1067) =
-                                                                                v1066
-                                                                            {
+                                                                        c: v1046,
+                                                                        width: v1047,
+                                                                    } = v1045 {
+                                                                        if v705 == v1046 {
+                                                                            let v1048 = &C::lookup_value(ctx, v1039);
+                                                                            if let Some(v1049) = v1048 {
                                                                                 if let &SimpleAst::And {
-                                                                                    a: v1068,
-                                                                                    b: v1069,
-                                                                                    data: v1070,
-                                                                                } = v1067 {
-                                                                                    let v1071 = &C::lookup_value(ctx, v1068);
-                                                                                    if let Some(v1072) = v1071 {
+                                                                                    a: v1050,
+                                                                                    b: v1051,
+                                                                                } = v1049 {
+                                                                                    let v1052 = &C::lookup_value(ctx, v1050);
+                                                                                    if let Some(v1053) = v1052 {
                                                                                         if let &SimpleAst::And {
-                                                                                            a: v1073,
-                                                                                            b: v1074,
-                                                                                            data: v1075,
-                                                                                        } = v1072 {
-                                                                                            if v412 == v1073 {
-                                                                                                if v413 == v1074 {
-                                                                                                    let v1076 = &C::any(ctx, v1060);
-                                                                                                    // Rule at .\isle\mba.isle line 835.
-                                                                                                    return Some(v1076.clone());
+                                                                                            a: v1054,
+                                                                                            b: v1055,
+                                                                                        } = v1053 {
+                                                                                            if v368 == v1054 {
+                                                                                                if v369 == v1055 {
+                                                                                                    let v1056 = &C::any(ctx, v1043);
+                                                                                                    // Rule at .\isle\mba.isle line 725.
+                                                                                                    return Some(v1056.clone());
                                                                                                 }
                                                                                             }
                                                                                         }
@@ -4208,122 +3616,111 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::And {
-                        a: v405,
-                        b: v406,
-                        data: v407,
+                        a: v363,
+                        b: v364,
                     } => {
-                        if v161 == v405 {
-                            let v1089 = &C::any(ctx, v405);
-                            // Rule at .\isle\mba.isle line 1107.
-                            return Some(v1089.clone());
+                        if v146 == v363 {
+                            let v1068 = &C::any(ctx, v363);
+                            // Rule at .\isle\mba.isle line 958.
+                            return Some(v1068.clone());
                         }
-                        let v163 = &C::lookup_value(ctx, v161);
-                        if let Some(v164) = v163 {
+                        let v147 = &C::lookup_value(ctx, v146);
+                        if let Some(v148) = v147 {
                             if let &SimpleAst::Xor {
-                                a: v1086,
-                                b: v1087,
-                                data: v1088,
-                            } = v164
-                            {
-                                if v406 == v1087 {
-                                    let v408 = &C::lookup_value(ctx, v405);
-                                    if let Some(v409) = v408 {
+                                a: v1066,
+                                b: v1067,
+                            } = v148 {
+                                if v364 == v1067 {
+                                    let v365 = &C::lookup_value(ctx, v363);
+                                    if let Some(v366) = v365 {
                                         if let &SimpleAst::And {
-                                            a: v1100,
-                                            b: v1101,
-                                            data: v1102,
-                                        } = v409
-                                        {
-                                            if v1086 == v1101 {
-                                                let v1103 = &C::any(ctx, v1100);
-                                                let v1104 = C::lookup_id(ctx, v1103);
-                                                let v1105 = &C::any(ctx, v1101);
-                                                let v1106 = C::lookup_id(ctx, v1105);
-                                                let v1107 = &C::and(ctx, v1104, v1106);
-                                                let v1108 = C::lookup_id(ctx, v1107);
-                                                let v1109 = &C::any(ctx, v406);
-                                                let v1110 = C::lookup_id(ctx, v1109);
-                                                let v1111 = &C::and(ctx, v1108, v1110);
-                                                let v1112 = C::lookup_id(ctx, v1111);
-                                                let v1113 = &C::any(ctx, v1101);
-                                                let v1114 = C::lookup_id(ctx, v1113);
-                                                let v1115 = &C::any(ctx, v406);
-                                                let v1116 = C::lookup_id(ctx, v1115);
-                                                let v1117 = &C::xor(ctx, v1114, v1116);
-                                                let v1118 = C::lookup_id(ctx, v1117);
-                                                let v1119 = &C::add(ctx, v1112, v1118);
-                                                // Rule at .\isle\mba.isle line 859.
-                                                return Some(v1119.clone());
+                                            a: v1079,
+                                            b: v1080,
+                                        } = v366 {
+                                            if v1066 == v1080 {
+                                                let v1081 = &C::any(ctx, v1079);
+                                                let v1082 = C::lookup_id(ctx, v1081);
+                                                let v1083 = &C::any(ctx, v1080);
+                                                let v1084 = C::lookup_id(ctx, v1083);
+                                                let v1085 = &C::and(ctx, v1082, v1084);
+                                                let v1086 = C::lookup_id(ctx, v1085);
+                                                let v1087 = &C::any(ctx, v364);
+                                                let v1088 = C::lookup_id(ctx, v1087);
+                                                let v1089 = &C::and(ctx, v1086, v1088);
+                                                let v1090 = C::lookup_id(ctx, v1089);
+                                                let v1091 = &C::any(ctx, v1080);
+                                                let v1092 = C::lookup_id(ctx, v1091);
+                                                let v1093 = &C::any(ctx, v364);
+                                                let v1094 = C::lookup_id(ctx, v1093);
+                                                let v1095 = &C::xor(ctx, v1092, v1094);
+                                                let v1096 = C::lookup_id(ctx, v1095);
+                                                let v1097 = &C::add(ctx, v1090, v1096);
+                                                // Rule at .\isle\mba.isle line 746.
+                                                return Some(v1097.clone());
                                             }
                                         }
                                     }
-                                    if v405 == v1086 {
-                                        let v1089 = &C::any(ctx, v405);
-                                        let v1090 = C::lookup_id(ctx, v1089);
-                                        let v421 = &C::any(ctx, v406);
-                                        let v422 = C::lookup_id(ctx, v421);
-                                        let v1091 = &C::and(ctx, v1090, v422);
-                                        let v1092 = C::lookup_id(ctx, v1091);
-                                        let v1093 = &C::any(ctx, v405);
-                                        let v1094 = C::lookup_id(ctx, v1093);
-                                        let v1095 = &C::any(ctx, v406);
-                                        let v1096 = C::lookup_id(ctx, v1095);
-                                        let v1097 = &C::xor(ctx, v1094, v1096);
-                                        let v1098 = C::lookup_id(ctx, v1097);
-                                        let v1099 = &C::add(ctx, v1092, v1098);
-                                        // Rule at .\isle\mba.isle line 851.
-                                        return Some(v1099.clone());
+                                    if v363 == v1066 {
+                                        let v1068 = &C::any(ctx, v363);
+                                        let v1069 = C::lookup_id(ctx, v1068);
+                                        let v375 = &C::any(ctx, v364);
+                                        let v376 = C::lookup_id(ctx, v375);
+                                        let v1070 = &C::and(ctx, v1069, v376);
+                                        let v1071 = C::lookup_id(ctx, v1070);
+                                        let v1072 = &C::any(ctx, v363);
+                                        let v1073 = C::lookup_id(ctx, v1072);
+                                        let v1074 = &C::any(ctx, v364);
+                                        let v1075 = C::lookup_id(ctx, v1074);
+                                        let v1076 = &C::xor(ctx, v1073, v1075);
+                                        let v1077 = C::lookup_id(ctx, v1076);
+                                        let v1078 = &C::add(ctx, v1071, v1077);
+                                        // Rule at .\isle\mba.isle line 740.
+                                        return Some(v1078.clone());
                                     }
                                 }
                             }
                         }
                     }
                     &SimpleAst::Xor {
-                        a: v1175,
-                        b: v1176,
-                        data: v1177,
+                        a: v1144,
+                        b: v1145,
                     } => {
-                        if v161 == v1175 {
-                            let v1178 = &C::any(ctx, v1175);
-                            let v1179 = C::lookup_id(ctx, v1178);
-                            let v1180 = &C::any(ctx, v1176);
-                            let v1181 = C::lookup_id(ctx, v1180);
-                            let v1182 = &C::or(ctx, v1179, v1181);
-                            // Rule at .\isle\mba.isle line 915.
-                            return Some(v1182.clone());
+                        if v146 == v1144 {
+                            let v1146 = &C::any(ctx, v1144);
+                            let v1147 = C::lookup_id(ctx, v1146);
+                            let v1148 = &C::any(ctx, v1145);
+                            let v1149 = C::lookup_id(ctx, v1148);
+                            let v1150 = &C::or(ctx, v1147, v1149);
+                            // Rule at .\isle\mba.isle line 789.
+                            return Some(v1150.clone());
                         }
                     }
                     &SimpleAst::Neg {
-                        a: v1566,
-                        data: v1567,
+                        a: v1519,
                     } => {
-                        let v163 = &C::lookup_value(ctx, v161);
-                        if let Some(v164) = v163 {
+                        let v147 = &C::lookup_value(ctx, v146);
+                        if let Some(v148) = v147 {
                             if let &SimpleAst::And {
-                                a: v412,
-                                b: v413,
-                                data: v414,
-                            } = v164
-                            {
-                                let v1568 = &C::lookup_value(ctx, v1566);
-                                if let Some(v1569) = v1568 {
+                                a: v368,
+                                b: v369,
+                            } = v148 {
+                                let v1520 = &C::lookup_value(ctx, v1519);
+                                if let Some(v1521) = v1520 {
                                     if let &SimpleAst::Or {
-                                        a: v1570,
-                                        b: v1571,
-                                        data: v1572,
-                                    } = v1569
-                                    {
-                                        if v412 == v1570 {
-                                            if v413 == v1571 {
-                                                let v1573 = &C::any(ctx, v1570);
-                                                let v1574 = C::lookup_id(ctx, v1573);
-                                                let v1575 = &C::any(ctx, v1571);
-                                                let v1576 = C::lookup_id(ctx, v1575);
-                                                let v1577 = &C::xor(ctx, v1574, v1576);
-                                                let v1578 = C::lookup_id(ctx, v1577);
-                                                let v1579 = &C::neg(ctx, v1578);
-                                                // Rule at .\isle\mba.isle line 1195.
-                                                return Some(v1579.clone());
+                                        a: v1522,
+                                        b: v1523,
+                                    } = v1521 {
+                                        if v368 == v1522 {
+                                            if v369 == v1523 {
+                                                let v1524 = &C::any(ctx, v1522);
+                                                let v1525 = C::lookup_id(ctx, v1524);
+                                                let v1526 = &C::any(ctx, v1523);
+                                                let v1527 = C::lookup_id(ctx, v1526);
+                                                let v1528 = &C::xor(ctx, v1525, v1527);
+                                                let v1529 = C::lookup_id(ctx, v1528);
+                                                let v1530 = &C::neg(ctx, v1529);
+                                                // Rule at .\isle\mba.isle line 1027.
+                                                return Some(v1530.clone());
                                             }
                                         }
                                     }
@@ -4334,60 +3731,53 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     _ => {}
                 }
             }
-            let v163 = &C::lookup_value(ctx, v161);
-            if let Some(v164) = v163 {
-                match v164 {
+            let v147 = &C::lookup_value(ctx, v146);
+            if let Some(v148) = v147 {
+                match v148 {
                     &SimpleAst::Add {
-                        a: v995,
-                        b: v996,
-                        data: v997,
+                        a: v987,
+                        b: v988,
                     } => {
-                        let v1003 = &C::lookup_value(ctx, v996);
-                        if let Some(v1004) = v1003 {
+                        let v993 = &C::lookup_value(ctx, v988);
+                        if let Some(v994) = v993 {
                             if let &SimpleAst::Mul {
-                                a: v1005,
-                                b: v1006,
-                                data: v1007,
-                            } = v1004
-                            {
-                                let v1008 = &C::lookup_value(ctx, v1005);
-                                if let Some(v1009) = v1008 {
+                                a: v995,
+                                b: v996,
+                            } = v994 {
+                                let v997 = &C::lookup_value(ctx, v995);
+                                if let Some(v998) = v997 {
                                     if let &SimpleAst::Constant {
-                                        c: v1010,
-                                        data: v1011,
-                                    } = v1009
-                                    {
-                                        if v1010 == 0xFFFFFFFFFFFFFFFF {
-                                            if v160 == v995 {
-                                                let v1012 = &C::lookup_value(ctx, v1006);
-                                                if let Some(v1013) = v1012 {
+                                        c: v999,
+                                        width: v1000,
+                                    } = v998 {
+                                        let v1001 = C::is_constant_modulo(ctx, v999, 0xFFFFFFFFFFFFFFFF, v1000);
+                                        if let Some(v1002) = v1001 {
+                                            if v145 == v987 {
+                                                let v1003 = &C::lookup_value(ctx, v996);
+                                                if let Some(v1004) = v1003 {
                                                     if let &SimpleAst::And {
-                                                        a: v1014,
-                                                        b: v1015,
-                                                        data: v1016,
-                                                    } = v1013
-                                                    {
-                                                        if v160 == v1014 {
-                                                            let v396 = &C::any(ctx, v160);
-                                                            // Rule at .\isle\mba.isle line 803.
-                                                            return Some(v396.clone());
+                                                        a: v1005,
+                                                        b: v1006,
+                                                    } = v1004 {
+                                                        if v145 == v1005 {
+                                                            let v350 = &C::any(ctx, v145);
+                                                            // Rule at .\isle\mba.isle line 698.
+                                                            return Some(v350.clone());
                                                         }
                                                     }
                                                 }
                                             }
-                                            let v998 = &C::lookup_value(ctx, v995);
-                                            if let Some(v999) = v998 {
+                                            let v989 = &C::lookup_value(ctx, v987);
+                                            if let Some(v990) = v989 {
                                                 if let &SimpleAst::Or {
-                                                    a: v1000,
-                                                    b: v1001,
-                                                    data: v1002,
-                                                } = v999
-                                                {
-                                                    if v160 == v1000 {
-                                                        if v1001 == v1006 {
-                                                            let v396 = &C::any(ctx, v160);
-                                                            // Rule at .\isle\mba.isle line 795.
-                                                            return Some(v396.clone());
+                                                    a: v991,
+                                                    b: v992,
+                                                } = v990 {
+                                                    if v145 == v991 {
+                                                        if v992 == v996 {
+                                                            let v350 = &C::any(ctx, v145);
+                                                            // Rule at .\isle\mba.isle line 691.
+                                                            return Some(v350.clone());
                                                         }
                                                     }
                                                 }
@@ -4399,139 +3789,122 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Mul {
-                        a: v788,
-                        b: v789,
-                        data: v790,
+                        a: v770,
+                        b: v771,
                     } => {
-                        let v791 = &C::lookup_value(ctx, v788);
-                        if let Some(v792) = v791 {
+                        let v772 = &C::lookup_value(ctx, v770);
+                        if let Some(v773) = v772 {
                             if let &SimpleAst::Constant {
-                                c: v793,
-                                data: v794,
-                            } = v792
-                            {
-                                if v793 == 0xFFFFFFFFFFFFFFFF {
-                                    let v795 = &C::lookup_value(ctx, v789);
-                                    if let Some(v796) = v795 {
-                                        match v796 {
-                                            &SimpleAst::Or {
-                                                a: v849,
-                                                b: v850,
-                                                data: v851,
-                                            } => {
-                                                let v852 = &C::lookup_value(ctx, v850);
-                                                if let Some(v853) = v852 {
-                                                    match v853 {
-                                                        &SimpleAst::Mul {
-                                                            a: v854,
-                                                            b: v855,
-                                                            data: v856,
-                                                        } => {
-                                                            if v160 == v855 {
-                                                                let v979 =
-                                                                    &C::lookup_value(ctx, v849);
-                                                                if let Some(v980) = v979 {
+                                c: v774,
+                                width: v775,
+                            } = v773 {
+                                let v776 = &C::lookup_value(ctx, v771);
+                                if let Some(v777) = v776 {
+                                    match v777 {
+                                        &SimpleAst::Or {
+                                            a: v834,
+                                            b: v835,
+                                        } => {
+                                            let v836 = &C::lookup_value(ctx, v835);
+                                            if let Some(v837) = v836 {
+                                                match v837 {
+                                                    &SimpleAst::Mul {
+                                                        a: v838,
+                                                        b: v839,
+                                                    } => {
+                                                        if v145 == v839 {
+                                                            let v844 = C::is_constant_modulo(ctx, v774, 0xFFFFFFFFFFFFFFFF, v775);
+                                                            if let Some(v845) = v844 {
+                                                                let v973 = &C::lookup_value(ctx, v834);
+                                                                if let Some(v974) = v973 {
                                                                     if let &SimpleAst::Mul {
-                                                                        a: v981,
-                                                                        b: v982,
-                                                                        data: v983,
-                                                                    } = v980
-                                                                    {
-                                                                        if v160 == v982 {
-                                                                            let v984 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v981,
-                                                                                );
-                                                                            if let Some(v985) = v984
-                                                                            {
+                                                                        a: v975,
+                                                                        b: v976,
+                                                                    } = v974 {
+                                                                        if v145 == v976 {
+                                                                            let v977 = &C::lookup_value(ctx, v975);
+                                                                            if let Some(v978) = v977 {
                                                                                 if let &SimpleAst::Constant {
-                                                                                    c: v986,
-                                                                                    data: v987,
-                                                                                } = v985 {
-                                                                                    if v986 == 0xFFFFFFFFFFFFFFFF {
-                                                                                        let v857 = &C::lookup_value(ctx, v854);
-                                                                                        if let Some(v858) = v857 {
+                                                                                    c: v979,
+                                                                                    width: v980,
+                                                                                } = v978 {
+                                                                                    if v774 == v979 {
+                                                                                        let v840 = &C::lookup_value(ctx, v838);
+                                                                                        if let Some(v841) = v840 {
                                                                                             if let &SimpleAst::Mul {
-                                                                                                a: v988,
-                                                                                                b: v989,
-                                                                                                data: v990,
-                                                                                            } = v858 {
-                                                                                                let v991 = &C::lookup_value(ctx, v988);
-                                                                                                if let Some(v992) = v991 {
+                                                                                                a: v981,
+                                                                                                b: v982,
+                                                                                            } = v841 {
+                                                                                                let v983 = &C::lookup_value(ctx, v981);
+                                                                                                if let Some(v984) = v983 {
                                                                                                     if let &SimpleAst::Constant {
-                                                                                                        c: v993,
-                                                                                                        data: v994,
-                                                                                                    } = v992 {
-                                                                                                        if v993 == 0xFFFFFFFFFFFFFFFF {
-                                                                                                            let v396 = &C::any(ctx, v160);
-                                                                                                            // Rule at .\isle\mba.isle line 787.
-                                                                                                            return Some(v396.clone());
+                                                                                                        c: v985,
+                                                                                                        width: v986,
+                                                                                                    } = v984 {
+                                                                                                        if v774 == v985 {
+                                                                                                            let v350 = &C::any(ctx, v145);
+                                                                                                            // Rule at .\isle\mba.isle line 684.
+                                                                                                            return Some(v350.clone());
                                                                                                         }
                                                                                                     }
                                                                                                 }
                                                                                             }
                                                                                         }
-                                                                                        let v396 = &C::any(ctx, v160);
-                                                                                        // Rule at .\isle\mba.isle line 779.
-                                                                                        return Some(v396.clone());
+                                                                                        let v350 = &C::any(ctx, v145);
+                                                                                        // Rule at .\isle\mba.isle line 677.
+                                                                                        return Some(v350.clone());
                                                                                     }
                                                                                 }
                                                                             }
                                                                         }
                                                                     }
                                                                 }
-                                                                if v160 == v849 {
-                                                                    let v857 =
-                                                                        &C::lookup_value(ctx, v854);
-                                                                    if let Some(v858) = v857 {
+                                                                if v145 == v834 {
+                                                                    let v840 = &C::lookup_value(ctx, v838);
+                                                                    if let Some(v841) = v840 {
                                                                         if let &SimpleAst::Constant {
-                                                                            c: v859,
-                                                                            data: v860,
-                                                                        } = v858 {
-                                                                            if v859 == 0xFFFFFFFFFFFFFFFF {
-                                                                                let v396 = &C::any(ctx, v160);
-                                                                                // Rule at .\isle\mba.isle line 691.
-                                                                                return Some(v396.clone());
+                                                                            c: v842,
+                                                                            width: v843,
+                                                                        } = v841 {
+                                                                            if v774 == v842 {
+                                                                                let v350 = &C::any(ctx, v145);
+                                                                                // Rule at .\isle\mba.isle line 592.
+                                                                                return Some(v350.clone());
                                                                             }
                                                                         }
                                                                     }
                                                                 }
                                                             }
                                                         }
-                                                        &SimpleAst::And {
-                                                            a: v1029,
-                                                            b: v1030,
-                                                            data: v1031,
-                                                        } => {
-                                                            if v160 == v1029 {
-                                                                let v979 =
-                                                                    &C::lookup_value(ctx, v849);
-                                                                if let Some(v980) = v979 {
+                                                    }
+                                                    &SimpleAst::And {
+                                                        a: v1016,
+                                                        b: v1017,
+                                                    } => {
+                                                        if v145 == v1016 {
+                                                            let v844 = C::is_constant_modulo(ctx, v774, 0xFFFFFFFFFFFFFFFF, v775);
+                                                            if let Some(v845) = v844 {
+                                                                let v973 = &C::lookup_value(ctx, v834);
+                                                                if let Some(v974) = v973 {
                                                                     if let &SimpleAst::Mul {
-                                                                        a: v981,
-                                                                        b: v982,
-                                                                        data: v983,
-                                                                    } = v980
-                                                                    {
-                                                                        if v982 == v1030 {
-                                                                            let v984 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v981,
-                                                                                );
-                                                                            if let Some(v985) = v984
-                                                                            {
+                                                                        a: v975,
+                                                                        b: v976,
+                                                                    } = v974 {
+                                                                        if v976 == v1017 {
+                                                                            let v977 = &C::lookup_value(ctx, v975);
+                                                                            if let Some(v978) = v977 {
                                                                                 if let &SimpleAst::Constant {
-                                                                                    c: v986,
-                                                                                    data: v987,
-                                                                                } = v985 {
-                                                                                    if v986 == 0xFFFFFFFFFFFFFFFF {
-                                                                                        let v396 = &C::any(ctx, v160);
-                                                                                        let v1032 = C::lookup_id(ctx, v396);
-                                                                                        let v1033 = &C::any(ctx, v982);
-                                                                                        let v1034 = C::lookup_id(ctx, v1033);
-                                                                                        let v1035 = &C::or(ctx, v1032, v1034);
-                                                                                        // Rule at .\isle\mba.isle line 819.
-                                                                                        return Some(v1035.clone());
+                                                                                    c: v979,
+                                                                                    width: v980,
+                                                                                } = v978 {
+                                                                                    if v774 == v979 {
+                                                                                        let v350 = &C::any(ctx, v145);
+                                                                                        let v1018 = C::lookup_id(ctx, v350);
+                                                                                        let v1019 = &C::any(ctx, v976);
+                                                                                        let v1020 = C::lookup_id(ctx, v1019);
+                                                                                        let v1021 = &C::or(ctx, v1018, v1020);
+                                                                                        // Rule at .\isle\mba.isle line 711.
+                                                                                        return Some(v1021.clone());
                                                                                     }
                                                                                 }
                                                                             }
@@ -4540,55 +3913,52 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                                 }
                                                             }
                                                         }
-                                                        _ => {}
                                                     }
+                                                    _ => {}
                                                 }
                                             }
-                                            &SimpleAst::Xor {
-                                                a: v797,
-                                                b: v798,
-                                                data: v799,
-                                            } => {
-                                                if let Some(v173) = v172 {
-                                                    if let &SimpleAst::Mul {
-                                                        a: v720,
-                                                        b: v721,
-                                                        data: v722,
-                                                    } = v173
-                                                    {
-                                                        if v721 == v797 {
-                                                            let v723 = &C::lookup_value(ctx, v720);
-                                                            if let Some(v724) = v723 {
-                                                                if let &SimpleAst::Constant {
-                                                                    c: v725,
-                                                                    data: v726,
-                                                                } = v724
-                                                                {
-                                                                    if v725 == 0x2 {
-                                                                        let v800 = &C::lookup_value(
-                                                                            ctx, v798,
-                                                                        );
-                                                                        if let Some(v801) = v800 {
-                                                                            if let &SimpleAst::Mul {
-                                                                                a: v802,
-                                                                                b: v803,
-                                                                                data: v804,
-                                                                            } = v801 {
-                                                                                if v721 == v803 {
-                                                                                    let v805 = &C::lookup_value(ctx, v802);
-                                                                                    if let Some(v806) = v805 {
-                                                                                        if let &SimpleAst::Constant {
-                                                                                            c: v807,
-                                                                                            data: v808,
-                                                                                        } = v806 {
-                                                                                            if v807 == 0xFFFFFFFFFFFFFFFF {
-                                                                                                let v809 = &C::constant(ctx, 0x2, v722);
-                                                                                                let v810 = C::lookup_id(ctx, v809);
-                                                                                                let v811 = &C::any(ctx, v721);
-                                                                                                let v812 = C::lookup_id(ctx, v811);
-                                                                                                let v813 = &C::mul(ctx, v810, v812);
-                                                                                                // Rule at .\isle\mba.isle line 651.
-                                                                                                return Some(v813.clone());
+                                        }
+                                        &SimpleAst::Xor {
+                                            a: v778,
+                                            b: v779,
+                                        } => {
+                                            if let Some(v157) = v156 {
+                                                if let &SimpleAst::Mul {
+                                                    a: v701,
+                                                    b: v702,
+                                                } = v157 {
+                                                    if v702 == v778 {
+                                                        let v703 = &C::lookup_value(ctx, v701);
+                                                        if let Some(v704) = v703 {
+                                                            if let &SimpleAst::Constant {
+                                                                c: v705,
+                                                                width: v706,
+                                                            } = v704 {
+                                                                let v727 = C::is_constant_modulo(ctx, v705, 0x2, v706);
+                                                                if let Some(v728) = v727 {
+                                                                    let v780 = &C::lookup_value(ctx, v779);
+                                                                    if let Some(v781) = v780 {
+                                                                        if let &SimpleAst::Mul {
+                                                                            a: v782,
+                                                                            b: v783,
+                                                                        } = v781 {
+                                                                            if v702 == v783 {
+                                                                                let v784 = &C::lookup_value(ctx, v782);
+                                                                                if let Some(v785) = v784 {
+                                                                                    if let &SimpleAst::Constant {
+                                                                                        c: v786,
+                                                                                        width: v787,
+                                                                                    } = v785 {
+                                                                                        if v774 == v786 {
+                                                                                            let v788 = C::is_constant_modulo(ctx, v774, 0xFFFFFFFFFFFFFFFF, v706);
+                                                                                            if let Some(v789) = v788 {
+                                                                                                let v790 = &C::constant(ctx, 0x2, v706);
+                                                                                                let v791 = C::lookup_id(ctx, v790);
+                                                                                                let v792 = &C::any(ctx, v702);
+                                                                                                let v793 = C::lookup_id(ctx, v792);
+                                                                                                let v794 = &C::mul(ctx, v791, v793);
+                                                                                                // Rule at .\isle\mba.isle line 552.
+                                                                                                return Some(v794.clone());
                                                                                             }
                                                                                         }
                                                                                     }
@@ -4602,85 +3972,75 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                     }
                                                 }
                                             }
-                                            _ => {}
                                         }
+                                        _ => {}
                                     }
                                 }
                             }
                         }
                     }
                     &SimpleAst::And {
-                        a: v412,
-                        b: v413,
-                        data: v414,
+                        a: v368,
+                        b: v369,
                     } => {
-                        let v415 = &C::lookup_value(ctx, v413);
-                        if let Some(v416) = v415 {
+                        let v370 = &C::lookup_value(ctx, v369);
+                        if let Some(v371) = v370 {
                             if let &SimpleAst::Mul {
-                                a: v877,
-                                b: v878,
-                                data: v879,
-                            } = v416
-                            {
-                                let v873 = &C::lookup_value(ctx, v412);
-                                if let Some(v874) = v873 {
-                                    match v874 {
+                                a: v861,
+                                b: v862,
+                            } = v371 {
+                                let v858 = &C::lookup_value(ctx, v368);
+                                if let Some(v859) = v858 {
+                                    match v859 {
                                         &SimpleAst::Mul {
-                                            a: v902,
-                                            b: v903,
-                                            data: v904,
+                                            a: v892,
+                                            b: v893,
                                         } => {
-                                            let v880 = &C::lookup_value(ctx, v877);
-                                            if let Some(v881) = v880 {
-                                                match v881 {
+                                            let v863 = &C::lookup_value(ctx, v861);
+                                            if let Some(v864) = v863 {
+                                                match v864 {
                                                     &SimpleAst::Mul {
-                                                        a: v917,
-                                                        b: v918,
-                                                        data: v919,
+                                                        a: v908,
+                                                        b: v909,
                                                     } => {
-                                                        let v905 = &C::lookup_value(ctx, v902);
-                                                        if let Some(v906) = v905 {
+                                                        let v894 = &C::lookup_value(ctx, v892);
+                                                        if let Some(v895) = v894 {
                                                             if let &SimpleAst::Constant {
-                                                                c: v907,
-                                                                data: v908,
-                                                            } = v906
-                                                            {
-                                                                if v907 == 0xFFFFFFFFFFFFFFFF {
-                                                                    let v909 =
-                                                                        &C::lookup_value(ctx, v903);
-                                                                    if let Some(v910) = v909 {
-                                                                        if let &SimpleAst::Neg {
-                                                                            a: v911,
-                                                                            data: v912,
-                                                                        } = v910
-                                                                        {
-                                                                            if v160 == v911 {
-                                                                                let v913 = &C::lookup_value(ctx, v878);
-                                                                                if let Some(v914) =
-                                                                                    v913
-                                                                                {
-                                                                                    if let &SimpleAst::Neg {
-                                                                                        a: v915,
-                                                                                        data: v916,
-                                                                                    } = v914 {
-                                                                                        if v160 == v915 {
-                                                                                            let v920 = &C::lookup_value(ctx, v917);
-                                                                                            if let Some(v921) = v920 {
+                                                                c: v896,
+                                                                width: v897,
+                                                            } = v895 {
+                                                                let v898 = &C::lookup_value(ctx, v893);
+                                                                if let Some(v899) = v898 {
+                                                                    if let &SimpleAst::Neg {
+                                                                        a: v900,
+                                                                    } = v899 {
+                                                                        if v145 == v900 {
+                                                                            let v901 = &C::lookup_value(ctx, v862);
+                                                                            if let Some(v902) = v901 {
+                                                                                if let &SimpleAst::Neg {
+                                                                                    a: v903,
+                                                                                } = v902 {
+                                                                                    if v145 == v903 {
+                                                                                        let v904 = C::is_constant_modulo(ctx, v896, 0xFFFFFFFFFFFFFFFF, v897);
+                                                                                        if let Some(v905) = v904 {
+                                                                                            let v910 = &C::lookup_value(ctx, v908);
+                                                                                            if let Some(v911) = v910 {
                                                                                                 if let &SimpleAst::Constant {
-                                                                                                    c: v922,
-                                                                                                    data: v923,
-                                                                                                } = v921 {
-                                                                                                    if v922 == 0xFFFFFFFFFFFFFFFF {
-                                                                                                        let v924 = &C::lookup_value(ctx, v918);
-                                                                                                        if let Some(v925) = v924 {
+                                                                                                    c: v912,
+                                                                                                    width: v913,
+                                                                                                } = v911 {
+                                                                                                    if v896 == v912 {
+                                                                                                        let v914 = &C::lookup_value(ctx, v909);
+                                                                                                        if let Some(v915) = v914 {
                                                                                                             if let &SimpleAst::Constant {
-                                                                                                                c: v926,
-                                                                                                                data: v927,
-                                                                                                            } = v925 {
-                                                                                                                if v926 == 0x2 {
-                                                                                                                    let v396 = &C::any(ctx, v160);
-                                                                                                                    // Rule at .\isle\mba.isle line 747.
-                                                                                                                    return Some(v396.clone());
+                                                                                                                c: v916,
+                                                                                                                width: v917,
+                                                                                                            } = v915 {
+                                                                                                                let v918 = C::is_constant_modulo(ctx, v916, 0x2, v897);
+                                                                                                                if let Some(v919) = v918 {
+                                                                                                                    let v350 = &C::any(ctx, v145);
+                                                                                                                    // Rule at .\isle\mba.isle line 646.
+                                                                                                                    return Some(v350.clone());
                                                                                                                 }
                                                                                                             }
                                                                                                         }
@@ -4698,37 +4058,34 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                         }
                                                     }
                                                     &SimpleAst::Constant {
-                                                        c: v882,
-                                                        data: v883,
+                                                        c: v865,
+                                                        width: v866,
                                                     } => {
-                                                        if v882 == 0x2 {
-                                                            let v905 = &C::lookup_value(ctx, v902);
-                                                            if let Some(v906) = v905 {
-                                                                if let &SimpleAst::Constant {
-                                                                    c: v907,
-                                                                    data: v908,
-                                                                } = v906
-                                                                {
-                                                                    if v907 == 0xFFFFFFFFFFFFFFFF {
-                                                                        let v909 = &C::lookup_value(
-                                                                            ctx, v903,
-                                                                        );
-                                                                        if let Some(v910) = v909 {
-                                                                            if let &SimpleAst::Neg {
-                                                                                a: v911,
-                                                                                data: v912,
-                                                                            } = v910 {
-                                                                                if v160 == v911 {
-                                                                                    let v913 = &C::lookup_value(ctx, v878);
-                                                                                    if let Some(v914) = v913 {
-                                                                                        if let &SimpleAst::Neg {
-                                                                                            a: v915,
-                                                                                            data: v916,
-                                                                                        } = v914 {
-                                                                                            if v160 == v915 {
-                                                                                                let v396 = &C::any(ctx, v160);
-                                                                                                // Rule at .\isle\mba.isle line 739.
-                                                                                                return Some(v396.clone());
+                                                        let v894 = &C::lookup_value(ctx, v892);
+                                                        if let Some(v895) = v894 {
+                                                            if let &SimpleAst::Constant {
+                                                                c: v896,
+                                                                width: v897,
+                                                            } = v895 {
+                                                                let v898 = &C::lookup_value(ctx, v893);
+                                                                if let Some(v899) = v898 {
+                                                                    if let &SimpleAst::Neg {
+                                                                        a: v900,
+                                                                    } = v899 {
+                                                                        if v145 == v900 {
+                                                                            let v901 = &C::lookup_value(ctx, v862);
+                                                                            if let Some(v902) = v901 {
+                                                                                if let &SimpleAst::Neg {
+                                                                                    a: v903,
+                                                                                } = v902 {
+                                                                                    if v145 == v903 {
+                                                                                        let v904 = C::is_constant_modulo(ctx, v896, 0xFFFFFFFFFFFFFFFF, v897);
+                                                                                        if let Some(v905) = v904 {
+                                                                                            let v906 = C::is_constant_modulo(ctx, v865, 0x2, v897);
+                                                                                            if let Some(v907) = v906 {
+                                                                                                let v350 = &C::any(ctx, v145);
+                                                                                                // Rule at .\isle\mba.isle line 638.
+                                                                                                return Some(v350.clone());
                                                                                             }
                                                                                         }
                                                                                     }
@@ -4745,54 +4102,48 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                             }
                                         }
                                         &SimpleAst::Neg {
-                                            a: v875,
-                                            data: v876,
+                                            a: v860,
                                         } => {
-                                            if let Some(v173) = v172 {
+                                            if let Some(v157) = v156 {
                                                 if let &SimpleAst::Mul {
-                                                    a: v720,
-                                                    b: v721,
-                                                    data: v722,
-                                                } = v173
-                                                {
-                                                    if v721 == v875 {
-                                                        if v721 == v878 {
-                                                            let v723 = &C::lookup_value(ctx, v720);
-                                                            if let Some(v724) = v723 {
+                                                    a: v701,
+                                                    b: v702,
+                                                } = v157 {
+                                                    if v702 == v860 {
+                                                        if v702 == v862 {
+                                                            let v703 = &C::lookup_value(ctx, v701);
+                                                            if let Some(v704) = v703 {
                                                                 if let &SimpleAst::Constant {
-                                                                    c: v725,
-                                                                    data: v726,
-                                                                } = v724
-                                                                {
-                                                                    if v725 == 0xFFFFFFFFFFFFFFFF {
-                                                                        let v880 = &C::lookup_value(
-                                                                            ctx, v877,
-                                                                        );
-                                                                        if let Some(v881) = v880 {
-                                                                            if let &SimpleAst::Constant {
-                                                                                c: v882,
-                                                                                data: v883,
-                                                                            } = v881 {
-                                                                                match v882 {
-                                                                                    0x2 => {
-                                                                                        let v750 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v722);
-                                                                                        let v884 = C::lookup_id(ctx, v750);
-                                                                                        let v811 = &C::any(ctx, v721);
-                                                                                        let v812 = C::lookup_id(ctx, v811);
-                                                                                        let v885 = &C::mul(ctx, v884, v812);
-                                                                                        // Rule at .\isle\mba.isle line 707.
-                                                                                        return Some(v885.clone());
-                                                                                    }
-                                                                                    0xFFFFFFFFFFFFFFFE => {
-                                                                                        let v750 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v722);
-                                                                                        let v884 = C::lookup_id(ctx, v750);
-                                                                                        let v811 = &C::any(ctx, v721);
-                                                                                        let v812 = C::lookup_id(ctx, v811);
-                                                                                        let v885 = &C::mul(ctx, v884, v812);
-                                                                                        // Rule at .\isle\mba.isle line 715.
-                                                                                        return Some(v885.clone());
-                                                                                    }
-                                                                                    _ => {}
+                                                                    c: v705,
+                                                                    width: v706,
+                                                                } = v704 {
+                                                                    let v863 = &C::lookup_value(ctx, v861);
+                                                                    if let Some(v864) = v863 {
+                                                                        if let &SimpleAst::Constant {
+                                                                            c: v865,
+                                                                            width: v866,
+                                                                        } = v864 {
+                                                                            let v867 = C::is_constant_modulo(ctx, v705, 0xFFFFFFFFFFFFFFFF, v706);
+                                                                            if let Some(v868) = v867 {
+                                                                                let v873 = C::is_constant_modulo(ctx, v865, 0xFFFFFFFFFFFFFFFE, v706);
+                                                                                if let Some(v874) = v873 {
+                                                                                    let v731 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v706);
+                                                                                    let v871 = C::lookup_id(ctx, v731);
+                                                                                    let v792 = &C::any(ctx, v702);
+                                                                                    let v793 = C::lookup_id(ctx, v792);
+                                                                                    let v872 = &C::mul(ctx, v871, v793);
+                                                                                    // Rule at .\isle\mba.isle line 614.
+                                                                                    return Some(v872.clone());
+                                                                                }
+                                                                                let v869 = C::is_constant_modulo(ctx, v865, 0x2, v706);
+                                                                                if let Some(v870) = v869 {
+                                                                                    let v731 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v706);
+                                                                                    let v871 = C::lookup_id(ctx, v731);
+                                                                                    let v792 = &C::any(ctx, v702);
+                                                                                    let v793 = C::lookup_id(ctx, v792);
+                                                                                    let v872 = &C::mul(ctx, v871, v793);
+                                                                                    // Rule at .\isle\mba.isle line 606.
+                                                                                    return Some(v872.clone());
                                                                                 }
                                                                             }
                                                                         }
@@ -4811,71 +4162,60 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Neg {
-                        a: v397,
-                        data: v398,
+                        a: v351,
                     } => {
-                        if let Some(v173) = v172 {
+                        if let Some(v157) = v156 {
                             if let &SimpleAst::Mul {
-                                a: v720,
-                                b: v721,
-                                data: v722,
-                            } = v173
-                            {
-                                let v723 = &C::lookup_value(ctx, v720);
-                                if let Some(v724) = v723 {
+                                a: v701,
+                                b: v702,
+                            } = v157 {
+                                let v703 = &C::lookup_value(ctx, v701);
+                                if let Some(v704) = v703 {
                                     if let &SimpleAst::Constant {
-                                        c: v725,
-                                        data: v726,
-                                    } = v724
-                                    {
-                                        match v725 {
-                                            0x2 => {
-                                                let v727 = &C::lookup_value(ctx, v397);
-                                                if let Some(v728) = v727 {
-                                                    if let &SimpleAst::Mul {
-                                                        a: v729,
-                                                        b: v730,
-                                                        data: v731,
-                                                    } = v728
-                                                    {
-                                                        let v732 = &C::lookup_value(ctx, v729);
-                                                        if let Some(v733) = v732 {
-                                                            if let &SimpleAst::Constant {
-                                                                c: v734,
-                                                                data: v735,
-                                                            } = v733
-                                                            {
-                                                                if v734 == 0xFFFFFFFFFFFFFFFF {
-                                                                    let v736 =
-                                                                        &C::lookup_value(ctx, v730);
-                                                                    if let Some(v737) = v736 {
-                                                                        if let &SimpleAst::Xor {
-                                                                            a: v738,
-                                                                            b: v739,
-                                                                            data: v740,
-                                                                        } = v737
-                                                                        {
-                                                                            if v721 == v738 {
-                                                                                let v741 = &C::lookup_value(ctx, v739);
-                                                                                if let Some(v742) =
-                                                                                    v741
-                                                                                {
-                                                                                    if let &SimpleAst::Mul {
-                                                                                        a: v743,
-                                                                                        b: v744,
-                                                                                        data: v745,
-                                                                                    } = v742 {
-                                                                                        if v721 == v744 {
-                                                                                            let v746 = &C::lookup_value(ctx, v743);
-                                                                                            if let Some(v747) = v746 {
-                                                                                                if let &SimpleAst::Constant {
-                                                                                                    c: v748,
-                                                                                                    data: v749,
-                                                                                                } = v747 {
-                                                                                                    if v748 == 0xFFFFFFFFFFFFFFFF {
-                                                                                                        let v750 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v722);
-                                                                                                        // Rule at .\isle\mba.isle line 627.
-                                                                                                        return Some(v750.clone());
+                                        c: v705,
+                                        width: v706,
+                                    } = v704 {
+                                        let v707 = &C::lookup_value(ctx, v351);
+                                        if let Some(v708) = v707 {
+                                            match v708 {
+                                                &SimpleAst::Mul {
+                                                    a: v709,
+                                                    b: v710,
+                                                } => {
+                                                    let v711 = &C::lookup_value(ctx, v709);
+                                                    if let Some(v712) = v711 {
+                                                        if let &SimpleAst::Constant {
+                                                            c: v713,
+                                                            width: v714,
+                                                        } = v712 {
+                                                            let v715 = &C::lookup_value(ctx, v710);
+                                                            if let Some(v716) = v715 {
+                                                                if let &SimpleAst::Xor {
+                                                                    a: v717,
+                                                                    b: v718,
+                                                                } = v716 {
+                                                                    if v702 == v717 {
+                                                                        let v719 = &C::lookup_value(ctx, v718);
+                                                                        if let Some(v720) = v719 {
+                                                                            if let &SimpleAst::Mul {
+                                                                                a: v721,
+                                                                                b: v722,
+                                                                            } = v720 {
+                                                                                if v702 == v722 {
+                                                                                    let v723 = &C::lookup_value(ctx, v721);
+                                                                                    if let Some(v724) = v723 {
+                                                                                        if let &SimpleAst::Constant {
+                                                                                            c: v725,
+                                                                                            width: v726,
+                                                                                        } = v724 {
+                                                                                            if v713 == v725 {
+                                                                                                let v727 = C::is_constant_modulo(ctx, v705, 0x2, v706);
+                                                                                                if let Some(v728) = v727 {
+                                                                                                    let v729 = C::is_constant_modulo(ctx, v713, 0xFFFFFFFFFFFFFFFF, v706);
+                                                                                                    if let Some(v730) = v729 {
+                                                                                                        let v731 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v706);
+                                                                                                        // Rule at .\isle\mba.isle line 528.
+                                                                                                        return Some(v731.clone());
                                                                                                     }
                                                                                                 }
                                                                                             }
@@ -4890,62 +4230,50 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                         }
                                                     }
                                                 }
-                                            }
-                                            0xFFFFFFFFFFFFFFFF => {
-                                                let v727 = &C::lookup_value(ctx, v397);
-                                                if let Some(v728) = v727 {
-                                                    if let &SimpleAst::Or {
-                                                        a: v886,
-                                                        b: v887,
-                                                        data: v888,
-                                                    } = v728
-                                                    {
-                                                        if v721 == v886 {
-                                                            let v889 = &C::lookup_value(ctx, v887);
-                                                            if let Some(v890) = v889 {
+                                                &SimpleAst::Or {
+                                                    a: v875,
+                                                    b: v876,
+                                                } => {
+                                                    if v702 == v875 {
+                                                        let v867 = C::is_constant_modulo(ctx, v705, 0xFFFFFFFFFFFFFFFF, v706);
+                                                        if let Some(v868) = v867 {
+                                                            let v877 = &C::lookup_value(ctx, v876);
+                                                            if let Some(v878) = v877 {
                                                                 if let &SimpleAst::Neg {
-                                                                    a: v891,
-                                                                    data: v892,
-                                                                } = v890
-                                                                {
-                                                                    let v893 =
-                                                                        &C::lookup_value(ctx, v891);
-                                                                    if let Some(v894) = v893 {
+                                                                    a: v879,
+                                                                } = v878 {
+                                                                    let v880 = &C::lookup_value(ctx, v879);
+                                                                    if let Some(v881) = v880 {
                                                                         if let &SimpleAst::Mul {
-                                                                            a: v895,
-                                                                            b: v896,
-                                                                            data: v897,
-                                                                        } = v894
-                                                                        {
-                                                                            if v721 == v896 {
-                                                                                let v898 = &C::lookup_value(ctx, v895);
-                                                                                if let Some(v899) =
-                                                                                    v898
-                                                                                {
+                                                                            a: v882,
+                                                                            b: v883,
+                                                                        } = v881 {
+                                                                            if v702 == v883 {
+                                                                                let v884 = &C::lookup_value(ctx, v882);
+                                                                                if let Some(v885) = v884 {
                                                                                     if let &SimpleAst::Constant {
-                                                                                        c: v900,
-                                                                                        data: v901,
-                                                                                    } = v899 {
-                                                                                        match v900 {
-                                                                                            0x2 => {
-                                                                                                let v750 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v722);
-                                                                                                let v884 = C::lookup_id(ctx, v750);
-                                                                                                let v811 = &C::any(ctx, v721);
-                                                                                                let v812 = C::lookup_id(ctx, v811);
-                                                                                                let v885 = &C::mul(ctx, v884, v812);
-                                                                                                // Rule at .\isle\mba.isle line 723.
-                                                                                                return Some(v885.clone());
-                                                                                            }
-                                                                                            0xFFFFFFFFFFFFFFFE => {
-                                                                                                let v750 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v722);
-                                                                                                let v884 = C::lookup_id(ctx, v750);
-                                                                                                let v811 = &C::any(ctx, v721);
-                                                                                                let v812 = C::lookup_id(ctx, v811);
-                                                                                                let v885 = &C::mul(ctx, v884, v812);
-                                                                                                // Rule at .\isle\mba.isle line 731.
-                                                                                                return Some(v885.clone());
-                                                                                            }
-                                                                                            _ => {}
+                                                                                        c: v886,
+                                                                                        width: v887,
+                                                                                    } = v885 {
+                                                                                        let v890 = C::is_constant_modulo(ctx, v886, 0xFFFFFFFFFFFFFFFE, v706);
+                                                                                        if let Some(v891) = v890 {
+                                                                                            let v731 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v706);
+                                                                                            let v871 = C::lookup_id(ctx, v731);
+                                                                                            let v792 = &C::any(ctx, v702);
+                                                                                            let v793 = C::lookup_id(ctx, v792);
+                                                                                            let v872 = &C::mul(ctx, v871, v793);
+                                                                                            // Rule at .\isle\mba.isle line 630.
+                                                                                            return Some(v872.clone());
+                                                                                        }
+                                                                                        let v888 = C::is_constant_modulo(ctx, v886, 0x2, v706);
+                                                                                        if let Some(v889) = v888 {
+                                                                                            let v731 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v706);
+                                                                                            let v871 = C::lookup_id(ctx, v731);
+                                                                                            let v792 = &C::any(ctx, v702);
+                                                                                            let v793 = C::lookup_id(ctx, v792);
+                                                                                            let v872 = &C::mul(ctx, v871, v793);
+                                                                                            // Rule at .\isle\mba.isle line 622.
+                                                                                            return Some(v872.clone());
                                                                                         }
                                                                                     }
                                                                                 }
@@ -4957,8 +4285,8 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                                                         }
                                                     }
                                                 }
+                                                _ => {}
                                             }
-                                            _ => {}
                                         }
                                     }
                                 }
@@ -4968,46 +4296,42 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     _ => {}
                 }
             }
-            if let Some(v173) = v172 {
-                match v173 {
+            if let Some(v157) = v156 {
+                match v157 {
                     &SimpleAst::Add {
-                        a: v473,
-                        b: v474,
-                        data: v475,
+                        a: v444,
+                        b: v445,
                     } => {
-                        let v476 = &C::lookup_value(ctx, v473);
-                        if let Some(v477) = v476 {
+                        let v446 = &C::lookup_value(ctx, v444);
+                        if let Some(v447) = v446 {
                             if let &SimpleAst::Constant {
-                                c: v478,
-                                data: v479,
-                            } = v477
-                            {
-                                if v478 == 0xFFFFFFFFFFFFFFFF {
-                                    let v480 = &C::lookup_value(ctx, v474);
-                                    if let Some(v481) = v480 {
-                                        if let &SimpleAst::Mul {
-                                            a: v482,
-                                            b: v483,
-                                            data: v484,
-                                        } = v481
-                                        {
-                                            let v485 = &C::lookup_value(ctx, v482);
-                                            if let Some(v486) = v485 {
-                                                if let &SimpleAst::Constant {
-                                                    c: v487,
-                                                    data: v488,
-                                                } = v486
-                                                {
-                                                    if v487 == 0xFFFFFFFFFFFFFFFF {
-                                                        let v489 = &C::any(ctx, v483);
-                                                        let v490 = C::lookup_id(ctx, v489);
-                                                        let v491 = &C::neg(ctx, v490);
-                                                        let v492 = C::lookup_id(ctx, v491);
-                                                        let v185 = &C::any(ctx, v161);
-                                                        let v186 = C::lookup_id(ctx, v185);
-                                                        let v493 = &C::or(ctx, v492, v186);
-                                                        // Rule at .\isle\mba.isle line 475.
-                                                        return Some(v493.clone());
+                                c: v448,
+                                width: v449,
+                            } = v447 {
+                                let v450 = &C::lookup_value(ctx, v445);
+                                if let Some(v451) = v450 {
+                                    if let &SimpleAst::Mul {
+                                        a: v452,
+                                        b: v453,
+                                    } = v451 {
+                                        let v454 = &C::lookup_value(ctx, v452);
+                                        if let Some(v455) = v454 {
+                                            if let &SimpleAst::Constant {
+                                                c: v456,
+                                                width: v457,
+                                            } = v455 {
+                                                if v448 == v456 {
+                                                    let v458 = C::is_constant_modulo(ctx, v448, 0xFFFFFFFFFFFFFFFF, v449);
+                                                    if let Some(v459) = v458 {
+                                                        let v460 = &C::any(ctx, v453);
+                                                        let v461 = C::lookup_id(ctx, v460);
+                                                        let v462 = &C::neg(ctx, v461);
+                                                        let v463 = C::lookup_id(ctx, v462);
+                                                        let v168 = &C::any(ctx, v146);
+                                                        let v169 = C::lookup_id(ctx, v168);
+                                                        let v464 = &C::or(ctx, v463, v169);
+                                                        // Rule at .\isle\mba.isle line 400.
+                                                        return Some(v464.clone());
                                                     }
                                                 }
                                             }
@@ -5018,40 +4342,33 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::And {
-                        a: v405,
-                        b: v406,
-                        data: v407,
+                        a: v363,
+                        b: v364,
                     } => {
-                        if let Some(v164) = v163 {
+                        if let Some(v148) = v147 {
                             if let &SimpleAst::And {
-                                a: v412,
-                                b: v413,
-                                data: v414,
-                            } = v164
-                            {
-                                let v408 = &C::lookup_value(ctx, v405);
-                                if let Some(v409) = v408 {
+                                a: v368,
+                                b: v369,
+                            } = v148 {
+                                let v365 = &C::lookup_value(ctx, v363);
+                                if let Some(v366) = v365 {
                                     if let &SimpleAst::Neg {
-                                        a: v410,
-                                        data: v411,
-                                    } = v409
-                                    {
-                                        if v410 == v412 {
-                                            let v415 = &C::lookup_value(ctx, v413);
-                                            if let Some(v416) = v415 {
+                                        a: v367,
+                                    } = v366 {
+                                        if v367 == v368 {
+                                            let v370 = &C::lookup_value(ctx, v369);
+                                            if let Some(v371) = v370 {
                                                 if let &SimpleAst::Neg {
-                                                    a: v417,
-                                                    data: v418,
-                                                } = v416
-                                                {
-                                                    if v406 == v417 {
-                                                        let v419 = &C::any(ctx, v410);
-                                                        let v420 = C::lookup_id(ctx, v419);
-                                                        let v421 = &C::any(ctx, v406);
-                                                        let v422 = C::lookup_id(ctx, v421);
-                                                        let v423 = &C::xor(ctx, v420, v422);
-                                                        // Rule at .\isle\mba.isle line 355.
-                                                        return Some(v423.clone());
+                                                    a: v372,
+                                                } = v371 {
+                                                    if v364 == v372 {
+                                                        let v373 = &C::any(ctx, v367);
+                                                        let v374 = C::lookup_id(ctx, v373);
+                                                        let v375 = &C::any(ctx, v364);
+                                                        let v376 = C::lookup_id(ctx, v375);
+                                                        let v377 = &C::xor(ctx, v374, v376);
+                                                        // Rule at .\isle\mba.isle line 300.
+                                                        return Some(v377.clone());
                                                     }
                                                 }
                                             }
@@ -5064,108 +4381,102 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     _ => {}
                 }
             }
-            if let Some(v164) = v163 {
+            if let Some(v148) = v147 {
                 if let &SimpleAst::Neg {
-                    a: v397,
-                    data: v398,
-                } = v164
-                {
-                    if v160 == v397 {
-                        let v399 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v398);
-                        // Rule at .\isle\mba.isle line 323.
-                        return Some(v399.clone());
+                    a: v351,
+                } = v148 {
+                    if v145 == v351 {
+                        let v352 = C::get_width(ctx, v145);
+                        let v353 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v352);
+                        // Rule at .\isle\mba.isle line 274.
+                        return Some(v353.clone());
                     }
                 }
             }
-            if v160 == v161 {
-                let v396 = &C::any(ctx, v160);
-                // Rule at .\isle\mba.isle line 315.
-                return Some(v396.clone());
+            if v145 == v146 {
+                let v350 = &C::any(ctx, v145);
+                // Rule at .\isle\mba.isle line 268.
+                return Some(v350.clone());
             }
-            if let Some(v173) = v172 {
-                match v173 {
+            if let Some(v157) = v156 {
+                match v157 {
                     &SimpleAst::Or {
-                        a: v174,
-                        b: v175,
-                        data: v176,
+                        a: v158,
+                        b: v159,
                     } => {
-                        let v177 = &C::lookup_value(ctx, v174);
-                        if let Some(v178) = v177 {
+                        let v160 = &C::lookup_value(ctx, v158);
+                        if let Some(v161) = v160 {
                             if let &SimpleAst::Constant {
-                                c: v179,
-                                data: v180,
-                            } = v178
-                            {
-                                let v181 = &C::constant(ctx, v179, v176);
-                                let v182 = C::lookup_id(ctx, v181);
-                                let v183 = &C::any(ctx, v175);
-                                let v184 = C::lookup_id(ctx, v183);
-                                let v185 = &C::any(ctx, v161);
-                                let v186 = C::lookup_id(ctx, v185);
-                                let v187 = &C::or(ctx, v184, v186);
-                                let v188 = C::lookup_id(ctx, v187);
-                                let v189 = &C::or(ctx, v182, v188);
-                                // Rule at .\isle\mba.isle line 171.
-                                return Some(v189.clone());
+                                c: v162,
+                                width: v163,
+                            } = v161 {
+                                let v164 = &C::constant(ctx, v162, v163);
+                                let v165 = C::lookup_id(ctx, v164);
+                                let v166 = &C::any(ctx, v159);
+                                let v167 = C::lookup_id(ctx, v166);
+                                let v168 = &C::any(ctx, v146);
+                                let v169 = C::lookup_id(ctx, v168);
+                                let v170 = &C::or(ctx, v167, v169);
+                                let v171 = C::lookup_id(ctx, v170);
+                                let v172 = &C::or(ctx, v165, v171);
+                                // Rule at .\isle\mba.isle line 158.
+                                return Some(v172.clone());
                             }
                         }
                     }
                     &SimpleAst::Constant {
-                        c: v190,
-                        data: v191,
+                        c: v173,
+                        width: v174,
                     } => {
-                        match v190 {
-                            0x0 => {
-                                let v394 = &C::any(ctx, v161);
-                                // Rule at .\isle\mba.isle line 299.
-                                return Some(v394.clone());
-                            }
-                            0xFFFFFFFFFFFFFFFF => {
-                                let v395 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v162);
-                                // Rule at .\isle\mba.isle line 307.
-                                return Some(v395.clone());
-                            }
-                            _ => {}
+                        let v347 = C::is_constant_modulo(ctx, v173, 0xFFFFFFFFFFFFFFFF, v174);
+                        if let Some(v348) = v347 {
+                            let v349 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v174);
+                            // Rule at .\isle\mba.isle line 261.
+                            return Some(v349.clone());
                         }
-                        if let Some(v164) = v163 {
-                            match v164 {
+                        let v344 = C::is_constant_modulo(ctx, v173, 0x0, v174);
+                        if let Some(v345) = v344 {
+                            let v346 = &C::any(ctx, v146);
+                            // Rule at .\isle\mba.isle line 254.
+                            return Some(v346.clone());
+                        }
+                        if let Some(v148) = v147 {
+                            match v148 {
                                 &SimpleAst::Or {
-                                    a: v192,
-                                    b: v193,
-                                    data: v194,
+                                    a: v175,
+                                    b: v176,
                                 } => {
-                                    let v195 = &C::lookup_value(ctx, v192);
-                                    if let Some(v196) = v195 {
+                                    let v177 = &C::lookup_value(ctx, v175);
+                                    if let Some(v178) = v177 {
                                         if let &SimpleAst::Constant {
-                                            c: v197,
-                                            data: v198,
-                                        } = v196
-                                        {
-                                            let v199 = &C::constant(ctx, v190, v194);
-                                            let v200 = C::lookup_id(ctx, v199);
-                                            let v201 = &C::constant(ctx, v197, v194);
-                                            let v202 = C::lookup_id(ctx, v201);
-                                            let v203 = &C::or(ctx, v200, v202);
-                                            let v204 = C::lookup_id(ctx, v203);
-                                            let v205 = &C::any(ctx, v193);
-                                            let v206 = C::lookup_id(ctx, v205);
-                                            let v207 = &C::or(ctx, v204, v206);
-                                            // Rule at .\isle\mba.isle line 179.
-                                            return Some(v207.clone());
+                                            c: v179,
+                                            width: v180,
+                                        } = v178 {
+                                            let v181 = &C::constant(ctx, v173, v174);
+                                            let v182 = C::lookup_id(ctx, v181);
+                                            let v183 = &C::constant(ctx, v179, v174);
+                                            let v184 = C::lookup_id(ctx, v183);
+                                            let v185 = &C::or(ctx, v182, v184);
+                                            let v186 = C::lookup_id(ctx, v185);
+                                            let v187 = &C::any(ctx, v176);
+                                            let v188 = C::lookup_id(ctx, v187);
+                                            let v189 = &C::or(ctx, v186, v188);
+                                            // Rule at .\isle\mba.isle line 164.
+                                            return Some(v189.clone());
                                         }
                                     }
                                 }
                                 &SimpleAst::Constant {
-                                    c: v165,
-                                    data: v166,
+                                    c: v149,
+                                    width: v150,
                                 } => {
-                                    let v208 = &C::constant(ctx, v190, v162);
-                                    let v209 = C::lookup_id(ctx, v208);
-                                    let v210 = &C::constant(ctx, v165, v162);
-                                    let v211 = C::lookup_id(ctx, v210);
-                                    let v212 = &C::or(ctx, v209, v211);
-                                    // Rule at .\isle\mba.isle line 187.
-                                    return Some(v212.clone());
+                                    let v181 = &C::constant(ctx, v173, v174);
+                                    let v182 = C::lookup_id(ctx, v181);
+                                    let v190 = &C::constant(ctx, v149, v174);
+                                    let v191 = C::lookup_id(ctx, v190);
+                                    let v192 = &C::or(ctx, v182, v191);
+                                    // Rule at .\isle\mba.isle line 170.
+                                    return Some(v192.clone());
                                 }
                                 _ => {}
                             }
@@ -5174,66 +4485,58 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     _ => {}
                 }
             }
-            if let Some(v164) = v163 {
+            if let Some(v148) = v147 {
                 if let &SimpleAst::Constant {
-                    c: v165,
-                    data: v166,
-                } = v164
-                {
-                    let v167 = &C::constant(ctx, v165, v162);
-                    let v168 = C::lookup_id(ctx, v167);
-                    let v169 = &C::any(ctx, v160);
-                    let v170 = C::lookup_id(ctx, v169);
-                    let v171 = &C::or(ctx, v168, v170);
-                    // Rule at .\isle\mba.isle line 163.
-                    return Some(v171.clone());
+                    c: v149,
+                    width: v150,
+                } = v148 {
+                    let v151 = &C::constant(ctx, v149, v150);
+                    let v152 = C::lookup_id(ctx, v151);
+                    let v153 = &C::any(ctx, v145);
+                    let v154 = C::lookup_id(ctx, v153);
+                    let v155 = &C::or(ctx, v152, v154);
+                    // Rule at .\isle\mba.isle line 152.
+                    return Some(v155.clone());
                 }
             }
         }
         &SimpleAst::Xor {
-            a: v213,
-            b: v214,
-            data: v215,
+            a: v193,
+            b: v194,
         } => {
-            let v216 = &C::lookup_value(ctx, v214);
-            if let Some(v217) = v216 {
+            let v195 = &C::lookup_value(ctx, v194);
+            if let Some(v196) = v195 {
                 if let &SimpleAst::Or {
-                    a: v1120,
-                    b: v1121,
-                    data: v1122,
-                } = v217
-                {
-                    let v1580 = &C::lookup_value(ctx, v1121);
-                    if let Some(v1581) = v1580 {
+                    a: v1098,
+                    b: v1099,
+                } = v196 {
+                    let v1531 = &C::lookup_value(ctx, v1099);
+                    if let Some(v1532) = v1531 {
                         if let &SimpleAst::Neg {
-                            a: v1582,
-                            data: v1583,
-                        } = v1581
-                        {
-                            let v1584 = &C::lookup_value(ctx, v1582);
-                            if let Some(v1585) = v1584 {
+                            a: v1533,
+                        } = v1532 {
+                            let v1534 = &C::lookup_value(ctx, v1533);
+                            if let Some(v1535) = v1534 {
                                 if let &SimpleAst::And {
-                                    a: v1586,
-                                    b: v1587,
-                                    data: v1588,
-                                } = v1585
-                                {
-                                    if v213 == v1587 {
-                                        let v1123 = &C::any(ctx, v213);
-                                        let v1124 = C::lookup_id(ctx, v1123);
-                                        let v1589 = &C::any(ctx, v1120);
-                                        let v1590 = C::lookup_id(ctx, v1589);
-                                        let v1591 = &C::any(ctx, v1586);
-                                        let v1592 = C::lookup_id(ctx, v1591);
-                                        let v1593 = &C::neg(ctx, v1592);
-                                        let v1594 = C::lookup_id(ctx, v1593);
-                                        let v1595 = &C::or(ctx, v1590, v1594);
-                                        let v1596 = C::lookup_id(ctx, v1595);
-                                        let v1597 = &C::and(ctx, v1124, v1596);
-                                        let v1598 = C::lookup_id(ctx, v1597);
-                                        let v1599 = &C::neg(ctx, v1598);
-                                        // Rule at .\isle\mba.isle line 1203.
-                                        return Some(v1599.clone());
+                                    a: v1536,
+                                    b: v1537,
+                                } = v1535 {
+                                    if v193 == v1537 {
+                                        let v1100 = &C::any(ctx, v193);
+                                        let v1101 = C::lookup_id(ctx, v1100);
+                                        let v1538 = &C::any(ctx, v1098);
+                                        let v1539 = C::lookup_id(ctx, v1538);
+                                        let v1540 = &C::any(ctx, v1536);
+                                        let v1541 = C::lookup_id(ctx, v1540);
+                                        let v1542 = &C::neg(ctx, v1541);
+                                        let v1543 = C::lookup_id(ctx, v1542);
+                                        let v1544 = &C::or(ctx, v1539, v1543);
+                                        let v1545 = C::lookup_id(ctx, v1544);
+                                        let v1546 = &C::and(ctx, v1101, v1545);
+                                        let v1547 = C::lookup_id(ctx, v1546);
+                                        let v1548 = &C::neg(ctx, v1547);
+                                        // Rule at .\isle\mba.isle line 1033.
+                                        return Some(v1548.clone());
                                     }
                                 }
                             }
@@ -5241,105 +4544,90 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     }
                 }
             }
-            let v225 = &C::lookup_value(ctx, v213);
-            if let Some(v226) = v225 {
-                match v226 {
+            let v204 = &C::lookup_value(ctx, v193);
+            if let Some(v205) = v204 {
+                match v205 {
                     &SimpleAst::And {
-                        a: v1347,
-                        b: v1348,
-                        data: v1349,
+                        a: v1322,
+                        b: v1323,
                     } => {
-                        if let Some(v217) = v216 {
+                        if let Some(v196) = v195 {
                             if let &SimpleAst::And {
-                                a: v1354,
-                                b: v1355,
-                                data: v1356,
-                            } = v217
-                            {
-                                if v1347 == v1354 {
-                                    let v1400 = &C::lookup_value(ctx, v1348);
-                                    if let Some(v1401) = v1400 {
+                                a: v1328,
+                                b: v1329,
+                            } = v196 {
+                                if v1322 == v1328 {
+                                    let v1374 = &C::lookup_value(ctx, v1323);
+                                    if let Some(v1375) = v1374 {
                                         if let &SimpleAst::Xor {
-                                            a: v1402,
-                                            b: v1403,
-                                            data: v1404,
-                                        } = v1401
-                                        {
-                                            let v1405 = &C::any(ctx, v1347);
-                                            let v1406 = C::lookup_id(ctx, v1405);
-                                            let v1407 = &C::any(ctx, v1355);
-                                            let v1408 = C::lookup_id(ctx, v1407);
-                                            let v1409 = &C::any(ctx, v1402);
-                                            let v1410 = C::lookup_id(ctx, v1409);
-                                            let v1411 = &C::any(ctx, v1403);
-                                            let v1412 = C::lookup_id(ctx, v1411);
-                                            let v1413 = &C::xor(ctx, v1410, v1412);
-                                            let v1414 = C::lookup_id(ctx, v1413);
-                                            let v1415 = &C::xor(ctx, v1408, v1414);
-                                            let v1416 = C::lookup_id(ctx, v1415);
-                                            let v1417 = &C::and(ctx, v1406, v1416);
-                                            // Rule at .\isle\mba.isle line 1131.
-                                            return Some(v1417.clone());
+                                            a: v1376,
+                                            b: v1377,
+                                        } = v1375 {
+                                            let v1378 = &C::any(ctx, v1322);
+                                            let v1379 = C::lookup_id(ctx, v1378);
+                                            let v1380 = &C::any(ctx, v1329);
+                                            let v1381 = C::lookup_id(ctx, v1380);
+                                            let v1382 = &C::any(ctx, v1376);
+                                            let v1383 = C::lookup_id(ctx, v1382);
+                                            let v1384 = &C::any(ctx, v1377);
+                                            let v1385 = C::lookup_id(ctx, v1384);
+                                            let v1386 = &C::xor(ctx, v1383, v1385);
+                                            let v1387 = C::lookup_id(ctx, v1386);
+                                            let v1388 = &C::xor(ctx, v1381, v1387);
+                                            let v1389 = C::lookup_id(ctx, v1388);
+                                            let v1390 = &C::and(ctx, v1379, v1389);
+                                            // Rule at .\isle\mba.isle line 976.
+                                            return Some(v1390.clone());
                                         }
                                     }
                                 }
-                                let v1350 = &C::lookup_value(ctx, v1347);
-                                if let Some(v1351) = v1350 {
+                                let v1324 = &C::lookup_value(ctx, v1322);
+                                if let Some(v1325) = v1324 {
                                     if let &SimpleAst::Constant {
-                                        c: v1352,
-                                        data: v1353,
-                                    } = v1351
-                                    {
-                                        if v1352 == 0x1 {
-                                            let v1357 = &C::lookup_value(ctx, v1354);
-                                            if let Some(v1358) = v1357 {
-                                                if let &SimpleAst::Constant {
-                                                    c: v1359,
-                                                    data: v1360,
-                                                } = v1358
-                                                {
-                                                    if v1359 == 0x1 {
-                                                        let v1361 = &C::lookup_value(ctx, v1355);
-                                                        if let Some(v1362) = v1361 {
-                                                            if let &SimpleAst::Add {
-                                                                a: v1363,
-                                                                b: v1364,
-                                                                data: v1365,
-                                                            } = v1362
-                                                            {
-                                                                if v1348 == v1363 {
-                                                                    let v1366 = &C::lookup_value(
-                                                                        ctx, v1364,
-                                                                    );
-                                                                    if let Some(v1367) = v1366 {
-                                                                        if let &SimpleAst::Mul {
-                                                                            a: v1368,
-                                                                            b: v1369,
-                                                                            data: v1370,
-                                                                        } = v1367
-                                                                        {
-                                                                            let v1371 =
-                                                                                &C::lookup_value(
-                                                                                    ctx, v1368,
-                                                                                );
-                                                                            if let Some(v1372) =
-                                                                                v1371
-                                                                            {
-                                                                                if let &SimpleAst::Constant {
-                                                                                    c: v1373,
-                                                                                    data: v1374,
-                                                                                } = v1372 {
-                                                                                    if v1373 == 0xFFFFFFFFFFFFFFFF {
-                                                                                        let v1375 = &C::lookup_value(ctx, v1369);
-                                                                                        if let Some(v1376) = v1375 {
-                                                                                            if let &SimpleAst::Constant {
-                                                                                                c: v1377,
-                                                                                                data: v1378,
-                                                                                            } = v1376 {
-                                                                                                if v1377 == 0x2 {
-                                                                                                    let v1379 = &C::constant(ctx, 0x0, v1349);
-                                                                                                    // Rule at .\isle\mba.isle line 1099.
-                                                                                                    return Some(v1379.clone());
+                                        c: v1326,
+                                        width: v1327,
+                                    } = v1325 {
+                                        let v1330 = &C::lookup_value(ctx, v1328);
+                                        if let Some(v1331) = v1330 {
+                                            if let &SimpleAst::Constant {
+                                                c: v1332,
+                                                width: v1333,
+                                            } = v1331 {
+                                                if v1326 == v1332 {
+                                                    let v1334 = &C::lookup_value(ctx, v1329);
+                                                    if let Some(v1335) = v1334 {
+                                                        if let &SimpleAst::Add {
+                                                            a: v1336,
+                                                            b: v1337,
+                                                        } = v1335 {
+                                                            if v1323 == v1336 {
+                                                                let v1338 = &C::lookup_value(ctx, v1337);
+                                                                if let Some(v1339) = v1338 {
+                                                                    if let &SimpleAst::Mul {
+                                                                        a: v1340,
+                                                                        b: v1341,
+                                                                    } = v1339 {
+                                                                        let v1342 = &C::lookup_value(ctx, v1340);
+                                                                        if let Some(v1343) = v1342 {
+                                                                            if let &SimpleAst::Constant {
+                                                                                c: v1344,
+                                                                                width: v1345,
+                                                                            } = v1343 {
+                                                                                let v1346 = &C::lookup_value(ctx, v1341);
+                                                                                if let Some(v1347) = v1346 {
+                                                                                    if let &SimpleAst::Constant {
+                                                                                        c: v1348,
+                                                                                        width: v1349,
+                                                                                    } = v1347 {
+                                                                                        let v1350 = C::is_constant_modulo(ctx, v1326, 0x1, v1327);
+                                                                                        if let Some(v1351) = v1350 {
+                                                                                            let v1352 = C::is_constant_modulo(ctx, v1344, 0xFFFFFFFFFFFFFFFF, v1327);
+                                                                                            if let Some(v1353) = v1352 {
+                                                                                                let v1354 = C::is_constant_modulo(ctx, v1348, 0x2, v1327);
+                                                                                                if let Some(v1355) = v1354 {
+                                                                                                    let v1356 = &C::constant(ctx, 0x0, v1327);
+                                                                                                    // Rule at .\isle\mba.isle line 949.
+                                                                                                    return Some(v1356.clone());
                                                                                                 }
                                                                                             }
                                                                                         }
@@ -5361,41 +4649,36 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                         }
                     }
                     &SimpleAst::Or {
-                        a: v1418,
-                        b: v1419,
-                        data: v1420,
+                        a: v1391,
+                        b: v1392,
                     } => {
-                        let v1421 = &C::lookup_value(ctx, v1418);
-                        if let Some(v1422) = v1421 {
+                        let v1393 = &C::lookup_value(ctx, v1391);
+                        if let Some(v1394) = v1393 {
                             if let &SimpleAst::Xor {
-                                a: v1423,
-                                b: v1424,
-                                data: v1425,
-                            } = v1422
-                            {
-                                if v214 == v1423 {
-                                    let v1426 = &C::lookup_value(ctx, v1419);
-                                    if let Some(v1427) = v1426 {
+                                a: v1395,
+                                b: v1396,
+                            } = v1394 {
+                                if v194 == v1395 {
+                                    let v1397 = &C::lookup_value(ctx, v1392);
+                                    if let Some(v1398) = v1397 {
                                         if let &SimpleAst::And {
-                                            a: v1428,
-                                            b: v1429,
-                                            data: v1430,
-                                        } = v1427
-                                        {
-                                            if v214 == v1428 {
-                                                let v1431 = &C::any(ctx, v1424);
-                                                let v1432 = C::lookup_id(ctx, v1431);
-                                                let v1433 = &C::any(ctx, v1429);
-                                                let v1434 = C::lookup_id(ctx, v1433);
-                                                let v1435 = &C::any(ctx, v1423);
-                                                let v1436 = C::lookup_id(ctx, v1435);
-                                                let v1437 = &C::and(ctx, v1434, v1436);
-                                                let v1438 = C::lookup_id(ctx, v1437);
-                                                let v1439 = &C::neg(ctx, v1438);
-                                                let v1440 = C::lookup_id(ctx, v1439);
-                                                let v1441 = &C::and(ctx, v1432, v1440);
-                                                // Rule at .\isle\mba.isle line 1139.
-                                                return Some(v1441.clone());
+                                            a: v1399,
+                                            b: v1400,
+                                        } = v1398 {
+                                            if v194 == v1399 {
+                                                let v1401 = &C::any(ctx, v1396);
+                                                let v1402 = C::lookup_id(ctx, v1401);
+                                                let v1403 = &C::any(ctx, v1400);
+                                                let v1404 = C::lookup_id(ctx, v1403);
+                                                let v1405 = &C::any(ctx, v1395);
+                                                let v1406 = C::lookup_id(ctx, v1405);
+                                                let v1407 = &C::and(ctx, v1404, v1406);
+                                                let v1408 = C::lookup_id(ctx, v1407);
+                                                let v1409 = &C::neg(ctx, v1408);
+                                                let v1410 = C::lookup_id(ctx, v1409);
+                                                let v1411 = &C::and(ctx, v1402, v1410);
+                                                // Rule at .\isle\mba.isle line 982.
+                                                return Some(v1411.clone());
                                             }
                                         }
                                     }
@@ -5406,66 +4689,59 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     _ => {}
                 }
             }
-            if let Some(v217) = v216 {
+            if let Some(v196) = v195 {
                 if let &SimpleAst::Or {
-                    a: v1120,
-                    b: v1121,
-                    data: v1122,
-                } = v217
-                {
-                    if v213 == v1120 {
-                        let v1123 = &C::any(ctx, v213);
-                        let v1124 = C::lookup_id(ctx, v1123);
-                        let v1125 = &C::neg(ctx, v1124);
-                        let v1126 = C::lookup_id(ctx, v1125);
-                        let v1127 = &C::any(ctx, v1121);
-                        let v1128 = C::lookup_id(ctx, v1127);
-                        let v1129 = &C::and(ctx, v1126, v1128);
-                        // Rule at .\isle\mba.isle line 867.
-                        return Some(v1129.clone());
+                    a: v1098,
+                    b: v1099,
+                } = v196 {
+                    if v193 == v1098 {
+                        let v1100 = &C::any(ctx, v193);
+                        let v1101 = C::lookup_id(ctx, v1100);
+                        let v1102 = &C::neg(ctx, v1101);
+                        let v1103 = C::lookup_id(ctx, v1102);
+                        let v1104 = &C::any(ctx, v1099);
+                        let v1105 = C::lookup_id(ctx, v1104);
+                        let v1106 = &C::and(ctx, v1103, v1105);
+                        // Rule at .\isle\mba.isle line 752.
+                        return Some(v1106.clone());
                     }
                 }
             }
-            if let Some(v226) = v225 {
+            if let Some(v205) = v204 {
                 if let &SimpleAst::Add {
-                    a: v494,
-                    b: v495,
-                    data: v496,
-                } = v226
-                {
-                    let v497 = &C::lookup_value(ctx, v494);
-                    if let Some(v498) = v497 {
+                    a: v465,
+                    b: v466,
+                } = v205 {
+                    let v467 = &C::lookup_value(ctx, v465);
+                    if let Some(v468) = v467 {
                         if let &SimpleAst::Constant {
-                            c: v499,
-                            data: v500,
-                        } = v498
-                        {
-                            if v499 == 0xFFFFFFFFFFFFFFFF {
-                                let v501 = &C::lookup_value(ctx, v495);
-                                if let Some(v502) = v501 {
-                                    if let &SimpleAst::Mul {
-                                        a: v503,
-                                        b: v504,
-                                        data: v505,
-                                    } = v502
-                                    {
-                                        let v506 = &C::lookup_value(ctx, v503);
-                                        if let Some(v507) = v506 {
-                                            if let &SimpleAst::Constant {
-                                                c: v508,
-                                                data: v509,
-                                            } = v507
-                                            {
-                                                if v508 == 0xFFFFFFFFFFFFFFFF {
-                                                    let v510 = &C::any(ctx, v504);
-                                                    let v511 = C::lookup_id(ctx, v510);
-                                                    let v512 = &C::neg(ctx, v511);
-                                                    let v513 = C::lookup_id(ctx, v512);
-                                                    let v238 = &C::any(ctx, v214);
-                                                    let v239 = C::lookup_id(ctx, v238);
-                                                    let v514 = &C::xor(ctx, v513, v239);
-                                                    // Rule at .\isle\mba.isle line 483.
-                                                    return Some(v514.clone());
+                            c: v469,
+                            width: v470,
+                        } = v468 {
+                            let v471 = &C::lookup_value(ctx, v466);
+                            if let Some(v472) = v471 {
+                                if let &SimpleAst::Mul {
+                                    a: v473,
+                                    b: v474,
+                                } = v472 {
+                                    let v475 = &C::lookup_value(ctx, v473);
+                                    if let Some(v476) = v475 {
+                                        if let &SimpleAst::Constant {
+                                            c: v477,
+                                            width: v478,
+                                        } = v476 {
+                                            if v469 == v477 {
+                                                let v479 = C::is_constant_modulo(ctx, v469, 0xFFFFFFFFFFFFFFFF, v470);
+                                                if let Some(v480) = v479 {
+                                                    let v481 = &C::any(ctx, v474);
+                                                    let v482 = C::lookup_id(ctx, v481);
+                                                    let v483 = &C::neg(ctx, v482);
+                                                    let v484 = C::lookup_id(ctx, v483);
+                                                    let v216 = &C::any(ctx, v194);
+                                                    let v217 = C::lookup_id(ctx, v216);
+                                                    let v485 = &C::xor(ctx, v484, v217);
+                                                    // Rule at .\isle\mba.isle line 407.
+                                                    return Some(v485.clone());
                                                 }
                                             }
                                         }
@@ -5476,97 +4752,93 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     }
                 }
             }
-            if v213 == v214 {
-                let v404 = &C::constant(ctx, 0x0, v215);
-                // Rule at .\isle\mba.isle line 347.
-                return Some(v404.clone());
+            if v193 == v194 {
+                let v361 = C::get_width(ctx, v193);
+                let v362 = &C::constant(ctx, 0x0, v361);
+                // Rule at .\isle\mba.isle line 294.
+                return Some(v362.clone());
             }
-            if let Some(v226) = v225 {
-                match v226 {
+            if let Some(v205) = v204 {
+                match v205 {
                     &SimpleAst::Xor {
-                        a: v227,
-                        b: v228,
-                        data: v229,
+                        a: v206,
+                        b: v207,
                     } => {
-                        let v230 = &C::lookup_value(ctx, v227);
-                        if let Some(v231) = v230 {
+                        let v208 = &C::lookup_value(ctx, v206);
+                        if let Some(v209) = v208 {
                             if let &SimpleAst::Constant {
-                                c: v232,
-                                data: v233,
-                            } = v231
-                            {
-                                let v234 = &C::constant(ctx, v232, v229);
-                                let v235 = C::lookup_id(ctx, v234);
-                                let v236 = &C::any(ctx, v228);
-                                let v237 = C::lookup_id(ctx, v236);
-                                let v238 = &C::any(ctx, v214);
-                                let v239 = C::lookup_id(ctx, v238);
-                                let v240 = &C::xor(ctx, v237, v239);
-                                let v241 = C::lookup_id(ctx, v240);
-                                let v242 = &C::xor(ctx, v235, v241);
-                                // Rule at .\isle\mba.isle line 203.
-                                return Some(v242.clone());
+                                c: v210,
+                                width: v211,
+                            } = v209 {
+                                let v212 = &C::constant(ctx, v210, v211);
+                                let v213 = C::lookup_id(ctx, v212);
+                                let v214 = &C::any(ctx, v207);
+                                let v215 = C::lookup_id(ctx, v214);
+                                let v216 = &C::any(ctx, v194);
+                                let v217 = C::lookup_id(ctx, v216);
+                                let v218 = &C::xor(ctx, v215, v217);
+                                let v219 = C::lookup_id(ctx, v218);
+                                let v220 = &C::xor(ctx, v213, v219);
+                                // Rule at .\isle\mba.isle line 182.
+                                return Some(v220.clone());
                             }
                         }
                     }
                     &SimpleAst::Constant {
-                        c: v243,
-                        data: v244,
+                        c: v221,
+                        width: v222,
                     } => {
-                        match v243 {
-                            0x0 => {
-                                let v400 = &C::any(ctx, v214);
-                                // Rule at .\isle\mba.isle line 331.
-                                return Some(v400.clone());
-                            }
-                            0xFFFFFFFFFFFFFFFF => {
-                                let v400 = &C::any(ctx, v214);
-                                let v401 = C::lookup_id(ctx, v400);
-                                let v402 = &C::neg(ctx, v401);
-                                // Rule at .\isle\mba.isle line 339.
-                                return Some(v402.clone());
-                            }
-                            _ => {}
+                        let v357 = C::is_constant_modulo(ctx, v221, 0xFFFFFFFFFFFFFFFF, v222);
+                        if let Some(v358) = v357 {
+                            let v356 = &C::any(ctx, v194);
+                            let v359 = C::lookup_id(ctx, v356);
+                            let v360 = &C::neg(ctx, v359);
+                            // Rule at .\isle\mba.isle line 287.
+                            return Some(v360.clone());
                         }
-                        if let Some(v217) = v216 {
-                            match v217 {
+                        let v354 = C::is_constant_modulo(ctx, v221, 0x0, v222);
+                        if let Some(v355) = v354 {
+                            let v356 = &C::any(ctx, v194);
+                            // Rule at .\isle\mba.isle line 280.
+                            return Some(v356.clone());
+                        }
+                        if let Some(v196) = v195 {
+                            match v196 {
                                 &SimpleAst::Xor {
-                                    a: v245,
-                                    b: v246,
-                                    data: v247,
+                                    a: v223,
+                                    b: v224,
                                 } => {
-                                    let v248 = &C::lookup_value(ctx, v245);
-                                    if let Some(v249) = v248 {
+                                    let v225 = &C::lookup_value(ctx, v223);
+                                    if let Some(v226) = v225 {
                                         if let &SimpleAst::Constant {
-                                            c: v250,
-                                            data: v251,
-                                        } = v249
-                                        {
-                                            let v252 = &C::constant(ctx, v243, v247);
-                                            let v253 = C::lookup_id(ctx, v252);
-                                            let v254 = &C::constant(ctx, v250, v247);
-                                            let v255 = C::lookup_id(ctx, v254);
-                                            let v256 = &C::xor(ctx, v253, v255);
-                                            let v257 = C::lookup_id(ctx, v256);
-                                            let v258 = &C::any(ctx, v246);
-                                            let v259 = C::lookup_id(ctx, v258);
-                                            let v260 = &C::xor(ctx, v257, v259);
-                                            // Rule at .\isle\mba.isle line 211.
-                                            return Some(v260.clone());
+                                            c: v227,
+                                            width: v228,
+                                        } = v226 {
+                                            let v229 = &C::constant(ctx, v221, v222);
+                                            let v230 = C::lookup_id(ctx, v229);
+                                            let v231 = &C::constant(ctx, v227, v222);
+                                            let v232 = C::lookup_id(ctx, v231);
+                                            let v233 = &C::xor(ctx, v230, v232);
+                                            let v234 = C::lookup_id(ctx, v233);
+                                            let v235 = &C::any(ctx, v224);
+                                            let v236 = C::lookup_id(ctx, v235);
+                                            let v237 = &C::xor(ctx, v234, v236);
+                                            // Rule at .\isle\mba.isle line 188.
+                                            return Some(v237.clone());
                                         }
                                     }
                                 }
                                 &SimpleAst::Constant {
-                                    c: v218,
-                                    data: v219,
+                                    c: v197,
+                                    width: v198,
                                 } => {
-                                    let v261 = &C::constant(ctx, v243, v215);
-                                    let v262 = C::lookup_id(ctx, v261);
-                                    let v263 = &C::constant(ctx, v218, v215);
-                                    let v264 = C::lookup_id(ctx, v263);
-                                    let v265 = &C::xor(ctx, v262, v264);
-                                    // Rule at .\isle\mba.isle line 219.
-                                    return Some(v265.clone());
+                                    let v229 = &C::constant(ctx, v221, v222);
+                                    let v230 = C::lookup_id(ctx, v229);
+                                    let v238 = &C::constant(ctx, v197, v222);
+                                    let v239 = C::lookup_id(ctx, v238);
+                                    let v240 = &C::xor(ctx, v230, v239);
+                                    // Rule at .\isle\mba.isle line 194.
+                                    return Some(v240.clone());
                                 }
                                 _ => {}
                             }
@@ -5575,132 +4847,118 @@ pub fn constructor_lower<C: Context>(ctx: &mut C, arg0: &SimpleAst) -> Option<Si
                     _ => {}
                 }
             }
-            if let Some(v217) = v216 {
+            if let Some(v196) = v195 {
                 if let &SimpleAst::Constant {
-                    c: v218,
-                    data: v219,
-                } = v217
-                {
-                    let v220 = &C::constant(ctx, v218, v215);
-                    let v221 = C::lookup_id(ctx, v220);
-                    let v222 = &C::any(ctx, v213);
-                    let v223 = C::lookup_id(ctx, v222);
-                    let v224 = &C::xor(ctx, v221, v223);
-                    // Rule at .\isle\mba.isle line 195.
-                    return Some(v224.clone());
+                    c: v197,
+                    width: v198,
+                } = v196 {
+                    let v199 = &C::constant(ctx, v197, v198);
+                    let v200 = C::lookup_id(ctx, v199);
+                    let v201 = &C::any(ctx, v193);
+                    let v202 = C::lookup_id(ctx, v201);
+                    let v203 = &C::xor(ctx, v200, v202);
+                    // Rule at .\isle\mba.isle line 176.
+                    return Some(v203.clone());
                 }
             }
         }
         &SimpleAst::Neg {
-            a: v266,
-            data: v267,
+            a: v241,
         } => {
-            let v268 = &C::lookup_value(ctx, v266);
-            if let Some(v269) = v268 {
-                match v269 {
+            let v242 = &C::lookup_value(ctx, v241);
+            if let Some(v243) = v242 {
+                match v243 {
                     &SimpleAst::And {
-                        a: v580,
-                        b: v581,
-                        data: v582,
+                        a: v547,
+                        b: v548,
                     } => {
-                        let v583 = &C::lookup_value(ctx, v580);
-                        if let Some(v584) = v583 {
+                        let v549 = &C::lookup_value(ctx, v547);
+                        if let Some(v550) = v549 {
                             if let &SimpleAst::Neg {
-                                a: v585,
-                                data: v586,
-                            } = v584
-                            {
-                                let v1157 = &C::lookup_value(ctx, v581);
-                                if let Some(v1158) = v1157 {
+                                a: v551,
+                            } = v550 {
+                                let v1128 = &C::lookup_value(ctx, v548);
+                                if let Some(v1129) = v1128 {
                                     if let &SimpleAst::Neg {
-                                        a: v1159,
-                                        data: v1160,
-                                    } = v1158
-                                    {
-                                        let v1161 = &C::any(ctx, v1159);
-                                        let v1162 = C::lookup_id(ctx, v1161);
-                                        let v1163 = &C::any(ctx, v585);
-                                        let v1164 = C::lookup_id(ctx, v1163);
-                                        let v1165 = &C::or(ctx, v1162, v1164);
-                                        // Rule at .\isle\mba.isle line 899.
-                                        return Some(v1165.clone());
+                                        a: v1130,
+                                    } = v1129 {
+                                        let v1131 = &C::any(ctx, v1130);
+                                        let v1132 = C::lookup_id(ctx, v1131);
+                                        let v1133 = &C::any(ctx, v551);
+                                        let v1134 = C::lookup_id(ctx, v1133);
+                                        let v1135 = &C::or(ctx, v1132, v1134);
+                                        // Rule at .\isle\mba.isle line 777.
+                                        return Some(v1135.clone());
                                     }
                                 }
-                                let v587 = &C::any(ctx, v585);
-                                let v588 = C::lookup_id(ctx, v587);
-                                let v589 = &C::any(ctx, v581);
-                                let v590 = C::lookup_id(ctx, v589);
-                                let v591 = &C::neg(ctx, v590);
-                                let v592 = C::lookup_id(ctx, v591);
-                                let v593 = &C::or(ctx, v588, v592);
-                                // Rule at .\isle\mba.isle line 539.
-                                return Some(v593.clone());
+                                let v552 = &C::any(ctx, v551);
+                                let v553 = C::lookup_id(ctx, v552);
+                                let v554 = &C::any(ctx, v548);
+                                let v555 = C::lookup_id(ctx, v554);
+                                let v556 = &C::neg(ctx, v555);
+                                let v557 = C::lookup_id(ctx, v556);
+                                let v558 = &C::or(ctx, v553, v557);
+                                // Rule at .\isle\mba.isle line 454.
+                                return Some(v558.clone());
                             }
                         }
                     }
                     &SimpleAst::Or {
-                        a: v594,
-                        b: v595,
-                        data: v596,
+                        a: v559,
+                        b: v560,
                     } => {
-                        let v597 = &C::lookup_value(ctx, v594);
-                        if let Some(v598) = v597 {
+                        let v561 = &C::lookup_value(ctx, v559);
+                        if let Some(v562) = v561 {
                             if let &SimpleAst::Neg {
-                                a: v599,
-                                data: v600,
-                            } = v598
-                            {
-                                let v601 = &C::any(ctx, v599);
-                                let v602 = C::lookup_id(ctx, v601);
-                                let v603 = &C::any(ctx, v595);
-                                let v604 = C::lookup_id(ctx, v603);
-                                let v605 = &C::neg(ctx, v604);
-                                let v606 = C::lookup_id(ctx, v605);
-                                let v607 = &C::and(ctx, v602, v606);
-                                // Rule at .\isle\mba.isle line 547.
-                                return Some(v607.clone());
+                                a: v563,
+                            } = v562 {
+                                let v564 = &C::any(ctx, v563);
+                                let v565 = C::lookup_id(ctx, v564);
+                                let v566 = &C::any(ctx, v560);
+                                let v567 = C::lookup_id(ctx, v566);
+                                let v568 = &C::neg(ctx, v567);
+                                let v569 = C::lookup_id(ctx, v568);
+                                let v570 = &C::and(ctx, v565, v569);
+                                // Rule at .\isle\mba.isle line 460.
+                                return Some(v570.clone());
                             }
                         }
                     }
                     &SimpleAst::Xor {
-                        a: v608,
-                        b: v609,
-                        data: v610,
+                        a: v571,
+                        b: v572,
                     } => {
-                        let v611 = &C::lookup_value(ctx, v608);
-                        if let Some(v612) = v611 {
+                        let v573 = &C::lookup_value(ctx, v571);
+                        if let Some(v574) = v573 {
                             if let &SimpleAst::Neg {
-                                a: v613,
-                                data: v614,
-                            } = v612
-                            {
-                                let v615 = &C::any(ctx, v613);
-                                let v616 = C::lookup_id(ctx, v615);
-                                let v617 = &C::any(ctx, v609);
-                                let v618 = C::lookup_id(ctx, v617);
-                                let v619 = &C::xor(ctx, v616, v618);
-                                // Rule at .\isle\mba.isle line 555.
-                                return Some(v619.clone());
+                                a: v575,
+                            } = v574 {
+                                let v576 = &C::any(ctx, v575);
+                                let v577 = C::lookup_id(ctx, v576);
+                                let v578 = &C::any(ctx, v572);
+                                let v579 = C::lookup_id(ctx, v578);
+                                let v580 = &C::xor(ctx, v577, v579);
+                                // Rule at .\isle\mba.isle line 466.
+                                return Some(v580.clone());
                             }
                         }
                     }
                     &SimpleAst::Neg {
-                        a: v449,
-                        data: v450,
+                        a: v421,
                     } => {
-                        let v451 = &C::any(ctx, v449);
-                        // Rule at .\isle\mba.isle line 459.
-                        return Some(v451.clone());
+                        let v422 = &C::any(ctx, v421);
+                        // Rule at .\isle\mba.isle line 387.
+                        return Some(v422.clone());
                     }
                     &SimpleAst::Constant {
-                        c: v270,
-                        data: v271,
+                        c: v244,
+                        width: v245,
                     } => {
-                        let v272 = &C::constant(ctx, v270, v267);
-                        let v273 = C::lookup_id(ctx, v272);
-                        let v274 = &C::neg(ctx, v273);
-                        // Rule at .\isle\mba.isle line 227.
-                        return Some(v274.clone());
+                        let v246 = &C::constant(ctx, v244, v245);
+                        let v247 = C::lookup_id(ctx, v246);
+                        let v248 = &C::neg(ctx, v247);
+                        // Rule at .\isle\mba.isle line 200.
+                        return Some(v248.clone());
                     }
                     _ => {}
                 }
