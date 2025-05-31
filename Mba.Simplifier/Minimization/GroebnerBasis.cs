@@ -48,7 +48,7 @@ namespace Mba.Simplifier.Minimization
                 // If the row is positive, construct algebraic normal form for this row.
                 // TODO: Use a more space / time efficienty method, 'GetRowAnf' is overkill.
                 var monoms = GetRowAnf(i);
-                polys.Add(monoms);
+                polys.Add(monoms);  
             }
 
             // Serialize the buffer to a C-compatible memory representation.

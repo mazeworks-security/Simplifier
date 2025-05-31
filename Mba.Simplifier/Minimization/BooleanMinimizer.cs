@@ -2,6 +2,7 @@
 using Mba.Common.MSiMBA;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Pipeline;
+using Mba.Simplifier.Slgb;
 using Mba.Testing;
 using Mba.Utility;
 using System;
@@ -19,6 +20,8 @@ namespace Mba.Simplifier.Minimization
 
         public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable, bool negate = false)
         {
+            new SlgbCalculator(ctx, truthTable).Run();
+
             // If requested, negate the result vector to find a negated expression.
             if (negate)
             {
