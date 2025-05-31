@@ -14,9 +14,9 @@ namespace Mba.Simplifier.Slgb
 {
     public class Globals
     {
-        public const int Width = 1;
+        public const int Width = 4;
 
-        public const ulong ModuloMask = 1;
+        public const ulong ModuloMask = 15;
     }
 
     public struct Monomial : IEquatable<Monomial>, IComparable<Monomial>
@@ -40,6 +40,8 @@ namespace Mba.Simplifier.Slgb
         {
             // 0&(a&b) == 0
             if (coefficient == 0)
+                return CreateConstant(0);
+            if (varMask == 0)
                 return CreateConstant(0);
 
             return new Monomial(coefficient, varMask);
@@ -145,7 +147,7 @@ namespace Mba.Simplifier.Slgb
                 return CreateProduct(a.Constant.Value & b.Coefficient, b.Vars);
 
             // Otherwise have have (coeff*conj1) * (coeff*conj2)
-            return CreateProduct(a.Coefficient & b.Coefficient, a.Vars & b.Vars);
+            return CreateProduct(a.Coefficient & b.Coefficient, a.Vars | b.Vars);
         }
 
         public bool IsDivisible(Monomial other)
@@ -156,11 +158,18 @@ namespace Mba.Simplifier.Slgb
             // If we have x/1 on any field.. yield true...
             // F... in the case of x/b10.... that gets messy....
             // if (other.isOne())
-            if (b.IsConstant && b.Constant.Value != 0)
+            //if (b.IsConstant && b.Constant.Value != 0)
+            //    return true;
+            if (b.IsConstant && b.Constant.Value == Globals.ModuloMask)
                 return true;
             // else if (this.isOne())
-            if (a.IsConstant && a.Constant.Value != 0)
+            //if (a.IsConstant && a.Constant.Value != 0)
+            //    return false;
+            if (a.IsConstant && a.Constant != 0)
                 return false;
+            if (a.IsConstant)
+                Debugger.Break();
+
             // In this case one of the constants is zero completely.. which shouldn't be happening..
             if(a.IsConstant || b.IsConstant)
             {
@@ -168,7 +177,9 @@ namespace Mba.Simplifier.Slgb
                 return false;
             }
 
-            return a.Vars == (a.Vars | b.Vars);
+            bool varsMatch = a.Vars == (a.Vars | b.Vars);
+            bool coeffsMatch = a.Coefficient == b.Coefficient;
+            return varsMatch && coeffsMatch;
         }
 
         public static Monomial operator /(Monomial a, Monomial b)
@@ -202,7 +213,18 @@ namespace Mba.Simplifier.Slgb
             {
                 return CreateProduct(a.Coefficient & b.Constant.Value, a.Vars);
             }
+            
+            // Coefficients must match for division to be defined..
+            //if(a.Coefficient != b.Coefficient)
+            //    return CreateConstant(0);
+            // x/x==1
+            if (a.Vars == b.Vars)
+            {
+                return CreateProduct(a.Coefficient & b.Coefficient, a.Vars);
+            }
+            // Otherwise we have same coefficients but different variables..
 
+            // 10*(x0&x1) / 10*(x0&x1)
             // Otherwise we finally have the form of (mask&a&b) & (mask&a&b&c)
             // If the monomials are not divisible then we just yield zero.
             // This is at least in line with symbsat... https://github.com/pavel-fokin/SymbSAT/blob/master/symbsat-cpp/monom.h#L148
@@ -340,24 +362,9 @@ namespace Mba.Simplifier.Slgb
 
     public class SlgbCalculator
     {
-        private readonly AstCtx ctx;
-
-        private readonly TruthTable table;
-
-        private readonly ulong[] variableCombinations;
-
-        private readonly List<int> groupSizes;
-
-        public SlgbCalculator(AstCtx ctx, TruthTable table)
-        {
-            this.ctx = ctx;
-            this.table = table;
-            variableCombinations = MultibitSiMBA.GetVariableCombinations(table.NumVars);
-            groupSizes = MultibitSiMBA.GetGroupSizes(table.NumVars);
-        }
 
         // Represent polynomial as a list of monomials.... 
-        public void Run()
+        public void Run(AstCtx ctx, TruthTable table)
         {
             if (table.GetBit(0))
                 throw new InvalidOperationException($"Constant offset");
@@ -371,7 +378,7 @@ namespace Mba.Simplifier.Slgb
 
                 // If the row is positive, construct algebraic normal form for this row.
                 // TODO: Use a more space / time efficienty method, 'GetRowAnf' is overkill.
-                var monoms = GetRowAnf(i);
+                var monoms = GetRowAnf(table.NumVars, i);
                 polys.Add(monoms);
             }
 
@@ -384,14 +391,16 @@ namespace Mba.Simplifier.Slgb
         }
 
         // Convert a single truth table row to algebraic normal form
-        private unsafe List<uint> GetRowAnf(int idx)
+        public static unsafe List<uint> GetRowAnf(int numVars, int idx)
         {
-            var resultVec = new ulong[table.NumBits];
+            var variableCombinations = MultibitSiMBA.GetVariableCombinations(numVars);
+
+            var resultVec = new ulong[(int)Math.Pow(2, numVars)];
             resultVec[idx] = 1;
 
             // Keep track of which variables are demanded by which combination,
             // as well as which result vector idx corresponds to which combination.
-            var groupSizes = MultibitSiMBA.GetGroupSizes(table.NumVars);
+            var groupSizes = MultibitSiMBA.GetGroupSizes(numVars);
             List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx = new();
             for (int i = 0; i < variableCombinations.Length; i++)
             {
@@ -400,7 +409,7 @@ namespace Mba.Simplifier.Slgb
                 combToMaskAndIdx.Add((comb, (int)myIndex));
             }
 
-            var varCount = table.NumVars;
+            var varCount = numVars;
             bool onlyOneVar = varCount == 1;
             int width = (int)(varCount == 1 ? 1 : 2u << (ushort)(varCount - 1));
             List<uint> terms = new();
@@ -420,12 +429,12 @@ namespace Mba.Simplifier.Slgb
                     MultibitSiMBA.SubtractCoeff(1, ptr, 0, coeff, index, width, varCount, onlyOneVar, trueMask);
                     terms.Add((uint)variableCombinations[i]);
                 }
-            }   
+            }
 
             return terms;
         }
 
-        private void Buchberger(List<Polynomial> polys)
+        public void Buchberger(List<Polynomial> polys)
         {
             var G = polys;
             //List<Polynomial> g = new();
@@ -499,6 +508,8 @@ namespace Mba.Simplifier.Slgb
                 }
             }
 
+
+            Autoreduce(G);
             Debugger.Break();
                 
         }
@@ -507,9 +518,17 @@ namespace Mba.Simplifier.Slgb
         {
             var flm = f.Lm;
             var glm = g.Lm;
+
+            //if (flm.ToString() == "1*(x3)" && glm.ToString() == "1*(x0&x1&x2)")
+            //    Debugger.Break();
             var lcm = flm * glm;
 
-            return f * (lcm / flm) + g * (lcm / glm);
+            var div1 = (lcm / flm);
+            var div2 = (lcm / glm);
+            var m1 = f * div1;
+            var m2 = g * div2;
+            var res = m1 + m2;
+            return res;
         }
 
         private static Polynomial NormalForm(Polynomial f, List<Polynomial> F)
@@ -548,6 +567,42 @@ namespace Mba.Simplifier.Slgb
             }
 
             return r;
+        }
+
+        private static List<Polynomial> Autoreduce(List<Polynomial> F)
+        {
+            var g = F.Select(x => x.Clone()).ToList();
+            var P = new List<Polynomial>();
+
+            while(g.Any())
+            {
+                var h = g.Last();
+                g.RemoveAt(g.Count - 1);
+                h = NormalForm(h, P);
+                if(!h.IsZero)
+                {
+                    var newP = new List<Polynomial>();
+                    foreach(var itp in P)
+                    {
+                        if(itp.Lm.IsDivisible(h.Lm))
+                        {
+                            // We erase this element if not divisble
+                            g.Add(itp);
+                            continue;
+                        }
+
+                        newP.Add(itp);
+                    }
+
+                    P = newP;
+                    P.Add(h);
+                }
+            }
+
+            Console.WriteLine($"Computed groebner basis with elements\n[\n{String.Join("\n", P.Select(x => "    " + x.ToString() + ","))}\n]");
+
+            Debugger.Break();
+            return P;
         }
     }
 }

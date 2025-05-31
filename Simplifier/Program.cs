@@ -3,6 +3,7 @@ using Mba.Parsing;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Pipeline;
+using Mba.Simplifier.Slgb;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
 using Microsoft.Z3;
@@ -10,10 +11,15 @@ using System.ComponentModel;
 using System.Diagnostics;
 
 bool printUsage = false;
-uint bitWidth = 64;
+uint bitWidth = 4;
 bool useEqsat = false;
 bool proveEquivalence = false;
-string inputText = "a|b|c|d";
+
+string inputText = "((((x&11111)^(y&3443)))|(z&2222))";
+
+SlgbTesting.Run();
+
+
 
 var printHelp = () =>
 {
@@ -68,6 +74,8 @@ AstIdx.ctx = ctx;
 var id = RustAstParser.Parse(ctx, inputText, bitWidth);
 
 Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n\n");
+
+SlgbTesting.Run();
 
 var input = id;
 id = ctx.RecursiveSimplify(id);
