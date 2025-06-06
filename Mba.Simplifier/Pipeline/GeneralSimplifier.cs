@@ -85,7 +85,7 @@ namespace Mba.Simplifier.Pipeline
             {
                 // Bail out if there are too many variables.
                 var vars = ctx.CollectVariables(id);
-                if(vars.Count > 11 || vars.Count == 0)
+                if(vars.Count > 15 || vars.Count == 0)
                 {
                     var simplified = SimplifyViaTermRewriting(id);
                     simbaCache.Add(id, simplified);
@@ -1212,6 +1212,8 @@ namespace Mba.Simplifier.Pipeline
 
         private IntermediatePoly TryReduce(IntermediatePoly poly)
         {
+            if (poly.ToString().Length > 50)
+                Debugger.Break();
             var uniqueBases = new Dictionary<AstIdx, ulong>();
             foreach (var monom in poly.coeffs.Keys)
             {
@@ -1238,17 +1240,22 @@ namespace Mba.Simplifier.Pipeline
             {
                 // Bail out if the result would be too large.
                 UInt128 result = matrixSize * deg;
-                if (result > (UInt128)(64*64*64))
-                    return poly;
+   
 
                 matrixSize = SaturatingMul(matrixSize, deg);
                 matrixSize &= poly.moduloMask;
             }
-            
-            // Place a limit on the matrix size.
-            if (matrixSize > (ulong)(64*64*64))
-                return poly;
 
+            // Place a limit on the matrix size.
+            //if (matrixSize > (ulong)(64 * 64 * 64))
+            if (false)
+            {
+                Debugger.Break();
+                return poly;
+            }
+
+            if (poly.ToString().Length > 50)
+                Debugger.Break();
             var width = poly.bitWidth;
             var sparsePoly = new SparsePolynomial(uniqueBases.Count, (byte)width);
 

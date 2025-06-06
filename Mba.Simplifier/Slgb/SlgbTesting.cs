@@ -17,9 +17,16 @@ namespace Mba.Simplifier.Slgb
         public static void Run()
         {
             var ctx = new AstCtx();
-            uint width = 4;
 
-            var boolean = RustAstParser.Parse(ctx, "(a&7)|(b&10)", 4);
+            Globs.Width = 8;
+            Globs.ModuloMask = (ulong)ModuloReducer.GetMask((uint)Globs.Width);
+
+            var width = (uint)Globs.Width;
+
+            var str = "((((x&7)^(y&3)))|(z&3))";
+            str = "((((x&103)^(y&115)))|(z&174))";
+            //str = "((((x&7)^(y&3)))|(z&3))";
+            var boolean = RustAstParser.Parse(ctx, str, width);
 
             var variables = ctx.CollectVariables(boolean);
             var ttSize = (int)Math.Pow(2, variables.Count);
@@ -90,7 +97,13 @@ namespace Mba.Simplifier.Slgb
                 .ToList();
 
             var calc = new SlgbCalculator();
-            calc.Buchberger(system);
+            var gb = calc.Buchberger(system);
+
+
+            var optimized = SlgbCalculator.Optimize(gb);
+
+            var gb2 = calc.Buchberger(optimized);
+            Debugger.Break();
 
             Debugger.Break();
         }

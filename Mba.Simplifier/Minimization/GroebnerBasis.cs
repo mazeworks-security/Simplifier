@@ -51,6 +51,33 @@ namespace Mba.Simplifier.Minimization
                 polys.Add(monoms);  
             }
 
+            /*
+            List<string> sPolys = new();
+            foreach(var poly in polys)
+            {
+                List<string> monomials = new();
+                foreach(var m in poly)
+                {
+                    var vs = new List<string>();
+                    for(ushort i = 0; i < (ushort)table.NumVars; i++)
+                    {
+                        if ((m & (1 << i)) != 0)
+                            vs.Add("x" + i.ToString());
+                    }
+
+                    monomials.Add(String.Join("*", vs)); 
+                }
+
+                sPolys.Add(String.Join(" + ", monomials));
+            }
+
+
+            var rr = String.Join(", ", sPolys);
+
+            Console.WriteLine("\n");
+            Console.WriteLine(rr);
+            */
+
             // Serialize the buffer to a C-compatible memory representation.
             var inBuffer = SerializeSystem(polys);
 

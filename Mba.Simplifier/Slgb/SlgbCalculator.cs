@@ -10,13 +10,15 @@ using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
+// This file implements an attempt at constructing groebner bases for booleans with constants, e.g. (x&1111)|(y&535454)|1010.
+// It works on some booleans, but fails on others. It's probably impossible in the general case due to division being undefined for booleans with different bitmasks.
 namespace Mba.Simplifier.Slgb
 {
-    public class Globals
+    public class Globs
     {
-        public const int Width = 4;
+        public static int Width = 64;
 
-        public const ulong ModuloMask = 15;
+        public static ulong ModuloMask = ulong.MaxValue;
     }
 
     public struct Monomial : IEquatable<Monomial>, IComparable<Monomial>
@@ -160,7 +162,7 @@ namespace Mba.Simplifier.Slgb
             // if (other.isOne())
             //if (b.IsConstant && b.Constant.Value != 0)
             //    return true;
-            if (b.IsConstant && b.Constant.Value == Globals.ModuloMask)
+            if (b.IsConstant && b.Constant.Value == Globs.ModuloMask)
                 return true;
             // else if (this.isOne())
             //if (a.IsConstant && a.Constant.Value != 0)
@@ -179,6 +181,11 @@ namespace Mba.Simplifier.Slgb
 
             bool varsMatch = a.Vars == (a.Vars | b.Vars);
             bool coeffsMatch = a.Coefficient == b.Coefficient;
+            //bool coeffsMatch = (a.Coefficient & b.Coefficient) != 0;
+            //bool coeffsMatch = a.Coefficient == (a.Coefficient | b.Coefficient);
+            //var product = (a.Coefficient & b.Coefficient);
+            //bool coeffsMatch = (product != 0) && product != a.Coefficient && product != b.Coefficient;
+            //bool coeffsMatch = (a.Coefficient == b.Coefficient) || b.Coefficient == Globs.ModuloMask;
             return varsMatch && coeffsMatch;
         }
 
@@ -187,7 +194,7 @@ namespace Mba.Simplifier.Slgb
             // If the two monomials are equal then we have a constant of 1(sign extended to the bit width,
             // because x/x == 1
             if (a.Equals(b))
-                return CreateConstant(ulong.MaxValue & Globals.ModuloMask);
+                return CreateConstant(ulong.MaxValue & Globs.ModuloMask);
 
             // If we just two constants, divide them. This forms a truth table:
             // 00 => 0
@@ -203,7 +210,10 @@ namespace Mba.Simplifier.Slgb
             // 1 / b
             // ???????????????
             if (a.IsConstant)
-                throw new InvalidOperationException($"Undefined behavior");
+            {
+                return Monomial.CreateConstant(0);
+                //throw new InvalidOperationException($"Undefined behavior");
+            }
 
             // This case(mask&a) / constant forms another truth table:
             // E.g. (b1111 & a&b) / b1010 => b1010&a&b
@@ -362,7 +372,6 @@ namespace Mba.Simplifier.Slgb
 
     public class SlgbCalculator
     {
-
         // Represent polynomial as a list of monomials.... 
         public void Run(AstCtx ctx, TruthTable table)
         {
@@ -387,7 +396,8 @@ namespace Mba.Simplifier.Slgb
                 .Select(x => new Polynomial(x.Select(y => Monomial.CreateProduct(1, y)).ToList()))
                 .ToList();
 
-            Buchberger(system);
+            var gb = Buchberger(system);
+
         }
 
         // Convert a single truth table row to algebraic normal form
@@ -434,9 +444,10 @@ namespace Mba.Simplifier.Slgb
             return terms;
         }
 
-        public void Buchberger(List<Polynomial> polys)
+        public List<Polynomial> Buchberger(List<Polynomial> polys)
         {
             var G = polys;
+            //var G = Autoreduce(polys);
             //List<Polynomial> g = new();
             List<(int, int)> pairs = new();
 
@@ -509,7 +520,9 @@ namespace Mba.Simplifier.Slgb
             }
 
 
-            Autoreduce(G);
+            var output = Autoreduce(G);
+
+            return output;
             Debugger.Break();
                 
         }
@@ -549,7 +562,19 @@ namespace Mba.Simplifier.Slgb
                     var film = F[i].Lm;
                     if (plm.IsDivisible(film))
                     {
-                        p = p + F[i] * (plm / film);
+                        /*
+                        var div = (plm / film);
+
+                        var fi = F[i];
+                        var product = (fi * div);
+                        p = p + product;
+                        */
+
+                        //p = p + F[i] * (plm / film);
+
+                        var div = (plm / film);
+                        p = p + F[i] * div;
+
                         divisionoccurred = true;
                     }
 
@@ -599,10 +624,62 @@ namespace Mba.Simplifier.Slgb
                 }
             }
 
-            Console.WriteLine($"Computed groebner basis with elements\n[\n{String.Join("\n", P.Select(x => "    " + x.ToString() + ","))}\n]");
+            int pSize = P.Count;
+            for(int i = 0; i < pSize; i++)
+            {
+                var h = P.First();
+                P.RemoveAt(0);
+                h = NormalForm(h, P);
+                if(h.IsZero)
+                {
+                    --pSize;
+                }
 
-            Debugger.Break();
+                else
+                {
+                    P.Add(h);
+                }
+            }
+
+            Console.WriteLine($"Computed groebner basis with {P.Count} elements\n[\n{String.Join("\n", P.Select(x => "    " + x.ToString() + ","))}\n]");
+
+
+            var union = String.Join(" | ", P.Select(x => $"({x})"));
+
+            union = union.Replace("*", "&");
+            union = union.Replace("+", "^");
+
+
+            Console.WriteLine($"Boolean: {union}");
+
+            //Debugger.Break();
             return P;
+        }
+
+        public static List<Polynomial> Optimize(List<Polynomial> polys)
+        {
+            var output = new List<Polynomial>();
+
+            var varsToCoeff = new Dictionary<ulong, ulong>();
+            foreach(var poly in polys)
+            {
+                if(poly.Monomials.Count != 1)
+                {
+                    output.Add(poly);
+                    continue;
+                }
+
+                var m = poly.Monomials.Single();
+                varsToCoeff.TryAdd(m.Vars, 0);
+                varsToCoeff[m.Vars] |= m.Coefficient;
+            }
+
+            foreach(var (vMask, coeff) in varsToCoeff)
+            {
+                output.Add(new Polynomial(new() { Monomial.CreateProduct(coeff, vMask) }));
+            }
+
+            return output;
         }
     }
 }

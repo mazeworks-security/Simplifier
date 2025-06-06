@@ -105,6 +105,13 @@ namespace Mba.Simplifier.Minimization
             // e.g. e ^ (a&(b&c))
             var factored = Factor(ctx, variables, terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
 
+            var str = factored.Value.ToString();
+            str = str.Replace("(", "");
+            str = str.Replace(")", "");
+            str = str.Replace("-1", "1");
+            str = str.Replace("&", "*");
+            str = str.Replace("^", " + ");
+
             // TODO: Apply the identify a^(~a&b) => a|b
             var simplified = SimplifyRec(factored.Value);
 
