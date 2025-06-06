@@ -16,6 +16,33 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.Minimization
 {
+    public struct VarConj
+    {
+        public uint Idx;
+
+        public VarConj(uint idx)
+        {
+            Idx = idx;
+        }
+
+        public override string ToString()
+        {
+            var conjs = new List<uint>();
+            for(ushort i = 0; i < 32; i++)
+            {
+                if((Idx & 1u << i) != 0)
+                    conjs.Add(i);
+            }
+
+            return String.Join("*", conjs);
+        }
+
+        public unsafe static implicit operator uint(VarConj reg) => reg.Idx;
+
+        public unsafe static implicit operator VarConj(uint reg) => new VarConj(reg);
+
+    }
+
     public class AnfMinimizer
     {
         private readonly AstCtx ctx;
