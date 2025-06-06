@@ -94,6 +94,9 @@ namespace Mba.Simplifier.Minimization
             // Compute a groebner basis for this truth table
             var (gb, negated) = GroebnerBasis.Compute(truthTable);
 
+
+            var sorted = gb.OrderBy(x => x.Count).ToList();
+
             // Set the initial demanded variable masks.
             for (int i = 0; i < variables.Count; i++)
             {
