@@ -20,6 +20,8 @@ namespace Mba.Simplifier.Minimization
     {
         public uint Idx;
 
+        bool IsOnes => Idx == uint.MaxValue;
+
         public VarConj(uint idx)
         {
             Idx = idx;
@@ -27,11 +29,14 @@ namespace Mba.Simplifier.Minimization
 
         public override string ToString()
         {
-            var conjs = new List<uint>();
+            if (IsOnes)
+                return "-1";
+
+            var conjs = new List<string>();
             for(ushort i = 0; i < 32; i++)
             {
                 if((Idx & 1u << i) != 0)
-                    conjs.Add(i);
+                    conjs.Add($"x{i}");
             }
 
             return String.Join("*", conjs);
@@ -51,7 +56,7 @@ namespace Mba.Simplifier.Minimization
 
         private readonly TruthTable truthTable;
 
-        private readonly Dictionary<AstIdx, uint> demandedVarsMap = new();
+        private readonly Dictionary<AstIdx, VarConj> demandedVarsMap = new();
 
         // Simplify the boolean expression as a 1-bit polynomial.
         // When the ground truth contains many XORs, this yields exponentially more compact results than DNF.
@@ -164,7 +169,7 @@ namespace Mba.Simplifier.Minimization
 
             // Yield a XOR of factored variable conjunctions
             // e.g. e ^ (a&(b&c))
-            var factored = Factor(ctx, variables, terms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
+            var factored = Factor(ctx, variables, terms.Select(x => (VarConj)variableCombinations[x]).ToList(), demandedVarsMap);
 
             factored = SimplifyORsRec(factored.Value);
             //factored = TrySimplifyORs(factored.Value);
@@ -238,12 +243,12 @@ namespace Mba.Simplifier.Minimization
         }
 
         // Apply greedy factoring over a sum of variable conjunctions
-        private static AstIdx? Factor(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<uint> conjs, Dictionary<AstIdx, uint> demandedVarsMap)
+        private static AstIdx? Factor(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<VarConj> conjs, Dictionary<AstIdx, VarConj> demandedVarsMap)
         {
             var getConjFromMask = (uint mask) => LinearSimplifier.ConjunctionFromVarMask(ctx, variables, 1, mask, null);
 
             // Remove the constant term if it exists
-            bool has = conjs.Remove(uint.MaxValue);
+            bool hasOnes = conjs.Remove(uint.MaxValue);
 
             var variableCounts = new (int, uint)[variables.Count];
             // Collect the number of times we encounter each variable.
@@ -261,10 +266,10 @@ namespace Mba.Simplifier.Minimization
             Array.Sort(variableCounts, (a, b) => b.Item2.CompareTo(a.Item2));
 
             // For each conjunction, we take out the leading factor.
-            var groups = new Dictionary<int, List<uint>>();
+            var groups = new Dictionary<int, List<VarConj>>();
             foreach (var conj in conjs)
             {
-                for (int index = 0; index < variableCounts.Length; index++)
+                for (int index = 0; index < variables.Count; index++)
                 {
                     var i = variableCounts[index].Item1;
 
@@ -273,7 +278,7 @@ namespace Mba.Simplifier.Minimization
                     {
                         var newConj = conj & ~mask;
                         if (!groups.ContainsKey(i))
-                            groups[i] = new List<uint>();
+                            groups[i] = new List<VarConj>();
 
                         if (newConj != 0)
                             groups[i].Add(newConj);
@@ -328,7 +333,7 @@ namespace Mba.Simplifier.Minimization
             //demandedVarsMap.TryAdd(xored, demandedSum);
 
             // If we have a constant offset of one, add it back.
-            if (has)
+            if (hasOnes)
             {
                 xored = ctx.Xor(ctx.Constant(ulong.MaxValue, ctx.GetWidth(variables[0])), xored);
                 //demandedVarsMap.TryAdd(xored, demandedSum);
@@ -482,7 +487,7 @@ namespace Mba.Simplifier.Minimization
 
             // Yield a XOR of factored variable conjunctions
             // e.g. e ^ (a&(b&c))
-            var factored = Factor(ctx, varSet, bTerms.Select(x => (uint)variableCombinations[x]).ToList(), demandedVarsMap);
+            var factored = Factor(ctx, varSet, bTerms.Select(x => (VarConj)variableCombinations[x]).ToList(), demandedVarsMap);
 
             return ctx.Or(term1, factored.Value);
             //return SimplifyRec(ctx.Or(term1, factored.Value));
@@ -588,7 +593,7 @@ namespace Mba.Simplifier.Minimization
         private uint GetDemandedVarsMask(AstIdx id)
         {
             // If we already know the mask, return it.
-            uint mask = 0;
+            VarConj mask = 0;
             if (demandedVarsMap.TryGetValue(id, out mask))
                 return mask;
 
