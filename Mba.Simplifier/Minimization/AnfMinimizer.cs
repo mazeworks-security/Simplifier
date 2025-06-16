@@ -16,16 +16,63 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.Minimization
 {
-    public struct VarConj
+    // Represents a sum of monomials in gf(2)
+    public class AnfPoly
     {
-        public uint Idx;
+        private int? hashCode;
 
-        bool IsOnes => Idx == uint.MaxValue;
+        public List<AnfMonom> Monoms { get; }
 
-        public VarConj(uint idx)
+        public AnfPoly()
         {
-            Idx = idx;
+            Monoms = new();
         }
+
+        public AnfPoly(List<AnfMonom> monoms)
+        {
+            Monoms = monoms;
+        }
+
+        public override int GetHashCode()
+        {
+            return hashCode.Value;
+        }
+
+        // This is a bit dirty but the hashcode needs to be mutable so that we can unnecessary heap allocations
+        public void UpdateHash()
+        {
+            int hash = 17;
+            foreach (var m in Monoms)
+                hash = hash * 31 + m.GetHashCode();
+
+            hashCode = hash;
+        }
+
+        public override string ToString()
+        {
+            return String.Join(" + ", Monoms);
+        }
+    }
+
+    // Algebraic normal form monomials
+    // This can either be a product of variables (a*b*c), or a constant (-1)
+    public struct AnfMonom
+    {
+        public uint Mask;
+
+        bool IsOnes => Mask == uint.MaxValue;
+
+        public AnfMonom(uint idx)
+        {
+            Mask = idx;
+        }
+
+        public bool ContainsVariable(int varIndex)
+            => !IsOnes && ((Mask & (1u << (ushort)varIndex)) != 0);
+
+        // Returns a monomial without the selected variable included
+        public AnfMonom WithoutVariable(int varIndex)
+            => Mask & ~((1u << (ushort)varIndex));
 
         public override string ToString()
         {
@@ -35,17 +82,23 @@ namespace Mba.Simplifier.Minimization
             var conjs = new List<string>();
             for(ushort i = 0; i < 32; i++)
             {
-                if((Idx & 1u << i) != 0)
+                if((Mask & 1u << i) != 0)
                     conjs.Add($"x{i}");
             }
 
             return String.Join("*", conjs);
         }
 
-        public unsafe static implicit operator uint(VarConj reg) => reg.Idx;
+        public override int GetHashCode()
+        {
+            return Mask.GetHashCode();
+        }
 
-        public unsafe static implicit operator VarConj(uint reg) => new VarConj(reg);
+        public static AnfMonom Ones => new AnfMonom(uint.MaxValue);
 
+        public unsafe static implicit operator uint(AnfMonom reg) => reg.Mask;
+
+        public unsafe static implicit operator AnfMonom(uint reg) => new AnfMonom(reg);
     }
 
     public class AnfMinimizer
@@ -56,7 +109,7 @@ namespace Mba.Simplifier.Minimization
 
         private readonly TruthTable truthTable;
 
-        private readonly Dictionary<AstIdx, VarConj> demandedVarsMap = new();
+        private readonly Dictionary<AstIdx, AnfMonom> demandedVarsMap = new();
 
         // Simplify the boolean expression as a 1-bit polynomial.
         // When the ground truth contains many XORs, this yields exponentially more compact results than DNF.
@@ -169,8 +222,7 @@ namespace Mba.Simplifier.Minimization
 
             // Yield a XOR of factored variable conjunctions
             // e.g. e ^ (a&(b&c))
-            var factored = Factor(ctx, variables, terms.Select(x => (VarConj)variableCombinations[x]).ToList(), demandedVarsMap);
-
+            var factored = Factor(ctx, variables, new AnfPoly(terms.Select(x => (AnfMonom)variableCombinations[x]).ToList()), demandedVarsMap);
             factored = SimplifyORsRec(factored.Value);
             //factored = TrySimplifyORs(factored.Value);
 
@@ -243,16 +295,18 @@ namespace Mba.Simplifier.Minimization
         }
 
         // Apply greedy factoring over a sum of variable conjunctions
-        private static AstIdx? Factor(AstCtx ctx, IReadOnlyList<AstIdx> variables, List<VarConj> conjs, Dictionary<AstIdx, VarConj> demandedVarsMap)
+        private static AstIdx? Factor(AstCtx ctx, IReadOnlyList<AstIdx> variables, AnfPoly poly, Dictionary<AstIdx, AnfMonom> demandedVarsMap)
         {
+            //var bar = Factor2(ctx, variables, poly, demandedVarsMap);
+
             var getConjFromMask = (uint mask) => LinearSimplifier.ConjunctionFromVarMask(ctx, variables, 1, mask, null);
 
             // Remove the constant term if it exists
-            bool hasOnes = conjs.Remove(uint.MaxValue);
+            bool hasOnes = poly.Monoms.Remove(uint.MaxValue);
 
             var variableCounts = new (int, uint)[variables.Count];
             // Collect the number of times we encounter each variable.
-            foreach (var conj in conjs)
+            foreach (var conj in poly.Monoms)
             {
                 for (int i = 0; i < variables.Count; i++)
                 {
@@ -266,8 +320,8 @@ namespace Mba.Simplifier.Minimization
             Array.Sort(variableCounts, (a, b) => b.Item2.CompareTo(a.Item2));
 
             // For each conjunction, we take out the leading factor.
-            var groups = new Dictionary<int, List<VarConj>>();
-            foreach (var conj in conjs)
+            var groups = new Dictionary<int, AnfPoly>();
+            foreach (var conj in poly.Monoms)
             {
                 for (int index = 0; index < variables.Count; index++)
                 {
@@ -278,12 +332,12 @@ namespace Mba.Simplifier.Minimization
                     {
                         var newConj = conj & ~mask;
                         if (!groups.ContainsKey(i))
-                            groups[i] = new List<VarConj>();
+                            groups[i] = new AnfPoly();
 
                         if (newConj != 0)
-                            groups[i].Add(newConj);
+                            groups[i].Monoms.Add(newConj);
                         else
-                            groups[i].Add(uint.MaxValue);
+                            groups[i].Monoms.Add(uint.MaxValue);
 
                         break;
                     }
@@ -296,15 +350,15 @@ namespace Mba.Simplifier.Minimization
             {
                 AstIdx result = variables[varIdx];
                 // If we have just 1 a single variable, yield it.
-                if (elems.Count == 0 || (elems.Count == 1 && elems[0] == uint.MaxValue))
+                if (elems.Monoms.Count == 0 || (elems.Monoms.Count == 1 && elems.Monoms[0] == uint.MaxValue))
                 {
                     output.Add(result); // In this case we already know the demanded mask
                     continue;
                 }
                 // If we have 1 variable by another conjunction, yield it.
-                else if (elems.Count == 1)
+                else if (elems.Monoms.Count == 1)
                 {
-                    var mask = elems[0];
+                    var mask = elems.Monoms[0];
                     var conj = ctx.And(result, getConjFromMask(mask));
                     output.Add(conj);
 
@@ -340,6 +394,68 @@ namespace Mba.Simplifier.Minimization
             }
 
             return xored;
+        }
+
+        private static AstIdx Factor2(AstCtx ctx, IReadOnlyList<AstIdx> variables, AnfPoly poly, Dictionary<AstIdx, AnfMonom> demandedVarsMap)
+        {
+            // Remove the constant term if it exists
+            bool hasOnes = poly.Monoms.Remove(uint.MaxValue);
+
+            var curr = poly;
+            var terms = new List<(int? varFactor, AnfPoly poly)>();
+            while(true)
+            {
+                var result = RemoveGcf(variables, curr);
+                if (result == null)
+                {
+                    terms.Add((null, curr));
+                    break;
+                }
+
+                terms.Add((result.Value.factor, result.Value.withFactorRemoved));
+                curr = result.Value.others;
+            }
+
+
+
+            return 0;
+        }
+
+        private static (int factor, AnfPoly withFactorRemoved, AnfPoly others)? RemoveGcf(IReadOnlyList<AstIdx> variables, AnfPoly poly)
+        {
+            // Count the number of times each variable occurs.
+            var variableCounts = new (int, uint)[variables.Count];
+            foreach (var conj in poly.Monoms)
+            {
+                for (int i = 0; i < variables.Count; i++)
+                {   
+                    var mask = (uint)1 << i;
+                    if ((conj & mask) != 0)
+                        variableCounts[i] = (i, variableCounts[i].Item2 + 1);
+                }
+            }
+
+            // Compute which variable is most common among the monomials
+            var gcfVarIndex = variableCounts.MaxBy(x => x.Item2).Item1;
+
+            if (variableCounts[gcfVarIndex].Item2 <= 1)
+                return null;
+
+
+            var withFactorRemoved = new AnfPoly();
+            var others = new AnfPoly();
+            foreach (var monom in poly.Monoms)
+            {
+                if (monom.ContainsVariable(gcfVarIndex))
+                {
+                    bool singleVariable = monom.Mask == 1u << (ushort)gcfVarIndex;
+                    withFactorRemoved.Monoms.Add(singleVariable ? AnfMonom.Ones : monom.WithoutVariable(gcfVarIndex));
+                }
+                else
+                    others.Monoms.Add(monom);
+            }
+
+            return (gcfVarIndex, withFactorRemoved, others);
         }
 
         private AstIdx SimplifyORsRec(AstIdx id)
@@ -487,7 +603,7 @@ namespace Mba.Simplifier.Minimization
 
             // Yield a XOR of factored variable conjunctions
             // e.g. e ^ (a&(b&c))
-            var factored = Factor(ctx, varSet, bTerms.Select(x => (VarConj)variableCombinations[x]).ToList(), demandedVarsMap);
+            var factored = Factor(ctx, varSet, new AnfPoly(bTerms.Select(x => (AnfMonom)variableCombinations[x]).ToList()), demandedVarsMap);
 
             return ctx.Or(term1, factored.Value);
             //return SimplifyRec(ctx.Or(term1, factored.Value));
@@ -593,7 +709,7 @@ namespace Mba.Simplifier.Minimization
         private uint GetDemandedVarsMask(AstIdx id)
         {
             // If we already know the mask, return it.
-            VarConj mask = 0;
+            AnfMonom mask = 0;
             if (demandedVarsMap.TryGetValue(id, out mask))
                 return mask;
 
