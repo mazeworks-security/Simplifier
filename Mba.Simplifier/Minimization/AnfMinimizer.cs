@@ -376,6 +376,8 @@ namespace Mba.Simplifier.Minimization
 
             Console.WriteLine(id.ToString());
 
+            new BoolMinimizer(boolCtx).Minimize(id);
+
             // Remove the constant term if it exists
             bool hasOnes = poly.Monoms.Remove(uint.MaxValue);
 

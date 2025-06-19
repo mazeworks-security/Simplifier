@@ -13,6 +13,8 @@ namespace Mba.Simplifier.Minimization.Factoring
     {
         public int Idx;
 
+        public BoolExpr Expr => ctx.Get(Idx);
+
         public ExprId(int idx)
         {
             Idx = idx;

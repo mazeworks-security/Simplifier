@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Mba.Ast;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -17,6 +19,8 @@ namespace Mba.Simplifier.Minimization.Factoring
         // Reduce allocations by reusing the same empty list across all childless nodes.
         private readonly List<ExprId> emptyList = new();
 
+        public int VarCount { get; private set; } = 0;
+
         // Expr id of the constant 1
         public ExprId Constant1Id { get; set; }
 
@@ -27,6 +31,7 @@ namespace Mba.Simplifier.Minimization.Factoring
 
         public ExprId Var(uint varIdx)
         {
+            VarCount = Math.Max(VarCount, (int)varIdx + 1);
             var vNode = new BoolExpr(ExprKind.Var, emptyList, (uint)varIdx);
             return AddExpr(vNode);
         }
@@ -42,21 +47,32 @@ namespace Mba.Simplifier.Minimization.Factoring
 
         public ExprId Add(List<ExprId> children)
         {
-            children = ReduceSumCoefficient(children);
-            children = Sort(children);
-
-            /*
             var output = new List<ExprId>();
-            ExprId? lastInstance = null;
-            for(int i = 0; i < children.Count; i++)
-            {
-                if (lastInstance == null)
-                    lastInstance = 0;
-            }
-            */
+            Hoist(ExprKind.Add, children, output);
+            children = output;
+
+            children = ReduceSumCoefficient(children);
+            if (children.Count == 1)
+                return children[0];
+
+            children = Sort(children);
 
             var vNode = new BoolExpr(ExprKind.Add, children);
             return AddExpr(vNode);
+        }
+
+        private void Hoist(ExprKind kind, IReadOnlyList<ExprId> children, List<ExprId> output)
+        {
+            foreach(var child in children)
+            {
+                if (Get(child).Kind != kind)
+                {
+                    output.Add(child);
+                    continue;
+                }
+
+                Hoist(kind, Get(child).Children, output);
+            }
         }
 
 
@@ -84,6 +100,13 @@ namespace Mba.Simplifier.Minimization.Factoring
 
         public ExprId Mul(List<ExprId> children)
         {
+            var output = new List<ExprId>();
+            Hoist(ExprKind.Mul, children, output);
+            children = output;
+
+            if (children.Count == 1)
+                return children[0];
+
             //children = ReduceMulPower(children);
             children = Sort(children);
             /*
@@ -187,10 +210,16 @@ namespace Mba.Simplifier.Minimization.Factoring
         public BoolExpr Get(ExprId id)
             => elements[id];
 
+        public ExprKind GetOpcode(ExprId id)
+            => elements[id].Kind;
+
         public string GetVarName(BoolExpr expr)
         {
             return $"x{expr.Data}";
         }
+
+        public uint GetVarIndex(BoolExpr expr)
+            => expr.Data;
 
         public uint GetConstValue(BoolExpr expr)
         {
