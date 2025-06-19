@@ -3,9 +3,9 @@ using Mba.Ast;
 using Mba.Common.MSiMBA;
 using Mba.Common.Utility;
 using Mba.Simplifier.Bindings;
+using Mba.Simplifier.Minimization.Factoring;
 using Mba.Simplifier.Pipeline;
 using Mba.Utility;
-using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -38,6 +38,13 @@ namespace Mba.Simplifier.Minimization
             return hashCode.Value;
         }
 
+        public override bool Equals(object? obj)
+        {
+            if (obj is not AnfPoly other)
+                return false;
+            return Monoms.SequenceEqual(other.Monoms);
+        }
+
         // This is a bit dirty but the hashcode needs to be mutable so that we can unnecessary heap allocations
         public void UpdateHash()
         {
@@ -46,6 +53,13 @@ namespace Mba.Simplifier.Minimization
                 hash = hash * 31 + m.GetHashCode();
 
             hashCode = hash;
+        }
+
+        public AnfPoly Clone()
+        {
+            var clone = new AnfPoly(Monoms.ToList());
+            clone.hashCode = hashCode;
+            return clone;
         }
 
         public override string ToString()
@@ -60,7 +74,7 @@ namespace Mba.Simplifier.Minimization
     {
         public uint Mask;
 
-        bool IsOnes => Mask == uint.MaxValue;
+        public bool IsOnes => Mask == uint.MaxValue;
 
         public AnfMonom(uint idx)
         {
@@ -122,69 +136,6 @@ namespace Mba.Simplifier.Minimization
             this.ctx = ctx;
             this.variables = variables;
             this.truthTable = truthTable;
-        }
-
-        private void Groebner()
-        {
-            // Collect all dnf terms
-            var terms = new List<AstIdx>();
-            for (int i = 0; i < truthTable.NumBits; i++)
-            {
-                if (!truthTable.GetBit(i))
-                    continue;
-
-                // Construct dnf for this term
-                var bitwise = new List<AstIdx>();
-                for (ushort varIdx = 0; varIdx < truthTable.NumVars; varIdx++)
-                {
-                    var vMask = 1 << varIdx;
-                    var negated = (i & vMask) == 0;
-                    bitwise.Add(negated ? ctx.Neg(variables[varIdx]) : variables[varIdx]);
-                }
-
-                terms.Add(ctx.And(bitwise));
-            }
-            
-            foreach (var term in terms)
-            {
-                var table = GetTruthTable(term, variables);
-                bool negated = table.GetBit(0);
-                var resultVec = table.AsList().Select(x => negated ? Negate(x) : (uint)x).ToArray();
-                var (anfTerms, variableCombinations) = GetAnfTerms(ctx, variables, resultVec);
-
-                anfTerms.Reverse();
-
-                AstIdx? result = null;
-                foreach (var anfTerm in anfTerms)
-                {
-                    var conj = LinearSimplifier.ConjunctionFromVarMask(ctx, variables, 1, variableCombinations[anfTerm], null);
-                    if (result == null)
-                        result = conj;
-                    else
-                        result = ctx.Xor(result.Value, conj);
-                }
-
-              
-
-                if (negated)
-                    result = ctx.Xor(ctx.Constant(ulong.MaxValue, ctx.GetWidth(result.Value)), result.Value);
-
-                var normal = ctx.GetAstString(result.Value); 
-                var astStr = ctx.GetAstString(result.Value);
-                astStr = astStr.Replace("(", "");
-                astStr = astStr.Replace(")", "");
-                astStr = astStr.Replace("&", "*");
-                astStr = astStr.Replace("^", " + ");
-
-                normal = astStr.Replace("(", "");
-                normal = astStr.Replace(")", "");
-                //normal = astStr.Replace("&", "*");
-                //normal = astStr.Replace("^", " + ");
-                //Console.WriteLine($"{astStr} = 1");
-                Console.WriteLine($"{normal} = 1");
-            }
-
-            Debugger.Break();
         }
 
         private unsafe AstIdx SimplifyBoolean()
@@ -297,7 +248,7 @@ namespace Mba.Simplifier.Minimization
         // Apply greedy factoring over a sum of variable conjunctions
         private static AstIdx? Factor(AstCtx ctx, IReadOnlyList<AstIdx> variables, AnfPoly poly, Dictionary<AstIdx, AnfMonom> demandedVarsMap)
         {
-            //var bar = Factor2(ctx, variables, poly, demandedVarsMap);
+            var bar = Factor2(ctx, variables, poly, demandedVarsMap);
 
             var getConjFromMask = (uint mask) => LinearSimplifier.ConjunctionFromVarMask(ctx, variables, 1, mask, null);
 
@@ -396,8 +347,35 @@ namespace Mba.Simplifier.Minimization
             return xored;
         }
 
+        // Yield a factored sum of products?
         private static AstIdx Factor2(AstCtx ctx, IReadOnlyList<AstIdx> variables, AnfPoly poly, Dictionary<AstIdx, AnfMonom> demandedVarsMap)
         {
+            var boolCtx = new BoolCtx();
+            ExprId.ctx = boolCtx;
+            List<ExprId> terms2 = new();
+            foreach(var monom in poly.Monoms)
+            {
+                if (monom.IsOnes)
+                {
+                    terms2.Add(boolCtx.Constant(uint.MaxValue));
+                    continue;
+                }
+
+                var vars = new List<ExprId>();
+                for (ushort i = 0; i < 32; i++)
+                {
+                    if ((monom.Mask & 1u << i) != 0)
+                        vars.Add(boolCtx.Var(i));
+                }
+
+                terms2.Add(boolCtx.Mul(vars));
+            }
+
+            var id = boolCtx.Add(terms2);
+
+
+            Console.WriteLine(id.ToString());
+
             // Remove the constant term if it exists
             bool hasOnes = poly.Monoms.Remove(uint.MaxValue);
 
@@ -416,8 +394,34 @@ namespace Mba.Simplifier.Minimization
                 curr = result.Value.others;
             }
 
+            // We have a list of (var * poly). 
+            // Now we want to spot cases where the poly is shared among list elements, e.g.:
+            //  - (x0, -1 + x2 + x3)
+            //  - (x1, -1 + x2 + x3)
+            var groupedByLhs = new Dictionary<AnfPoly, AnfPoly>();
+            foreach(var (varFactor, polyFactor) in terms)
+            {
+                // Recompute the hash since the polynomial may have changed
+                polyFactor.UpdateHash();
+
+                var currMonom = varFactor == null ? AnfMonom.Ones : new AnfMonom(1u << (ushort)varFactor.Value);
+                if (!groupedByLhs.ContainsKey(polyFactor))
+                {
+                    var nnew = new AnfPoly();
+                    nnew.Monoms.Add(currMonom);
+                    groupedByLhs[polyFactor] = nnew;
+                    continue;
+                }
+
+                groupedByLhs[polyFactor].Monoms.Add(currMonom);
+            }
 
 
+            // Sum of products...
+
+            // Returns a list of AnfPoly products...
+            // But what about sums...? 
+            // 
             return 0;
         }
 
@@ -501,7 +505,6 @@ namespace Mba.Simplifier.Minimization
 
         private AstIdx TrySimplifyORs(List<AstIdx?> terms)
         {
-            
             var getCost = (AstIdx? idx) => idx == null ? uint.MaxValue : ctx.GetCost(idx.Value);
 
             bool changed = true;
@@ -766,6 +769,71 @@ namespace Mba.Simplifier.Minimization
                 table.SetBit(i, rv[i] != 0);
 
             return table;
+        }
+
+
+
+        private void Groebner()
+        {
+            // Collect all dnf terms
+            var terms = new List<AstIdx>();
+            for (int i = 0; i < truthTable.NumBits; i++)
+            {
+                if (!truthTable.GetBit(i))
+                    continue;
+
+                // Construct dnf for this term
+                var bitwise = new List<AstIdx>();
+                for (ushort varIdx = 0; varIdx < truthTable.NumVars; varIdx++)
+                {
+                    var vMask = 1 << varIdx;
+                    var negated = (i & vMask) == 0;
+                    bitwise.Add(negated ? ctx.Neg(variables[varIdx]) : variables[varIdx]);
+                }
+
+                terms.Add(ctx.And(bitwise));
+            }
+
+            foreach (var term in terms)
+            {
+                var table = GetTruthTable(term, variables);
+                bool negated = table.GetBit(0);
+                var resultVec = table.AsList().Select(x => negated ? Negate(x) : (uint)x).ToArray();
+                var (anfTerms, variableCombinations) = GetAnfTerms(ctx, variables, resultVec);
+
+                anfTerms.Reverse();
+
+                AstIdx? result = null;
+                foreach (var anfTerm in anfTerms)
+                {
+                    var conj = LinearSimplifier.ConjunctionFromVarMask(ctx, variables, 1, variableCombinations[anfTerm], null);
+                    if (result == null)
+                        result = conj;
+                    else
+                        result = ctx.Xor(result.Value, conj);
+                }
+
+
+
+                if (negated)
+                    result = ctx.Xor(ctx.Constant(ulong.MaxValue, ctx.GetWidth(result.Value)), result.Value);
+
+                var normal = ctx.GetAstString(result.Value);
+                var astStr = ctx.GetAstString(result.Value);
+                astStr = astStr.Replace("(", "");
+                astStr = astStr.Replace(")", "");
+                astStr = astStr.Replace("&", "*");
+                astStr = astStr.Replace("^", " + ");
+
+                normal = astStr.Replace("(", "");
+                normal = astStr.Replace(")", "");
+                //normal = astStr.Replace("&", "*");
+                //normal = astStr.Replace("^", " + ");
+                //Console.WriteLine($"{astStr} = 1");
+                Console.WriteLine($"{normal} = 1");
+            }
+
+            Debugger.Break();
         }
     }
 }
