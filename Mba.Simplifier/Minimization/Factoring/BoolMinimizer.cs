@@ -12,6 +12,8 @@ namespace Mba.Simplifier.Minimization.Factoring
     {
         private readonly BoolCtx ctx;
 
+        private Dictionary<ExprId, uint> costMap = new();
+
         public BoolMinimizer(BoolCtx ctx)
         {
             this.ctx = ctx;
@@ -23,9 +25,12 @@ namespace Mba.Simplifier.Minimization.Factoring
             Debugger.Break();
         }
 
+        // Try to match a*b + a*c => a*(b+c), considering only the most common literal.
         private ExprId TryFactorByLiteral(ExprId id)
         {
             var node = ctx.Get(id);
+            if (node.Kind == ExprKind.Mul)
+                Debugger.Break();
             if (node.Kind != ExprKind.Add)
                 return id;
 
@@ -122,5 +127,40 @@ namespace Mba.Simplifier.Minimization.Factoring
             return bestIdx;
         }
 
+        // We are looking for a*b + a*c, where `a` can now be an arbitrary linear combination.
+        private ExprId TryFactorBySum(ExprId id)
+        {
+            var node = ctx.Get(id);
+            if(node.Kind != ExprKind.Add)
+            {
+                Debugger.Break();
+                return id;
+            }
+        }
+
+
+        private uint GetCost(ExprId id)
+        {
+            if (costMap.TryGetValue(id, out var existing))
+                return existing;
+
+            uint cost = 1;
+            var node = ctx.Get(id);
+            if (node.Kind == ExprKind.Const || node.Kind == ExprKind.Var)
+            {
+                cost = 1;
+            }
+
+            else
+            {
+                foreach(var child in node.Children)
+                {
+                    cost += 1 + GetCost(child);
+                }
+            }
+
+            costMap[id] = existing;
+            return cost;
+        }
     }
 }
