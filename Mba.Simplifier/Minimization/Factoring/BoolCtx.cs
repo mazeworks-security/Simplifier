@@ -78,7 +78,7 @@ namespace Mba.Simplifier.Minimization.Factoring
 
         private List<ExprId> ReduceSumCoefficient(List<ExprId> children)
         {
-            return children;
+            //return children;
             var output = new List<ExprId>();
 
             var grouped = children.GroupBy(x => x);

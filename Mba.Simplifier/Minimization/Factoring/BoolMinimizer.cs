@@ -22,6 +22,16 @@ namespace Mba.Simplifier.Minimization.Factoring
         public void Minimize(ExprId id)
         {
             var bar = TryFactorByLiteral(id);
+
+            var bar2 = TryFactorByExpandedSum(bar);
+
+            ExprId res = bar2;
+            for(int i = 0; i < 10; i++)
+            {
+                res = TryFactorByLiteral(res);
+                res = TryFactorByExpandedSum(res);
+            }
+
             Debugger.Break();
         }
 
@@ -133,9 +143,115 @@ namespace Mba.Simplifier.Minimization.Factoring
             var node = ctx.Get(id);
             if(node.Kind != ExprKind.Add)
             {
+                foreach (var c in node.Children)
+                    TryFactorBySum(c);
                 Debugger.Break();
                 return id;
             }
+
+            Dictionary<ExprId, int> countMap = new();
+            foreach(var childId in node.Children)
+            {
+                var child = ctx.Get(childId);
+                if (child.Kind == ExprKind.Mul)
+                {
+                    foreach (var factor in child.Children)
+                    {
+                        countMap.TryAdd(factor, 0);
+                        countMap[factor] += 1;
+                    }
+                }
+            }
+
+            // If there are no factors with more than one occurrence, there is no factoring to do.
+            if (!countMap.Any(x => x.Value > 1))
+                return id;
+
+
+            foreach (var c in node.Children)
+                TryFactorBySum(c);
+
+            return id;
+        }
+
+        // We are looking for a*b + a, where a is some arbitrary linear combination
+        // E.g. x1*(x2 + 1) + x2 + 1
+        private ExprId TryFactorByExpandedSum(ExprId id)
+        {
+            var node = ctx.Get(id);
+            if (node.Kind == ExprKind.Const || node.Kind == ExprKind.Var)
+                return id;
+            if(node.Kind == ExprKind.Mul)
+            {
+                return ctx.Mul(node.Children.Select(x => TryFactorByExpandedSum(x)).ToList());
+            }
+
+
+            var currTerms = node.Children.ToList();
+
+            bool changed = true;
+
+            start:
+            while (changed)
+            {
+                changed = false;
+                foreach (var childId in currTerms.ToList())
+                {
+                    var child = ctx.Get(childId);
+                    if (child.Kind != ExprKind.Mul)
+                        continue;
+
+                    // We have a multiplication of N asts, e.g. (a+b+c)*(b+c)
+                    // Enumerate through the factors of the multiplication
+                    foreach (var factorId in child.Children)
+                    {
+                        var factor = ctx.Get(factorId);
+                        if (factor.Kind != ExprKind.Add)
+                            continue;
+
+                        bool found = true;
+                        foreach (var term in factor.Children)
+                        {
+                            if (!currTerms.Contains(term))
+                            {
+                                found = false;
+                                break;
+                            }
+                        }
+
+                        if (!found)
+                            continue;
+
+                        // Remove the linear combination from the terms
+                        currTerms = currTerms.Where(x => !factor.Children.Contains(x)).ToList();
+                        // Remove the product from the list of terms, we need to recompute it
+                        currTerms = currTerms.Where(x => x != childId).ToList();
+
+
+                        var nnew = ctx.Mul(child.Children.Where(x => x != factorId).ToList());
+                        nnew = ctx.Add(nnew, ctx.Constant1Id);
+                        nnew = ctx.Mul(nnew, factorId);
+
+                        currTerms.Add(nnew);
+
+
+                        changed = true;
+                        //Debugger.Break();
+                        goto start;
+                        Debugger.Break();
+
+                    }
+                }
+            }
+
+            currTerms = currTerms.Select(x => TryFactorByExpandedSum(x)).ToList();
+
+            var res = ctx.Add(currTerms);
+
+            //foreach (var c in node.Children)
+            //    TryFactorByExpandedSum(c);
+
+            return res;
         }
 
 
