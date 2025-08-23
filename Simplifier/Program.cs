@@ -11,10 +11,10 @@ using System.ComponentModel;
 using System.Diagnostics;
 
 bool printUsage = false;
-uint bitWidth = 32;
+uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = true;
-string inputText = "X ^ (X - 1)";
+string inputText = null;
 
 var printHelp = () =>
 {
