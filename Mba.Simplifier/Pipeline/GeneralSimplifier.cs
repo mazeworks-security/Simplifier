@@ -3,12 +3,14 @@ using Mba.Common.MSiMBA;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Pipeline.Intermediate;
 using Mba.Simplifier.Polynomial;
+using Mba.Simplifier.Utility;
 using Mba.Utility;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Tasks;
@@ -192,8 +194,24 @@ namespace Mba.Simplifier.Pipeline
             return propagated;
         }
 
+        private static ulong Pow(ulong bbase, ulong exponent)
+        {
+            ulong result = 1;
+
+            for (ulong term = bbase; exponent != 0; term = term * term)
+            {
+                if (exponent % 2 != 0) { result *= term; }
+                exponent /= 2;
+            }
+
+            return result;
+        }
+
         private AstIdx GetAstWithSubstitutions(AstIdx id, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear, bool inBitwise = false)
         {
+            // Sometimes we perform constant folding in this method.
+            // To make sure that we correctly track whether the expression is semi-linear, we use this method to process replacements.
+            var visitReplacement = (AstIdx replacementIdx, bool inBitwise, ref bool isSemiLinear) => GetAstWithSubstitutions(replacementIdx, substitutionMapping, ref isSemiLinear, inBitwise);
             var op0 = (bool inBitwise, ref bool isSemiLinear) => GetAstWithSubstitutions(ctx.GetOp0(id), substitutionMapping, ref isSemiLinear, inBitwise);
             var op1 = (bool inBitwise, ref bool isSemiLinear) => GetAstWithSubstitutions(ctx.GetOp1(id), substitutionMapping, ref isSemiLinear, inBitwise);
 
@@ -282,20 +300,55 @@ namespace Mba.Simplifier.Pipeline
                 case AstOp.Pow:
                     var basis = SimplifyViaRecursiveSiMBA(ctx.GetOp0(id));
                     var degree = SimplifyViaRecursiveSiMBA(ctx.GetOp1(id));
-                    if (ctx.IsConstant(basis))
-                        throw new InvalidOperationException($"TODO: Handle base folding to constant");
-                    
+                    if (ctx.IsConstant(basis) && ctx.IsConstant(degree))
+                    {
+                        var folded = Pow(ctx.GetConstantValue(basis), ctx.GetConstantValue(degree));
+                        return visitReplacement(ctx.Constant(folded, ctx.GetWidth(basis)), inBitwise, ref isSemiLinear);
+                    }
+
                     var pow = ctx.Pow(basis, degree);
                     return GetSubstitution(pow, substitutionMapping);
-
-                    // We need to check if one of the terms folds to a constant like we do in the multiplication case.
-                    throw new InvalidOperationException("TODO");
 
                 case AstOp.And:
                 case AstOp.Or:
                 case AstOp.Xor:
                     if (opcode == AstOp.And)
-                        return ctx.And(op0(true, ref isSemiLinear), op1(true, ref isSemiLinear));
+                    {
+                        // Simplify both children.
+                        var and0 = op0(true, ref isSemiLinear);
+                        var and1 = op1(true, ref isSemiLinear);
+
+                        var id0 = ctx.GetOp0(id);
+                        var id1 = ctx.GetOp1(id);
+                        // Move constants to the left
+                        if (ctx.IsConstant(and1))
+                        {
+                            (and0, and1) = (and1, and0);
+                            (id0, id1) = (id1, id0);
+                        }
+                        
+                        // Rewrite (a&mask) as `Trunc(a)`, or `Trunc(a & mask)` if mask is not completely a bit mask.
+                        // This is a form of adhoc demanded bits based simplification
+                        if (ctx.IsConstant(and0) && !ctx.IsConstant(and1))
+                        {
+                            var andMask = ctx.GetConstantValue(and0);
+                            var truncWidth = ConstantToTruncWidth(andMask);
+                            if (truncWidth != 0 && truncWidth < ctx.GetWidth(id))
+                            {
+                                isSemiLinear = true;
+                                var trunc = Truncate(id1, (uint)truncWidth);
+    
+                                trunc = visitReplacement(trunc, true, ref isSemiLinear);
+                                var ext = ctx.Zext(trunc, ctx.GetWidth(id));
+                                if (ModuloReducer.GetMask((uint)truncWidth) != andMask)
+                                    ext = ctx.And(ctx.Constant(andMask, ctx.GetWidth(id)), ext);
+                                return ext;
+                            }
+                        }
+                       
+
+                        return ctx.And(and0, and1);
+                    }
                     if (opcode == AstOp.Or)
                         return ctx.Or(op0(true, ref isSemiLinear), op1(true, ref isSemiLinear));
                     if (opcode == AstOp.Xor)
@@ -322,6 +375,28 @@ namespace Mba.Simplifier.Pipeline
                         return ctx.Neg(op0(inBitwise, ref isSemiLinear));
                     }
 
+                case AstOp.Lshr:
+                    var src = SimplifyViaRecursiveSiMBA(ctx.GetOp0(id));
+                    var by = SimplifyViaRecursiveSiMBA(ctx.GetOp1(id));
+                    // Apply constant propagation if both nodes fold.
+                    if (ctx.IsConstant(src) && ctx.IsConstant(by))
+                    {
+                        var value = ctx.GetConstantValue(src) >> (ushort)(ctx.GetConstantValue(by) % (ulong)ctx.GetWidth(id));
+                        var constant = ctx.Constant(value, ctx.GetWidth(id));
+                        return visitReplacement(constant, inBitwise, ref isSemiLinear);
+                    }
+
+                    return GetSubstitution(ctx.Lshr(src, by), substitutionMapping);
+
+                case AstOp.Zext:
+                    isSemiLinear = true;
+                    return ctx.Zext(op0(true, ref isSemiLinear), ctx.GetWidth(id));
+
+                case AstOp.Trunc:
+                    isSemiLinear = true;
+                    var child = ctx.GetOp0(id);
+                    var truncated = AstRewriter.ChangeBitwidth(ctx, child, ctx.GetWidth(id), new());
+                    return ctx.Trunc(truncated, ctx.GetWidth(id));
 
                 case AstOp.Constant:
                     // If a bitwise constant is present, we want to mark it as semi-linear
@@ -331,9 +406,28 @@ namespace Mba.Simplifier.Pipeline
                     return id;
                 case AstOp.Symbol:
                     return id;
+
                 default:
                     throw new InvalidOperationException($"Unrecognized opcode: {opcode}!");
             }
+        }
+
+        private ulong ConstantToTruncWidth(ulong c)
+        {
+            var minWidth = 63 - BitOperations.LeadingZeroCount(c);
+            if (minWidth <= 7)
+                return 8;
+            if (minWidth <= 16)
+                return 16;
+            if (minWidth <= 32)
+                return 32;
+            return 0;
+        }
+
+        private AstIdx Truncate(AstIdx idx, uint width)
+        {
+            var trunc = AstRewriter.ChangeBitwidth(ctx, idx, width, new());
+            return trunc;
         }
 
         public record PolynomialParts(uint width, ulong coeffSum, Dictionary<AstIdx, ulong> ConstantPowers, List<AstIdx> Others);
@@ -1311,16 +1405,23 @@ namespace Mba.Simplifier.Pipeline
             return outPoly;
         }
 
-        private static AstIdx ApplyBackSubstitution(AstCtx ctx, AstIdx id, Dictionary<AstIdx, AstIdx> backSubstitutions)
+        public static AstIdx ApplyBackSubstitution(AstCtx ctx, AstIdx id, Dictionary<AstIdx, AstIdx> backSubstitutions, Dictionary<AstIdx, AstIdx> cache = null)
         {
+            if (cache == null)
+                cache = new();
             if (backSubstitutions.TryGetValue(id, out var backSub))
                 return backSub;
+            if (cache.TryGetValue(id, out var existing))
+                return existing;
 
-            var op0 = () => ApplyBackSubstitution(ctx, ctx.GetOp0(id), backSubstitutions);
-            var op1 = () => ApplyBackSubstitution(ctx, ctx.GetOp1(id), backSubstitutions);
+
+            var op0 = () => ApplyBackSubstitution(ctx, ctx.GetOp0(id), backSubstitutions, cache);
+            var op1 = () => ApplyBackSubstitution(ctx, ctx.GetOp1(id), backSubstitutions, cache);
 
             var opcode = ctx.GetOpcode(id);
-            return opcode switch
+            var width = ctx.GetWidth(id);
+
+            var result = opcode switch
             {
                 AstOp.None => throw new NotImplementedException(),
                 AstOp.Add => ctx.Add(op0(), op1()),
@@ -1330,9 +1431,15 @@ namespace Mba.Simplifier.Pipeline
                 AstOp.Or => ctx.Or(op0(), op1()),
                 AstOp.Xor => ctx.Xor(op0(), op1()),
                 AstOp.Neg => ctx.Neg(op0()),
+                AstOp.Lshr => ctx.Lshr(op0(), op1()),
+                AstOp.Zext => ctx.Zext(op0(), width),
+                AstOp.Trunc => ctx.Trunc(op0(), width),
                 AstOp.Constant => id,
                 AstOp.Symbol => id,
             };
+
+            cache.TryAdd(id, result);
+            return result;
         }
     }
 }

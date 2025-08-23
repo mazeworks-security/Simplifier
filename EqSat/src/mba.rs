@@ -21,12 +21,14 @@ pub trait Context {
     fn or(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst;
     fn xor(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst;
     fn neg(&mut self, arg0: AstIdx) -> SimpleAst;
+    fn lshr(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst;
     fn any(&mut self, arg0: AstIdx) -> SimpleAst;
     fn lookup_value(&mut self, arg0: AstIdx) -> Option<SimpleAst>;
     fn lookup_id(&mut self, arg0: &SimpleAst) -> AstIdx;
     fn constant(&mut self, arg0: u64, arg1: u8) -> SimpleAst;
     fn symbol(&mut self, arg0: u32, arg1: u8) -> SimpleAst;
     fn zext(&mut self, arg0: AstIdx, arg1: u8) -> SimpleAst;
+    fn trunc(&mut self, arg0: AstIdx, arg1: u8) -> SimpleAst;
     fn fold_add(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst;
     fn get_width(&mut self, arg0: AstIdx) -> u8;
     fn is_constant_modulo(&mut self, arg0: u64, arg1: u64, arg2: u8) -> Option<Empty>;
@@ -198,7 +200,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                                 let v1255 = &C::mul(ctx, v1254, v1119);
                                                                                                                 let v1256 = C::lookup_id(ctx, v1255);
                                                                                                                 let v1257 = &C::xor(ctx, v1165, v1256);
-                                                                                                                // Rule at .\isle\mba.isle line 891.
+                                                                                                                // Rule at .\isle\mba.isle line 898.
                                                                                                                 return Some(v1257.clone());
                                                                                                             }
                                                                                                         }
@@ -269,7 +271,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                                     let v1435 = &C::xor(ctx, v1432, v1434);
                                                                                                                     let v1436 = C::lookup_id(ctx, v1435);
                                                                                                                     let v1437 = &C::add(ctx, v537, v1436);
-                                                                                                                    // Rule at .\isle\mba.isle line 988.
+                                                                                                                    // Rule at .\isle\mba.isle line 995.
                                                                                                                     return Some(v1437.clone());
                                                                                                                 }
                                                                                                             }
@@ -386,7 +388,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                                                         let v1466 = &C::mul(ctx, v323, v1465);
                                                                                                                                         let v1467 = C::lookup_id(ctx, v1466);
                                                                                                                                         let v1468 = &C::add(ctx, v1455, v1467);
-                                                                                                                                        // Rule at .\isle\mba.isle line 995.
+                                                                                                                                        // Rule at .\isle\mba.isle line 1002.
                                                                                                                                         return Some(v1468.clone());
                                                                                                                                     }
                                                                                                                                 }
@@ -440,7 +442,7 @@ pub fn constructor_lower<C: Context>(
                                                                 } = v311 {
                                                                     if v312 == v492 {
                                                                         let v1238 = &C::any(ctx, v312);
-                                                                        // Rule at .\isle\mba.isle line 884.
+                                                                        // Rule at .\isle\mba.isle line 891.
                                                                         return Some(v1238.clone());
                                                                     }
                                                                 }
@@ -456,7 +458,7 @@ pub fn constructor_lower<C: Context>(
                                                     let v1232 = &C::any(ctx, v308);
                                                     let v1233 = C::lookup_id(ctx, v1232);
                                                     let v1234 = &C::and(ctx, v1231, v1233);
-                                                    // Rule at .\isle\mba.isle line 870.
+                                                    // Rule at .\isle\mba.isle line 877.
                                                     return Some(v1234.clone());
                                                 }
                                             }
@@ -549,7 +551,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                                                                             let v1653 = &C::any(ctx, v1616);
                                                                                                                                                             let v1654 = C::lookup_id(ctx, v1653);
                                                                                                                                                             let v1655 = &C::mul(ctx, v1652, v1654);
-                                                                                                                                                            // Rule at .\isle\mba.isle line 1057.
+                                                                                                                                                            // Rule at .\isle\mba.isle line 1064.
                                                                                                                                                             return Some(v1655.clone());
                                                                                                                                                         }
                                                                                                                                                     }
@@ -634,7 +636,7 @@ pub fn constructor_lower<C: Context>(
                                                                                 let v1286 = &C::and(ctx, v1283, v1285);
                                                                                 let v1287 = C::lookup_id(ctx, v1286);
                                                                                 let v1297 = &C::mul(ctx, v1296, v1287);
-                                                                                // Rule at .\isle\mba.isle line 926.
+                                                                                // Rule at .\isle\mba.isle line 933.
                                                                                 return Some(v1297.clone());
                                                                             }
                                                                         }
@@ -663,7 +665,7 @@ pub fn constructor_lower<C: Context>(
                                                             let v1286 = &C::and(ctx, v1283, v1285);
                                                             let v1287 = C::lookup_id(ctx, v1286);
                                                             let v1288 = &C::mul(ctx, v1259, v1287);
-                                                            // Rule at .\isle\mba.isle line 919.
+                                                            // Rule at .\isle\mba.isle line 926.
                                                             return Some(v1288.clone());
                                                         }
                                                     }
@@ -713,7 +715,7 @@ pub fn constructor_lower<C: Context>(
                                                                                     let v1516 = &C::neg(ctx, v1515);
                                                                                     let v1517 = C::lookup_id(ctx, v1516);
                                                                                     let v1518 = &C::and(ctx, v1509, v1517);
-                                                                                    // Rule at .\isle\mba.isle line 1021.
+                                                                                    // Rule at .\isle\mba.isle line 1028.
                                                                                     return Some(v1518.clone());
                                                                                 }
                                                                             }
@@ -731,7 +733,7 @@ pub fn constructor_lower<C: Context>(
                                                 if v299 == v487 {
                                                     if v300 == v1281 {
                                                         let v491 = &C::any(ctx, v487);
-                                                        // Rule at .\isle\mba.isle line 1015.
+                                                        // Rule at .\isle\mba.isle line 1022.
                                                         return Some(v491.clone());
                                                     }
                                                 }
@@ -747,7 +749,7 @@ pub fn constructor_lower<C: Context>(
                                             } = v1358 {
                                                 if v299 == v1359 {
                                                     let v1123 = &C::any(ctx, v486);
-                                                    // Rule at .\isle\mba.isle line 964.
+                                                    // Rule at .\isle\mba.isle line 971.
                                                     return Some(v1123.clone());
                                                 }
                                             }
@@ -767,7 +769,7 @@ pub fn constructor_lower<C: Context>(
                                                 if v487 == v1319 {
                                                     let v1320 = C::get_width(ctx, v486);
                                                     let v1321 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1320);
-                                                    // Rule at .\isle\mba.isle line 943.
+                                                    // Rule at .\isle\mba.isle line 950.
                                                     return Some(v1321.clone());
                                                 }
                                             }
@@ -804,7 +806,7 @@ pub fn constructor_lower<C: Context>(
                                                 let v1267 = &C::any(ctx, v298);
                                                 let v1268 = C::lookup_id(ctx, v1267);
                                                 let v1269 = &C::and(ctx, v1266, v1268);
-                                                // Rule at .\isle\mba.isle line 906.
+                                                // Rule at .\isle\mba.isle line 913.
                                                 return Some(v1269.clone());
                                             }
                                             let v285 = &C::lookup_value(ctx, v250);
@@ -821,7 +823,7 @@ pub fn constructor_lower<C: Context>(
                                                             } = v1236 {
                                                                 if v297 == v1237 {
                                                                     let v301 = &C::any(ctx, v297);
-                                                                    // Rule at .\isle\mba.isle line 877.
+                                                                    // Rule at .\isle\mba.isle line 884.
                                                                     return Some(v301.clone());
                                                                 }
                                                             }
@@ -871,7 +873,7 @@ pub fn constructor_lower<C: Context>(
                                                                 let v1262 = &C::and(ctx, v1261, v526);
                                                                 let v1263 = C::lookup_id(ctx, v1262);
                                                                 let v1264 = &C::mul(ctx, v1259, v1263);
-                                                                // Rule at .\isle\mba.isle line 899.
+                                                                // Rule at .\isle\mba.isle line 906.
                                                                 return Some(v1264.clone());
                                                             }
                                                         }
@@ -939,7 +941,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                             let v1606 = &C::xor(ctx, v1601, v1605);
                                                                                                             let v1607 = C::lookup_id(ctx, v1606);
                                                                                                             let v1608 = &C::add(ctx, v1599, v1607);
-                                                                                                            // Rule at .\isle\mba.isle line 1051.
+                                                                                                            // Rule at .\isle\mba.isle line 1058.
                                                                                                             return Some(v1608.clone());
                                                                                                         }
                                                                                                     }
@@ -992,7 +994,7 @@ pub fn constructor_lower<C: Context>(
                                                                 let v1487 = &C::xor(ctx, v1480, v1486);
                                                                 let v1488 = C::lookup_id(ctx, v1487);
                                                                 let v1489 = &C::add(ctx, v1478, v1488);
-                                                                // Rule at .\isle\mba.isle line 1003.
+                                                                // Rule at .\isle\mba.isle line 1010.
                                                                 return Some(v1489.clone());
                                                             }
                                                         }
@@ -1083,7 +1085,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                                             let v1159 = &C::xor(ctx, v1117, v1119);
                                                                                                                             let v1160 = C::lookup_id(ctx, v1159);
                                                                                                                             let v1161 = &C::mul(ctx, v1115, v1160);
-                                                                                                                            // Rule at .\isle\mba.isle line 795.
+                                                                                                                            // Rule at .\isle\mba.isle line 802.
                                                                                                                             return Some(v1161.clone());
                                                                                                                         }
                                                                                                                     }
@@ -1101,7 +1103,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                         let v1120 = &C::or(ctx, v1117, v1119);
                                                                                                         let v1121 = C::lookup_id(ctx, v1120);
                                                                                                         let v1122 = &C::mul(ctx, v1115, v1121);
-                                                                                                        // Rule at .\isle\mba.isle line 764.
+                                                                                                        // Rule at .\isle\mba.isle line 771.
                                                                                                         return Some(v1122.clone());
                                                                                                     }
                                                                                                 }
@@ -1133,7 +1135,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                         let v1190 = &C::and(ctx, v1117, v1119);
                                                                                                         let v1191 = C::lookup_id(ctx, v1190);
                                                                                                         let v1192 = &C::mul(ctx, v1115, v1191);
-                                                                                                        // Rule at .\isle\mba.isle line 829.
+                                                                                                        // Rule at .\isle\mba.isle line 836.
                                                                                                         return Some(v1192.clone());
                                                                                                     }
                                                                                                 }
@@ -1194,7 +1196,7 @@ pub fn constructor_lower<C: Context>(
                                                                                     let v1216 = &C::and(ctx, v1213, v1215);
                                                                                     let v1217 = C::lookup_id(ctx, v1216);
                                                                                     let v1218 = &C::mul(ctx, v1211, v1217);
-                                                                                    // Rule at .\isle\mba.isle line 856.
+                                                                                    // Rule at .\isle\mba.isle line 863.
                                                                                     return Some(v1218.clone());
                                                                                 }
                                                                             }
@@ -1213,7 +1215,7 @@ pub fn constructor_lower<C: Context>(
                                                                             let v1203 = &C::and(ctx, v1198, v1202);
                                                                             let v1204 = C::lookup_id(ctx, v1203);
                                                                             let v1205 = &C::mul(ctx, v1196, v1204);
-                                                                            // Rule at .\isle\mba.isle line 849.
+                                                                            // Rule at .\isle\mba.isle line 856.
                                                                             return Some(v1205.clone());
                                                                         }
                                                                     }
@@ -1247,7 +1249,7 @@ pub fn constructor_lower<C: Context>(
                                                     let v1223 = &C::any(ctx, v49);
                                                     let v1224 = C::lookup_id(ctx, v1223);
                                                     let v1225 = &C::and(ctx, v1222, v1224);
-                                                    // Rule at .\isle\mba.isle line 863.
+                                                    // Rule at .\isle\mba.isle line 870.
                                                     return Some(v1225.clone());
                                                 }
                                                 if let Some(v61) = v60 {
@@ -1262,7 +1264,7 @@ pub fn constructor_lower<C: Context>(
                                                                 let v303 = &C::any(ctx, v298);
                                                                 let v304 = C::lookup_id(ctx, v303);
                                                                 let v1167 = &C::xor(ctx, v302, v304);
-                                                                // Rule at .\isle\mba.isle line 810.
+                                                                // Rule at .\isle\mba.isle line 817.
                                                                 return Some(v1167.clone());
                                                             }
                                                         }
@@ -1283,7 +1285,7 @@ pub fn constructor_lower<C: Context>(
                                                                 let v70 = &C::any(ctx, v63);
                                                                 let v71 = C::lookup_id(ctx, v70);
                                                                 let v1166 = &C::xor(ctx, v1165, v71);
-                                                                // Rule at .\isle\mba.isle line 803.
+                                                                // Rule at .\isle\mba.isle line 810.
                                                                 return Some(v1166.clone());
                                                             }
                                                         }
@@ -1317,7 +1319,7 @@ pub fn constructor_lower<C: Context>(
                                                                 let v303 = &C::any(ctx, v298);
                                                                 let v304 = C::lookup_id(ctx, v303);
                                                                 let v1193 = &C::and(ctx, v302, v304);
-                                                                // Rule at .\isle\mba.isle line 836.
+                                                                // Rule at .\isle\mba.isle line 843.
                                                                 return Some(v1193.clone());
                                                             }
                                                         }
@@ -1344,7 +1346,7 @@ pub fn constructor_lower<C: Context>(
                                                         let v599 = &C::any(ctx, v270);
                                                         let v600 = C::lookup_id(ctx, v599);
                                                         let v601 = &C::mul(ctx, v598, v600);
-                                                        // Rule at .\isle\mba.isle line 758.
+                                                        // Rule at .\isle\mba.isle line 765.
                                                         return Some(v601.clone());
                                                     }
                                                 }
@@ -1394,7 +1396,7 @@ pub fn constructor_lower<C: Context>(
                                                                             let v1063 = &C::xor(ctx, v1060, v1062);
                                                                             let v1064 = C::lookup_id(ctx, v1063);
                                                                             let v1065 = &C::add(ctx, v1058, v1064);
-                                                                            // Rule at .\isle\mba.isle line 732.
+                                                                            // Rule at .\isle\mba.isle line 739.
                                                                             return Some(v1065.clone());
                                                                         }
                                                                     }
@@ -1415,7 +1417,7 @@ pub fn constructor_lower<C: Context>(
                                                         let v599 = &C::any(ctx, v270);
                                                         let v600 = C::lookup_id(ctx, v599);
                                                         let v601 = &C::mul(ctx, v598, v600);
-                                                        // Rule at .\isle\mba.isle line 484.
+                                                        // Rule at .\isle\mba.isle line 491.
                                                         return Some(v601.clone());
                                                     }
                                                 }
@@ -1449,7 +1451,7 @@ pub fn constructor_lower<C: Context>(
                                                                     let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
                                                                     if let Some(v398) = v397 {
                                                                         let v301 = &C::any(ctx, v297);
-                                                                        // Rule at .\isle\mba.isle line 432.
+                                                                        // Rule at .\isle\mba.isle line 439.
                                                                         return Some(v301.clone());
                                                                     }
                                                                 }
@@ -1509,7 +1511,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                 let v527 = &C::mul(ctx, v524, v526);
                                                                                                 let v528 = C::lookup_id(ctx, v527);
                                                                                                 let v529 = &C::add(ctx, v339, v528);
-                                                                                                // Rule at .\isle\mba.isle line 439.
+                                                                                                // Rule at .\isle\mba.isle line 446.
                                                                                                 return Some(v529.clone());
                                                                                             }
                                                                                         }
@@ -1556,7 +1558,7 @@ pub fn constructor_lower<C: Context>(
                                                                             let v544 = &C::any(ctx, v335);
                                                                             let v545 = C::lookup_id(ctx, v544);
                                                                             let v546 = &C::add(ctx, v543, v545);
-                                                                            // Rule at .\isle\mba.isle line 447.
+                                                                            // Rule at .\isle\mba.isle line 454.
                                                                             return Some(v546.clone());
                                                                         }
                                                                     }
@@ -1583,7 +1585,7 @@ pub fn constructor_lower<C: Context>(
                                     let v397 = C::is_constant_modulo(ctx, v253, 0xFFFFFFFFFFFFFFFF, v254);
                                     if let Some(v398) = v397 {
                                         let v399 = &C::constant(ctx, 0x0, v254);
-                                        // Rule at .\isle\mba.isle line 345.
+                                        // Rule at .\isle\mba.isle line 352.
                                         return Some(v399.clone());
                                     }
                                 }
@@ -1605,7 +1607,7 @@ pub fn constructor_lower<C: Context>(
                                     let v1141 = &C::any(ctx, v299);
                                     let v1142 = C::lookup_id(ctx, v1141);
                                     let v1143 = &C::or(ctx, v1140, v1142);
-                                    // Rule at .\isle\mba.isle line 783.
+                                    // Rule at .\isle\mba.isle line 790.
                                     return Some(v1143.clone());
                                 }
                             }
@@ -1623,7 +1625,7 @@ pub fn constructor_lower<C: Context>(
                                         } = v489 {
                                             if v486 == v490 {
                                                 let v491 = &C::any(ctx, v487);
-                                                // Rule at .\isle\mba.isle line 414.
+                                                // Rule at .\isle\mba.isle line 421.
                                                 return Some(v491.clone());
                                             }
                                         }
@@ -1649,7 +1651,7 @@ pub fn constructor_lower<C: Context>(
                                             let v1125 = &C::any(ctx, v487);
                                             let v1126 = C::lookup_id(ctx, v1125);
                                             let v1194 = &C::add(ctx, v1124, v1126);
-                                            // Rule at .\isle\mba.isle line 843.
+                                            // Rule at .\isle\mba.isle line 850.
                                             return Some(v1194.clone());
                                         }
                                     }
@@ -1671,7 +1673,7 @@ pub fn constructor_lower<C: Context>(
                                                     let v500 = &C::any(ctx, v298);
                                                     let v501 = C::lookup_id(ctx, v500);
                                                     let v502 = &C::add(ctx, v499, v501);
-                                                    // Rule at .\isle\mba.isle line 420.
+                                                    // Rule at .\isle\mba.isle line 427.
                                                     return Some(v502.clone());
                                                 }
                                             }
@@ -1699,7 +1701,7 @@ pub fn constructor_lower<C: Context>(
                                             let v1125 = &C::any(ctx, v487);
                                             let v1126 = C::lookup_id(ctx, v1125);
                                             let v1127 = &C::or(ctx, v1124, v1126);
-                                            // Rule at .\isle\mba.isle line 771.
+                                            // Rule at .\isle\mba.isle line 778.
                                             return Some(v1127.clone());
                                         }
                                     }
@@ -1717,7 +1719,7 @@ pub fn constructor_lower<C: Context>(
                                                 if v334 == v505 {
                                                     let v506 = C::get_width(ctx, v334);
                                                     let v507 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v506);
-                                                    // Rule at .\isle\mba.isle line 426.
+                                                    // Rule at .\isle\mba.isle line 433.
                                                     return Some(v507.clone());
                                                 }
                                             }
@@ -1751,7 +1753,7 @@ pub fn constructor_lower<C: Context>(
                                                 let v1185 = &C::xor(ctx, v1124, v1126);
                                                 let v1186 = C::lookup_id(ctx, v1185);
                                                 let v1187 = &C::neg(ctx, v1186);
-                                                // Rule at .\isle\mba.isle line 823.
+                                                // Rule at .\isle\mba.isle line 830.
                                                 return Some(v1187.clone());
                                             }
                                         }
@@ -1762,7 +1764,7 @@ pub fn constructor_lower<C: Context>(
                         if v49 == v261 {
                             let v388 = C::get_width(ctx, v49);
                             let v594 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v388);
-                            // Rule at .\isle\mba.isle line 478.
+                            // Rule at .\isle\mba.isle line 485.
                             return Some(v594.clone());
                         }
                     }
@@ -1777,7 +1779,7 @@ pub fn constructor_lower<C: Context>(
                     let v394 = C::is_constant_modulo(ctx, v77, 0x0, v78);
                     if let Some(v395) = v394 {
                         let v396 = &C::any(ctx, v50);
-                        // Rule at .\isle\mba.isle line 338.
+                        // Rule at .\isle\mba.isle line 345.
                         return Some(v396.clone());
                     }
                 }
@@ -1789,7 +1791,7 @@ pub fn constructor_lower<C: Context>(
                 let v391 = &C::any(ctx, v49);
                 let v392 = C::lookup_id(ctx, v391);
                 let v393 = &C::mul(ctx, v390, v392);
-                // Rule at .\isle\mba.isle line 332.
+                // Rule at .\isle\mba.isle line 339.
                 return Some(v393.clone());
             }
             if let Some(v61) = v60 {
@@ -1813,7 +1815,7 @@ pub fn constructor_lower<C: Context>(
                                 let v74 = &C::add(ctx, v71, v73);
                                 let v75 = C::lookup_id(ctx, v74);
                                 let v76 = &C::add(ctx, v69, v75);
-                                // Rule at .\isle\mba.isle line 110.
+                                // Rule at .\isle\mba.isle line 117.
                                 return Some(v76.clone());
                             }
                         }
@@ -1874,7 +1876,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                                 let v294 = &C::any(ctx, v275);
                                                                                                                 let v295 = C::lookup_id(ctx, v294);
                                                                                                                 let v296 = &C::mul(ctx, v293, v295);
-                                                                                                                // Rule at .\isle\mba.isle line 220.
+                                                                                                                // Rule at .\isle\mba.isle line 227.
                                                                                                                 return Some(v296.clone());
                                                                                                             }
                                                                                                         }
@@ -1935,7 +1937,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                 let v326 = &C::mul(ctx, v323, v325);
                                                                                                 let v327 = C::lookup_id(ctx, v326);
                                                                                                 let v328 = &C::add(ctx, v321, v327);
-                                                                                                // Rule at .\isle\mba.isle line 232.
+                                                                                                // Rule at .\isle\mba.isle line 239.
                                                                                                 return Some(v328.clone());
                                                                                             }
                                                                                         }
@@ -1979,7 +1981,7 @@ pub fn constructor_lower<C: Context>(
                                                                 let v331 = &C::any(ctx, v309);
                                                                 let v332 = C::lookup_id(ctx, v331);
                                                                 let v333 = &C::add(ctx, v321, v332);
-                                                                // Rule at .\isle\mba.isle line 240.
+                                                                // Rule at .\isle\mba.isle line 247.
                                                                 return Some(v333.clone());
                                                             }
                                                         }
@@ -2009,7 +2011,7 @@ pub fn constructor_lower<C: Context>(
                                         let v303 = &C::any(ctx, v298);
                                         let v304 = C::lookup_id(ctx, v303);
                                         let v305 = &C::add(ctx, v302, v304);
-                                        // Rule at .\isle\mba.isle line 226.
+                                        // Rule at .\isle\mba.isle line 233.
                                         return Some(v305.clone());
                                     }
                                 }
@@ -2046,7 +2048,7 @@ pub fn constructor_lower<C: Context>(
                                                             let v340 = &C::any(ctx, v335);
                                                             let v341 = C::lookup_id(ctx, v340);
                                                             let v342 = &C::add(ctx, v339, v341);
-                                                            // Rule at .\isle\mba.isle line 247.
+                                                            // Rule at .\isle\mba.isle line 254.
                                                             return Some(v342.clone());
                                                         }
                                                     }
@@ -2083,7 +2085,7 @@ pub fn constructor_lower<C: Context>(
                                             let v91 = &C::any(ctx, v80);
                                             let v92 = C::lookup_id(ctx, v91);
                                             let v93 = &C::add(ctx, v90, v92);
-                                            // Rule at .\isle\mba.isle line 116.
+                                            // Rule at .\isle\mba.isle line 123.
                                             return Some(v93.clone());
                                         }
                                     }
@@ -2104,7 +2106,7 @@ pub fn constructor_lower<C: Context>(
                                                     let v258 = &C::any(ctx, v250);
                                                     let v259 = C::lookup_id(ctx, v258);
                                                     let v260 = &C::neg(ctx, v259);
-                                                    // Rule at .\isle\mba.isle line 206.
+                                                    // Rule at .\isle\mba.isle line 213.
                                                     return Some(v260.clone());
                                                 }
                                             }
@@ -2121,7 +2123,7 @@ pub fn constructor_lower<C: Context>(
                                         let v267 = &C::any(ctx, v261);
                                         let v268 = C::lookup_id(ctx, v267);
                                         let v269 = &C::mul(ctx, v266, v268);
-                                        // Rule at .\isle\mba.isle line 213.
+                                        // Rule at .\isle\mba.isle line 220.
                                         return Some(v269.clone());
                                     }
                                 }
@@ -2134,7 +2136,7 @@ pub fn constructor_lower<C: Context>(
                                     let v94 = &C::constant(ctx, v53, v78);
                                     let v95 = C::lookup_id(ctx, v94);
                                     let v96 = &C::add(ctx, v86, v95);
-                                    // Rule at .\isle\mba.isle line 122.
+                                    // Rule at .\isle\mba.isle line 129.
                                     return Some(v96.clone());
                                 }
                                 _ => {}
@@ -2154,7 +2156,7 @@ pub fn constructor_lower<C: Context>(
                     let v57 = &C::any(ctx, v49);
                     let v58 = C::lookup_id(ctx, v57);
                     let v59 = &C::add(ctx, v56, v58);
-                    // Rule at .\isle\mba.isle line 104.
+                    // Rule at .\isle\mba.isle line 111.
                     return Some(v59.clone());
                 }
             }
@@ -2185,7 +2187,7 @@ pub fn constructor_lower<C: Context>(
                                 let v26 = &C::mul(ctx, v23, v25);
                                 let v27 = C::lookup_id(ctx, v26);
                                 let v28 = &C::mul(ctx, v21, v27);
-                                // Rule at .\isle\mba.isle line 86.
+                                // Rule at .\isle\mba.isle line 93.
                                 return Some(v28.clone());
                             }
                         }
@@ -2210,7 +2212,7 @@ pub fn constructor_lower<C: Context>(
                                     let v591 = &C::add(ctx, v588, v590);
                                     let v592 = C::lookup_id(ctx, v591);
                                     let v593 = &C::pow(ctx, v586, v592);
-                                    // Rule at .\isle\mba.isle line 472.
+                                    // Rule at .\isle\mba.isle line 479.
                                     return Some(v593.clone());
                                 }
                             }
@@ -2237,7 +2239,7 @@ pub fn constructor_lower<C: Context>(
                                                 let v418 = C::is_constant_modulo(ctx, v29, 0xFFFFFFFFFFFFFFFF, v30);
                                                 if let Some(v419) = v418 {
                                                     let v420 = &C::any(ctx, v32);
-                                                    // Rule at .\isle\mba.isle line 380.
+                                                    // Rule at .\isle\mba.isle line 387.
                                                     return Some(v420.clone());
                                                 }
                                             }
@@ -2274,7 +2276,7 @@ pub fn constructor_lower<C: Context>(
                                                                 let v647 = &C::mul(ctx, v623, v646);
                                                                 let v648 = C::lookup_id(ctx, v647);
                                                                 let v649 = &C::xor(ctx, v644, v648);
-                                                                // Rule at .\isle\mba.isle line 504.
+                                                                // Rule at .\isle\mba.isle line 511.
                                                                 return Some(v649.clone());
                                                             }
                                                         }
@@ -2314,7 +2316,7 @@ pub fn constructor_lower<C: Context>(
                                                                 let v626 = &C::mul(ctx, v623, v625);
                                                                 let v627 = C::lookup_id(ctx, v626);
                                                                 let v628 = &C::xor(ctx, v621, v627);
-                                                                // Rule at .\isle\mba.isle line 496.
+                                                                // Rule at .\isle\mba.isle line 503.
                                                                 return Some(v628.clone());
                                                             }
                                                         }
@@ -2330,13 +2332,13 @@ pub fn constructor_lower<C: Context>(
                         let v403 = C::is_constant_modulo(ctx, v29, 0x1, v30);
                         if let Some(v404) = v403 {
                             let v405 = &C::any(ctx, v2);
-                            // Rule at .\isle\mba.isle line 359.
+                            // Rule at .\isle\mba.isle line 366.
                             return Some(v405.clone());
                         }
                         let v400 = C::is_constant_modulo(ctx, v29, 0x0, v30);
                         if let Some(v401) = v400 {
                             let v402 = &C::constant(ctx, 0x0, v30);
-                            // Rule at .\isle\mba.isle line 352.
+                            // Rule at .\isle\mba.isle line 359.
                             return Some(v402.clone());
                         }
                         if let Some(v4) = v3 {
@@ -2360,7 +2362,7 @@ pub fn constructor_lower<C: Context>(
                                             let v43 = &C::any(ctx, v32);
                                             let v44 = C::lookup_id(ctx, v43);
                                             let v45 = &C::mul(ctx, v42, v44);
-                                            // Rule at .\isle\mba.isle line 92.
+                                            // Rule at .\isle\mba.isle line 99.
                                             return Some(v45.clone());
                                         }
                                     }
@@ -2374,7 +2376,7 @@ pub fn constructor_lower<C: Context>(
                                     let v46 = &C::constant(ctx, v5, v30);
                                     let v47 = C::lookup_id(ctx, v46);
                                     let v48 = &C::mul(ctx, v38, v47);
-                                    // Rule at .\isle\mba.isle line 98.
+                                    // Rule at .\isle\mba.isle line 105.
                                     return Some(v48.clone());
                                 }
                                 _ => {}
@@ -2395,7 +2397,7 @@ pub fn constructor_lower<C: Context>(
                     let v9 = &C::any(ctx, v1);
                     let v10 = C::lookup_id(ctx, v9);
                     let v11 = &C::mul(ctx, v8, v10);
-                    // Rule at .\isle\mba.isle line 80.
+                    // Rule at .\isle\mba.isle line 87.
                     return Some(v11.clone());
                 }
             }
@@ -2413,13 +2415,13 @@ pub fn constructor_lower<C: Context>(
                     let v415 = C::is_constant_modulo(ctx, v410, 0x1, v411);
                     if let Some(v416) = v415 {
                         let v417 = &C::any(ctx, v406);
-                        // Rule at .\isle\mba.isle line 373.
+                        // Rule at .\isle\mba.isle line 380.
                         return Some(v417.clone());
                     }
                     let v412 = C::is_constant_modulo(ctx, v410, 0x0, v411);
                     if let Some(v413) = v412 {
                         let v414 = &C::constant(ctx, 0x1, v411);
-                        // Rule at .\isle\mba.isle line 366.
+                        // Rule at .\isle\mba.isle line 373.
                         return Some(v414.clone());
                     }
                 }
@@ -2454,7 +2456,7 @@ pub fn constructor_lower<C: Context>(
                                     let v1498 = &C::or(ctx, v1495, v1497);
                                     let v1499 = C::lookup_id(ctx, v1498);
                                     let v1500 = &C::and(ctx, v1032, v1499);
-                                    // Rule at .\isle\mba.isle line 1009.
+                                    // Rule at .\isle\mba.isle line 1016.
                                     return Some(v1500.clone());
                                 }
                             }
@@ -2483,7 +2485,7 @@ pub fn constructor_lower<C: Context>(
                                         let v1557 = &C::neg(ctx, v1556);
                                         let v1558 = C::lookup_id(ctx, v1557);
                                         let v1559 = &C::and(ctx, v1554, v1558);
-                                        // Rule at .\isle\mba.isle line 1039.
+                                        // Rule at .\isle\mba.isle line 1046.
                                         return Some(v1559.clone());
                                     }
                                 }
@@ -2513,7 +2515,7 @@ pub fn constructor_lower<C: Context>(
                                                             let v1371 = &C::xor(ctx, v1368, v1370);
                                                             let v1372 = C::lookup_id(ctx, v1371);
                                                             let v1373 = &C::and(ctx, v1366, v1372);
-                                                            // Rule at .\isle\mba.isle line 970.
+                                                            // Rule at .\isle\mba.isle line 977.
                                                             return Some(v1373.clone());
                                                         }
                                                     }
@@ -2563,7 +2565,7 @@ pub fn constructor_lower<C: Context>(
                                                                     let v1576 = &C::or(ctx, v1565, v1575);
                                                                     let v1577 = C::lookup_id(ctx, v1576);
                                                                     let v1578 = &C::neg(ctx, v1577);
-                                                                    // Rule at .\isle\mba.isle line 1045.
+                                                                    // Rule at .\isle\mba.isle line 1052.
                                                                     return Some(v1578.clone());
                                                                 }
                                                             }
@@ -2610,7 +2612,7 @@ pub fn constructor_lower<C: Context>(
                                                                                 let v1316 = C::is_constant_modulo(ctx, v1310, 0x2, v126);
                                                                                 if let Some(v1317) = v1316 {
                                                                                     let v380 = &C::constant(ctx, 0x0, v126);
-                                                                                    // Rule at .\isle\mba.isle line 934.
+                                                                                    // Rule at .\isle\mba.isle line 941.
                                                                                     return Some(v380.clone());
                                                                                 }
                                                                             }
@@ -2647,7 +2649,7 @@ pub fn constructor_lower<C: Context>(
                             let v1276 = &C::neg(ctx, v1275);
                             let v1277 = C::lookup_id(ctx, v1276);
                             let v1278 = &C::and(ctx, v1273, v1277);
-                            // Rule at .\isle\mba.isle line 913.
+                            // Rule at .\isle\mba.isle line 920.
                             return Some(v1278.clone());
                         }
                     }
@@ -2687,7 +2689,7 @@ pub fn constructor_lower<C: Context>(
                                                                         let v1178 = &C::any(ctx, v1172);
                                                                         let v1179 = C::lookup_id(ctx, v1178);
                                                                         let v1180 = &C::xor(ctx, v1177, v1179);
-                                                                        // Rule at .\isle\mba.isle line 817.
+                                                                        // Rule at .\isle\mba.isle line 824.
                                                                         return Some(v1180.clone());
                                                                     }
                                                                 }
@@ -2725,7 +2727,7 @@ pub fn constructor_lower<C: Context>(
                                         } = v1014 {
                                             if v97 == v1015 {
                                                 let v384 = &C::any(ctx, v97);
-                                                // Rule at .\isle\mba.isle line 705.
+                                                // Rule at .\isle\mba.isle line 712.
                                                 return Some(v384.clone());
                                             }
                                         }
@@ -2770,7 +2772,7 @@ pub fn constructor_lower<C: Context>(
                                                                             let v856 = C::is_constant_modulo(ctx, v682, 0xFFFFFFFFFFFFFFFF, v683);
                                                                             if let Some(v857) = v856 {
                                                                                 let v384 = &C::any(ctx, v97);
-                                                                                // Rule at .\isle\mba.isle line 599.
+                                                                                // Rule at .\isle\mba.isle line 606.
                                                                                 return Some(v384.clone());
                                                                             }
                                                                         }
@@ -2805,7 +2807,7 @@ pub fn constructor_lower<C: Context>(
                                                                                         let v1033 = &C::any(ctx, v1025);
                                                                                         let v1034 = C::lookup_id(ctx, v1033);
                                                                                         let v1035 = &C::and(ctx, v1032, v1034);
-                                                                                        // Rule at .\isle\mba.isle line 718.
+                                                                                        // Rule at .\isle\mba.isle line 725.
                                                                                         return Some(v1035.clone());
                                                                                     }
                                                                                 }
@@ -2860,7 +2862,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                     let v698 = C::is_constant_modulo(ctx, v682, 0xFFFFFFFFFFFFFFFF, v677);
                                                                                                     if let Some(v699) = v698 {
                                                                                                         let v700 = &C::constant(ctx, 0x0, v677);
-                                                                                                        // Rule at .\isle\mba.isle line 520.
+                                                                                                        // Rule at .\isle\mba.isle line 527.
                                                                                                         return Some(v700.clone());
                                                                                                     }
                                                                                                 }
@@ -2919,7 +2921,7 @@ pub fn constructor_lower<C: Context>(
                                                                     let v666 = C::is_constant_modulo(ctx, v662, 0x2, v655);
                                                                     if let Some(v667) = v666 {
                                                                         let v668 = &C::constant(ctx, 0x0, v655);
-                                                                        // Rule at .\isle\mba.isle line 512.
+                                                                        // Rule at .\isle\mba.isle line 519.
                                                                         return Some(v668.clone());
                                                                     }
                                                                 }
@@ -2993,7 +2995,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                             let v948 = C::is_constant_modulo(ctx, v935, 0x2, v925);
                                                                                                             if let Some(v949) = v948 {
                                                                                                                 let v384 = &C::any(ctx, v97);
-                                                                                                                // Rule at .\isle\mba.isle line 654.
+                                                                                                                // Rule at .\isle\mba.isle line 661.
                                                                                                                 return Some(v384.clone());
                                                                                                             }
                                                                                                         }
@@ -3066,7 +3068,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                                 let v971 = C::is_constant_modulo(ctx, v969, 0xFFFFFFFFFFFFFFFF, v970);
                                                                                                                 if let Some(v972) = v971 {
                                                                                                                     let v384 = &C::any(ctx, v97);
-                                                                                                                    // Rule at .\isle\mba.isle line 670.
+                                                                                                                    // Rule at .\isle\mba.isle line 677.
                                                                                                                     return Some(v384.clone());
                                                                                                                 }
                                                                                                             }
@@ -3091,7 +3093,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                         let v963 = C::is_constant_modulo(ctx, v941, 0xFFFFFFFFFFFFFFFF, v957);
                                                                                                         if let Some(v964) = v963 {
                                                                                                             let v384 = &C::any(ctx, v97);
-                                                                                                            // Rule at .\isle\mba.isle line 662.
+                                                                                                            // Rule at .\isle\mba.isle line 669.
                                                                                                             return Some(v384.clone());
                                                                                                         }
                                                                                                     }
@@ -3147,7 +3149,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                 let v767 = &C::any(ctx, v733);
                                                                                                 let v768 = C::lookup_id(ctx, v767);
                                                                                                 let v811 = &C::mul(ctx, v810, v768);
-                                                                                                // Rule at .\isle\mba.isle line 584.
+                                                                                                // Rule at .\isle\mba.isle line 591.
                                                                                                 return Some(v811.clone());
                                                                                             }
                                                                                             let v830 = C::is_constant_modulo(ctx, v828, 0x2, v737);
@@ -3157,7 +3159,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                 let v767 = &C::any(ctx, v733);
                                                                                                 let v768 = C::lookup_id(ctx, v767);
                                                                                                 let v811 = &C::mul(ctx, v810, v768);
-                                                                                                // Rule at .\isle\mba.isle line 576.
+                                                                                                // Rule at .\isle\mba.isle line 583.
                                                                                                 return Some(v811.clone());
                                                                                             }
                                                                                         }
@@ -3218,7 +3220,7 @@ pub fn constructor_lower<C: Context>(
                                                                         let v767 = &C::any(ctx, v733);
                                                                         let v768 = C::lookup_id(ctx, v767);
                                                                         let v769 = &C::mul(ctx, v766, v768);
-                                                                        // Rule at .\isle\mba.isle line 544.
+                                                                        // Rule at .\isle\mba.isle line 551.
                                                                         return Some(v769.clone());
                                                                     }
                                                                 }
@@ -3277,7 +3279,7 @@ pub fn constructor_lower<C: Context>(
                                                                                     let v767 = &C::any(ctx, v733);
                                                                                     let v768 = C::lookup_id(ctx, v767);
                                                                                     let v811 = &C::mul(ctx, v810, v768);
-                                                                                    // Rule at .\isle\mba.isle line 568.
+                                                                                    // Rule at .\isle\mba.isle line 575.
                                                                                     return Some(v811.clone());
                                                                                 }
                                                                                 let v807 = C::is_constant_modulo(ctx, v803, 0x2, v737);
@@ -3287,7 +3289,7 @@ pub fn constructor_lower<C: Context>(
                                                                                     let v767 = &C::any(ctx, v733);
                                                                                     let v768 = C::lookup_id(ctx, v767);
                                                                                     let v811 = &C::mul(ctx, v810, v768);
-                                                                                    // Rule at .\isle\mba.isle line 560.
+                                                                                    // Rule at .\isle\mba.isle line 567.
                                                                                     return Some(v811.clone());
                                                                                 }
                                                                             }
@@ -3309,7 +3311,7 @@ pub fn constructor_lower<C: Context>(
                                     if v97 == v604 {
                                         let v386 = C::get_width(ctx, v97);
                                         let v387 = &C::constant(ctx, 0x0, v386);
-                                        // Rule at .\isle\mba.isle line 490.
+                                        // Rule at .\isle\mba.isle line 497.
                                         return Some(v387.clone());
                                     }
                                 }
@@ -3347,7 +3349,7 @@ pub fn constructor_lower<C: Context>(
                                                                                 let v750 = C::is_constant_modulo(ctx, v746, 0xFFFFFFFFFFFFFFFF, v737);
                                                                                 if let Some(v751) = v750 {
                                                                                     let v752 = &C::constant(ctx, 0x0, v737);
-                                                                                    // Rule at .\isle\mba.isle line 536.
+                                                                                    // Rule at .\isle\mba.isle line 543.
                                                                                     return Some(v752.clone());
                                                                                 }
                                                                             }
@@ -3402,7 +3404,7 @@ pub fn constructor_lower<C: Context>(
                                                     let v120 = &C::any(ctx, v98);
                                                     let v121 = C::lookup_id(ctx, v120);
                                                     let v443 = &C::and(ctx, v442, v121);
-                                                    // Rule at .\isle\mba.isle line 393.
+                                                    // Rule at .\isle\mba.isle line 400.
                                                     return Some(v443.clone());
                                                 }
                                             }
@@ -3421,14 +3423,14 @@ pub fn constructor_lower<C: Context>(
                     if v97 == v385 {
                         let v386 = C::get_width(ctx, v97);
                         let v387 = &C::constant(ctx, 0x0, v386);
-                        // Rule at .\isle\mba.isle line 326.
+                        // Rule at .\isle\mba.isle line 333.
                         return Some(v387.clone());
                     }
                 }
             }
             if v97 == v98 {
                 let v384 = &C::any(ctx, v97);
-                // Rule at .\isle\mba.isle line 320.
+                // Rule at .\isle\mba.isle line 327.
                 return Some(v384.clone());
             }
             if let Some(v109) = v108 {
@@ -3452,7 +3454,7 @@ pub fn constructor_lower<C: Context>(
                                 let v122 = &C::and(ctx, v119, v121);
                                 let v123 = C::lookup_id(ctx, v122);
                                 let v124 = &C::and(ctx, v117, v123);
-                                // Rule at .\isle\mba.isle line 134.
+                                // Rule at .\isle\mba.isle line 141.
                                 return Some(v124.clone());
                             }
                         }
@@ -3464,13 +3466,13 @@ pub fn constructor_lower<C: Context>(
                         let v381 = C::is_constant_modulo(ctx, v125, 0xFFFFFFFFFFFFFFFF, v126);
                         if let Some(v382) = v381 {
                             let v383 = &C::any(ctx, v98);
-                            // Rule at .\isle\mba.isle line 313.
+                            // Rule at .\isle\mba.isle line 320.
                             return Some(v383.clone());
                         }
                         let v378 = C::is_constant_modulo(ctx, v125, 0x0, v126);
                         if let Some(v379) = v378 {
                             let v380 = &C::constant(ctx, 0x0, v126);
-                            // Rule at .\isle\mba.isle line 306.
+                            // Rule at .\isle\mba.isle line 313.
                             return Some(v380.clone());
                         }
                         if let Some(v100) = v99 {
@@ -3494,7 +3496,7 @@ pub fn constructor_lower<C: Context>(
                                             let v139 = &C::any(ctx, v128);
                                             let v140 = C::lookup_id(ctx, v139);
                                             let v141 = &C::and(ctx, v138, v140);
-                                            // Rule at .\isle\mba.isle line 140.
+                                            // Rule at .\isle\mba.isle line 147.
                                             return Some(v141.clone());
                                         }
                                     }
@@ -3508,7 +3510,7 @@ pub fn constructor_lower<C: Context>(
                                     let v142 = &C::constant(ctx, v101, v126);
                                     let v143 = C::lookup_id(ctx, v142);
                                     let v144 = &C::and(ctx, v134, v143);
-                                    // Rule at .\isle\mba.isle line 146.
+                                    // Rule at .\isle\mba.isle line 153.
                                     return Some(v144.clone());
                                 }
                                 _ => {}
@@ -3528,7 +3530,7 @@ pub fn constructor_lower<C: Context>(
                     let v105 = &C::any(ctx, v97);
                     let v106 = C::lookup_id(ctx, v105);
                     let v107 = &C::and(ctx, v104, v106);
-                    // Rule at .\isle\mba.isle line 128.
+                    // Rule at .\isle\mba.isle line 135.
                     return Some(v107.clone());
                 }
             }
@@ -3593,7 +3595,7 @@ pub fn constructor_lower<C: Context>(
                                                                                             if v368 == v1054 {
                                                                                                 if v369 == v1055 {
                                                                                                     let v1056 = &C::any(ctx, v1043);
-                                                                                                    // Rule at .\isle\mba.isle line 725.
+                                                                                                    // Rule at .\isle\mba.isle line 732.
                                                                                                     return Some(v1056.clone());
                                                                                                 }
                                                                                             }
@@ -3621,7 +3623,7 @@ pub fn constructor_lower<C: Context>(
                     } => {
                         if v146 == v363 {
                             let v1068 = &C::any(ctx, v363);
-                            // Rule at .\isle\mba.isle line 958.
+                            // Rule at .\isle\mba.isle line 965.
                             return Some(v1068.clone());
                         }
                         let v147 = &C::lookup_value(ctx, v146);
@@ -3655,7 +3657,7 @@ pub fn constructor_lower<C: Context>(
                                                 let v1095 = &C::xor(ctx, v1092, v1094);
                                                 let v1096 = C::lookup_id(ctx, v1095);
                                                 let v1097 = &C::add(ctx, v1090, v1096);
-                                                // Rule at .\isle\mba.isle line 746.
+                                                // Rule at .\isle\mba.isle line 753.
                                                 return Some(v1097.clone());
                                             }
                                         }
@@ -3674,7 +3676,7 @@ pub fn constructor_lower<C: Context>(
                                         let v1076 = &C::xor(ctx, v1073, v1075);
                                         let v1077 = C::lookup_id(ctx, v1076);
                                         let v1078 = &C::add(ctx, v1071, v1077);
-                                        // Rule at .\isle\mba.isle line 740.
+                                        // Rule at .\isle\mba.isle line 747.
                                         return Some(v1078.clone());
                                     }
                                 }
@@ -3691,7 +3693,7 @@ pub fn constructor_lower<C: Context>(
                             let v1148 = &C::any(ctx, v1145);
                             let v1149 = C::lookup_id(ctx, v1148);
                             let v1150 = &C::or(ctx, v1147, v1149);
-                            // Rule at .\isle\mba.isle line 789.
+                            // Rule at .\isle\mba.isle line 796.
                             return Some(v1150.clone());
                         }
                     }
@@ -3719,7 +3721,7 @@ pub fn constructor_lower<C: Context>(
                                                 let v1528 = &C::xor(ctx, v1525, v1527);
                                                 let v1529 = C::lookup_id(ctx, v1528);
                                                 let v1530 = &C::neg(ctx, v1529);
-                                                // Rule at .\isle\mba.isle line 1027.
+                                                // Rule at .\isle\mba.isle line 1034.
                                                 return Some(v1530.clone());
                                             }
                                         }
@@ -3761,7 +3763,7 @@ pub fn constructor_lower<C: Context>(
                                                     } = v1004 {
                                                         if v145 == v1005 {
                                                             let v350 = &C::any(ctx, v145);
-                                                            // Rule at .\isle\mba.isle line 698.
+                                                            // Rule at .\isle\mba.isle line 705.
                                                             return Some(v350.clone());
                                                         }
                                                     }
@@ -3776,7 +3778,7 @@ pub fn constructor_lower<C: Context>(
                                                     if v145 == v991 {
                                                         if v992 == v996 {
                                                             let v350 = &C::any(ctx, v145);
-                                                            // Rule at .\isle\mba.isle line 691.
+                                                            // Rule at .\isle\mba.isle line 698.
                                                             return Some(v350.clone());
                                                         }
                                                     }
@@ -3843,7 +3845,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                     } = v984 {
                                                                                                         if v774 == v985 {
                                                                                                             let v350 = &C::any(ctx, v145);
-                                                                                                            // Rule at .\isle\mba.isle line 684.
+                                                                                                            // Rule at .\isle\mba.isle line 691.
                                                                                                             return Some(v350.clone());
                                                                                                         }
                                                                                                     }
@@ -3851,7 +3853,7 @@ pub fn constructor_lower<C: Context>(
                                                                                             }
                                                                                         }
                                                                                         let v350 = &C::any(ctx, v145);
-                                                                                        // Rule at .\isle\mba.isle line 677.
+                                                                                        // Rule at .\isle\mba.isle line 684.
                                                                                         return Some(v350.clone());
                                                                                     }
                                                                                 }
@@ -3868,7 +3870,7 @@ pub fn constructor_lower<C: Context>(
                                                                         } = v841 {
                                                                             if v774 == v842 {
                                                                                 let v350 = &C::any(ctx, v145);
-                                                                                // Rule at .\isle\mba.isle line 592.
+                                                                                // Rule at .\isle\mba.isle line 599.
                                                                                 return Some(v350.clone());
                                                                             }
                                                                         }
@@ -3903,7 +3905,7 @@ pub fn constructor_lower<C: Context>(
                                                                                         let v1019 = &C::any(ctx, v976);
                                                                                         let v1020 = C::lookup_id(ctx, v1019);
                                                                                         let v1021 = &C::or(ctx, v1018, v1020);
-                                                                                        // Rule at .\isle\mba.isle line 711.
+                                                                                        // Rule at .\isle\mba.isle line 718.
                                                                                         return Some(v1021.clone());
                                                                                     }
                                                                                 }
@@ -3957,7 +3959,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                 let v792 = &C::any(ctx, v702);
                                                                                                 let v793 = C::lookup_id(ctx, v792);
                                                                                                 let v794 = &C::mul(ctx, v791, v793);
-                                                                                                // Rule at .\isle\mba.isle line 552.
+                                                                                                // Rule at .\isle\mba.isle line 559.
                                                                                                 return Some(v794.clone());
                                                                                             }
                                                                                         }
@@ -4039,7 +4041,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                                 let v918 = C::is_constant_modulo(ctx, v916, 0x2, v897);
                                                                                                                 if let Some(v919) = v918 {
                                                                                                                     let v350 = &C::any(ctx, v145);
-                                                                                                                    // Rule at .\isle\mba.isle line 646.
+                                                                                                                    // Rule at .\isle\mba.isle line 653.
                                                                                                                     return Some(v350.clone());
                                                                                                                 }
                                                                                                             }
@@ -4084,7 +4086,7 @@ pub fn constructor_lower<C: Context>(
                                                                                             let v906 = C::is_constant_modulo(ctx, v865, 0x2, v897);
                                                                                             if let Some(v907) = v906 {
                                                                                                 let v350 = &C::any(ctx, v145);
-                                                                                                // Rule at .\isle\mba.isle line 638.
+                                                                                                // Rule at .\isle\mba.isle line 645.
                                                                                                 return Some(v350.clone());
                                                                                             }
                                                                                         }
@@ -4132,7 +4134,7 @@ pub fn constructor_lower<C: Context>(
                                                                                     let v792 = &C::any(ctx, v702);
                                                                                     let v793 = C::lookup_id(ctx, v792);
                                                                                     let v872 = &C::mul(ctx, v871, v793);
-                                                                                    // Rule at .\isle\mba.isle line 614.
+                                                                                    // Rule at .\isle\mba.isle line 621.
                                                                                     return Some(v872.clone());
                                                                                 }
                                                                                 let v869 = C::is_constant_modulo(ctx, v865, 0x2, v706);
@@ -4142,7 +4144,7 @@ pub fn constructor_lower<C: Context>(
                                                                                     let v792 = &C::any(ctx, v702);
                                                                                     let v793 = C::lookup_id(ctx, v792);
                                                                                     let v872 = &C::mul(ctx, v871, v793);
-                                                                                    // Rule at .\isle\mba.isle line 606.
+                                                                                    // Rule at .\isle\mba.isle line 613.
                                                                                     return Some(v872.clone());
                                                                                 }
                                                                             }
@@ -4214,7 +4216,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                     let v729 = C::is_constant_modulo(ctx, v713, 0xFFFFFFFFFFFFFFFF, v706);
                                                                                                     if let Some(v730) = v729 {
                                                                                                         let v731 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v706);
-                                                                                                        // Rule at .\isle\mba.isle line 528.
+                                                                                                        // Rule at .\isle\mba.isle line 535.
                                                                                                         return Some(v731.clone());
                                                                                                     }
                                                                                                 }
@@ -4262,7 +4264,7 @@ pub fn constructor_lower<C: Context>(
                                                                                             let v792 = &C::any(ctx, v702);
                                                                                             let v793 = C::lookup_id(ctx, v792);
                                                                                             let v872 = &C::mul(ctx, v871, v793);
-                                                                                            // Rule at .\isle\mba.isle line 630.
+                                                                                            // Rule at .\isle\mba.isle line 637.
                                                                                             return Some(v872.clone());
                                                                                         }
                                                                                         let v888 = C::is_constant_modulo(ctx, v886, 0x2, v706);
@@ -4272,7 +4274,7 @@ pub fn constructor_lower<C: Context>(
                                                                                             let v792 = &C::any(ctx, v702);
                                                                                             let v793 = C::lookup_id(ctx, v792);
                                                                                             let v872 = &C::mul(ctx, v871, v793);
-                                                                                            // Rule at .\isle\mba.isle line 622.
+                                                                                            // Rule at .\isle\mba.isle line 629.
                                                                                             return Some(v872.clone());
                                                                                         }
                                                                                     }
@@ -4330,7 +4332,7 @@ pub fn constructor_lower<C: Context>(
                                                         let v168 = &C::any(ctx, v146);
                                                         let v169 = C::lookup_id(ctx, v168);
                                                         let v464 = &C::or(ctx, v463, v169);
-                                                        // Rule at .\isle\mba.isle line 400.
+                                                        // Rule at .\isle\mba.isle line 407.
                                                         return Some(v464.clone());
                                                     }
                                                 }
@@ -4367,7 +4369,7 @@ pub fn constructor_lower<C: Context>(
                                                         let v375 = &C::any(ctx, v364);
                                                         let v376 = C::lookup_id(ctx, v375);
                                                         let v377 = &C::xor(ctx, v374, v376);
-                                                        // Rule at .\isle\mba.isle line 300.
+                                                        // Rule at .\isle\mba.isle line 307.
                                                         return Some(v377.clone());
                                                     }
                                                 }
@@ -4388,14 +4390,14 @@ pub fn constructor_lower<C: Context>(
                     if v145 == v351 {
                         let v352 = C::get_width(ctx, v145);
                         let v353 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v352);
-                        // Rule at .\isle\mba.isle line 274.
+                        // Rule at .\isle\mba.isle line 281.
                         return Some(v353.clone());
                     }
                 }
             }
             if v145 == v146 {
                 let v350 = &C::any(ctx, v145);
-                // Rule at .\isle\mba.isle line 268.
+                // Rule at .\isle\mba.isle line 275.
                 return Some(v350.clone());
             }
             if let Some(v157) = v156 {
@@ -4419,7 +4421,7 @@ pub fn constructor_lower<C: Context>(
                                 let v170 = &C::or(ctx, v167, v169);
                                 let v171 = C::lookup_id(ctx, v170);
                                 let v172 = &C::or(ctx, v165, v171);
-                                // Rule at .\isle\mba.isle line 158.
+                                // Rule at .\isle\mba.isle line 165.
                                 return Some(v172.clone());
                             }
                         }
@@ -4431,13 +4433,13 @@ pub fn constructor_lower<C: Context>(
                         let v347 = C::is_constant_modulo(ctx, v173, 0xFFFFFFFFFFFFFFFF, v174);
                         if let Some(v348) = v347 {
                             let v349 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v174);
-                            // Rule at .\isle\mba.isle line 261.
+                            // Rule at .\isle\mba.isle line 268.
                             return Some(v349.clone());
                         }
                         let v344 = C::is_constant_modulo(ctx, v173, 0x0, v174);
                         if let Some(v345) = v344 {
                             let v346 = &C::any(ctx, v146);
-                            // Rule at .\isle\mba.isle line 254.
+                            // Rule at .\isle\mba.isle line 261.
                             return Some(v346.clone());
                         }
                         if let Some(v148) = v147 {
@@ -4461,7 +4463,7 @@ pub fn constructor_lower<C: Context>(
                                             let v187 = &C::any(ctx, v176);
                                             let v188 = C::lookup_id(ctx, v187);
                                             let v189 = &C::or(ctx, v186, v188);
-                                            // Rule at .\isle\mba.isle line 164.
+                                            // Rule at .\isle\mba.isle line 171.
                                             return Some(v189.clone());
                                         }
                                     }
@@ -4475,7 +4477,7 @@ pub fn constructor_lower<C: Context>(
                                     let v190 = &C::constant(ctx, v149, v174);
                                     let v191 = C::lookup_id(ctx, v190);
                                     let v192 = &C::or(ctx, v182, v191);
-                                    // Rule at .\isle\mba.isle line 170.
+                                    // Rule at .\isle\mba.isle line 177.
                                     return Some(v192.clone());
                                 }
                                 _ => {}
@@ -4495,7 +4497,7 @@ pub fn constructor_lower<C: Context>(
                     let v153 = &C::any(ctx, v145);
                     let v154 = C::lookup_id(ctx, v153);
                     let v155 = &C::or(ctx, v152, v154);
-                    // Rule at .\isle\mba.isle line 152.
+                    // Rule at .\isle\mba.isle line 159.
                     return Some(v155.clone());
                 }
             }
@@ -4535,7 +4537,7 @@ pub fn constructor_lower<C: Context>(
                                         let v1546 = &C::and(ctx, v1101, v1545);
                                         let v1547 = C::lookup_id(ctx, v1546);
                                         let v1548 = &C::neg(ctx, v1547);
-                                        // Rule at .\isle\mba.isle line 1033.
+                                        // Rule at .\isle\mba.isle line 1040.
                                         return Some(v1548.clone());
                                     }
                                 }
@@ -4576,7 +4578,7 @@ pub fn constructor_lower<C: Context>(
                                             let v1388 = &C::xor(ctx, v1381, v1387);
                                             let v1389 = C::lookup_id(ctx, v1388);
                                             let v1390 = &C::and(ctx, v1379, v1389);
-                                            // Rule at .\isle\mba.isle line 976.
+                                            // Rule at .\isle\mba.isle line 983.
                                             return Some(v1390.clone());
                                         }
                                     }
@@ -4626,7 +4628,7 @@ pub fn constructor_lower<C: Context>(
                                                                                                 let v1354 = C::is_constant_modulo(ctx, v1348, 0x2, v1327);
                                                                                                 if let Some(v1355) = v1354 {
                                                                                                     let v1356 = &C::constant(ctx, 0x0, v1327);
-                                                                                                    // Rule at .\isle\mba.isle line 949.
+                                                                                                    // Rule at .\isle\mba.isle line 956.
                                                                                                     return Some(v1356.clone());
                                                                                                 }
                                                                                             }
@@ -4677,7 +4679,7 @@ pub fn constructor_lower<C: Context>(
                                                 let v1409 = &C::neg(ctx, v1408);
                                                 let v1410 = C::lookup_id(ctx, v1409);
                                                 let v1411 = &C::and(ctx, v1402, v1410);
-                                                // Rule at .\isle\mba.isle line 982.
+                                                // Rule at .\isle\mba.isle line 989.
                                                 return Some(v1411.clone());
                                             }
                                         }
@@ -4702,7 +4704,7 @@ pub fn constructor_lower<C: Context>(
                         let v1104 = &C::any(ctx, v1099);
                         let v1105 = C::lookup_id(ctx, v1104);
                         let v1106 = &C::and(ctx, v1103, v1105);
-                        // Rule at .\isle\mba.isle line 752.
+                        // Rule at .\isle\mba.isle line 759.
                         return Some(v1106.clone());
                     }
                 }
@@ -4740,7 +4742,7 @@ pub fn constructor_lower<C: Context>(
                                                     let v216 = &C::any(ctx, v194);
                                                     let v217 = C::lookup_id(ctx, v216);
                                                     let v485 = &C::xor(ctx, v484, v217);
-                                                    // Rule at .\isle\mba.isle line 407.
+                                                    // Rule at .\isle\mba.isle line 414.
                                                     return Some(v485.clone());
                                                 }
                                             }
@@ -4755,7 +4757,7 @@ pub fn constructor_lower<C: Context>(
             if v193 == v194 {
                 let v361 = C::get_width(ctx, v193);
                 let v362 = &C::constant(ctx, 0x0, v361);
-                // Rule at .\isle\mba.isle line 294.
+                // Rule at .\isle\mba.isle line 301.
                 return Some(v362.clone());
             }
             if let Some(v205) = v204 {
@@ -4779,7 +4781,7 @@ pub fn constructor_lower<C: Context>(
                                 let v218 = &C::xor(ctx, v215, v217);
                                 let v219 = C::lookup_id(ctx, v218);
                                 let v220 = &C::xor(ctx, v213, v219);
-                                // Rule at .\isle\mba.isle line 182.
+                                // Rule at .\isle\mba.isle line 189.
                                 return Some(v220.clone());
                             }
                         }
@@ -4793,13 +4795,13 @@ pub fn constructor_lower<C: Context>(
                             let v356 = &C::any(ctx, v194);
                             let v359 = C::lookup_id(ctx, v356);
                             let v360 = &C::neg(ctx, v359);
-                            // Rule at .\isle\mba.isle line 287.
+                            // Rule at .\isle\mba.isle line 294.
                             return Some(v360.clone());
                         }
                         let v354 = C::is_constant_modulo(ctx, v221, 0x0, v222);
                         if let Some(v355) = v354 {
                             let v356 = &C::any(ctx, v194);
-                            // Rule at .\isle\mba.isle line 280.
+                            // Rule at .\isle\mba.isle line 287.
                             return Some(v356.clone());
                         }
                         if let Some(v196) = v195 {
@@ -4823,7 +4825,7 @@ pub fn constructor_lower<C: Context>(
                                             let v235 = &C::any(ctx, v224);
                                             let v236 = C::lookup_id(ctx, v235);
                                             let v237 = &C::xor(ctx, v234, v236);
-                                            // Rule at .\isle\mba.isle line 188.
+                                            // Rule at .\isle\mba.isle line 195.
                                             return Some(v237.clone());
                                         }
                                     }
@@ -4837,7 +4839,7 @@ pub fn constructor_lower<C: Context>(
                                     let v238 = &C::constant(ctx, v197, v222);
                                     let v239 = C::lookup_id(ctx, v238);
                                     let v240 = &C::xor(ctx, v230, v239);
-                                    // Rule at .\isle\mba.isle line 194.
+                                    // Rule at .\isle\mba.isle line 201.
                                     return Some(v240.clone());
                                 }
                                 _ => {}
@@ -4857,7 +4859,7 @@ pub fn constructor_lower<C: Context>(
                     let v201 = &C::any(ctx, v193);
                     let v202 = C::lookup_id(ctx, v201);
                     let v203 = &C::xor(ctx, v200, v202);
-                    // Rule at .\isle\mba.isle line 176.
+                    // Rule at .\isle\mba.isle line 183.
                     return Some(v203.clone());
                 }
             }
@@ -4887,7 +4889,7 @@ pub fn constructor_lower<C: Context>(
                                         let v1133 = &C::any(ctx, v551);
                                         let v1134 = C::lookup_id(ctx, v1133);
                                         let v1135 = &C::or(ctx, v1132, v1134);
-                                        // Rule at .\isle\mba.isle line 777.
+                                        // Rule at .\isle\mba.isle line 784.
                                         return Some(v1135.clone());
                                     }
                                 }
@@ -4898,7 +4900,7 @@ pub fn constructor_lower<C: Context>(
                                 let v556 = &C::neg(ctx, v555);
                                 let v557 = C::lookup_id(ctx, v556);
                                 let v558 = &C::or(ctx, v553, v557);
-                                // Rule at .\isle\mba.isle line 454.
+                                // Rule at .\isle\mba.isle line 461.
                                 return Some(v558.clone());
                             }
                         }
@@ -4919,7 +4921,7 @@ pub fn constructor_lower<C: Context>(
                                 let v568 = &C::neg(ctx, v567);
                                 let v569 = C::lookup_id(ctx, v568);
                                 let v570 = &C::and(ctx, v565, v569);
-                                // Rule at .\isle\mba.isle line 460.
+                                // Rule at .\isle\mba.isle line 467.
                                 return Some(v570.clone());
                             }
                         }
@@ -4938,7 +4940,7 @@ pub fn constructor_lower<C: Context>(
                                 let v578 = &C::any(ctx, v572);
                                 let v579 = C::lookup_id(ctx, v578);
                                 let v580 = &C::xor(ctx, v577, v579);
-                                // Rule at .\isle\mba.isle line 466.
+                                // Rule at .\isle\mba.isle line 473.
                                 return Some(v580.clone());
                             }
                         }
@@ -4947,7 +4949,7 @@ pub fn constructor_lower<C: Context>(
                         a: v421,
                     } => {
                         let v422 = &C::any(ctx, v421);
-                        // Rule at .\isle\mba.isle line 387.
+                        // Rule at .\isle\mba.isle line 394.
                         return Some(v422.clone());
                     }
                     &SimpleAst::Constant {
@@ -4957,7 +4959,7 @@ pub fn constructor_lower<C: Context>(
                         let v246 = &C::constant(ctx, v244, v245);
                         let v247 = C::lookup_id(ctx, v246);
                         let v248 = &C::neg(ctx, v247);
-                        // Rule at .\isle\mba.isle line 200.
+                        // Rule at .\isle\mba.isle line 207.
                         return Some(v248.clone());
                     }
                     _ => {}

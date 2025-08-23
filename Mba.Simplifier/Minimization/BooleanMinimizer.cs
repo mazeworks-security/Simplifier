@@ -17,6 +17,8 @@ namespace Mba.Simplifier.Minimization
     {
         private const bool useLegacyMinimizer = false;
 
+        private static int substCount = 0;
+
         public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable, bool negate = false)
         {
             // If requested, negate the result vector to find a negated expression.
@@ -56,8 +58,7 @@ namespace Mba.Simplifier.Minimization
                 return dnf;
             }
 
-            // Though now we prefer to use the new minimizer implemented purely in rust. It's faster and generally yields better results.
-            return ctx.MinimizeAnf(TableDatabase.Instance.db, truthTable, (List<AstIdx>)variables, MultibitSiMBA.JitPage.Value);
+            return MinimizeAnf(ctx, variables, truthTable);
         }
 
         private static AstIdx? AsConstant(AstCtx ctx, TruthTable table, uint width)
@@ -79,23 +80,36 @@ namespace Mba.Simplifier.Minimization
             var ast = TableDatabase.Instance.GetTableEntry(ctx, (List<AstIdx>)variables, (int)(uint)truthTable.arr[0]);
             return ast;
         }
-
-        public static AstNode RewriteUsingNewVariables(AstNode ast, Func<VarNode, VarNode> getVar)
+        
+        private static AstIdx MinimizeAnf(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
         {
-            var op1 = () => RewriteUsingNewVariables(ast.Children[0], getVar);
-            var op2 = () => RewriteUsingNewVariables(ast.Children[1], getVar);
-            return ast switch
+            // Minimize normally if zext/trunc nodes aren't present
+            bool containsExt = variables.Any(x => ctx.GetOpcode(x) == AstOp.Zext || ctx.GetOpcode(x) == AstOp.Trunc);
+            if (!containsExt)
+                return ctx.MinimizeAnf(TableDatabase.Instance.db, truthTable, (List<AstIdx>)variables, MultibitSiMBA.JitPage.Value);
+
+            // Otherwise we need to apply substitution.
+            var invSubstMapping = new Dictionary<AstIdx, AstIdx>();
+            var tempVars = new List<AstIdx>();
+            foreach (var v in variables)
             {
-                ConstNode constNode => new ConstNode(constNode.Value, ast.BitSize),
-                VarNode varNode => getVar(varNode),
-                PowerNode powerNode => new PowerNode(op1(), op2()),
-                AddNode => new AddNode(op1(), op2()),
-                MulNode mulNode => new MulNode(op1(), op2()),
-                AndNode andNode => new AndNode(op1(), op2()),
-                OrNode orNode => new OrNode(op1(), op2()),
-                XorNode => new XorNode(op1(), op2()),
-                NegNode => new NegNode(op1()),
-            };
+                bool isExt = ctx.GetOpcode(v) == AstOp.Zext || ctx.GetOpcode(v) == AstOp.Trunc;
+                if (!isExt)
+                {
+                    tempVars.Add(v);
+                    continue;
+                }
+
+                var toSubst = v;
+                var subst = ctx.Symbol($"extSubstVar{substCount}", ctx.GetWidth(toSubst));
+                substCount++;
+                invSubstMapping.Add(subst, toSubst);
+                tempVars.Add(subst);
+            }
+
+            var r = ctx.MinimizeAnf(TableDatabase.Instance.db, truthTable, tempVars, MultibitSiMBA.JitPage.Value);
+            var backSubst = GeneralSimplifier.ApplyBackSubstitution(ctx, r, invSubstMapping);
+            return backSubst;
         }
     }
 }

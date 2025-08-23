@@ -48,6 +48,7 @@ namespace Mba.Simplifier.Utility
                 AstOp.Constant => z3Ctx.MkBV(ctx.GetConstantValue(idx), ctx.GetWidth(idx)),
                 AstOp.Symbol => z3Ctx.MkBVConst(ctx.GetSymbolName(idx), ctx.GetWidth(idx)),
                 AstOp.Zext => z3Ctx.MkZeroExt((uint)ctx.GetWidth(idx) - ctx.GetWidth(ctx.GetOp0(idx)), op0()),
+                AstOp.Trunc => z3Ctx.MkExtract((uint)ctx.GetWidth(idx) - 1, 0, op0()),
                 _ => throw new InvalidOperationException($"Cannot translate opcode {opcode} to z3!")
             };
 

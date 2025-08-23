@@ -24,9 +24,11 @@ namespace Mba.Simplifier.Bindings
         Or = 5,
         Xor = 6,
         Neg = 7,
-        Constant = 8,
-        Symbol = 9,
-        Zext = 10,
+        Lshr = 8,
+        Constant = 9,
+        Symbol = 10,
+        Zext = 11,
+        Trunc = 12,
     }
 
     public class AstCtx
@@ -53,7 +55,9 @@ namespace Mba.Simplifier.Bindings
         public unsafe AstIdx Or(AstIdx a, AstIdx b) => Api.ContextOr(this, a, b);
         public unsafe AstIdx Xor(AstIdx a, AstIdx b) => Api.ContextXor(this, a, b);
         public unsafe AstIdx Neg(AstIdx a) => Api.ContextNeg(this, a);
+        public unsafe AstIdx Lshr(AstIdx a, AstIdx b) => Api.ContextLshr(this, a, b);
         public unsafe AstIdx Zext(AstIdx a, byte width) => Api.ContextZext(this, a, width);
+        public unsafe AstIdx Trunc(AstIdx a, byte width) => Api.ContextTrunc(this, a, width);
         public unsafe AstIdx Constant(ulong c, byte width) => Api.ContextConstant(this, c, width);
         public unsafe AstIdx Constant(ulong c, uint width) => Api.ContextConstant(this, c, (byte)width);
         public unsafe AstIdx Symbol(string s, byte width) => Api.ContextSymbol(this, new MarshaledString(s), width);
@@ -68,6 +72,7 @@ namespace Mba.Simplifier.Bindings
                 AstOp.And => And(a, b),
                 AstOp.Or => Or(a, b),
                 AstOp.Xor => Xor(a, b),
+                AstOp.Lshr => Lshr(a, b),
                 _ => throw new NotImplementedException(),
             };
         }
@@ -222,7 +227,6 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
-        // public unsafe static extern AstIdx ContextMinimizeAnf(OpaqueAstCtx* ctx, OpaqueTruthTableDb* db, ulong* truthTable, AstIdx* variableArray, uint numVars, ulong* rwxJitPage);
         public unsafe AstIdx MinimizeAnf(TruthTableDb db, TruthTable table, List<AstIdx> variables, nint rwxPagePtr)
         {
             var span = CollectionsMarshal.AsSpan(variables);
@@ -265,6 +269,19 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
+        public unsafe nint Compile(AstIdx id, ulong mask, AstIdx[] variables, nint rwxPagePtr)
+        {
+            fixed (AstIdx* arrPtr = &variables[0])
+            {
+                return (nint)Api.ContextCompile(this, id, mask, arrPtr, (ulong)variables.Length, (ulong*)rwxPagePtr);
+            }
+        }
+
+        public unsafe void Execute(bool isMultibit, uint bitWidth, AstIdx[] variables, ulong numCombinations, nint rwxPagePtr, nint outputArrayPtr, bool isOneBitVars)
+        {
+            Api.ContextExecute(isMultibit ? 1u : 0, bitWidth, (ulong)variables.Length, numCombinations, (ulong*)rwxPagePtr, (ulong*)outputArrayPtr, isOneBitVars ? 1u : 0);
+        }
+
         // Apply term rewriting, but not recursively.
         public unsafe AstIdx SingleSimplify(AstIdx id) => Api.ContextSingleSimplify(this, id);
         // Apply recursive term rewriting via ISLE.
@@ -304,7 +321,13 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern AstIdx ContextNeg(OpaqueAstCtx* ctx, AstIdx a);
 
             [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextLshr(OpaqueAstCtx* ctx, AstIdx a, AstIdx b);
+
+            [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextZext(OpaqueAstCtx* ctx, AstIdx a, byte width);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextTrunc(OpaqueAstCtx* ctx, AstIdx a, byte width);
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextConstant(OpaqueAstCtx* ctx, ulong c, byte width);
@@ -373,10 +396,19 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern ulong* ContextJit(OpaqueAstCtx* ctx, AstIdx id, ulong mask, uint isMultiBit, uint bitWidth, AstIdx* variableArray, ulong varCount, ulong numCombinations, ulong* rwxJitPage, ulong* outputArray);
 
             [DllImport("eq_sat")]
+            public unsafe static extern ulong* ContextCompile(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern ulong* ContextExecute(uint isMultiBit, uint bitWidth, ulong varCount, ulong numCombinations, ulong* rwxJitPage, ulong* outputArray, uint isOneBitVars);
+
+            [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextSingleSimplify(OpaqueAstCtx* ctx, AstIdx id);
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextRecursiveSimplify(OpaqueAstCtx* ctx, AstIdx id);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern nint GetPowPtr();
         }
     }
 }

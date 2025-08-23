@@ -40,8 +40,8 @@ namespace Mba.Simplifier.Utility
 
             return node.Kind switch
             {
-                AstKind.Const => ctx.Constant((ulong)(node as ConstNode).Value, bitWidth),
-                AstKind.Var => ctx.Symbol((node as VarNode).Name, bitWidth),
+                AstKind.Const => ctx.Constant((ulong)(node as ConstNode).Value, node.BitSize),
+                AstKind.Var => ctx.Symbol((node as VarNode).Name, (byte)node.BitSize),
                 AstKind.Add => binop(AstOp.Add),
                 AstKind.Power => binop(AstOp.Pow),
                 AstKind.Mul => binop(AstOp.Mul),
@@ -49,6 +49,9 @@ namespace Mba.Simplifier.Utility
                 AstKind.Or => binop(AstOp.Or),
                 AstKind.Xor => binop(AstOp.Xor),
                 AstKind.Neg => ctx.Neg(Convert(node.Children[0])),
+                AstKind.Lshr => binop(AstOp.Lshr),
+                AstKind.Zext => ctx.Zext(Convert(node.Children[0]), (byte)node.BitSize),
+                AstKind.Trunc => ctx.Trunc(Convert(node.Children[0]), (byte)node.BitSize),
                 _ => throw new InvalidOperationException($"Ast kind {node.Kind} is not supported!")
             };
         }

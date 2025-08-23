@@ -4,7 +4,7 @@ use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     f32::consts::PI,
     ffi::{CStr, CString},
-    u64,
+    u64, vec,
 };
 
 use ahash::AHashMap;
@@ -128,6 +128,14 @@ impl Arena {
     }
 
     pub fn pow(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let op1 = self.get_node(a);
+        let op2 = self.get_node(b);
+        if let SimpleAst::Constant { c: c1, width } = op1 {
+            if let SimpleAst::Constant { c: c2, width } = op2 {
+                let result = self.constant(Pow(*c1, *c2), self.get_width(a));
+                return result;
+            }
+        }
         let width = self.get_bin_width(a, b);
         let cost = self.get_bin_cost(a, b);
         let data = AstData {
@@ -182,6 +190,21 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Neg { a }, data);
     }
 
+    pub fn lshr(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let width = self.get_width(a);
+        let cost = (1 as u32).saturating_add(self.get_data(a).cost);
+        let has_poly = self.get_data(a).has_poly;
+        let class = AstClass::Nonlinear;
+
+        let data = AstData {
+            width: width,
+            cost: cost,
+            has_poly: has_poly,
+            class: class,
+        };
+        return self.insert_ast_node(SimpleAst::Lshr { a, b }, data);
+    }
+
     pub fn zext(&mut self, a: AstIdx, width: u8) -> AstIdx {
         let cost = (1 as u32).saturating_add(self.get_data(a).cost);
         let has_poly = self.get_has_poly(a);
@@ -197,6 +220,23 @@ impl Arena {
         };
 
         return self.insert_ast_node(SimpleAst::Zext { a, to: width }, data);
+    }
+
+    pub fn trunc(&mut self, a: AstIdx, width: u8) -> AstIdx {
+        let cost = (1 as u32).saturating_add(self.get_data(a).cost);
+        let has_poly = self.get_has_poly(a);
+
+        let mask = get_modulo_mask(width);
+        let mask_node = self.constant(mask, width);
+        let class = self.compute_bitwise_class(a, mask_node);
+        let data = AstData {
+            width: width,
+            cost: cost,
+            has_poly: has_poly,
+            class: class,
+        };
+
+        return self.insert_ast_node(SimpleAst::Trunc { a, to: width }, data);
     }
 
     pub fn constant(&mut self, c: u64, width: u8) -> AstIdx {
@@ -423,11 +463,14 @@ pub enum SimpleAst {
     Or { a: AstIdx, b: AstIdx },
     Xor { a: AstIdx, b: AstIdx },
     Neg { a: AstIdx },
+    // Shift operators:
+    Lshr { a: AstIdx, b: AstIdx },
     // Literals:
     Constant { c: u64, width: u8 },
     Symbol { id: u32, width: u8 },
     // Special operators
     Zext { a: AstIdx, to: u8 },
+    Trunc { a: AstIdx, to: u8 },
 }
 
 pub struct Context {
@@ -470,6 +513,17 @@ impl mba::Context for Context {
     }
 
     fn pow(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst {
+        let op1 = self.arena.get_node(arg0);
+        let op2 = self.arena.get_node(arg1);
+        if let SimpleAst::Constant { c: c1, width } = op1 {
+            if let SimpleAst::Constant { c: c2, width } = op2 {
+                let result = self
+                    .arena
+                    .constant(Pow(*c1, *c2), self.arena.get_width(arg0));
+
+                return self.arena.get_node(result).clone();
+            }
+        }
         let pow = self.arena.pow(arg0, arg1);
         return self.arena.get_node(pow).clone();
     }
@@ -529,10 +583,32 @@ impl mba::Context for Context {
         return self.arena.get_node(neg).clone();
     }
 
+    fn lshr(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst {
+        let op1 = self.arena.get_node(arg0);
+        let op2 = self.arena.get_node(arg1);
+        if let SimpleAst::Constant { c: c1, width } = op1 {
+            if let SimpleAst::Constant { c: c2, width } = op2 {
+                let result = self
+                    .arena
+                    .constant((*c1 >> *c2), self.arena.get_width(arg0));
+
+                return self.arena.get_node(result).clone();
+            }
+        }
+        let xor = self.arena.lshr(arg0, arg1);
+        return self.arena.get_node(xor).clone();
+    }
+
     fn zext(&mut self, arg0: AstIdx, width: u8) -> SimpleAst {
         let zext = self.arena.zext(arg0, width);
 
         self.arena.get_node(zext).clone()
+    }
+
+    fn trunc(&mut self, arg0: AstIdx, width: u8) -> SimpleAst {
+        let trunc = self.arena.trunc(arg0, width);
+
+        self.arena.get_node(trunc).clone()
     }
 
     fn any(&mut self, arg0: AstIdx) -> SimpleAst {
@@ -621,9 +697,11 @@ impl AstPrinter {
             SimpleAst::Or { a, b } => "|",
             SimpleAst::Xor { a, b } => "^",
             SimpleAst::Neg { a } => "~",
+            SimpleAst::Lshr { a, b } => ">>",
             SimpleAst::Constant { c, width } => "",
             SimpleAst::Symbol { id, width } => "",
             SimpleAst::Zext { a, to } => "zx",
+            SimpleAst::Trunc { a, to } => "tr",
         };
 
         // Don't put parens for constants or symbols
@@ -637,24 +715,33 @@ impl AstPrinter {
             | SimpleAst::Pow { a, b }
             | SimpleAst::And { a, b }
             | SimpleAst::Or { a, b }
-            | SimpleAst::Xor { a, b } => {
+            | SimpleAst::Xor { a, b }
+            | SimpleAst::Lshr { a, b } => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
                 self.output.push_str(&format!("{}", operator));
                 self.print_node(ctx, ctx.arena.get_node(*b));
             }
             SimpleAst::Zext { a, to } => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
-                self.output.push_str(&format!(" {} ", operator));
-                self.output.push_str(&(*to).to_string());
+                self.output.push_str(&format!(" {} i{}", operator, to));
+            }
+            SimpleAst::Trunc { a, to } => {
+                self.print_node(ctx, ctx.arena.get_node(*a));
+                self.output.push_str(&format!(" {} i{}", operator, to));
             }
             SimpleAst::Neg { a } => {
                 self.output.push('~');
                 self.print_node(ctx, ctx.arena.get_node(*a));
             }
-            SimpleAst::Constant { c, width } => self.output.push_str(&(*c as i64).to_string()),
-            SimpleAst::Symbol { id, width } => self
-                .output
-                .push_str(&ctx.arena.get_symbol_name(*id).clone()),
+            SimpleAst::Constant { c, width } => {
+                self.output
+                    .push_str(&format!("{}:i{}", (*c as i64).to_string(), width))
+            }
+            SimpleAst::Symbol { id, width } => self.output.push_str(&format!(
+                "{}:i{}",
+                ctx.arena.get_symbol_name(*id).clone(),
+                width
+            )),
         }
 
         if operator != "" {
@@ -677,10 +764,12 @@ pub fn eval_ast(ctx: &Context, idx: AstIdx, value_mapping: &HashMap<AstIdx, u64>
         SimpleAst::And { a, b } => e(a) & e(b),
         SimpleAst::Or { a, b } => e(a) | e(b),
         SimpleAst::Xor { a, b } => e(a) ^ e(b),
+        SimpleAst::Lshr { a, b } => e(a) >> e(b),
         SimpleAst::Neg { a } => !e(a),
         SimpleAst::Constant { c, width } => *c,
         SimpleAst::Symbol { id, width } => *value_mapping.get(&idx).unwrap(),
         SimpleAst::Zext { a, to } => get_modulo_mask(ctx.arena.get_width(*a)) & e(a),
+        SimpleAst::Trunc { a, to } => get_modulo_mask(*to) & e(a),
     }
 }
 
@@ -694,7 +783,8 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
         | SimpleAst::Pow { a, b }
         | SimpleAst::And { a, b }
         | SimpleAst::Or { a, b }
-        | SimpleAst::Xor { a, b } => {
+        | SimpleAst::Xor { a, b }
+        | SimpleAst::Lshr { a, b } => {
             let op1 = recursive_simplify(ctx, a);
             let op2 = recursive_simplify(ctx, b);
             ast = match ast {
@@ -704,6 +794,7 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
                 SimpleAst::And { a, b } => ctx.and(op1, op2),
                 SimpleAst::Or { a, b } => ctx.or(op1, op2),
                 SimpleAst::Xor { a, b } => ctx.xor(op1, op2),
+                SimpleAst::Lshr { a, b } => ctx.lshr(op1, op2),
                 _ => unreachable!(),
             };
         }
@@ -713,7 +804,11 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
         }
         SimpleAst::Zext { a, to } => {
             let op1 = recursive_simplify(ctx, a);
-            ast = SimpleAst::Zext { a: op1, to }
+            ast = ctx.zext(op1, to);
+        }
+        SimpleAst::Trunc { a, to } => {
+            let op1 = recursive_simplify(ctx, a);
+            ast = ctx.trunc(op1, to)
         }
         SimpleAst::Constant { c, width } => return idx,
         SimpleAst::Symbol { id, width } => return idx,
@@ -804,8 +899,9 @@ fn collect_var_indices_internal(
         | SimpleAst::Pow { a, b }
         | SimpleAst::And { a, b }
         | SimpleAst::Or { a, b }
-        | SimpleAst::Xor { a, b } => vbin(*a, *b),
-        SimpleAst::Neg { a } | SimpleAst::Zext { a, .. } => {
+        | SimpleAst::Xor { a, b }
+        | SimpleAst::Lshr { a, b } => vbin(*a, *b),
+        SimpleAst::Neg { a } | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
             collect_var_indices_internal(ctx, *a, visited, out_vars)
         }
         SimpleAst::Constant { c, width } => return,
@@ -955,9 +1051,25 @@ pub extern "C" fn ContextNeg(ctx: *mut Context, a: AstIdx) -> AstIdx {
 }
 
 #[no_mangle]
+pub extern "C" fn ContextLshr(ctx: *mut Context, a: AstIdx, b: AstIdx) -> AstIdx {
+    unsafe {
+        let id = (*ctx).arena.lshr(a, b);
+        return id;
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn ContextZext(ctx: *mut Context, a: AstIdx, width: u8) -> AstIdx {
     unsafe {
         let id = (*ctx).arena.zext(a, width);
+        return id;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ContextTrunc(ctx: *mut Context, a: AstIdx, width: u8) -> AstIdx {
+    unsafe {
+        let id = (*ctx).arena.trunc(a, width);
         return id;
     }
 }
@@ -1007,9 +1119,11 @@ pub fn get_opcode(ctx: &Context, id: AstIdx) -> u8 {
         SimpleAst::Or { a, b } => 5,
         SimpleAst::Xor { a, b } => 6,
         SimpleAst::Neg { a } => 7,
-        SimpleAst::Constant { c, width } => 8,
-        SimpleAst::Symbol { id, width } => 9,
-        SimpleAst::Zext { a, to } => 10,
+        SimpleAst::Lshr { a, b } => 8,
+        SimpleAst::Constant { c, width } => 9,
+        SimpleAst::Symbol { id, width } => 10,
+        SimpleAst::Zext { a, to } => 11,
+        SimpleAst::Trunc { a, to } => 12,
     };
 }
 
@@ -1066,7 +1180,9 @@ pub fn get_op0(ctx: &Context, id: AstIdx) -> AstIdx {
         SimpleAst::Or { a, b } => *a,
         SimpleAst::Xor { a, b } => *a,
         SimpleAst::Neg { a } => *a,
+        SimpleAst::Lshr { a, b } => *a,
         SimpleAst::Zext { a, to } => *a,
+        SimpleAst::Trunc { a, to } => *a,
         _ => unreachable!("Type has no first operand!"),
     };
 }
@@ -1089,6 +1205,7 @@ pub fn get_op1(ctx: &Context, id: AstIdx) -> AstIdx {
         SimpleAst::And { a, b } => *b,
         SimpleAst::Or { a, b } => *b,
         SimpleAst::Xor { a, b } => *b,
+        SimpleAst::Lshr { a, b } => *b,
         _ => unreachable!("Type has no second operand!"),
     };
 }
@@ -1384,7 +1501,7 @@ unsafe fn jit_rec(
             emit(page, offset, &[0x48, 0xc1, 0xE6, var_idx]);
 
             // // varValue = i & varMask
-            // mov rdi, combIdxRegister
+            // mov rdi, combIdxRegister (rdx)
             emit(page, offset, &[0x48, 0x89, 0xD7]);
             // and rdi, rsi
             emit(page, offset, &[0x48, 0x21, 0xF7]);
@@ -1403,14 +1520,32 @@ unsafe fn jit_rec(
             emit_u8(page, offset, PUSH_RDI);
         }
         SimpleAst::Zext { a, to } => {
+            // Zero extend is a no-op in our JIT, since we always AND with a mask after every operation.
             jit_rec(ctx, *a, node_to_var, page, offset);
-            emit_u8(page, offset, POP_RSI);
-
-            // TODO: AND with mask!
-            //emit(page, offset, &[0x48, 0xF7, 0xD6]);
-            emit_u8(page, offset, PUSH_RSI);
         }
+        SimpleAst::Trunc { a, to } => {
+            jit_rec(ctx, *a, node_to_var, page, offset);
+
+            // mov rax, constant
+            emit_u8(page, offset, 0x48);
+            emit_u8(page, offset, 0xB8);
+            // Fill in the constant
+            let trunc_mask = get_modulo_mask(*to);
+            emit_u64(page, offset, trunc_mask);
+            // and [rsp+8], rax
+            emit(page, offset, &[0x48, 0x21, 0x04, 0x24]);
+        }
+        SimpleAst::Lshr { a, b } => todo!(),
     };
+
+    // mov rax, constant
+    emit_u8(page, offset, 0x48);
+    emit_u8(page, offset, 0xB8);
+    // Fill in the constant
+    let c = get_modulo_mask(ctx.arena.get_width(node));
+    emit_u64(page, offset, c);
+    // and [rsp+8], rax
+    emit(page, offset, &[0x48, 0x21, 0x04, 0x24]);
 }
 
 unsafe fn jit_constant(c: u64, page: *mut u8, offset: &mut usize) {
@@ -1421,6 +1556,11 @@ unsafe fn jit_constant(c: u64, page: *mut u8, offset: &mut usize) {
     emit_u64(page, offset, c);
     // Push rax
     emit_u8(page, offset, PUSH_RAX);
+}
+
+#[no_mangle]
+pub extern "C" fn GetPowPtr(mut base: u64, mut exp: u64) -> u64 {
+    return Pow as *const () as u64;
 }
 
 #[no_mangle]
@@ -1435,6 +1575,102 @@ pub extern "C" fn Pow(mut base: u64, mut exp: u64) -> u64 {
     }
 
     return res;
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ContextCompile(
+    ctx_p: *mut Context,
+    node: AstIdx,
+    mask: u64,
+    variables: *const AstIdx,
+    var_count: u64,
+    page: *mut u8,
+) {
+    let mut ctx: &mut Context = &mut (*ctx_p);
+
+    let mut offset: usize = 0;
+
+    // Push all clobbered registers
+    emit_u8(page, &mut offset, PUSH_RBX);
+    emit_u8(page, &mut offset, PUSH_RSI);
+    emit_u8(page, &mut offset, PUSH_RDI);
+
+    // JIT code
+    let mut node_to_var: HashMap<AstIdx, u8> = HashMap::with_capacity(var_count as usize);
+    for i in 0..var_count {
+        node_to_var.insert(*variables.add(i as usize), i as u8);
+    }
+
+    jit_rec(ctx, node, &node_to_var, page, &mut offset);
+
+    // Pop the evaluation result
+    emit_u8(page, &mut offset, POP_RAX);
+
+    // Mask off bits that we don't care about
+    // mov rsi, mask
+    emit(page, &mut offset, &[0x48, 0xBE]);
+    emit_u64(page, &mut offset, mask);
+
+    // and rax, rsi
+    emit(page, &mut offset, &[0x48, 0x21, 0xF0]);
+
+    // Shift the value back down to bit index zero,
+    // varValue = varValue >> (ushort)v
+    // shr rax, bitIdxRegister
+    emit(page, &mut offset, &[0x48, 0xD3, 0xE8]);
+
+    // Restore the clobbered registers.
+    emit_u8(page, &mut offset, POP_RDI);
+    emit_u8(page, &mut offset, POP_RSI);
+    emit_u8(page, &mut offset, POP_RBX);
+
+    emit_u8(page, &mut offset, RET);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ContextExecute(
+    multi_bit_u: u32,
+    bit_width: u32,
+    var_count: u64,
+    num_combinations: u64,
+    page: *mut u8,
+    output: *mut u64,
+    one_bit_vars: u32,
+) {
+    let multi_bit = multi_bit_u != 0;
+    let num_bit_iterations: u32 = if multi_bit { bit_width } else { 1 };
+
+    if (one_bit_vars != 0) {
+        let fptr: unsafe extern "C" fn(u32, u64) -> u64 = std::mem::transmute(page);
+
+        let mut arr_idx: usize = 0;
+        for bit_index in 0..num_bit_iterations {
+            for i in 0..num_combinations {
+                let result = fptr(bit_index, i);
+                *output.add(arr_idx) = result;
+                arr_idx += 1;
+            }
+        }
+
+        return;
+    }
+
+    let mut var_values = vec![0u64; var_count as usize];
+    let vptr = var_values.as_mut_slice();
+
+    let mut arr_idx: usize = 0;
+    let fptr: unsafe extern "C" fn(*mut u64) -> u64 = std::mem::transmute(page);
+    for bit_index in 0..num_bit_iterations {
+        for i in 0..num_combinations {
+            for v_idx in 0..var_count {
+                vptr[v_idx as usize] = ((i >> v_idx) & 1) << bit_index;
+            }
+
+            let result = (fptr(vptr.as_mut_ptr()) & get_modulo_mask(bit_width as u8)) >> bit_index;
+            *output.add(arr_idx) = result;
+            arr_idx += 1;
+        }
+    }
 }
 
 #[no_mangle]
