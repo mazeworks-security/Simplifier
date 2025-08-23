@@ -78,7 +78,7 @@ namespace Mba.Simplifier.Pipeline
         {
             // Given a polynomial, collect all terms being multiplied together.
             List<AstIdx> terms = new();
-            LinearSimplifier.SplitIntoTermsByOpcode(AstOp.Mul, ctx, poly, terms);
+            SplitIntoTermsByOpcode(AstOp.Mul, ctx, poly, terms);
             if (terms.Count != 2)
                 throw new InvalidOperationException();
 
@@ -108,6 +108,46 @@ namespace Mba.Simplifier.Pipeline
                     combinedIndex++;
                 }
             }
+        }
+
+        public static void SplitIntoTermsByOpcode(AstOp op, AstCtx ctx, AstIdx expr, List<AstIdx> terms)
+        {
+            var opcode = ctx.GetOpcode(expr);
+            if (opcode == op)
+            {
+                var op1 = ctx.GetOp0(expr);
+                var op2 = ctx.GetOp1(expr);
+                if (ctx.GetOpcode(op1) == op)
+                {
+                    SplitIntoTerms(ctx, op1, terms);
+                }
+
+                else
+                {
+                    terms.Add(op1);
+                }
+
+                if (ctx.GetOpcode(op2) == op)
+                {
+                    SplitIntoTerms(ctx, op2, terms);
+                }
+
+                else
+                {
+                    terms.Add(op2);
+                }
+            }
+
+            else
+            {
+                terms.Add(expr);
+            }
+        }
+
+
+        private static void SplitIntoTerms(AstCtx ctx, AstIdx expr, List<AstIdx> terms)
+        {
+            SplitIntoTermsByOpcode(AstOp.Add, ctx, expr, terms);
         }
 
         public static void GetAnfVector(uint bitSize, IReadOnlyList<AstIdx> allVars, ApInt[] variableCombinations, List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx, ApInt[] resultVector, ulong[] outAnfVector)

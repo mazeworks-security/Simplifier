@@ -23,7 +23,6 @@ namespace Mba.Simplifier.Minimization
 
         public void Run()
         {
-            Console.WriteLine("  ");
             AstIdx.ctx = ctx;
             variables = Enumerable.Range(0, MAX_TABLES).Select(x => ctx.Symbol($"v{x}", BIT_WIDTH)).ToList();
             inputTables = GetInputTables(ctx, variables);

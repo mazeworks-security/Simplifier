@@ -1,6 +1,8 @@
 #![allow(unused)]
 
-use egraph::simplify_via_eqsat;
+use rand::Rng;
+
+// use egraph::simplify_via_eqsat;
 use libc::c_char;
 use std::{
     collections::HashMap,
@@ -17,8 +19,8 @@ use crate::{
     truth_table_database::TruthTableDatabase,
 };
 
-use egg::*;
-use simple_ast::{marshal_string, AstData, AstIdx, SimpleAst};
+// use egg::*;
+use simple_ast::{marshal_string, AstData, AstIdx, Empty, SimpleAst};
 
 use mimalloc::MiMalloc;
 
@@ -31,14 +33,16 @@ mod truth_table_database;
 
 #[no_mangle]
 pub extern "C" fn SimplifyViaEqsat(s: *const c_char, ms: u64) -> *mut c_char {
+    /*
     let str = marshal_string(s).to_owned();
 
     let res = simplify_via_eqsat(&str, Some(ms));
     unsafe {
         return CString::new(res).unwrap().into_raw();
     }
+    */
 
-    println!(" ");
+    panic!("Disabled for now");
 }
 
 fn read_expr_from_args() -> String {
