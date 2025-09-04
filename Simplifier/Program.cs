@@ -2,6 +2,8 @@
 using Mba.Parsing;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.DSL;
+using Mba.Simplifier.Fuzzing;
+using Mba.Simplifier.Interpreter;
 using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
@@ -98,7 +100,6 @@ for (int i = 0; i < 3; i++)
     id = ctx.RecursiveSimplify(id);
     Console.WriteLine($"Eqsat run {i} yielded: {ctx.GetAstString(id)}\n\n");
 }
-
 
 Console.WriteLine($"Simplified to: {ctx.GetAstString(id)}\n\nwith cost: {ctx.GetCost(id)}");
 

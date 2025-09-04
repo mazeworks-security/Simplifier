@@ -21,6 +21,8 @@ using Mba.Common.Interop;
 using System.Runtime.CompilerServices;
 using System.Reflection.Metadata;
 using static Antlr4.Runtime.Atn.SemanticContext;
+using Mba.Simplifier.Interpreter;
+using Mba.Simplifier.Utility;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -76,6 +78,10 @@ namespace Mba.Simplifier.Pipeline
 
         public LinearSimplifier(AstCtx ctx, AstIdx? ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
         {
+            // If we are given an AST, verify that the correct width was passed.
+            if (ast != null && bitSize != ctx.GetWidth(ast.Value))
+                throw new InvalidOperationException($"Incorrect width passed to linear simplifier!");
+
             this.initialInput = ast;
             this.ctx = ctx;
             this.variables = variables;
@@ -107,12 +113,40 @@ namespace Mba.Simplifier.Pipeline
                     resultVector = JitResultVector(ctx, bitSize, moduloMask, variables, ast.Value, multiBit, numCombinations);
             }
 
+            // After constructing the result vector, cast all of the variables to the size of the output expression.
+            // This enables us to support mixing operations of different widths without inserting adhoc checks all over the place.
+            this.variables = CastVariables(ctx, variables, bitSize);
+
             if (resultVectorHook != null)
             {
                 resultVectorHook(resultVector, numCombinations);
                 return;
             }
+        }
 
+        private static IReadOnlyList<AstIdx> CastVariables(AstCtx ctx, IReadOnlyList<AstIdx> variables, uint bitSize)
+        {
+            // If all variables are of a correct size, no casting is necessary.
+            if (!variables.Any(x => ctx.GetWidth(x) != bitSize))
+                return variables;
+
+            var result = new List<AstIdx>();
+            foreach(var v in variables)
+            {
+                // Skip if the variable is of the correct size
+                var w = ctx.GetWidth(v);
+                if (w == bitSize)
+                {
+                    result.Add(v);
+                    continue;
+                }
+
+                // Either truncate or extend the variable to the expected size.
+                // Note that this is a sound / legal transformation.
+                result.Add(w < bitSize ? ctx.Zext(v, (byte)bitSize) : ctx.Trunc(v, (byte)bitSize));
+            }
+
+            return result;
         }
 
         // Initialize the group sizes of the various variables, i.e., their numbers
@@ -128,11 +162,41 @@ namespace Mba.Simplifier.Pipeline
 
         public unsafe static ApInt[] JitResultVector(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, bool multiBit, ApInt numCombinations)
         {
+            return JitResultVectorNew(ctx, bitWidth, mask, variables, ast, multiBit, numCombinations);
+        }
+
+        public unsafe static ApInt[] JitResultVectorOld(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, bool multiBit, ApInt numCombinations)
+        {
             uint capacity = (uint)(numCombinations * (multiBit ? bitWidth : 1u));
             var resultVec = new ApInt[capacity];
             fixed (ulong* vecPtr = &resultVec[0])
             {
                 ctx.JitEvaluate(ast, mask, multiBit, bitWidth, variables.ToArray(), numCombinations, MultibitSiMBA.JitPage.Value, (nint)vecPtr);
+            }
+
+            return resultVec;
+        }
+
+        public unsafe static ApInt[] JitResultVectorNew(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, bool multiBit, ApInt numCombinations)
+        {
+            var jit = new Amd64OptimizingJit(ctx);
+            jit.Compile(ast, variables.ToList(), MultibitSiMBA.JitPage.Value, false);
+            var vec = LinearSimplifier.Execute(ctx, bitWidth, mask, variables, multiBit, numCombinations, MultibitSiMBA.JitPage.Value, false);
+            return vec;
+        }
+
+        public unsafe static nint Compile(AstCtx ctx, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, nint codePtr)
+        {
+            return ctx.Compile(ast, mask, variables.ToArray(), codePtr);
+        }
+
+        public unsafe static ApInt[] Execute(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, bool multiBit, ApInt numCombinations, nint codePtr, bool isOneBitVars)
+        {
+            uint capacity = (uint)(numCombinations * (multiBit ? bitWidth : 1u));
+            var resultVec = new ApInt[capacity];
+            fixed (ulong* vecPtr = &resultVec[0])
+            {
+                ctx.Execute(multiBit, bitWidth, variables.ToArray(), numCombinations, codePtr, (nint)vecPtr, isOneBitVars);
             }
 
             return resultVec;
@@ -299,7 +363,9 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // (4) If the result vector has two terms and <= 4 variables we can find an optimal answer.
-            if(variables.Count <= 4 && coeffToTable.Count == 2)
+            // Disabled because `((-407:i64*(uns21:i64|subst0:i64))+(uns21:i64&subst0:i64))` triggers assert!
+            //if(variables.Count <= 4 && coeffToTable.Count == 2)
+            if (false)
             {
                 return SimplifyTwoTerm(constant, coeffToTable);
             }
@@ -536,7 +602,7 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // TODO: Verify this version is correct!
-            Debugger.Break();
+            //Debugger.Break();
             var option1 = DetermineCombOfTwoFast(a, constant, null, true).Value;
             var option2 = DetermineCombOfTwoFast((a - constant) & moduloMask, constant, null, true).Value;
             return new AstIdx[] { option1, option1 }.MinBy(x => ctx.GetCost(x));
@@ -1434,6 +1500,7 @@ namespace Mba.Simplifier.Pipeline
 
             // Merging needs to be done carefully, because the constant offset adjustment is assuming we have already performed some merging
             // Merge bitwise terms.
+           
             var andToBitwise = process(combinedAnds);
             var union = new List<AstIdx>();
             foreach (var x in andToBitwise)
@@ -1448,6 +1515,28 @@ namespace Mba.Simplifier.Pipeline
 
         private AstIdx TryPartition(AstIdx bitwise, ApInt coeff, ApInt constant, ApInt freeMask)
         {
+            // TODO: Refactor out code duplication
+            if (refiner.CanChangeCoefficientTo(coeff, moduloMask, ~freeMask))
+            {
+                // Alternatively can we find a negated form?
+                // TODO: Do we need to negate the free mask?
+                // Note: Try (moduloMask*moduloMask) first because a coefficient of 1 can be omitted, yielding a bitwise classification term
+                bestSolution = PartitionCoeffAndConstant(bitwise, (moduloMask * moduloMask) & moduloMask, (~constant & moduloMask), (freeMask) & moduloMask);
+                if (bestSolution != null)
+                {
+                    bestSolution = ctx.Neg(bestSolution.Value);
+                    return bestSolution.Value;
+                }
+
+                // Try to partition the constant offset.
+                // Note: In the event that this fails, we could still try other means of partitioning the constant offset.
+                // Trying to find a fitting coefficient / OR mask is exponential in the worst case, but there should be a linear time solution.
+                // TODO: We need to find a better method of partitioning the constant offset.
+                bestSolution = PartitionCoeffAndConstant(bitwise, moduloMask, constant, freeMask);
+                if (bestSolution != null)
+                    return bestSolution.Value;
+            }
+
             // Try to partition the constant offset.
             // Note: In the event that this fails, we could still try other means of partitioning the constant offset.
             // Trying to find a fitting coefficient / OR mask is exponential in the worst case, but there should be a linear time solution.
@@ -1456,10 +1545,22 @@ namespace Mba.Simplifier.Pipeline
             if (bestSolution != null)
                 return bestSolution.Value;
 
+            // Alternatively can we find a negated form?
+            // TODO: Do we need to negate the free mask?
+            bestSolution = PartitionCoeffAndConstant(bitwise, (coeff * moduloMask) & moduloMask, (~constant & moduloMask), (freeMask) & moduloMask);
+            if (bestSolution != null)
+            {
+                bestSolution = ctx.Neg(bestSolution.Value);
+                return bestSolution.Value;
+            }
+
             // If all else fails, we cannot find a single term solution.
             // Place the constant offset on the outside of the expression.
-            var constTerm = ctx.Constant(constant, width);
             var mul = ctx.Mul(ctx.Constant(coeff, width), bitwise);
+            if (constant == 0)
+                return mul;
+
+            var constTerm = ctx.Constant(constant, width);
             return ctx.Add(constTerm, mul);
         }
 
@@ -1500,15 +1601,17 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
+
             // If the sign bit pops out, try to move it back in.
             var signBit = 1ul << ((ushort)width - 1);
             if (constant == signBit)
             {
                 var withoutSign = SubtractSignBit(coeff, bitwise);
-                if (withoutSign == null)
-                    throw new InvalidOperationException($"Failed to partition constant offset!");
-                var coeffId = ctx.Constant(coeff, width);
-                return ctx.Mul(coeffId, withoutSign.Value);
+                if (withoutSign != null)
+                {
+                    var coeffId = ctx.Constant(coeff, width);
+                    return ctx.Mul(coeffId, withoutSign.Value);
+                }
             }
 
             // Try to fit the constant offset into the undemanded bits.
