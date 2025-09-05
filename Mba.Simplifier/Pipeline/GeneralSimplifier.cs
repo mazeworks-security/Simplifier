@@ -1,10 +1,12 @@
 ﻿using Iced.Intel;
+using Mba.Ast;
 using Mba.Common.MSiMBA;
 using Mba.Simplifier.Bindings;
-using Mba.Simplifier.Pipeline.Intermediate;
+using Mba.Simplifier.Interpreter;
 using Mba.Simplifier.Polynomial;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
+using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -14,6 +16,7 @@ using System.Numerics;
 using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -26,6 +29,8 @@ namespace Mba.Simplifier.Pipeline
 
         // For any given node, we store the optimal representation yielded by SiMBA.
         private readonly Dictionary<uint, uint> simbaCache = new();
+
+        private int substCount = 0;
 
         public static AstIdx Simplify(AstCtx ctx, AstIdx id) => new GeneralSimplifier(ctx).SimplifyGeneral(id);
 
@@ -109,9 +114,30 @@ namespace Mba.Simplifier.Pipeline
             // Apply recursive term rewriting again in hopes that it will cheaply reduce some parts.
             withSubstitutions = SimplifyViaTermRewriting(withSubstitutions);
 
+            // Discard any vanished substitutions
+            var usedVars = ctx.CollectVariables(withSubstitutions).ToHashSet();
+            foreach(var (substValue, substVar) in substMapping.ToList())
+            {
+                if (!usedVars.Contains(substVar))
+                    substMapping.Remove(substValue);
+            }
+
+            // Try to take a guess (MSiMBA) and prove it's equivalence
+            var guess = SimplifyViaGuessAndProve(withSubstitutions, substMapping, ref isSemiLinear);
+            if (guess != null)
+            {
+                // Apply constant folding / term rewriting.
+                var simplGuess = SimplifyViaTermRewriting(guess.Value);
+
+                // Cache the result.
+                simbaCache.TryAdd(id, simplGuess);
+                return simplGuess;
+            }
+
+
             // If there are multiple substitutions, try to minimize the number of substitutions.
             if (substMapping.Count > 1)
-                withSubstitutions = TryUnmergeLinCombs(withSubstitutions, substMapping);
+                withSubstitutions = TryUnmergeLinCombs(withSubstitutions, substMapping, ref isSemiLinear);
             withSubstitutions = SimplifyViaTermRewriting(withSubstitutions);
 
             // If polynomial parts are present, try to simplify them.
@@ -332,16 +358,24 @@ namespace Mba.Simplifier.Pipeline
                         if (ctx.IsConstant(and0) && !ctx.IsConstant(and1))
                         {
                             var andMask = ctx.GetConstantValue(and0);
+                            if (CanEliminateMask(andMask, id1))
+                                return visitReplacement(id1, inBitwise, ref isSemiLinear);
+
+
                             var truncWidth = ConstantToTruncWidth(andMask);
                             if (truncWidth != 0 && truncWidth < ctx.GetWidth(id))
                             {
                                 isSemiLinear = true;
-                                var trunc = Truncate(id1, (uint)truncWidth);
-    
-                                trunc = visitReplacement(trunc, true, ref isSemiLinear);
+                                var moduloWidth = 64 - (uint)BitOperations.LeadingZeroCount(andMask);
+                                var moduloMask = ModuloReducer.GetMask(moduloWidth);
+                                var trunc = Truncate(id1, (uint)truncWidth, moduloMask);
+
+                                var before = trunc;
+                                trunc = visitReplacement(before, true, ref isSemiLinear);
                                 var ext = ctx.Zext(trunc, ctx.GetWidth(id));
                                 if (ModuloReducer.GetMask((uint)truncWidth) != andMask)
                                     ext = ctx.And(ctx.Constant(andMask, ctx.GetWidth(id)), ext);
+
                                 return ext;
                             }
                         }
@@ -357,6 +391,8 @@ namespace Mba.Simplifier.Pipeline
                 case AstOp.Neg:
                     if (inBitwise)
                     {
+                        // Deleting because it causes stackoverflow!
+                        /*
                         // If we encounter a negation inside of a bitwise operator, try to simplify the subtree.
                         var simplified = SimplifyViaRecursiveSiMBA(id);
                         if (simplified != id)
@@ -364,6 +400,7 @@ namespace Mba.Simplifier.Pipeline
                             id = simplified;
                             goto start;
                         }
+                        */
 
                         // Otherwise we have a negation that cannot be distributed, so we leave it as is.
                         return ctx.Neg(op0(inBitwise, ref isSemiLinear));
@@ -395,7 +432,8 @@ namespace Mba.Simplifier.Pipeline
                 case AstOp.Trunc:
                     isSemiLinear = true;
                     var child = ctx.GetOp0(id);
-                    var truncated = AstRewriter.ChangeBitwidth(ctx, child, ctx.GetWidth(id), new());
+                    var w = ctx.GetWidth(id);
+                    var truncated = AstRewriter.ChangeBitwidth(ctx, child, w, ModuloReducer.GetMask(w), new());
                     return ctx.Trunc(truncated, ctx.GetWidth(id));
 
                 case AstOp.Constant:
@@ -412,9 +450,23 @@ namespace Mba.Simplifier.Pipeline
             }
         }
 
+        // Look for (mask&expr), where the knownbits of expr allow us to eliminate the mask
+        private bool CanEliminateMask(ulong andMask, AstIdx idx)
+        {
+            var knownBits = ctx.GetKnownBits(idx);
+
+            var zeroes = ~andMask & ModuloReducer.GetMask(ctx.GetWidth(idx));
+            if ((zeroes & knownBits.Zeroes) == zeroes)
+                return true;
+
+            return false;
+
+        }
+
         private ulong ConstantToTruncWidth(ulong c)
         {
-            var minWidth = 63 - BitOperations.LeadingZeroCount(c);
+            var lz = BitOperations.LeadingZeroCount(c);
+            var minWidth = 64 - lz;
             if (minWidth <= 7)
                 return 8;
             if (minWidth <= 16)
@@ -424,9 +476,9 @@ namespace Mba.Simplifier.Pipeline
             return 0;
         }
 
-        private AstIdx Truncate(AstIdx idx, uint width)
+        private AstIdx Truncate(AstIdx idx, uint width, ulong moduloMask)
         {
-            var trunc = AstRewriter.ChangeBitwidth(ctx, idx, width, new());
+            var trunc = AstRewriter.ChangeBitwidth(ctx, idx, width, moduloMask, new());
             return trunc;
         }
 
@@ -552,13 +604,12 @@ namespace Mba.Simplifier.Pipeline
             if (substitutionMapping.TryGetValue(id, out var existing))
                 return existing;
 
-            var substCount = substitutionMapping.Count;
             while(true)
             {
                 var subst = ctx.Symbol($"subst{substCount}", ctx.GetWidth(id));
-                if(substitutionMapping.Values.Contains(subst))
+                substCount++;
+                if (substitutionMapping.Values.Contains(subst))
                 {
-                    substCount++;
                     continue;
                 }
 
@@ -567,13 +618,17 @@ namespace Mba.Simplifier.Pipeline
             }
         }
 
-        private AstIdx TryUnmergeLinCombs(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping)
+        private AstIdx TryUnmergeLinCombs(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear)
         {
             // We cannot rewrite substitutions as negations of one another if there is only one substitution.
             if (substitutionMapping.Count == 1)
                 return withSubstitutions;
 
-            var rewriteMapping = GetUnmergeMapping(substitutionMapping);
+            var result = UnmergeDisjointParts(withSubstitutions, substitutionMapping, ref isSemiLinear);
+            if (result != null)
+                withSubstitutions = result.Value;
+
+            var rewriteMapping = UnmergeNegatedParts(substitutionMapping);
 
             // Return if we cannot rewrite any substitutions as negations of one another.
             if(!rewriteMapping.Any())
@@ -583,7 +638,7 @@ namespace Mba.Simplifier.Pipeline
             return withSubstitutions;
         }
 
-        private Dictionary<AstIdx, AstIdx> GetUnmergeMapping(Dictionary<AstIdx, AstIdx> substitutionMapping)
+        private Dictionary<AstIdx, AstIdx> UnmergeNegatedParts(Dictionary<AstIdx, AstIdx> substitutionMapping)
         {
             var rewriteMapping = new Dictionary<AstIdx, AstIdx>();
             bool changed = true;
@@ -607,6 +662,637 @@ namespace Mba.Simplifier.Pipeline
             }
 
             return rewriteMapping;
+        }
+
+        // We are looking for nonlinear MBAs of the form:
+        // (-3689350793862841103*(RSI&(4040198467629586701 + 1099511628211*((5292288&RBX))))) + 
+        // (-3689348594839584681*(RSI&(4040198467629586696+(1099511628211*(5292288&RBX))))) + 
+        // (7378699388702425784*(RSI&(4040198467629586909+(1099511628211*(5292288&RBX)))))
+        // , where the same semi-linear expression(minus the constant offset) is substituted in multiple terms.
+        // We then try to decompose each substituted part into `known_ones | (shared_bits + 1099511628211*(5292288&RBX))`
+        // , allowing us to reduce the number of substituted terms. This (a) unblurs the relationship between the expression, and (b) allows msimba to take advantage of the known bits.
+        // TODO: Bail out when no semi-linear parts are found!
+        private AstIdx? UnmergeDisjointParts(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear)
+        {
+            var list = substitutionMapping.ToList();
+            var inputExpressions = list.Select(x => x.Key).ToList();
+            var inputSubstVars = list.Select(x => x.Value).ToList();
+
+            // We have a list of <substVar, expr>, where expression is an arbitary nonlinear expression.
+            var parts = new List<(AstIdx idx, Dictionary<AstIdx, AstIdx> substitutions)>();
+
+            var tempSubstMapping = new Dictionary<AstIdx, AstIdx>();
+            var results = new List<AstIdx>();
+            for(int i = 0 ; i < inputExpressions.Count; i++)
+            {
+                // Substitute all of the nonlinear parts for this expression
+                // Here we share the list of substitutions 
+                var expr = inputExpressions[i];
+                bool isSl = false;
+                var result = GetAstWithSubstitutions(expr, tempSubstMapping, ref isSemiLinear);
+                results.Add(result);
+            }
+            // Invert the temp substitution mapping
+            tempSubstMapping = tempSubstMapping.ToDictionary(x => x.Value, x => x.Key);
+
+            var vars = results.SelectMany(x => ctx.CollectVariables(x)).Distinct().OrderBy(x => ctx.GetSymbolName(x)).ToList();
+            if (vars.Count > 11)
+                return null;
+
+            // Compute a result vector for each expression
+            Dictionary<ResultVectorKey, List<(int index, ulong constantOffset)>> vecToExpr = new();
+            for(int i = 0; i < results.Count; i++)
+            {
+                var expr = results[i];
+                var w = ctx.GetWidth(expr);
+                var moduloMask = (ulong)ModuloReducer.GetMask(w);
+                var numCombinations = (ulong)Math.Pow(2, vars.Count);
+
+                var resultVec = LinearSimplifier.JitResultVector(ctx, ctx.GetWidth(expr), moduloMask, vars, expr, true, numCombinations);
+                var constantOffset = LinearSimplifier.SubtractConstantOffset(moduloMask, resultVec, (int)numCombinations);
+
+                var key = new ResultVectorKey(resultVec);
+                vecToExpr.TryAdd(key, new());
+                vecToExpr[key].Add((i, constantOffset));
+            }
+
+            Dictionary<AstIdx, AstIdx> varToNewSubstValue = new Dictionary<AstIdx, AstIdx>();
+            foreach(var (key, members) in vecToExpr)
+            {
+                var temp = results[members.First().index];
+                var w = ctx.GetWidth(temp);
+                var moduloMask = (ulong)ModuloReducer.GetMask(w);
+                var numCombinations = (ulong)Math.Pow(2, vars.Count);
+
+                int vecIdx = 0;
+                KnownBits kb = KnownBits.MakeConstant(0, w);
+                var resultVector = key.resultVector;
+                // Compute the known bits of the result vector
+                // TODO:
+                // (1) If a column of the truth table shares the same coefficient, we can compute knownbits for the entire column in parallel.
+                // (2) Port to C++
+                for(int bitIndex = 0; bitIndex < w; bitIndex++)
+                {
+                    for(ulong i = 0; i < numCombinations; i++)
+                    {
+                        var coeff = resultVector[vecIdx];
+                        if(coeff == 0)
+                        {
+                            vecIdx++;
+                            continue;
+                        }
+
+                        // Knownbits += coeff*(x&whatever)
+                        ulong value = moduloMask & ~(1ul << bitIndex);
+                        var curr = new KnownBits(w, value, 0);
+                        var mul = KnownBits.Mul(KnownBits.MakeConstant(coeff, w), curr);
+                        kb = KnownBits.Add(kb, mul);
+                        vecIdx++;
+                    }
+                }
+
+                // Compute the shared bits among the constant offset.
+                var union = moduloMask;
+                foreach(var (_, constantOffset) in members)
+                    union &= constantOffset;
+
+                // Update the constant offset to extract out the shared bits
+                for (int i = 0; i < members.Count; i++)
+                {
+                    var member = members[i];
+                    members[i] = (member.index, member.constantOffset & ~union);
+                }
+
+                // Verify that we can rewrite every linear combination to be in the form of sharedBits | (sharedSubst)
+                kb = KnownBits.Add(kb, KnownBits.MakeConstant(union, w));
+                if (members.Any(x => !CanFitConstantInUndemandedBits(kb, x.constantOffset, moduloMask)))
+                    continue;
+
+                // Replace each substituted var with a new substituted var | some constant offset.
+                var newSubstVar = ctx.Symbol($"subst{substCount}", (byte)w);
+                substCount++;
+                for(int i = 0; i < members.Count; i++)
+                {
+                    var member = members[i];
+                    var expr = ctx.Or(ctx.Constant(member.constantOffset, w), newSubstVar);
+                    var inVar = inputSubstVars[member.index];
+                    if (varToNewSubstValue.ContainsKey(inVar))
+                        throw new InvalidOperationException($"Cannot share substituted parts!");
+                    
+                    varToNewSubstValue[inVar] = expr;
+                }
+
+                var vecExpr = LinearSimplifier.Run(w, ctx, null, false, true, false, vars, null, resultVector); // TODO: ToArray
+                vecExpr = ctx.Add(ctx.Constant(union, w), vecExpr);
+                // Back substitute in the variables we temporarily substituted.
+                vecExpr = ApplyBackSubstitution(ctx, vecExpr, tempSubstMapping);
+                substitutionMapping.Remove(vecExpr);
+                substitutionMapping.TryAdd(vecExpr, newSubstVar);
+                isSemiLinear = true;
+            }
+
+            withSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, varToNewSubstValue);
+            var newVars = ctx.CollectVariables(withSubstitutions).ToHashSet();
+            foreach(var (expr, substVar) in substitutionMapping.ToList())
+            {
+                if (!newVars.Contains(substVar))
+                    substitutionMapping.Remove(expr);
+            }
+
+            return withSubstitutions;
+        }
+
+        // Returns true if the c1+(c2&x) can be rewritten as c1|(c2&x)
+        private bool CanFitConstantInUndemandedBits(KnownBits kb, ulong constant, ulong moduloMask)
+        {
+            if ((kb.Ones & constant) != 0)
+                return false;
+            if ((kb.UnknownBits & constant) != 0)
+                return false;
+            return true;
+        }
+
+        // MSiMBA is guaranteed to return a correct result if the input expression can be represented as a semi-linear MBA
+        // For some instances of nonlinear MBA we can soundly and efficiently prove that MSiMBAs result is equivalent to the input expression.
+        // Here are we doing exactly that: Running MSiMBA and returning it's result if we can prove the equivalence of the expressions.
+        private unsafe AstIdx? SimplifyViaGuessAndProve(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear)
+        {
+            // If there are no substituted parts, we have a semi-linear MBA.
+            if (substitutionMapping.Count == 0)
+                return null;
+
+            // Compute demanded bits for each variable
+            // TODO: Keep track of which bits are demanded by the parent(withSubstitutions)
+            Dictionary<AstIdx, ulong> varToDemandedBits = new();
+            foreach(var (expr, substVar) in substitutionMapping)
+                ComputeSymbolDemandedBits(expr, ModuloReducer.GetMask(ctx.GetWidth(expr)), varToDemandedBits);
+
+            // Compute the total number of demanded variable bits in the substituted parts.
+            ulong totalDemanded = 0;
+            foreach (var demandedBits in varToDemandedBits.Values)
+                totalDemanded += (ulong)BitOperations.PopCount(demandedBits);
+            if (totalDemanded > 12)
+                return null;
+
+            // Partition the MBA into semi-linear, unconstrained, and constrained parts.
+            var (semilinearIdx, unconstrainedIdx, constrainedIdx) = PartitionConstrainedParts(withSubstitutions, substitutionMapping);
+
+            // If there are no constrained or unconstrained parts then this is a semi-linear MBA.
+            if (unconstrainedIdx == null && constrainedIdx == null)
+                throw new InvalidOperationException($"Expected nonlinear expression!");
+
+            // If we have no unconstrained parts, we can prove the equivalence of the entire expression.
+            if (unconstrainedIdx == null)
+                return SimplifyConstrained(withSubstitutions, substitutionMapping, varToDemandedBits);
+
+            // If we have have no constrained parts, we can simplify the entire expression individually.
+            if (constrainedIdx == null)
+            {
+                // Simplify the constrained parts.
+                var withoutSubstitutions = ApplyBackSubstitution(ctx, unconstrainedIdx.Value, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
+                var r = SimplifyUnconstrained(withoutSubstitutions, varToDemandedBits);
+                if (r == null)
+                    return null;
+                if (semilinearIdx == null)
+                    return r.Value;
+
+                // If there are some semi-linear parts, combine and simplify.
+                var sum = ctx.Add(semilinearIdx.Value, r.Value);
+                var simplified = LinearSimplifier.Run(ctx.GetWidth(sum), ctx, sum, false, true);
+                return simplified;
+            }
+
+            // Otherwise we have both constrained and unconstrained parts, which need to be simplified individually and composed back together.
+            if (semilinearIdx != null)
+                constrainedIdx = ctx.Add(semilinearIdx.Value, constrainedIdx.Value);
+
+            // Simplify constrained parts.
+            var constrainedSimpl = SimplifyConstrained(constrainedIdx.Value, substitutionMapping, varToDemandedBits);
+            if (constrainedSimpl == null)
+                return null;
+
+            // Simplify unconstrained parts.
+            var unconstrainedBackSub = ApplyBackSubstitution(ctx, unconstrainedIdx.Value, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
+            var unconstrainedSimpl = SimplifyUnconstrained(unconstrainedBackSub, varToDemandedBits);
+            if (unconstrainedSimpl == null)
+                return null;
+
+            // Compose and simplify
+            var composed = ctx.Add(constrainedSimpl.Value, unconstrainedSimpl.Value);
+            var simplComposed = LinearSimplifier.Run(ctx.GetWidth(composed), ctx, composed, false, true);
+            return simplComposed;
+        }
+
+        // Partition the result vector into semi-linear, constrained, and unconstrained parts.
+        private (AstIdx? semilinearIdx, AstIdx? unconstrainedIdx, AstIdx? constrainedIdx) PartitionConstrainedParts(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping)
+        {
+            // Construct a result vector for the linear part.
+            var substVars = substitutionMapping.Values.ToList();
+            var allVars = ctx.CollectVariables(withSubstitutions);
+            var bitSize = ctx.GetWidth(withSubstitutions);
+            var numCombinations = (ulong)Math.Pow(2, allVars.Count);
+            var groupSizes = LinearSimplifier.GetGroupSizes(allVars.Count);
+            var moduloMask = ModuloReducer.GetMask(bitSize);
+            var resultVec = LinearSimplifier.JitResultVector(ctx, bitSize, moduloMask, allVars, withSubstitutions, multiBit: true, numCombinations);
+            // Subtract the constant offset
+            var constantOffset = LinearSimplifier.SubtractConstantOffset(moduloMask, resultVec, (int)numCombinations);
+
+            // Get all possible conjunctions of variables.
+            var variableCombinations = LinearSimplifier.GetVariableCombinations(allVars.Count);
+            List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx = new();
+            for (int i = 0; i < variableCombinations.Length; i++)
+            {
+                var myMask = variableCombinations[i];
+                var myIndex = LinearSimplifier.GetGroupSizeIndex(groupSizes, myMask);
+                combToMaskAndIdx.Add((myMask, (int)myIndex));
+            }
+
+            // Change result vector basis to algebraic normal form
+            var (_, linearCombinations) = GetAnf(bitSize, allVars, groupSizes, resultVec, true);
+
+            // Compute a bitmask containing all substituted vars
+            ulong substVarMask = 0;
+            for (int i = 0; i < allVars.Count; i++)
+            {
+                if (!substVars.Contains(allVars[i]))
+                    continue;
+
+                substVarMask |= (1ul << (ushort)i);
+            }
+
+            List<AstIdx> semiLinearParts = new();
+            if (constantOffset != 0)
+                semiLinearParts.Add(ctx.Constant(constantOffset, bitSize));
+            List<AstIdx> unconstrainedParts = new();
+            List<AstIdx> constrainedParts = new();
+
+            // Decompose result vector into semi-linear, unconstrained, and constrained parts.
+            int resultVecIdx = 0;
+            for(int i = 0; i < linearCombinations.Count; i++)
+            {
+                foreach(var (coeff, bitMask) in linearCombinations[i])
+                {
+                    if (coeff == 0)
+                        goto skip;
+
+                    // If the term only contains normal variables, its semi-linear.
+                    var varComb = variableCombinations[i];
+                    if ((varComb & substVarMask) == 0)
+                    {
+                        semiLinearParts.Add(LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, varComb, bitMask));
+                        goto skip;
+                    }
+
+                    // If the term only contains substituted variables, it's unconstrained.
+                    if ((varComb & ~substVarMask) == 0)
+                    {
+                        unconstrainedParts.Add(LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, varComb, bitMask));
+                        goto skip;
+                    }
+
+                    // Otherwise we have some mix of variables and substituted parts.
+                    // This is constrained!
+                    constrainedParts.Add(LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, varComb, bitMask));
+
+                skip:
+                    resultVecIdx++;
+                }
+            }
+
+            AstIdx? semilinearIdx = semiLinearParts.Any() ? ctx.Add(semiLinearParts) : null;
+            AstIdx? unconstrainedIdx = unconstrainedParts.Any() ? ctx.Add(unconstrainedParts) : null;
+            AstIdx? constrainedIdx = constrainedParts.Any() ? ctx.Add(constrainedParts) : null;
+            return (semilinearIdx, unconstrainedIdx, constrainedIdx);
+        }
+
+        // TODO: Refactor out!
+        private static (ulong[], List<List<(ulong coeff, ulong bitMask)>>) GetAnf(uint width, List<AstIdx> variables, List<int> groupSizes, ulong[] resultVector, bool multiBit)
+        {
+            // Get all combinations of variables.
+            var moduloMask = ModuloReducer.GetMask(width);
+            var numCombinations = (ulong)Math.Pow(2, variables.Count);
+            var variableCombinations = LinearSimplifier.GetVariableCombinations(variables.Count);
+
+            // Linear combination, where the index can be seen as an index into `variableCombinations`,
+            // and the element at that index is a list of terms operating over that boolean combination.
+            // Term = coeff*(bitMask&basisExpression).
+            var linearCombinations = new List<List<(ulong coeff, ulong bitMask)>>(variableCombinations.Length);
+            for (int i = 0; i < variableCombinations.Length; i++)
+                linearCombinations.Add(new((int)width));
+
+            // Keep track of which variables are demanded by which combination,
+            // as well as which result vector idx corresponds to which combination.
+            List<(ulong trueMask, int resultVecIdx)> combToMaskAndIdx = new();
+            for (int i = 0; i < variableCombinations.Length; i++)
+            {
+                var myMask = variableCombinations[i];
+                var myIndex = LinearSimplifier.GetGroupSizeIndex(groupSizes, myMask);
+                combToMaskAndIdx.Add((myMask, (int)myIndex));
+            }
+
+            bool allZeroes = true;
+            var varCount = variables.Count;
+            bool onlyOneVar = varCount == 1;
+            int vecWidth = (int)(varCount == 1 ? 1 : 2u << (ushort)(varCount - 1));
+
+            unsafe
+            {
+                fixed (ulong* ptr = &resultVector[0])
+                {
+                    for (ushort bitIndex = 0; bitIndex < LinearSimplifier.GetNumBitIterations(multiBit, width); bitIndex++)
+                    {
+                        // If multi-bit simba is enabled, we need to take our base expression
+                        // and isolate only the bit at the current bit index.
+                        var maskForIndex = multiBit ? (ulong)1 << bitIndex : moduloMask;
+                        // Offset the result vector index such that we are fetching entries for the current bit index.
+                        var offset = bitIndex * numCombinations;
+                        for (int i = 0; i < variableCombinations.Length; i++)
+                        {
+                            // Fetch the result vector index for this conjunction.
+                            // If the coefficient is zero, we can skip it.
+                            var comb = variableCombinations[i];
+                            var (trueMask, index) = combToMaskAndIdx[i];
+                            var coeff = ptr[(int)offset + index];
+                            if (coeff == 0)
+                                continue;
+
+                            // Subtract the coefficient from the result vector.
+                            allZeroes = false;
+                            MultibitSiMBA.SubtractCoeff(moduloMask, ptr, bitIndex, coeff, index, vecWidth, varCount, onlyOneVar, trueMask);
+
+                            // Add an entry to the linear combination list.
+                            linearCombinations[i].Add((coeff, maskForIndex));
+                        }
+                    }
+                }
+            }
+
+            return (variableCombinations, linearCombinations);
+        }
+
+        private unsafe AstIdx? SimplifyConstrained(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping, Dictionary<AstIdx, ulong> varToDemandedBits)
+        {
+            // Compute a result vector for the original expression
+            var withoutSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
+            var w = ctx.GetWidth(withoutSubstitutions);
+            var inputVars = ctx.CollectVariables(withoutSubstitutions);
+            var originalResultVec = LinearSimplifier.JitResultVector(ctx, w, ModuloReducer.GetMask(w), inputVars, withoutSubstitutions, true, (ulong)Math.Pow(2, inputVars.Count));
+
+            // Jit the function with substituted parts.
+            var exprToSubstVar = substitutionMapping.OrderBy(x => ctx.GetAstString(x.Value)).ToList();
+            var allVars = inputVars.Concat(exprToSubstVar.Select(x => x.Value)).ToList(); // Sort them....
+            var pagePtr = JitUtils.AllocateExecutablePage(4096);
+            new Amd64OptimizingJit(ctx).Compile(withSubstitutions, allVars, pagePtr, true);
+            var jittedWithSubstitutions = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr;
+
+            // Return null if the expressions are not provably equivalent
+            var demandedVars = varToDemandedBits.OrderBy(x => ctx.GetSymbolName(x.Key)).Select(x => (x.Key, x.Value)).ToList();
+            if (!IsConstrainedExpressionEquivalent(w, inputVars, demandedVars, exprToSubstVar, jittedWithSubstitutions, originalResultVec))
+            {
+                JitUtils.FreeExecutablePage(pagePtr);
+                return null;
+            }
+
+            // Otherwise they are equivalent. Return MSiMBA's result!
+            JitUtils.FreeExecutablePage(pagePtr);
+            var expected = LinearSimplifier.Run(w, ctx, null, false, true, false, inputVars, null, originalResultVec);
+            return expected;
+        }
+
+        // Returns true if two expressions are guaranteed to be equivalent
+        private unsafe bool IsConstrainedExpressionEquivalent(uint width,List<AstIdx> inputVars, List<(AstIdx demandedVar, ulong demandedMask)> demandedVars, List<KeyValuePair<AstIdx, AstIdx>> exprToSubstVar, delegate* unmanaged[SuppressGCTransition]<ulong*, ulong> jittedWithSubstitutions, ulong[] originalResultVec)
+        {
+            int totalDemanded = demandedVars.Sum(x => BitOperations.PopCount(x.demandedMask));
+
+            // Compute a full result vector in (2^t*bitWidth)*(2^demandedSymbolBits) time
+            // Proof for why this works:
+            // - Constrained parts are always a part of a bitwise term.
+            // - Substituted parts evaluate to constants, which get treated as semi-linear constants(inside bitwise terms)
+            var numCombinations = (ulong)Math.Pow(2, inputVars.Count);
+            var vDemandedMap = new Dictionary<AstIdx, ulong>();
+            int vecIdx = 0;
+            var vArray = new ulong[inputVars.Count + exprToSubstVar.Count];
+            for (ushort bitIndex = 0; bitIndex < width; bitIndex++)
+            {
+                for (ulong i = 0; i < numCombinations; i++)
+                {
+                    // Set the value to zeroes or ones
+                    for (int vIdx = 0; vIdx < inputVars.Count; vIdx++)
+                    {
+                        var value = ((i >> (ushort)vIdx) & 1) == 0 ? 0ul : 1ul;
+                        value <<= bitIndex;
+                        vArray[vIdx] = value;
+                    }
+
+                    // Enumerate through all 2^t combinations of input values for the demanded variable bits,
+                    // evaluate the substituted parts on these input combinations, plug evaluated substituted parts into `withSubstitutions` expression,
+                    // and compare their result vectors.
+                    var numDemandedCombinations = (ulong)Math.Pow(2, totalDemanded);
+                    for (ulong j = 0; j < numDemandedCombinations; j++)
+                    {
+                        // Choose one of 2^t input combinations for the demanded variable bits in the substitued parts
+                        vDemandedMap.Clear();
+                        int currVarIdx = 0;
+                        ulong currDemandedVarMask = demandedVars[currVarIdx].demandedMask;
+                        for (int vIdx = 0; vIdx < (int)totalDemanded; vIdx++)
+                        {
+                            // If we've chosen values for all bits in this variable, move onto the next one.
+                            if (currDemandedVarMask == 0)
+                            {
+                                currVarIdx += 1;
+                                currDemandedVarMask = demandedVars[currVarIdx].demandedMask;
+                            }
+
+                            // Get the index of the demanded variable bit we are setting
+                            var vBitIdx = (ushort)BitOperations.TrailingZeroCount(currDemandedVarMask);
+
+                            // Compute the value for this bit
+                            var value = ((j >> (ushort)vIdx) & 1) == 0 ? 0ul : 1ul;
+                            value <<= vBitIdx;
+
+                            // Set the variable bit's value
+                            vDemandedMap.TryAdd(demandedVars[currVarIdx].demandedVar, 0);
+                            vDemandedMap[demandedVars[currVarIdx].demandedVar] |= value;
+
+                            // Mark this bit as decided
+                            currDemandedVarMask &= ~(1ul << vBitIdx);
+                        }
+
+                        // Evaluate each substituted part on this input combination
+                        for (int substIdx = 0; substIdx < exprToSubstVar.Count; substIdx++)
+                        {
+                            var eval = SimpleAstEvaluator.Evaluate(ctx, exprToSubstVar[substIdx].Key, vDemandedMap);
+                            vArray[inputVars.Count + substIdx] = eval;
+                        }
+
+                        // Evaluate withSubstitutions on f(x, y, z, subst0, subst1, subst...) and compare result vectors.
+                        fixed (ulong* vPtr = &vArray[0])
+                        {
+                            var curr = jittedWithSubstitutions(vPtr) >> bitIndex;
+                            if (curr != originalResultVec[vecIdx])
+                                return false;
+                        }
+                    }
+
+                    vecIdx += 1;
+                }
+            }
+
+            return true;
+        }
+
+        private unsafe AstIdx? SimplifyUnconstrained(AstIdx withoutSubstitutions, Dictionary<AstIdx, ulong> varToDemandedBits)
+        {
+            List<(AstIdx demandedVar, ulong demandedMask)> demandedVars = varToDemandedBits.OrderBy(x => ctx.GetSymbolName(x.Key)).Select(x => (x.Key, x.Value)).ToList();
+
+            // Compute a result vector for the nonlinear expression.
+            var w = ctx.GetWidth(withoutSubstitutions);
+            var inputVars = ctx.CollectVariables(withoutSubstitutions);
+            Debug.Assert(inputVars.Count == demandedVars.Count && inputVars.SequenceEqual(demandedVars.Select(x => x.demandedVar)));
+            var expectedExpr = LinearSimplifier.Run(w, ctx, withoutSubstitutions, false, true, false, inputVars);
+
+            // Jit the input expression
+            var pagePtr1 = JitUtils.AllocateExecutablePage(4096);
+            new Amd64OptimizingJit(ctx).Compile(withoutSubstitutions, inputVars, pagePtr1, true);
+            var jittedBefore = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr1;
+
+            // Jit the output expression
+            var pagePtr2 = JitUtils.AllocateExecutablePage(4096);
+            new Amd64OptimizingJit(ctx).Compile(expectedExpr, inputVars, pagePtr2, true);
+            var jittedAfter = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr2;
+
+            // Prove that they are equivalent for all possible input combinations
+            int totalDemanded = demandedVars.Sum(x => BitOperations.PopCount(x.demandedMask));
+            var numDemandedCombinations = (ulong)Math.Pow(2, totalDemanded);
+            var vArray = new ulong[inputVars.Count];
+            for (ulong combIdx = 0; combIdx < numDemandedCombinations; combIdx++)
+            {
+                // Set all variable values to zero.
+                for (int i = 0; i < vArray.Length; i++)
+                    vArray[i] = 0;
+
+                int currVarIdx = 0;
+                ulong currDemandedVarMask = demandedVars[currVarIdx].demandedMask;
+                for (int vIdx = 0; vIdx < (int)totalDemanded; vIdx++)
+                {
+                    // If we've chosen values for all bits in this variable, move onto the next one.
+                    if (currDemandedVarMask == 0)
+                    {
+                        currVarIdx += 1;
+                        currDemandedVarMask = demandedVars[currVarIdx].demandedMask;
+                    }
+
+                    // Get the index of the demanded variable bit we are setting
+                    var vBitIdx = (ushort)BitOperations.TrailingZeroCount(currDemandedVarMask);
+
+                    // Compute the value for this bit
+                    var value = ((combIdx >> (ushort)vIdx) & 1) == 0 ? 0ul : 1ul;
+                    value <<= vBitIdx;
+
+                    // Set the variable bit's value
+                    vArray[currVarIdx] |= value;
+                    // Mark this bit as decided
+                    currDemandedVarMask &= ~(1ul << vBitIdx);
+                }
+
+                fixed (ulong* vPtr = &vArray[0])
+                {
+                    var op1 = jittedBefore(vPtr);
+                    var op2 = jittedAfter(vPtr);
+                    if (op1 != op2)
+                    {
+                        JitUtils.FreeExecutablePage(pagePtr1);
+                        JitUtils.FreeExecutablePage(pagePtr2);
+                        return null;
+                    }
+                }
+            }
+
+            return expectedExpr;
+        }
+
+        // TODO: Cache results to avoid exponentially visiting shared nodes
+        private void ComputeSymbolDemandedBits(AstIdx idx, ulong currDemanded, Dictionary<AstIdx, ulong> symbolDemandedBits)
+        {
+            var op0 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp0(idx), demanded, symbolDemandedBits);
+            var op1 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp1(idx), demanded, symbolDemandedBits);
+
+            var opc = ctx.GetOpcode(idx);
+            switch(opc)
+            {
+                // If we have a symbol, union the set of demanded bits
+                case AstOp.Symbol:
+                    symbolDemandedBits.TryAdd(idx, 0);
+                    symbolDemandedBits[idx] |= currDemanded;
+                    break;
+                // If we have a constant, there is nothing to do.
+                case AstOp.Constant:
+                    break;
+                // TODO: If the multiplication can be rewritten as a constant, we can get more precision by ignoring bits that get shifted out?
+                // Also check if mul can be rewritten as shl?
+                // For addition by a constant we can also get more precision
+                case AstOp.Add:
+                case AstOp.Mul:
+                    // If we have addition/multiplication, we only care about bits at and below the highest set bit.
+                    var demandedWidth = 64 - (uint)BitOperations.LeadingZeroCount(currDemanded);
+                    currDemanded = ModuloReducer.GetMask(demandedWidth);
+
+                    op0(currDemanded);
+                    op1(currDemanded);
+                    break;
+                case AstOp.Lshr:
+                    var shiftBy = ctx.GetOp1(idx);
+                    var shiftByConstant = ctx.TryGetConstantValue(shiftBy);
+                    if (shiftByConstant == null)
+                    {
+                        op0(currDemanded);
+                        op1(currDemanded);
+                        break;
+                    }
+
+                    // If we know the value we are shifting by, we can truncate the demanded bits.
+                    op0(currDemanded >> (ushort)shiftByConstant.Value);
+                    op1(currDemanded);
+                    break;
+
+                case AstOp.And:
+                    {
+                        // If we have a&b, demandedbits(a) does not include any known zero bits from b. Works both ways.
+                        var op0Demanded = ~ctx.GetKnownBits(ctx.GetOp1(idx)).Zeroes & currDemanded;
+                        var op1Demanded = ~ctx.GetKnownBits(ctx.GetOp0(idx)).Zeroes & currDemanded;
+                        op0(op0Demanded);
+                        op1(op1Demanded);
+                        break;
+                    }
+
+                case AstOp.Or:
+                    {
+                        // If we have a|b, demandedbits(a) does not include any known one bits from b. Works both ways.
+                        var op0Demanded = ~ctx.GetKnownBits(ctx.GetOp1(idx)).Ones & currDemanded;
+                        var op1Demanded = ~ctx.GetKnownBits(ctx.GetOp0(idx)).Ones & currDemanded;
+                        op0(op0Demanded);
+                        op1(op1Demanded);
+                        break;
+                    }
+                // TODO: We can gain some precision by exploiting XOR known bits.
+                case AstOp.Xor:
+                    op0(currDemanded);
+                    op1(currDemanded);
+                    break;
+                // TODO: Treat negation as x^-1, then use XOR transfer function
+                case AstOp.Neg:
+                    op0(currDemanded);
+                    break;
+                case AstOp.Trunc:
+                    currDemanded &= ModuloReducer.GetMask(ctx.GetWidth(idx));
+                    op0(currDemanded);
+                    break;
+                case AstOp.Zext:
+                    op0(currDemanded & ctx.GetWidth(ctx.GetOp0(idx)));
+                    break;
+                default:
+                    throw new InvalidOperationException($"Cannot compute demanded bits for {opc}");
+            }
         }
 
         private AstIdx? TrySimplifyMixedPolynomialParts(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, Dictionary<AstIdx, AstIdx> inverseSubstMapping, List<AstIdx> varList)
@@ -654,7 +1340,7 @@ namespace Mba.Simplifier.Pipeline
                 return parts;
 
             // Try to rewrite substituted parts as negations of one another. Exit early if this fails.
-            var rewriteMapping = GetUnmergeMapping(substitutionMapping);
+            var rewriteMapping = UnmergeNegatedParts(substitutionMapping);
             if (rewriteMapping.Count == 0)
                 return parts;
 

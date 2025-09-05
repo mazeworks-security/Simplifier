@@ -44,6 +44,7 @@ namespace Mba.Simplifier.Utility
                 AstOp.And => z3Ctx.MkBVAND(op0(), op1()),
                 AstOp.Or => z3Ctx.MkBVOR(op0(), op1()),
                 AstOp.Xor => z3Ctx.MkBVXOR(op0(), op1()),
+                AstOp.Lshr => z3Ctx.MkBVLSHR(op0(), op1()),
                 AstOp.Neg => z3Ctx.MkBVNot(op0()),
                 AstOp.Constant => z3Ctx.MkBV(ctx.GetConstantValue(idx), ctx.GetWidth(idx)),
                 AstOp.Symbol => z3Ctx.MkBVConst(ctx.GetSymbolName(idx), ctx.GetWidth(idx)),
