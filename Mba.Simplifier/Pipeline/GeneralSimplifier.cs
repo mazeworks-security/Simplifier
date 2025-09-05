@@ -1,10 +1,12 @@
 ﻿using Iced.Intel;
+using Mba.Ast;
 using Mba.Common.MSiMBA;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Pipeline.Intermediate;
 using Mba.Simplifier.Polynomial;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
+using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -14,6 +16,7 @@ using System.Numerics;
 using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -26,6 +29,8 @@ namespace Mba.Simplifier.Pipeline
 
         // For any given node, we store the optimal representation yielded by SiMBA.
         private readonly Dictionary<uint, uint> simbaCache = new();
+
+        private int substCount = 0;
 
         public static AstIdx Simplify(AstCtx ctx, AstIdx id) => new GeneralSimplifier(ctx).SimplifyGeneral(id);
 
@@ -111,7 +116,7 @@ namespace Mba.Simplifier.Pipeline
 
             // If there are multiple substitutions, try to minimize the number of substitutions.
             if (substMapping.Count > 1)
-                withSubstitutions = TryUnmergeLinCombs(withSubstitutions, substMapping);
+                withSubstitutions = TryUnmergeLinCombs(withSubstitutions, substMapping, ref isSemiLinear);
             withSubstitutions = SimplifyViaTermRewriting(withSubstitutions);
 
             // If polynomial parts are present, try to simplify them.
@@ -552,13 +557,12 @@ namespace Mba.Simplifier.Pipeline
             if (substitutionMapping.TryGetValue(id, out var existing))
                 return existing;
 
-            var substCount = substitutionMapping.Count;
             while(true)
             {
                 var subst = ctx.Symbol($"subst{substCount}", ctx.GetWidth(id));
-                if(substitutionMapping.Values.Contains(subst))
+                substCount++;
+                if (substitutionMapping.Values.Contains(subst))
                 {
-                    substCount++;
                     continue;
                 }
 
@@ -567,13 +571,17 @@ namespace Mba.Simplifier.Pipeline
             }
         }
 
-        private AstIdx TryUnmergeLinCombs(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping)
+        private AstIdx TryUnmergeLinCombs(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear)
         {
             // We cannot rewrite substitutions as negations of one another if there is only one substitution.
             if (substitutionMapping.Count == 1)
                 return withSubstitutions;
 
-            var rewriteMapping = GetUnmergeMapping(substitutionMapping);
+            var result = UnmergeDisjointParts(withSubstitutions, substitutionMapping, ref isSemiLinear);
+            if (result != null)
+                withSubstitutions = result.Value;
+
+            var rewriteMapping = UnmergeNegatedParts(substitutionMapping);
 
             // Return if we cannot rewrite any substitutions as negations of one another.
             if(!rewriteMapping.Any())
@@ -583,7 +591,7 @@ namespace Mba.Simplifier.Pipeline
             return withSubstitutions;
         }
 
-        private Dictionary<AstIdx, AstIdx> GetUnmergeMapping(Dictionary<AstIdx, AstIdx> substitutionMapping)
+        private Dictionary<AstIdx, AstIdx> UnmergeNegatedParts(Dictionary<AstIdx, AstIdx> substitutionMapping)
         {
             var rewriteMapping = new Dictionary<AstIdx, AstIdx>();
             bool changed = true;
@@ -607,6 +615,153 @@ namespace Mba.Simplifier.Pipeline
             }
 
             return rewriteMapping;
+        }
+
+        // We are looking for nonlinear MBAs of the form:
+        // (-3689350793862841103*(RSI&(4040198467629586701 + 1099511628211*((5292288&RBX))))) + 
+        // (-3689348594839584681*(RSI&(4040198467629586696+(1099511628211*(5292288&RBX))))) + 
+        // (7378699388702425784*(RSI&(4040198467629586909+(1099511628211*(5292288&RBX)))))
+        // , where the same semi-linear expression(minus the constant offset) is substituted in multiple terms.
+        // We then try to decompose each substituted part into `known_ones | (shared_bits + 1099511628211*(5292288&RBX))`
+        // , allowing us to reduce the number of substituted terms. This (a) unblurs the relationship between the expression, and (b) allows msimba to take advantage of the known bits.
+        // TODO: Bail out when no semi-linear parts are found!
+        private AstIdx? UnmergeDisjointParts(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear)
+        {
+            var list = substitutionMapping.ToList();
+            var inputExpressions = list.Select(x => x.Key).ToList();
+            var inputSubstVars = list.Select(x => x.Value).ToList();
+
+            // We have a list of <substVar, expr>, where expression is an arbitary nonlinear expression.
+            var parts = new List<(AstIdx idx, Dictionary<AstIdx, AstIdx> substitutions)>();
+
+            var tempSubstMapping = new Dictionary<AstIdx, AstIdx>();
+            var results = new List<AstIdx>();
+            for(int i = 0 ; i < inputExpressions.Count; i++)
+            {
+                // Substitute all of the nonlinear parts for this expression
+                // Here we share the list of substitutions 
+                var expr = inputExpressions[i];
+                bool isSl = false;
+                var result = GetAstWithSubstitutions(expr, tempSubstMapping, ref isSemiLinear);
+                results.Add(result);
+            }
+            // Invert the temp substitution mapping
+            tempSubstMapping = tempSubstMapping.ToDictionary(x => x.Value, x => x.Key);
+
+            var w = ctx.GetWidth(inputExpressions.First());
+            var moduloMask = (ulong)ModuloReducer.GetMask(w);
+            var vars = results.SelectMany(x => ctx.CollectVariables(x)).Distinct().OrderBy(x => ctx.GetSymbolName(x)).ToList();
+            var numCombinations = (ulong)Math.Pow(2, vars.Count);
+            Dictionary<ResultVectorKey, List<(int index, ulong constantOffset)>> vecToExpr = new();
+            for(int i = 0; i < results.Count; i++)
+            {
+                var expr = results[i];
+  
+                var resultVec = LinearSimplifier.JitResultVector(ctx, w, moduloMask, vars, expr, true, numCombinations);
+                var constantOffset = LinearSimplifier.SubtractConstantOffset(moduloMask, resultVec, (int)numCombinations);
+
+                var key = new ResultVectorKey(resultVec);
+                vecToExpr.TryAdd(key, new());
+                vecToExpr[key].Add((i, constantOffset));
+            }
+
+            int vecIdx = 0;
+
+            Dictionary<AstIdx, AstIdx> varToNewSubstValue = new Dictionary<AstIdx, AstIdx>();
+            foreach(var (key, members) in vecToExpr)
+            {
+                KnownBits kb = KnownBits.MakeConstant(0, w);
+                var resultVector = key.resultVector;
+                // Compute the known bits of the result vector
+                // TODO:
+                // (1) If a column of the truth table shares the same coefficient, we can compute knownbits for the entire column in parallel.
+                // (2) Port to C++
+                for(int bitIndex = 0; bitIndex < w; bitIndex++)
+                {
+                    for(ulong i = 0; i < numCombinations; i++)
+                    {
+                        var coeff = resultVector[vecIdx];
+                        if(coeff == 0)
+                        {
+                            vecIdx++;
+                            continue;
+                        }
+
+                        // Knownbits += coeff*(x&whatever)
+                        ulong value = moduloMask & ~(1ul << bitIndex);
+                        var curr = new KnownBits(w, value, 0);
+                        var mul = KnownBits.Get(TransferOpcode.Mul, KnownBits.MakeConstant(coeff, w), curr);
+                        kb = KnownBits.Get(TransferOpcode.Add, kb, mul);
+                        vecIdx++;
+                    }
+                }
+
+                // Compute the shared bits among the constant offset.
+                var union = moduloMask;
+                foreach(var (_, constantOffset) in members)
+                    union &= constantOffset;
+
+                // Update the constant offset to extract out the shared bits
+                for (int i = 0; i < members.Count; i++)
+                {
+                    var member = members[i];
+                    members[i] = (member.index, member.constantOffset & ~union);
+                }
+
+                // Verify that we can rewrite every linear combination to be in the form of sharedBits | (sharedSubst)
+                kb = KnownBits.Get(TransferOpcode.Add, kb, KnownBits.MakeConstant(union, w));
+                if (members.Any(x => !CanFitConstantInUndemandedBits(kb, x.constantOffset, moduloMask)))
+                {
+                    Debugger.Break();
+                    continue;
+                }
+
+                // Replace each substituted var with a new substituted var | some constant offset.
+                var newSubstVar = ctx.Symbol($"subst{substCount}", (byte)w);
+                substCount++;
+                for(int i = 0; i < members.Count; i++)
+                {
+                    var member = members[i];
+                    var expr = ctx.Or(ctx.Constant(member.constantOffset, w), newSubstVar);
+                    var inVar = inputSubstVars[member.index];
+                    if (varToNewSubstValue.ContainsKey(inVar))
+                        throw new InvalidOperationException($"Cannot share substituted parts!");
+                    
+                    varToNewSubstValue[inVar] = expr;
+                }
+
+                var vecExpr = LinearSimplifier.Run(w, ctx, null, false, true, false, vars, null, resultVector);
+                vecExpr = ctx.Add(ctx.Constant(union, w), vecExpr);
+                // Back substitute in the variables we temporarily substituted.
+                vecExpr = ApplyBackSubstitution(ctx, vecExpr, tempSubstMapping);
+                substitutionMapping.Remove(vecExpr);
+                substitutionMapping.TryAdd(vecExpr, newSubstVar);
+
+                isSemiLinear = true;
+            }
+
+            withSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, varToNewSubstValue);
+
+
+            var newVars = ctx.CollectVariables(withSubstitutions).ToHashSet();
+            foreach(var (expr, substVar) in substitutionMapping.ToList())
+            {
+                if (!newVars.Contains(substVar))
+                    substitutionMapping.Remove(expr);
+            }
+
+            return withSubstitutions;
+            Debugger.Break();
+        }
+
+        private bool CanFitConstantInUndemandedBits(KnownBits kb, ulong constant, ulong moduloMask)
+        {
+            if ((kb.Ones & constant) != 0)
+                return false;
+            if ((kb.UnknownBits & constant) != 0)
+                return false;
+
+            return true;
         }
 
         private AstIdx? TrySimplifyMixedPolynomialParts(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, Dictionary<AstIdx, AstIdx> inverseSubstMapping, List<AstIdx> varList)
@@ -654,7 +809,7 @@ namespace Mba.Simplifier.Pipeline
                 return parts;
 
             // Try to rewrite substituted parts as negations of one another. Exit early if this fails.
-            var rewriteMapping = GetUnmergeMapping(substitutionMapping);
+            var rewriteMapping = UnmergeNegatedParts(substitutionMapping);
             if (rewriteMapping.Count == 0)
                 return parts;
 

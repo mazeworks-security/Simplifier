@@ -9,14 +9,31 @@ using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
 using Microsoft.Z3;
+using Simplifier;
 using System.ComponentModel;
 using System.Diagnostics;
 
 bool printUsage = false;
-uint bitWidth = 64;
+uint bitWidth = 8;
 bool useEqsat = false;
 bool proveEquivalence = true;
 string inputText = null;
+
+//DatasetTester.Run();
+
+inputText = "(-3689350793862841103*(RSI&(4040198467629586701 + 1099511628211*((5292288&RBX))))) +  (-3689348594839584681*(RSI&(4040198467629586696+(1099511628211*(5292288&RBX))))) + (7378699388702425784*(RSI&(4040198467629586909+(1099511628211*(5292288&RBX)))))";
+
+inputText = "(((1099511628211:i64*(659114373011020351:i64|(5292288:i64&RBX:i64)))&-214:i64)) tr i8";
+
+//inputText = "(-3689350793862841103*(RSI&(5|subst))) + (-3689348594839584681*(RSI&subst)) + (7378699388702425784*(RSI&(213|subst)))";
+
+//inputText = "((((3689348594839584681:i64*(5:i64&RSI:i64))+(461170361061343928:i64*(208:i64&RSI:i64)))+(-3689348594839584681:i64*(5:i64&(RSI:i64&((1099511628211:i64*(4040198467629586696 + (5292288:i64&RBX:i64)))):i64))))+(-461170361061343928:i64*(208:i64&(RSI:i64&((1099511628211:i64*(4040198467629586696 + (5292288:i64&RBX:i64)))):i64))))";
+
+//inputText = "(1099511628211:i64*(4040198467629586696:i64 + (5292288:i64&RBX:i64)))";
+
+//inputText = "((((3689348594839584681:i64*(5:i64&RSI:i64))+(461170361061343928:i64*(208:i64&RSI:i64)))+(-3689348594839584681:i64*(5:i64&(RSI:i64&(1099511628211:i64*(4040198467629586696:i64 + (5292288:i64&RBX:i64))):i64))))+(-461170361061343928:i64*(208:i64&(RSI:i64&(1099511628211:i64*(4040198467629586696:i64 + (5292288:i64&RBX:i64))):i64))))";
+
+// inputText = "((((3689348594839584681:i64*(5:i64&RSI:i64))+(461170361061343928:i64*(208:i64&RSI:i64)))+(-3689348594839584681:i64*(5:i64&(RSI:i64&(1099511628211:i64*(4040198467629586696:i64 + (5292288:i64&RBX:i64)))))))+(-461170361061343928:i64*(208:i64&(RSI:i64&(1099511628211:i64*(4040198467629586696:i64 + (5292288:i64&RBX:i64)))))))\r\n";
 
 var printHelp = () =>
 {
@@ -71,6 +88,10 @@ AstIdx.ctx = ctx;
 var id = RustAstParser.Parse(ctx, inputText, bitWidth);
 
 Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n\n");
+
+
+var bar = LinearSimplifier.Run(bitWidth, ctx, id, false, true);
+Console.WriteLine(ctx.GetAstString(bar));
 
 var input = id;
 id = ctx.RecursiveSimplify(id);
