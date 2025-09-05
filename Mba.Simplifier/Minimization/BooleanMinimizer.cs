@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -35,6 +36,15 @@ namespace Mba.Simplifier.Minimization
             if (variables.Count == 1)
             {
                 return truthTable.GetBit(0) == false ? variables[0] : ctx.Neg(variables[0]);
+            }
+
+            if (variables.Count <= 5)
+            {
+                var bar = MinimizeAnf(ctx, variables, truthTable.Clone()); 
+                //var bar = FromTruthTable(ctx, variables, truthTable);
+                var tableUint = (uint)truthTable.arr[0];
+                var result = GetOptimalNpnCircuit(ctx, variables, AppendVariables(tableUint, (uint)variables.Count, 5 - (uint)variables.Count));
+                return result;
             }
 
             // If there are four or less variables, we can pull the optimal representation from the truth table.
@@ -74,13 +84,105 @@ namespace Mba.Simplifier.Minimization
             return ctx.Constant(constant, width);
         }
 
+        public static uint AppendVariables(uint truthTable, uint numExistingVars, uint numVarsToAdd)
+        {
+            uint currentRows = 1u << (int)numExistingVars; 
+            uint duplicationFactor = 1u << (int)numVarsToAdd;
+            uint expandedTruthTable = 0;
+            for (uint i = 0; i < duplicationFactor; i++)
+                expandedTruthTable |= truthTable << (int)(i * (1u << (int)numExistingVars));
+            return expandedTruthTable;
+        }
+
+        // Extend the truth table to include new variables
+        public static uint AddTruthTableVariables(uint truthTable, uint numVarsToAdd)
+        {
+            uint currentRows = 1u << BitOperations.PopCount(truthTable); 
+            uint newRows = currentRows << (int)numVarsToAdd; 
+            uint expandedTruthTable = 0;
+            for (uint i = 0; i < currentRows; i++)
+            {
+                for (uint j = 0; j < (1u << (int)numVarsToAdd); j++)
+                    expandedTruthTable |= (truthTable & (1u << (int)i)) << (int)(i + j);
+            }
+
+            return expandedTruthTable;
+        }
+
+        public static UInt32 ReverseBytes(UInt32 value)
+        {
+            return (value & 0x000000FFU) << 24 | (value & 0x0000FF00U) << 8 |
+                (value & 0x00FF0000U) >> 8 | (value & 0xFF000000U) >> 24;
+        }
+
+        public static unsafe AstIdx GetOptimalNpnCircuit(AstCtx ctx, IReadOnlyList<AstIdx> variables, uint truthTable)
+        {
+            // Lookup the optimal circuit representation
+            var neg = ReverseBits(truthTable);
+            //var neg = ReverseBytes(truthTable);
+            var gv = Optimal5.Instance.Lookup(neg);
+
+            Optimal5.Instance.PrintGatevec(gv);
+
+            // Emplace variables onto node vector
+
+            var reversed = variables.Reverse().ToArray();
+            var nodeVec = new AstIdx[5 + gv.NumGates];
+            for (int i = 0; i < 5; i++)
+                nodeVec[i] = reversed[Math.Min(i, variables.Count - 1)];
+
+            // Compute the circuit
+            for (int idx = 0; idx < gv.NumGates; idx++)
+            {
+                // Fetch operands
+                uint a = gv.Gates[idx];
+                var i1 = ((a >> 4) & 31);
+                var idx1 = nodeVec[i1 - 1];
+                var i2 = ((a >> 10) & 31);
+                var idx2 = nodeVec[i2 - 1];
+
+                // Build the expression
+                var expr = (a & 7) switch
+                {
+                    3 => ctx.Xor(idx1, idx2),
+                    4 => ctx.And(idx1, idx2),
+                    5 => ctx.And(idx1, ctx.Neg(idx2)),
+                    6 => ctx.And(idx2, ctx.Neg(idx1)),
+                    7 => ctx.Or(idx1, idx2),
+                    _ => throw new InvalidOperationException()
+                };
+
+                nodeVec[idx + 5] = expr;
+            }
+
+            // Negate the circuit if necessary
+            var resultIdx = (gv.Output >> 1) - 1;
+            var result = nodeVec[resultIdx];
+            if ((gv.Output & 1) != 0)
+                result = ctx.Neg(result);
+
+            return result;
+        }
+
+        public static uint ReverseBits(uint n)
+        {
+            n = (n >> 1) & 0x55555555 | (n << 1) & 0xaaaaaaaa;
+            n = (n >> 2) & 0x33333333 | (n << 2) & 0xcccccccc;
+            n = (n >> 4) & 0x0f0f0f0f | (n << 4) & 0xf0f0f0f0;
+            n = (n >> 8) & 0x00ff00ff | (n << 8) & 0xff00ff00;
+            n = (n >> 16) & 0x0000ffff | (n << 16) & 0xffff0000;
+            return n;
+        }
+
+
         public static AstIdx FromTruthTable(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
         {
             // Fetch the truth table entry corresponding to this node.
             var ast = TableDatabase.Instance.GetTableEntry(ctx, (List<AstIdx>)variables, (int)(uint)truthTable.arr[0]);
             return ast;
         }
-        
+
+
         private static AstIdx MinimizeAnf(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
         {
             // Minimize normally if zext/trunc nodes aren't present

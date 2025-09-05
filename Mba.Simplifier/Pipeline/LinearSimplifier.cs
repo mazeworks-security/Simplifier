@@ -773,7 +773,7 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
-        private static ApInt SubtractConstantOffset(ApInt moduloMask, ApInt[] resultVector, int numCombinations)
+        public static ApInt SubtractConstantOffset(ApInt moduloMask, ApInt[] resultVector, int numCombinations)
         {
             var l = resultVector.Length;
 
@@ -795,7 +795,18 @@ namespace Mba.Simplifier.Pipeline
                         ApInt constantOffset = moduloMask & constant >> bitIndex;
                         for (int i = 0; i < (int)numCombinations; i++)
                         {
-                            ptr[comb + i] = moduloMask & (ptr[comb + i] - constantOffset);
+                            var newCoeff = moduloMask & (ptr[comb + i] - constantOffset);
+                            if (comb == 0)
+                            {
+                                ptr[comb + i] = newCoeff;
+                                continue;
+                            }
+
+                            // Canonicalize the coefficient to ensure that we are returning a canonical result vector
+                            // TODO: This may actually interfere with our ability to find good coefficients for single bitwise terms
+                            // Might need to disable this
+                            newCoeff = (moduloMask & (newCoeff * (1ul << bitIndex))) >> bitIndex;
+                            ptr[comb + i] = newCoeff;
                         }
 
                         bitIndex += 1;
@@ -806,7 +817,7 @@ namespace Mba.Simplifier.Pipeline
             return constant;
         }
 
-        private new (ApInt[], List<List<(ApInt coeff, ApInt bitMask)>>) GetAnf()
+        private (ApInt[], List<List<(ApInt coeff, ApInt bitMask)>>) GetAnf()
         {
             // Get all combinations of variables.
             var variableCombinations = GetVariableCombinations(variables.Count);

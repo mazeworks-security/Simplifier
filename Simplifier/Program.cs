@@ -9,6 +9,7 @@ using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
 using Microsoft.Z3;
+using Simplifier;
 using System.ComponentModel;
 using System.Diagnostics;
 
@@ -17,6 +18,17 @@ uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = true;
 string inputText = null;
+
+
+
+inputText = "e + (a|b|c|d) - e";
+
+inputText = "a|b|c|d";
+
+inputText = "e + d + (a^(b&c)) - e - d";
+
+
+//inputText = "(a|b|c|d)&e";
 
 var printHelp = () =>
 {

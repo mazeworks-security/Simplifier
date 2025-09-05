@@ -9,15 +9,15 @@ namespace Mba.Simplifier.Utility
 {
     public static class AstRewriter
     {
-        public static AstIdx ChangeBitwidth(AstCtx ctx, AstIdx node, uint newWidth, Dictionary<AstIdx, AstIdx> cache)
+        public static AstIdx ChangeBitwidth(AstCtx ctx, AstIdx node, uint newWidth, ulong moduloMask, Dictionary<AstIdx, AstIdx> cache)
         {
             // We are working with DAGs, so we need a cache to avoid exponentially visiting nodes with high sharing.
             if (cache.TryGetValue(node, out var existing))
                 return existing;
 
             var opcode = ctx.GetOpcode(node);
-            var op0 = () => ChangeBitwidth(ctx, ctx.GetOp0(node), newWidth, cache);
-            var binop = () => ctx.Binop(opcode, ChangeBitwidth(ctx, ctx.GetOp0(node), newWidth, cache), ChangeBitwidth(ctx,ctx.GetOp1(node), newWidth, cache));
+            var op0 = () => ChangeBitwidth(ctx, ctx.GetOp0(node), newWidth, moduloMask, cache);
+            var binop = () => ctx.Binop(opcode, ChangeBitwidth(ctx, ctx.GetOp0(node), newWidth, moduloMask, cache), ChangeBitwidth(ctx,ctx.GetOp1(node), newWidth, moduloMask, cache));
 
             if (opcode == AstOp.Trunc)
             {
@@ -54,8 +54,8 @@ namespace Mba.Simplifier.Utility
                 AstOp.Neg => ctx.Neg(op0()),
                 // For lshrs we can't truncate any before, because the high bits may now effect the low bits!
                 AstOp.Lshr => ctx.Trunc(node, (byte)newWidth),
-                AstOp.Constant => ctx.Constant(ctx.GetConstantValue(node), newWidth),
-                AstOp.Symbol => ResizeValue(ctx, node, (byte)newWidth),
+                AstOp.Constant => ctx.Constant(ctx.GetConstantValue(node) & moduloMask, newWidth),
+                AstOp.Symbol => ResizeValue(ctx, node, (byte)newWidth, moduloMask),
                 _ => throw new InvalidOperationException($"Cannot change width of opcode {opcode}"),
             };
 
@@ -63,7 +63,7 @@ namespace Mba.Simplifier.Utility
             return result;
         }
 
-        private static AstIdx ResizeValue(AstCtx ctx, AstIdx node, byte target)
+        private static AstIdx ResizeValue(AstCtx ctx, AstIdx node, byte target, ulong moduloMask)
         {
             var w = ctx.GetWidth(node);
             if (w == target)
