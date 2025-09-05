@@ -11,6 +11,7 @@ use ahash::AHashMap;
 use libc::{c_char, c_void};
 
 use crate::{
+    known_bits::*,
     mba::{self, Context as MbaContext},
     truth_table_database::{TruthTable, TruthTableDatabase},
 };

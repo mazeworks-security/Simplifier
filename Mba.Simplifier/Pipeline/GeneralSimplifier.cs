@@ -665,11 +665,12 @@ namespace Mba.Simplifier.Pipeline
                 vecToExpr[key].Add((i, constantOffset));
             }
 
-            int vecIdx = 0;
+   
 
             Dictionary<AstIdx, AstIdx> varToNewSubstValue = new Dictionary<AstIdx, AstIdx>();
             foreach(var (key, members) in vecToExpr)
             {
+                int vecIdx = 0;
                 KnownBits kb = KnownBits.MakeConstant(0, w);
                 var resultVector = key.resultVector;
                 // Compute the known bits of the result vector
