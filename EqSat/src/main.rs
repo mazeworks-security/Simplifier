@@ -27,6 +27,7 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+mod known_bits;
 mod mba;
 mod simple_ast;
 mod truth_table_database;

@@ -773,7 +773,7 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
-        private static ApInt SubtractConstantOffset(ApInt moduloMask, ApInt[] resultVector, int numCombinations)
+        public static ApInt SubtractConstantOffset(ApInt moduloMask, ApInt[] resultVector, int numCombinations)
         {
             var l = resultVector.Length;
 
