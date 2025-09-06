@@ -3,6 +3,7 @@ using Mba.Utility;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -42,11 +43,21 @@ namespace Mba.Simplifier.Bindings
         public static KnownBits Empty(uint width)
             => new KnownBits(width, 0, 0);
 
-        public KnownBits Get(TransferOpcode opcode, KnownBits rhs)
-            => Get(opcode, this, rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe KnownBits Add(KnownBits lhs, KnownBits rhs)
+        {
+            KnownBits result;
+            Api.GetAddKnownBits(&lhs, &rhs, &result);
+            return result;
+        }
 
-        public static KnownBits Get(TransferOpcode transferOpcode, KnownBits lhs, KnownBits rhs)
-            => Api.GetKnownBits(transferOpcode, lhs, rhs);
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static unsafe KnownBits Mul(KnownBits lhs, KnownBits rhs)
+        {
+            KnownBits result;
+            Api.GetMulKnownBits(&lhs, &rhs, &result);
+            return result;
+        }
 
         public static KnownBits MakeConstant(ulong c, uint width)
         {
@@ -78,10 +89,10 @@ namespace Mba.Simplifier.Bindings
         private static class Api
         {
             [DllImport("Mba.FFI")]
-            public unsafe static extern sbyte* GetKnownBitsStr(KnownBits kb);
+            public unsafe static extern void GetAddKnownBits(KnownBits* lhs, KnownBits* rhs, KnownBits* output);
 
             [DllImport("Mba.FFI")]
-            public unsafe static extern KnownBits GetKnownBits(TransferOpcode opcode, KnownBits lhs, KnownBits rhs);
+            public unsafe static extern void GetMulKnownBits(KnownBits* lhs, KnownBits* rhs, KnownBits* output);
         }
     }
 }

@@ -15,6 +15,7 @@ namespace Simplifier
     {
         public static void Run()
         {
+            Console.WriteLine("  ");
             var lines = File.ReadLines("C:\\Users\\colton\\source\\repos\\mba-database\\real-world-nonlinear.txt");
             var beforeAndAfter = lines.Select(x => (x.Split(",")[0], x.Split(",")[1])).ToList();
 

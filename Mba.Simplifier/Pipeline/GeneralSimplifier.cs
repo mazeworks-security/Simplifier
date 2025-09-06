@@ -691,8 +691,8 @@ namespace Mba.Simplifier.Pipeline
                         // Knownbits += coeff*(x&whatever)
                         ulong value = moduloMask & ~(1ul << bitIndex);
                         var curr = new KnownBits(w, value, 0);
-                        var mul = KnownBits.Get(TransferOpcode.Mul, KnownBits.MakeConstant(coeff, w), curr);
-                        kb = KnownBits.Get(TransferOpcode.Add, kb, mul);
+                        var mul = KnownBits.Mul(KnownBits.MakeConstant(coeff, w), curr);
+                        kb = KnownBits.Add(kb, mul);
                         vecIdx++;
                     }
                 }
@@ -710,7 +710,7 @@ namespace Mba.Simplifier.Pipeline
                 }
 
                 // Verify that we can rewrite every linear combination to be in the form of sharedBits | (sharedSubst)
-                kb = KnownBits.Get(TransferOpcode.Add, kb, KnownBits.MakeConstant(union, w));
+                kb = KnownBits.Add(kb, KnownBits.MakeConstant(union, w));
                 if (members.Any(x => !CanFitConstantInUndemandedBits(kb, x.constantOffset, moduloMask)))
                 {
                     Debugger.Break();
