@@ -15,7 +15,7 @@ namespace Simplifier
     {
         public static void Run()
         {
-            Console.WriteLine("  ");
+            Console.WriteLine("    ");
             var lines = File.ReadLines("C:\\Users\\colton\\source\\repos\\mba-database\\real-world-nonlinear.txt");
             var beforeAndAfter = lines.Select(x => (x.Split(",")[0], x.Split(",")[1])).ToList();
 
@@ -31,6 +31,8 @@ namespace Simplifier
 
                 strBefore = "(228698418667888:i64+((((3689349694351212892:i64*(4611686018427387690:i64&RSI:i64))+(1099511628211:i64*(-214:i64&(4040198467629586696:i64+(1099511628211:i64*(5292288:i64&RBX:i64))))))+(-3689349694351212892:i64*(4611686018427387690:i64&(RSI:i64&(4040198467629586696:i64+(1099511628211:i64*(5292288:i64&RBX:i64)))))))+(-3689349694351212892:i64*(RSI:i64&(-4040198467629586910:i64+(72056494526299725:i64*(5292288:i64&RBX:i64)))))))";
 
+                strBefore = "(1:i64*(-214:i64&(4040198467629586696:i64+(1099511628211:i64*(5292288:i64&RBX:i64)))))";
+
                 var before = RustAstParser.Parse(ctx, strBefore, uint.MaxValue);
                 var after = RustAstParser.Parse(ctx, strAfter, uint.MaxValue);
 
@@ -41,6 +43,8 @@ namespace Simplifier
                 var simplified = generalSimplifier.SimplifyGeneral(before);
                 for(int i = 0; i < 5; i++)
                     simplified = generalSimplifier.SimplifyGeneral(simplified);
+
+                var kb = ctx.GetKnownBits(simplified);
 
                 var r = LinearSimplifier.Run(ctx.GetWidth(before), ctx, before, false, true);
                 var rClass = ctx.GetClass(r);

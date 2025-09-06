@@ -1192,6 +1192,15 @@ pub extern "C" fn ContextGetClass(ctx: *mut Context, id: AstIdx) -> u8 {
 }
 
 #[no_mangle]
+pub extern "C" fn ContextGetKnownBits(ctx: *mut Context, id: AstIdx) -> KnownBits {
+    unsafe {
+        let kb = (*ctx).arena.get_data(id).known_bits;
+
+        return kb;
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn ContextGetOp0(ctx: *const Context, id: AstIdx) -> AstIdx {
     unsafe {
         return get_op0(&(*ctx), id);

@@ -23,7 +23,7 @@ namespace Mba.Simplifier.Bindings
         Neg = 6,
     }
 
-    struct KnownBits
+    public struct KnownBits
     {
         public readonly uint Width;
 
