@@ -160,8 +160,12 @@ namespace Mba.Simplifier.Bindings
         public unsafe uint GetCost(AstIdx id) => Api.ContextGetCost(this, id);
         public unsafe bool GetHasPoly(AstIdx id) => Api.ContextGetHasPoly(this, id);
         public unsafe AstClassification GetClass(AstIdx id) => Api.ContextGetClass(this, id);
+        public unsafe KnownBits GetKnownBits(AstIdx id) => Api.ContextGetKnownBits(this, id);
         public unsafe AstIdx GetOp0(AstIdx id) => Api.ContextGetOp0(this, id);
-        public unsafe AstIdx GetOp1(AstIdx id) => Api.ContextGetOp1(this, id);
+        public unsafe AstIdx GetOp1(AstIdx id)
+        {
+            return Api.ContextGetOp1(this, id);
+        }
         public unsafe ulong GetConstantValue(AstIdx id) => Api.ContextGetConstantValue(this, id);
 
         public unsafe bool IsSymbol(AstIdx id) => GetOpcode(id) == AstOp.Symbol;
@@ -355,6 +359,10 @@ namespace Mba.Simplifier.Bindings
             [DllImport("eq_sat")]
             [SuppressGCTransition]
             public unsafe static extern AstClassification ContextGetClass(OpaqueAstCtx* ctx, AstIdx id);
+
+            [DllImport("eq_sat")]
+            [SuppressGCTransition]
+            public unsafe static extern KnownBits ContextGetKnownBits(OpaqueAstCtx* ctx, AstIdx id);
 
             [DllImport("eq_sat")]
             [SuppressGCTransition]

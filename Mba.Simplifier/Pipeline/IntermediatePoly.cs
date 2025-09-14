@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Mba.Simplifier.Pipeline.Intermediate
+namespace Mba.Simplifier.Pipeline
 {
     // This is an intermediate stage between our SparsePolynomial representation, and the 
     // representation that's necessary for arbitrary polynomial reduction.
@@ -23,7 +23,7 @@ namespace Mba.Simplifier.Pipeline.Intermediate
         public IntermediatePoly(uint bitWidth)
         {
             this.bitWidth = bitWidth;
-            moduloMask = (ulong)ModuloReducer.GetMask(bitWidth);
+            moduloMask = ModuloReducer.GetMask(bitWidth);
         }
 
         public void Sum(IntermediateMonomial monomial, ulong value)
@@ -33,7 +33,7 @@ namespace Mba.Simplifier.Pipeline.Intermediate
             old &= moduloMask;
             if (old == 0)
             {
-                if(contained)
+                if (contained)
                     coeffs.Remove(monomial);
                 return;
             }
@@ -43,10 +43,10 @@ namespace Mba.Simplifier.Pipeline.Intermediate
         public override string ToString()
         {
             var terms = new List<string>();
-            foreach(var (monom, coeff) in coeffs)
+            foreach (var (monom, coeff) in coeffs)
                 terms.Add($"{coeff}*({monom})");
 
-            return String.Join(" + ", terms);
+            return string.Join(" + ", terms);
         }
 
         public static IntermediatePoly Add(IReadOnlyList<IntermediatePoly> polys)
@@ -162,15 +162,15 @@ namespace Mba.Simplifier.Pipeline.Intermediate
         {
             List<string> terms = new();
             bool unroll = true;
-            foreach(var (var, deg) in varDegrees)
+            foreach (var (var, deg) in varDegrees)
             {
                 if (!unroll)
                     terms.Add($"{var}**{deg}");
                 else
-                    terms.Add(String.Join("*", Enumerable.Repeat(var.ToString(), (int)deg)));
+                    terms.Add(string.Join("*", Enumerable.Repeat(var.ToString(), (int)deg)));
             }
 
-            return String.Join("*", terms);
+            return string.Join("*", terms);
         }
 
         private static int ComputeHash(IReadOnlyDictionary<AstIdx, ulong> varDegrees)
@@ -179,7 +179,7 @@ namespace Mba.Simplifier.Pipeline.Intermediate
             foreach (var (var, deg) in varDegrees)
             {
                 // The hashes must not be dependent on one another, since the order of the dictionary is not guaranteed.
-                var tempHash = (var.GetHashCode() * 31) + (deg.GetHashCode() * 17);
+                var tempHash = var.GetHashCode() * 31 + deg.GetHashCode() * 17;
                 hash += tempHash;
             }
 
@@ -200,7 +200,7 @@ namespace Mba.Simplifier.Pipeline.Intermediate
                 return false;
             if (varDegrees.Count != other.varDegrees.Count)
                 return false;
-            foreach(var (var, deg) in varDegrees)
+            foreach (var (var, deg) in varDegrees)
             {
                 if (!other.varDegrees.TryGetValue(var, out var otherDeg))
                     return false;
