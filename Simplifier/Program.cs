@@ -9,7 +9,6 @@ using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
 using Microsoft.Z3;
-using Simplifier;
 using System.ComponentModel;
 using System.Diagnostics;
 
@@ -17,7 +16,9 @@ bool printUsage = false;
 uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = true;
-string inputText = null;
+string inputText = "a|b|c";
+
+inputText = "b|(a^c)";
 
 var printHelp = () =>
 {
