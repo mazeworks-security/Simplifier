@@ -16,9 +16,7 @@ bool printUsage = false;
 uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = true;
-string inputText = "a|b|c";
-
-inputText = "b|(a^c)";
+string inputText = null;
 
 var printHelp = () =>
 {
