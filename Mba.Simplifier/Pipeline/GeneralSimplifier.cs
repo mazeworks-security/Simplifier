@@ -1235,6 +1235,7 @@ namespace Mba.Simplifier.Pipeline
                 // For addition by a constant we can also get more precision
                 case AstOp.Add:
                 case AstOp.Mul:
+                case AstOp.Pow:
                     // If we have addition/multiplication, we only care about bits at and below the highest set bit.
                     var demandedWidth = 64 - (uint)BitOperations.LeadingZeroCount(currDemanded);
                     currDemanded = ModuloReducer.GetMask(demandedWidth);
