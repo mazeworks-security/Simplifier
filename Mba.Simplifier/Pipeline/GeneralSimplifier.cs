@@ -241,6 +241,26 @@ namespace Mba.Simplifier.Pipeline
 
         private AstIdx GetAstWithSubstitutions(AstIdx id, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear, bool inBitwise = false)
         {
+            // This is dubious: Do we actually need to run simba here... for some reason performance degrades if not
+            // TODO: Maybe comment this out
+            var cls = ctx.GetClass(id);
+            if (cls == AstClassification.Bitwise)
+                return SimplifyViaRecursiveSiMBA(id);
+            if (cls == AstClassification.BitwiseWithConstants)
+            {
+                isSemiLinear = true;
+                return SimplifyViaRecursiveSiMBA(id);
+            }
+
+            if (cls == AstClassification.Linear && !inBitwise)
+                return SimplifyViaRecursiveSiMBA(id);
+            if (cls == AstClassification.SemiLinear && !inBitwise)
+            {
+                isSemiLinear = true;
+                return SimplifyViaRecursiveSiMBA(id);
+            }
+            
+
             // Sometimes we perform constant folding in this method.
             // To make sure that we correctly track whether the expression is semi-linear, we use this method to process replacements.
             var visitReplacement = (AstIdx replacementIdx, bool inBitwise, ref bool isSemiLinear) => GetAstWithSubstitutions(replacementIdx, substitutionMapping, ref isSemiLinear, inBitwise);
@@ -830,14 +850,17 @@ namespace Mba.Simplifier.Pipeline
             // Compute demanded bits for each variable
             // TODO: Keep track of which bits are demanded by the parent(withSubstitutions)
             Dictionary<AstIdx, ulong> varToDemandedBits = new();
-            var cache = new HashSet<DemandedBitsTuple>();
+            var cache = new HashSet<(AstIdx idx, ulong currDemanded)>();
+            int totalDemanded = 0;
             foreach (var (expr, substVar) in substitutionMapping)
-                ComputeSymbolDemandedBits(expr, ModuloReducer.GetMask(ctx.GetWidth(expr)), varToDemandedBits, cache);
+            {
+                ComputeSymbolDemandedBits(expr, ModuloReducer.GetMask(ctx.GetWidth(expr)), varToDemandedBits, cache, ref totalDemanded);
+                if (totalDemanded > 12)
+                    break;
+            }
 
-            // Compute the total number of demanded variable bits in the substituted parts.
-            ulong totalDemanded = 0;
-            foreach (var demandedBits in varToDemandedBits.Values)
-                totalDemanded += (ulong)BitOperations.PopCount(demandedBits);
+
+            // Bail if there are too many demanded bits!
             if (totalDemanded > 12)
                 return null;
 
@@ -1244,21 +1267,29 @@ namespace Mba.Simplifier.Pipeline
         }
 
         // TODO: Cache results to avoid exponentially visiting shared nodes
-        private void ComputeSymbolDemandedBits(AstIdx idx, ulong currDemanded, Dictionary<AstIdx, ulong> symbolDemandedBits, HashSet<DemandedBitsTuple> seen)
+        private void ComputeSymbolDemandedBits(AstIdx idx, ulong currDemanded, Dictionary<AstIdx, ulong> symbolDemandedBits, HashSet<(AstIdx idx, ulong currDemanded)> seen, ref int totalDemanded)
         {
-            if (!seen.Add(new DemandedBitsTuple(idx, currDemanded)))
+            if (totalDemanded > 12)
+                return;
+            if (!seen.Add((idx, currDemanded)))
                 return;
 
-            var op0 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp0(idx), demanded, symbolDemandedBits, seen);
-            var op1 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp1(idx), demanded, symbolDemandedBits, seen);
+            totalDemanded += 1;
+
+            var op0 = (ulong demanded, ref int totalDemanded) => ComputeSymbolDemandedBits(ctx.GetOp0(idx), demanded, symbolDemandedBits, seen, ref totalDemanded);
+            var op1 = (ulong demanded, ref int totalDemanded) => ComputeSymbolDemandedBits(ctx.GetOp1(idx), demanded, symbolDemandedBits, seen, ref totalDemanded);
 
             var opc = ctx.GetOpcode(idx);
             switch (opc)
             {
                 // If we have a symbol, union the set of demanded bits
                 case AstOp.Symbol:
-                    symbolDemandedBits.TryAdd(idx, 0);
-                    symbolDemandedBits[idx] |= currDemanded;
+                    //symbolDemandedBits.TryAdd(idx, 0);
+                    symbolDemandedBits.TryGetValue(idx, out var oldDemanded);
+                    var newDemanded = oldDemanded | currDemanded;
+                    symbolDemandedBits[idx] = newDemanded;
+                    totalDemanded += BitOperations.PopCount(newDemanded & ~oldDemanded);
+                    
                     break;
                 // If we have a constant, there is nothing to do.
                 case AstOp.Constant:
@@ -1273,22 +1304,22 @@ namespace Mba.Simplifier.Pipeline
                     var demandedWidth = 64 - (uint)BitOperations.LeadingZeroCount(currDemanded);
                     currDemanded = ModuloReducer.GetMask(demandedWidth);
 
-                    op0(currDemanded);
-                    op1(currDemanded);
+                    op0(currDemanded, ref totalDemanded);
+                    op1(currDemanded, ref totalDemanded);
                     break;
                 case AstOp.Lshr:
                     var shiftBy = ctx.GetOp1(idx);
                     var shiftByConstant = ctx.TryGetConstantValue(shiftBy);
                     if (shiftByConstant == null)
                     {
-                        op0(currDemanded);
-                        op1(currDemanded);
+                        op0(currDemanded, ref totalDemanded);
+                        op1(currDemanded, ref totalDemanded);
                         break;
                     }
 
                     // If we know the value we are shifting by, we can truncate the demanded bits.
-                    op0(currDemanded >> (ushort)shiftByConstant.Value);
-                    op1(currDemanded);
+                    op0(currDemanded >> (ushort)shiftByConstant.Value, ref totalDemanded);
+                    op1(currDemanded, ref totalDemanded);
                     break;
 
                 case AstOp.And:
@@ -1296,8 +1327,8 @@ namespace Mba.Simplifier.Pipeline
                         // If we have a&b, demandedbits(a) does not include any known zero bits from b. Works both ways.
                         var op0Demanded = ~ctx.GetKnownBits(ctx.GetOp1(idx)).Zeroes & currDemanded;
                         var op1Demanded = ~ctx.GetKnownBits(ctx.GetOp0(idx)).Zeroes & currDemanded;
-                        op0(op0Demanded);
-                        op1(op1Demanded);
+                        op0(op0Demanded, ref totalDemanded);
+                        op1(op1Demanded, ref totalDemanded);
                         break;
                     }
 
@@ -1306,25 +1337,25 @@ namespace Mba.Simplifier.Pipeline
                         // If we have a|b, demandedbits(a) does not include any known one bits from b. Works both ways.
                         var op0Demanded = ~ctx.GetKnownBits(ctx.GetOp1(idx)).Ones & currDemanded;
                         var op1Demanded = ~ctx.GetKnownBits(ctx.GetOp0(idx)).Ones & currDemanded;
-                        op0(op0Demanded);
-                        op1(op1Demanded);
+                        op0(op0Demanded, ref totalDemanded);
+                        op1(op1Demanded, ref totalDemanded);
                         break;
                     }
                 // TODO: We can gain some precision by exploiting XOR known bits.
                 case AstOp.Xor:
-                    op0(currDemanded);
-                    op1(currDemanded);
+                    op0(currDemanded, ref totalDemanded);
+                    op1(currDemanded, ref totalDemanded);
                     break;
                 // TODO: Treat negation as x^-1, then use XOR transfer function
                 case AstOp.Neg:
-                    op0(currDemanded);
+                    op0(currDemanded, ref totalDemanded);
                     break;
                 case AstOp.Trunc:
                     currDemanded &= ModuloReducer.GetMask(ctx.GetWidth(idx));
-                    op0(currDemanded);
+                    op0(currDemanded, ref totalDemanded);
                     break;
                 case AstOp.Zext:
-                    op0(currDemanded & ModuloReducer.GetMask(ctx.GetWidth(ctx.GetOp0(idx))));
+                    op0(currDemanded & ModuloReducer.GetMask(ctx.GetWidth(ctx.GetOp0(idx))), ref totalDemanded);
                     break;
                 default:
                     throw new InvalidOperationException($"Cannot compute demanded bits for {opc}");
