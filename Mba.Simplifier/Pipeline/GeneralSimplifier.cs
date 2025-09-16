@@ -95,7 +95,7 @@ namespace Mba.Simplifier.Pipeline
                 if (vars.Count > 11 || vars.Count == 0)
                 {
                     var simplified = SimplifyViaTermRewriting(id);
-                    simbaCache.Add(id, simplified);
+                    simbaCache.TryAdd(id, simplified);
                     return simplified;
                 }
 
@@ -122,6 +122,11 @@ namespace Mba.Simplifier.Pipeline
                     substMapping.Remove(substValue);
             }
 
+            if (substMapping.Count > 8)
+            {
+                Console.WriteLine(substMapping.Count);
+                //Debugger.Break();
+            }
             // Try to take a guess (MSiMBA) and prove it's equivalence
             var guess = SimplifyViaGuessAndProve(withSubstitutions, substMapping, ref isSemiLinear);
             if (guess != null)
@@ -140,6 +145,7 @@ namespace Mba.Simplifier.Pipeline
                 withSubstitutions = TryUnmergeLinCombs(withSubstitutions, substMapping, ref isSemiLinear);
             withSubstitutions = SimplifyViaTermRewriting(withSubstitutions);
 
+
             // If polynomial parts are present, try to simplify them.
             var inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
             AstIdx? reducedPoly = null;
@@ -152,7 +158,7 @@ namespace Mba.Simplifier.Pipeline
                 if (reducedPoly != null)
                 {
                     // Back substitute the original substitutions.
-                    reducedPoly = ApplyBackSubstitution(ctx, reducedPoly.Value, inverseMapping);
+                    reducedPoly = BackSubstitute(ctx, reducedPoly.Value, inverseMapping);
 
                     // Reset internal state.
                     substMapping.Clear();
@@ -182,7 +188,7 @@ namespace Mba.Simplifier.Pipeline
             if (variables.Count > 11)
             {
                 var simplified = SimplifyViaTermRewriting(id);
-                simbaCache.Add(id, simplified);
+                simbaCache.TryAdd(id, simplified);
                 return simplified;
             }
 
@@ -193,7 +199,7 @@ namespace Mba.Simplifier.Pipeline
             var result = withSubstitutions;
             if (!ctx.IsConstant(withSubstitutions))
                 result = LinearSimplifier.Run(ctx.GetWidth(withSubstitutions), ctx, withSubstitutions, false, isSemiLinear, false, variables);
-            var backSub = ApplyBackSubstitution(ctx, result, inverseMapping);
+            var backSub = BackSubstitute(ctx, result, inverseMapping);
 
             // Apply constant folding / term rewriting.
             var propagated = SimplifyViaTermRewriting(backSub);
@@ -634,7 +640,7 @@ namespace Mba.Simplifier.Pipeline
             if (!rewriteMapping.Any())
                 return withSubstitutions;
 
-            withSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, rewriteMapping);
+            withSubstitutions = BackSubstitute(ctx, withSubstitutions, rewriteMapping);
             return withSubstitutions;
         }
 
@@ -654,7 +660,7 @@ namespace Mba.Simplifier.Pipeline
 
                     if (clone.TryGetValue(neg, out var otherSubst))
                     {
-                        rewriteMapping.Add(substVariable, ctx.Neg(otherSubst));
+                        rewriteMapping.TryAdd(substVariable, ctx.Neg(otherSubst));
                         substitutionMapping.Remove(ast);
                         goto start;
                     }
@@ -785,13 +791,13 @@ namespace Mba.Simplifier.Pipeline
                 var vecExpr = LinearSimplifier.Run(w, ctx, null, false, true, false, vars, null, resultVector); // TODO: ToArray
                 vecExpr = ctx.Add(ctx.Constant(union, w), vecExpr);
                 // Back substitute in the variables we temporarily substituted.
-                vecExpr = ApplyBackSubstitution(ctx, vecExpr, tempSubstMapping);
+                vecExpr = BackSubstitute(ctx, vecExpr, tempSubstMapping);
                 substitutionMapping.Remove(vecExpr);
                 substitutionMapping.TryAdd(vecExpr, newSubstVar);
                 isSemiLinear = true;
             }
 
-            withSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, varToNewSubstValue);
+            withSubstitutions = BackSubstitute(ctx, withSubstitutions, varToNewSubstValue);
             var newVars = ctx.CollectVariables(withSubstitutions).ToHashSet();
             foreach (var (expr, substVar) in substitutionMapping.ToList())
             {
@@ -824,8 +830,9 @@ namespace Mba.Simplifier.Pipeline
             // Compute demanded bits for each variable
             // TODO: Keep track of which bits are demanded by the parent(withSubstitutions)
             Dictionary<AstIdx, ulong> varToDemandedBits = new();
+            var cache = new HashSet<DemandedBitsTuple>();
             foreach (var (expr, substVar) in substitutionMapping)
-                ComputeSymbolDemandedBits(expr, ModuloReducer.GetMask(ctx.GetWidth(expr)), varToDemandedBits, new());
+                ComputeSymbolDemandedBits(expr, ModuloReducer.GetMask(ctx.GetWidth(expr)), varToDemandedBits, cache);
 
             // Compute the total number of demanded variable bits in the substituted parts.
             ulong totalDemanded = 0;
@@ -849,7 +856,7 @@ namespace Mba.Simplifier.Pipeline
             if (constrainedIdx == null)
             {
                 // Simplify the constrained parts.
-                var withoutSubstitutions = ApplyBackSubstitution(ctx, unconstrainedIdx.Value, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
+                var withoutSubstitutions = BackSubstitute(ctx, unconstrainedIdx.Value, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
                 var r = SimplifyUnconstrained(withoutSubstitutions, varToDemandedBits);
                 if (r == null)
                     return null;
@@ -872,7 +879,7 @@ namespace Mba.Simplifier.Pipeline
                 return null;
 
             // Simplify unconstrained parts.
-            var unconstrainedBackSub = ApplyBackSubstitution(ctx, unconstrainedIdx.Value, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
+            var unconstrainedBackSub = BackSubstitute(ctx, unconstrainedIdx.Value, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
             var unconstrainedSimpl = SimplifyUnconstrained(unconstrainedBackSub, varToDemandedBits);
             if (unconstrainedSimpl == null)
                 return null;
@@ -1035,7 +1042,7 @@ namespace Mba.Simplifier.Pipeline
         private unsafe AstIdx? SimplifyConstrained(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping, Dictionary<AstIdx, ulong> varToDemandedBits)
         {
             // Compute a result vector for the original expression
-            var withoutSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
+            var withoutSubstitutions = BackSubstitute(ctx, withSubstitutions, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
             var w = ctx.GetWidth(withoutSubstitutions);
             var inputVars = ctx.CollectVariables(withoutSubstitutions);
             var originalResultVec = LinearSimplifier.JitResultVector(ctx, w, ModuloReducer.GetMask(w), inputVars, withoutSubstitutions, true, (ulong)Math.Pow(2, inputVars.Count));
@@ -1044,7 +1051,7 @@ namespace Mba.Simplifier.Pipeline
             var exprToSubstVar = substitutionMapping.OrderBy(x => ctx.GetAstString(x.Value)).ToList();
             var allVars = inputVars.Concat(exprToSubstVar.Select(x => x.Value)).ToList(); // Sort them....
             var pagePtr = JitUtils.AllocateExecutablePage(4096);
-            new Amd64OptimizingJit(ctx).Compile(withSubstitutions, allVars, pagePtr, true);
+            new Amd64OptimizingJit(ctx).Compile(withSubstitutions, allVars, pagePtr, false);
             var jittedWithSubstitutions = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr;
 
             // Return null if the expressions are not provably equivalent
@@ -1155,12 +1162,12 @@ namespace Mba.Simplifier.Pipeline
 
             // Jit the input expression
             var pagePtr1 = JitUtils.AllocateExecutablePage(4096);
-            new Amd64OptimizingJit(ctx).Compile(withoutSubstitutions, inputVars, pagePtr1, true);
+            new Amd64OptimizingJit(ctx).Compile(withoutSubstitutions, inputVars, pagePtr1, false);
             var jittedBefore = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr1;
 
             // Jit the output expression
             var pagePtr2 = JitUtils.AllocateExecutablePage(4096);
-            new Amd64OptimizingJit(ctx).Compile(expectedExpr, inputVars, pagePtr2, true);
+            new Amd64OptimizingJit(ctx).Compile(expectedExpr, inputVars, pagePtr2, false);
             var jittedAfter = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr2;
 
             // Prove that they are equivalent for all possible input combinations
@@ -1215,12 +1222,32 @@ namespace Mba.Simplifier.Pipeline
             return expectedExpr;
         }
 
-        // TODO: Cache results to avoid exponentially visiting shared nodes
-        private void ComputeSymbolDemandedBits(AstIdx idx, ulong currDemanded, Dictionary<AstIdx, ulong> symbolDemandedBits, HashSet<(AstIdx idx, ulong currDemanded)> seen)
+        public struct DemandedBitsTuple
         {
-            if (seen.Contains((idx, currDemanded)))
+            public AstIdx Idx;
+
+            public ulong CurrDemanded;
+
+            public DemandedBitsTuple(AstIdx idx, ulong currDemanded)
+            {
+                Idx = idx;
+                CurrDemanded = currDemanded;
+            }
+
+            public override int GetHashCode()
+            {
+                int hash = 17;
+                hash = hash * 31 + Idx.GetHashCode();
+                hash = hash * 31 + CurrDemanded.GetHashCode();
+                return hash;
+            }
+        }
+
+        // TODO: Cache results to avoid exponentially visiting shared nodes
+        private void ComputeSymbolDemandedBits(AstIdx idx, ulong currDemanded, Dictionary<AstIdx, ulong> symbolDemandedBits, HashSet<DemandedBitsTuple> seen)
+        {
+            if (!seen.Add(new DemandedBitsTuple(idx, currDemanded)))
                 return;
-            seen.Add((idx, currDemanded));
 
             var op0 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp0(idx), demanded, symbolDemandedBits, seen);
             var op1 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp1(idx), demanded, symbolDemandedBits, seen);
@@ -1307,7 +1334,7 @@ namespace Mba.Simplifier.Pipeline
         private AstIdx? TrySimplifyMixedPolynomialParts(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, Dictionary<AstIdx, AstIdx> inverseSubstMapping, List<AstIdx> varList)
         {
             // Back substitute in the (possibly) polynomial parts
-            var newId = ApplyBackSubstitution(ctx, id, inverseSubstMapping);
+            var newId = BackSubstitute(ctx, id, inverseSubstMapping);
 
             // Decompose each term into structured polynomial parts
             var terms = GetRootTerms(ctx, newId);
@@ -1329,7 +1356,7 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // Do a full back substitution again.
-            result = ApplyBackSubstitution(ctx, result.Value, inverseSubstMapping);
+            result = BackSubstitute(ctx, result.Value, inverseSubstMapping);
 
             // Bail out if this resulted in a worse result.
             var cost1 = ctx.GetCost(result.Value);
@@ -1359,7 +1386,7 @@ namespace Mba.Simplifier.Pipeline
                 var outPowers = new Dictionary<AstIdx, ulong>();
                 foreach (var (factor, degree) in part.ConstantPowers)
                 {
-                    var unmerged = ApplyBackSubstitution(ctx, factor, rewriteMapping);
+                    var unmerged = BackSubstitute(ctx, factor, rewriteMapping);
                     outPowers.TryAdd(unmerged, 0);
                     outPowers[unmerged] += degree;
                 }
@@ -1530,8 +1557,8 @@ namespace Mba.Simplifier.Pipeline
             }
 
             var invBases = basisSubstitutions.ToDictionary(x => x.Value, x => LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, 1, x.Key));
-            var backSub = ApplyBackSubstitution(ctx, reduced, invBases);
-            backSub = ApplyBackSubstitution(ctx, backSub, substMapping.ToDictionary(x => x.Value, x => x.Key));
+            var backSub = BackSubstitute(ctx, reduced, invBases);
+            backSub = BackSubstitute(ctx, backSub, substMapping.ToDictionary(x => x.Value, x => x.Key));
             return backSub;
         }
 
@@ -1888,7 +1915,7 @@ namespace Mba.Simplifier.Pipeline
 
             // Back substitute the substitute variables.
             var inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
-            sum = ApplyBackSubstitution(ctx, sum, inverseMapping);
+            sum = BackSubstitute(ctx, sum, inverseMapping);
 
             // Try to simplify using the general simplifier.
             sum = ctx.RecursiveSimplify(sum);
@@ -2100,18 +2127,19 @@ namespace Mba.Simplifier.Pipeline
             return outPoly;
         }
 
-        public static AstIdx ApplyBackSubstitution(AstCtx ctx, AstIdx id, Dictionary<AstIdx, AstIdx> backSubstitutions, Dictionary<AstIdx, AstIdx> cache = null)
+        public static AstIdx BackSubstitute(AstCtx ctx, AstIdx id, Dictionary<AstIdx, AstIdx> backSubstitutions)
+            => BackSubstitute(ctx, id, backSubstitutions, new(16));
+
+        public static AstIdx BackSubstitute(AstCtx ctx, AstIdx id, Dictionary<AstIdx, AstIdx> backSubstitutions, Dictionary<AstIdx, AstIdx> cache)
         {
-            if (cache == null)
-                cache = new();
             if (backSubstitutions.TryGetValue(id, out var backSub))
                 return backSub;
             if (cache.TryGetValue(id, out var existing))
                 return existing;
 
 
-            var op0 = () => ApplyBackSubstitution(ctx, ctx.GetOp0(id), backSubstitutions, cache);
-            var op1 = () => ApplyBackSubstitution(ctx, ctx.GetOp1(id), backSubstitutions, cache);
+            var op0 = () => BackSubstitute(ctx, ctx.GetOp0(id), backSubstitutions, cache);
+            var op1 = () => BackSubstitute(ctx, ctx.GetOp1(id), backSubstitutions, cache);
 
             var opcode = ctx.GetOpcode(id);
             var width = ctx.GetWidth(id);

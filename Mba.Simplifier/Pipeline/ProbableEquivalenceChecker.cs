@@ -59,11 +59,11 @@ namespace Mba.Simplifier.Pipeline
         public unsafe bool ProbablyEquivalent(bool slowHeuristics = false)
         {
             var jit1 = new Amd64OptimizingJit(ctx);
-            jit1.Compile(before, variables, pagePtr1, true);
+            jit1.Compile(before, variables, pagePtr1, false);
             func1 = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr1;
 
             var jit2 = new Amd64OptimizingJit(ctx);
-            jit2.Compile(after, variables, pagePtr2, true);
+            jit2.Compile(after, variables, pagePtr2, false);
             func2 = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr2;
 
             var vArray = stackalloc ulong[variables.Count];
