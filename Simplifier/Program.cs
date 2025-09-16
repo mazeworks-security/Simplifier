@@ -20,6 +20,10 @@ string inputText = "a|b|c";
 
 inputText = "b|(a^c)";
 
+inputText = "(((uns19:i8*4:i8)&4:i8) zx i32)";
+
+inputText = "((((1:i32&((uns17:i8 zx i32)&(~uns18:i32)))|(4294964010:i32&(~((uns17:i8 zx i32)|(~uns18:i32)))))|(4294964011:i32&((uns17:i8 zx i32)&uns18:i32)))|(4:i32*(1:i32&(uns19:i8 zx i32))))";
+
 var printHelp = () =>
 {
     Console.WriteLine("Usage: Simplifier.exe");

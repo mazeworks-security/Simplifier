@@ -124,7 +124,7 @@ namespace Mba.Simplifier.Pipeline
             }
         }
 
-        private static IReadOnlyList<AstIdx> CastVariables(AstCtx ctx, IReadOnlyList<AstIdx> variables, uint bitSize)
+        public static IReadOnlyList<AstIdx> CastVariables(AstCtx ctx, IReadOnlyList<AstIdx> variables, uint bitSize)
         {
             // If all variables are of a correct size, no casting is necessary.
             if (!variables.Any(x => ctx.GetWidth(x) != bitSize))

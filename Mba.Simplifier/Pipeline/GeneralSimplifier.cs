@@ -888,7 +888,7 @@ namespace Mba.Simplifier.Pipeline
         {
             // Construct a result vector for the linear part.
             var substVars = substitutionMapping.Values.ToList();
-            var allVars = ctx.CollectVariables(withSubstitutions);
+            IReadOnlyList<AstIdx> allVars = ctx.CollectVariables(withSubstitutions);
             var bitSize = ctx.GetWidth(withSubstitutions);
             var numCombinations = (ulong)Math.Pow(2, allVars.Count);
             var groupSizes = LinearSimplifier.GetGroupSizes(allVars.Count);
@@ -927,6 +927,8 @@ namespace Mba.Simplifier.Pipeline
             List<AstIdx> constrainedParts = new();
 
             // Decompose result vector into semi-linear, unconstrained, and constrained parts.
+            // Upcast variables as necessary!
+            allVars = LinearSimplifier.CastVariables(ctx, allVars, bitSize);
             int resultVecIdx = 0;
             for(int i = 0; i < linearCombinations.Count; i++)
             {
@@ -966,7 +968,7 @@ namespace Mba.Simplifier.Pipeline
         }
 
         // TODO: Refactor out!
-        private static (ulong[], List<List<(ulong coeff, ulong bitMask)>>) GetAnf(uint width, List<AstIdx> variables, List<int> groupSizes, ulong[] resultVector, bool multiBit)
+        private static (ulong[], List<List<(ulong coeff, ulong bitMask)>>) GetAnf(uint width, IReadOnlyList<AstIdx> variables, List<int> groupSizes, ulong[] resultVector, bool multiBit)
         {
             // Get all combinations of variables.
             var moduloMask = ModuloReducer.GetMask(width);
