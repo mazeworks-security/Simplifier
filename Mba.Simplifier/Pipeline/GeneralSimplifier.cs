@@ -22,6 +22,8 @@ namespace Mba.Simplifier.Pipeline
 {
     public class GeneralSimplifier
     {
+        private const bool REDUCE_POLYS = true;
+
         private readonly AstCtx ctx;
 
         // For any given node, we store the best possible ISLE result.
@@ -42,7 +44,7 @@ namespace Mba.Simplifier.Pipeline
         public AstIdx SimplifyGeneral(AstIdx id, bool useIsle = true)
         {
             // Simplify the AST via efficient, recursive term rewriting(ISLE).
-            if (useIsle)
+            if(useIsle)
                 id = SimplifyViaTermRewriting(id);
 
             // Simplify via recursive SiMBA.
@@ -53,7 +55,7 @@ namespace Mba.Simplifier.Pipeline
         // Simplify the AST via efficient, recursive term rewriting(ISLE).
         private AstIdx SimplifyViaTermRewriting(AstIdx id)
         {
-            if (isleCache.TryGetValue(id, out var existingIdx))
+            if(isleCache.TryGetValue(id, out var existingIdx))
                 return existingIdx;
             var initialId = id;
 
@@ -67,7 +69,7 @@ namespace Mba.Simplifier.Pipeline
 
             // TODO: Add to isle cache
             bool cacheIsle = true;
-            if (cacheIsle)
+            if(cacheIsle)
             {
                 isleCache.TryAdd(initialId, id);
                 isleCache.TryAdd(id, id);
@@ -78,14 +80,14 @@ namespace Mba.Simplifier.Pipeline
         // Simplify the AST via recursive SiMBA application.
         private AstIdx SimplifyViaRecursiveSiMBA(AstIdx id, bool polySimplify = true)
         {
-            if (simbaCache.TryGetValue(id, out var existing))
+            if(simbaCache.TryGetValue(id, out var existing))
                 return existing;
             id = SimplifyViaTermRewriting(id);
             // TODO: We should probably apply ISLE before attempting any other steps.
 
             // For linear and semi-linear MBAs, we can skip the substitution / polynomial simplification steps.
             var linClass = ctx.GetClass(id);
-            if (ctx.IsConstant(id))
+            if(ctx.IsConstant(id))
                 return id;
 
             if(linClass != AstClassification.Nonlinear)
@@ -95,7 +97,7 @@ namespace Mba.Simplifier.Pipeline
                 if(vars.Count > 11 || vars.Count == 0)
                 {
                     var simplified = SimplifyViaTermRewriting(id);
-                    simbaCache.Add(id, simplified);
+                    simbaCache.TryAdd(id, simplified);
                     return simplified;
                 }
 
@@ -118,13 +120,13 @@ namespace Mba.Simplifier.Pipeline
             var usedVars = ctx.CollectVariables(withSubstitutions).ToHashSet();
             foreach(var (substValue, substVar) in substMapping.ToList())
             {
-                if (!usedVars.Contains(substVar))
+                if(!usedVars.Contains(substVar))
                     substMapping.Remove(substValue);
             }
 
             // Try to take a guess (MSiMBA) and prove it's equivalence
             var guess = SimplifyViaGuessAndProve(withSubstitutions, substMapping, ref isSemiLinear);
-            if (guess != null)
+            if(guess != null)
             {
                 // Apply constant folding / term rewriting.
                 var simplGuess = SimplifyViaTermRewriting(guess.Value);
@@ -136,14 +138,15 @@ namespace Mba.Simplifier.Pipeline
 
 
             // If there are multiple substitutions, try to minimize the number of substitutions.
-            if (substMapping.Count > 1)
+            if(substMapping.Count > 1)
                 withSubstitutions = TryUnmergeLinCombs(withSubstitutions, substMapping, ref isSemiLinear);
             withSubstitutions = SimplifyViaTermRewriting(withSubstitutions);
+
 
             // If polynomial parts are present, try to simplify them.
             var inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
             AstIdx? reducedPoly = null;
-            if (polySimplify && ctx.GetHasPoly(id))
+            if(polySimplify && ctx.GetHasPoly(id))
             {
                 // Try to reduce the polynomial parts using "pure" polynomial reduction algorithms.
                 reducedPoly = ReducePolynomials(GetRootTerms(ctx, withSubstitutions), substMapping, inverseMapping);
@@ -152,7 +155,7 @@ namespace Mba.Simplifier.Pipeline
                 if(reducedPoly != null)
                 {
                     // Back substitute the original substitutions.
-                    reducedPoly = ApplyBackSubstitution(ctx, reducedPoly.Value, inverseMapping);
+                    reducedPoly = BackSubstitute(ctx, reducedPoly.Value, inverseMapping);
 
                     // Reset internal state.
                     substMapping.Clear();
@@ -164,10 +167,10 @@ namespace Mba.Simplifier.Pipeline
 
             // If there are any substitutions, we want to try simplifying the polynomial parts.
             var variables = ctx.CollectVariables(withSubstitutions);
-            if (polySimplify && substMapping.Count > 0 && ctx.GetHasPoly(id))
+            if(REDUCE_POLYS && polySimplify && substMapping.Count > 0 && ctx.GetHasPoly(id))
             {
                 var maybeSimplified = TrySimplifyMixedPolynomialParts(withSubstitutions, substMapping, inverseMapping, variables);
-                if (maybeSimplified != null && maybeSimplified.Value != id)
+                if(maybeSimplified != null && maybeSimplified.Value != id)
                 {
                     // Reset internal state.
                     substMapping.Clear();
@@ -179,10 +182,10 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // If there are still more too many variables remaining, bail out.
-            if (variables.Count > 11)
+            if(variables.Count > 11)
             {
                 var simplified = SimplifyViaTermRewriting(id);
-                simbaCache.Add(id, simplified);
+                simbaCache.TryAdd(id, simplified);
                 return simplified;
             }
 
@@ -191,9 +194,9 @@ namespace Mba.Simplifier.Pipeline
             withSubstitutions = SimplifyViaTermRewriting(withSubstitutions);
 
             var result = withSubstitutions;
-            if (!ctx.IsConstant(withSubstitutions))
+            if(!ctx.IsConstant(withSubstitutions))
                 result = LinearSimplifier.Run(ctx.GetWidth(withSubstitutions), ctx, withSubstitutions, false, isSemiLinear, false, variables);
-            var backSub = ApplyBackSubstitution(ctx, result, inverseMapping);
+            var backSub = BackSubstitute(ctx, result, inverseMapping);
 
             // Apply constant folding / term rewriting.
             var propagated = SimplifyViaTermRewriting(backSub);
@@ -210,7 +213,7 @@ namespace Mba.Simplifier.Pipeline
             var newSubstMapping = new Dictionary<AstIdx, AstIdx>();
             var newWithSubst = GetAstWithSubstitutions(propagated, newSubstMapping, ref isSemiLinear, false);
             var newVars = ctx.CollectVariables(newWithSubst);
-            if (newVars.Count < variables.Count)
+            if(newVars.Count < variables.Count)
             {
                 propagated = SimplifyViaRecursiveSiMBA(propagated, true);
             }
@@ -226,7 +229,7 @@ namespace Mba.Simplifier.Pipeline
 
             for (ulong term = bbase; exponent != 0; term = term * term)
             {
-                if (exponent % 2 != 0) { result *= term; }
+                if(exponent % 2 != 0) { result *= term; }
                 exponent /= 2;
             }
 
@@ -249,10 +252,10 @@ namespace Mba.Simplifier.Pipeline
                 case AstOp.Mul:
                     // If we encounter an arithmetic subtree inside of a bitwise operator, it is not linear.
                     // In this case we try to recursively simplify the subtree and check if it was made linear.
-                    if (inBitwise)
+                    if(inBitwise)
                     {
                         var simplified = SimplifyViaRecursiveSiMBA(id);
-                        if (simplified != id)
+                        if(simplified != id)
                         {
                             id = simplified;
                             goto start;
@@ -260,7 +263,7 @@ namespace Mba.Simplifier.Pipeline
                     }
 
                     // If the above check still yielded something that is not linear, we apply substitution.
-                    if (inBitwise)
+                    if(inBitwise)
                     {
                         return GetSubstitution(id, substitutionMapping);
                     }
@@ -273,30 +276,30 @@ namespace Mba.Simplifier.Pipeline
 
                     // If the first operand is not a constant, then we want to recursively simplify both children and
                     // check if it yields a constant.
-                    if (opcode == AstOp.Mul && ctx.GetOpcode(v0) != AstOp.Constant)
+                    if(opcode == AstOp.Mul && ctx.GetOpcode(v0) != AstOp.Constant)
                     {
                         v0 = SimplifyViaRecursiveSiMBA(v0);
                         v1 = SimplifyViaRecursiveSiMBA(v1);
 
-                        if (ctx.GetOpcode(v1) == AstOp.Constant)
+                        if(ctx.GetOpcode(v1) == AstOp.Constant)
                             (v0, v1) = (v1, v0);
                     }
 
                     // If both children are still not constant after applying recursive simplification,
                     // then we need to perform substitution.
-                    if (opcode == AstOp.Mul && ctx.GetOpcode(v0) != AstOp.Constant)
+                    if(opcode == AstOp.Mul && ctx.GetOpcode(v0) != AstOp.Constant)
                     {
                         var mul = ctx.Mul(v0, v1);
                         return GetSubstitution(mul, substitutionMapping);
                     }
 
                     // Otherwise we have a multiplication where one term is a constant(linear).
-                    if (opcode == AstOp.Mul)
+                    if(opcode == AstOp.Mul)
                     {
                         var constTerm = v0;
 
                         // In the case of coeff*(x+y), where coeff is a constant, we want to distribute it, yielding coeff*x + coeff*y.
-                        if (ctx.GetOpcode(v1) == AstOp.Add)
+                        if(ctx.GetOpcode(v1) == AstOp.Add)
                         {
                             var left = ctx.Mul(constTerm, ctx.GetOp0(v1));
                             left = ctx.SingleSimplify(left);
@@ -308,8 +311,8 @@ namespace Mba.Simplifier.Pipeline
                             var oldSum = sum;
                             var newSum = ctx.SingleSimplify(sum);
                             sum = newSum;
-                            // In this case, we apply constant folding(but we do not search recursively).
 
+                            // In this case, we apply constant folding(but we do not search recursively).
                             return GetAstWithSubstitutions(sum, substitutionMapping, ref isSemiLinear, inBitwise);
                         }
 
@@ -326,7 +329,7 @@ namespace Mba.Simplifier.Pipeline
                 case AstOp.Pow:
                     var basis = SimplifyViaRecursiveSiMBA(ctx.GetOp0(id));
                     var degree = SimplifyViaRecursiveSiMBA(ctx.GetOp1(id));
-                    if (ctx.IsConstant(basis) && ctx.IsConstant(degree))
+                    if(ctx.IsConstant(basis) && ctx.IsConstant(degree))
                     {
                         var folded = Pow(ctx.GetConstantValue(basis), ctx.GetConstantValue(degree));
                         return visitReplacement(ctx.Constant(folded, ctx.GetWidth(basis)), inBitwise, ref isSemiLinear);
@@ -338,7 +341,7 @@ namespace Mba.Simplifier.Pipeline
                 case AstOp.And:
                 case AstOp.Or:
                 case AstOp.Xor:
-                    if (opcode == AstOp.And)
+                    if(opcode == AstOp.And)
                     {
                         // Simplify both children.
                         var and0 = op0(true, ref isSemiLinear);
@@ -347,23 +350,23 @@ namespace Mba.Simplifier.Pipeline
                         var id0 = ctx.GetOp0(id);
                         var id1 = ctx.GetOp1(id);
                         // Move constants to the left
-                        if (ctx.IsConstant(and1))
+                        if(ctx.IsConstant(and1))
                         {
                             (and0, and1) = (and1, and0);
                             (id0, id1) = (id1, id0);
                         }
-                        
+
                         // Rewrite (a&mask) as `Trunc(a)`, or `Trunc(a & mask)` if mask is not completely a bit mask.
                         // This is a form of adhoc demanded bits based simplification
-                        if (ctx.IsConstant(and0) && !ctx.IsConstant(and1))
+                        if(ctx.IsConstant(and0) && !ctx.IsConstant(and1))
                         {
                             var andMask = ctx.GetConstantValue(and0);
-                            if (CanEliminateMask(andMask, id1))
+                            if(CanEliminateMask(andMask, id1))
                                 return visitReplacement(id1, inBitwise, ref isSemiLinear);
 
 
                             var truncWidth = ConstantToTruncWidth(andMask);
-                            if (truncWidth != 0 && truncWidth < ctx.GetWidth(id))
+                            if(truncWidth != 0 && truncWidth < ctx.GetWidth(id))
                             {
                                 isSemiLinear = true;
                                 var moduloWidth = 64 - (uint)BitOperations.LeadingZeroCount(andMask);
@@ -373,29 +376,29 @@ namespace Mba.Simplifier.Pipeline
                                 var before = trunc;
                                 trunc = visitReplacement(before, true, ref isSemiLinear);
                                 var ext = ctx.Zext(trunc, ctx.GetWidth(id));
-                                if (ModuloReducer.GetMask((uint)truncWidth) != andMask)
+                                if(ModuloReducer.GetMask((uint)truncWidth) != andMask)
                                     ext = ctx.And(ctx.Constant(andMask, ctx.GetWidth(id)), ext);
 
                                 return ext;
                             }
                         }
-                       
+
 
                         return ctx.And(and0, and1);
                     }
-                    if (opcode == AstOp.Or)
+                    if(opcode == AstOp.Or)
                         return ctx.Or(op0(true, ref isSemiLinear), op1(true, ref isSemiLinear));
-                    if (opcode == AstOp.Xor)
+                    if(opcode == AstOp.Xor)
                         return ctx.Xor(op0(true, ref isSemiLinear), op1(true, ref isSemiLinear));
                     throw new InvalidOperationException("Unrecognized opcode!");
                 case AstOp.Neg:
-                    if (inBitwise)
+                    if(inBitwise)
                     {
-                        // Deleting because it causes stackoverflow!
+                        // Temporary disabled because it can cause stack overflows.
                         /*
                         // If we encounter a negation inside of a bitwise operator, try to simplify the subtree.
                         var simplified = SimplifyViaRecursiveSiMBA(id);
-                        if (simplified != id)
+                        if(simplified != id)
                         {
                             id = simplified;
                             goto start;
@@ -416,7 +419,7 @@ namespace Mba.Simplifier.Pipeline
                     var src = SimplifyViaRecursiveSiMBA(ctx.GetOp0(id));
                     var by = SimplifyViaRecursiveSiMBA(ctx.GetOp1(id));
                     // Apply constant propagation if both nodes fold.
-                    if (ctx.IsConstant(src) && ctx.IsConstant(by))
+                    if(ctx.IsConstant(src) && ctx.IsConstant(by))
                     {
                         var value = ctx.GetConstantValue(src) >> (ushort)(ctx.GetConstantValue(by) % (ulong)ctx.GetWidth(id));
                         var constant = ctx.Constant(value, ctx.GetWidth(id));
@@ -438,7 +441,7 @@ namespace Mba.Simplifier.Pipeline
 
                 case AstOp.Constant:
                     // If a bitwise constant is present, we want to mark it as semi-linear
-                    if (inBitwise)
+                    if(inBitwise)
                         isSemiLinear = true;
 
                     return id;
@@ -456,7 +459,7 @@ namespace Mba.Simplifier.Pipeline
             var knownBits = ctx.GetKnownBits(idx);
 
             var zeroes = ~andMask & ModuloReducer.GetMask(ctx.GetWidth(idx));
-            if ((zeroes & knownBits.Zeroes) == zeroes)
+            if((zeroes & knownBits.Zeroes) == zeroes)
                 return true;
 
             return false;
@@ -467,11 +470,11 @@ namespace Mba.Simplifier.Pipeline
         {
             var lz = BitOperations.LeadingZeroCount(c);
             var minWidth = 64 - lz;
-            if (minWidth <= 7)
+            if(minWidth <= 7)
                 return 8;
-            if (minWidth <= 16)
+            if(minWidth <= 16)
                 return 16;
-            if (minWidth <= 32)
+            if(minWidth <= 32)
                 return 32;
             return 0;
         }
@@ -508,7 +511,7 @@ namespace Mba.Simplifier.Pipeline
             // Skip if this is not a multiplication.
             var opcode = ctx.GetOpcode(id);
 
-            var roots = GetRootMultiplications(ctx,id);
+            var roots = GetRootMultiplications(ctx, id);
             ulong coeffSum = 0;
             Dictionary<AstIdx, ulong> constantPowers = new();
             List<AstIdx> others = new();
@@ -516,11 +519,11 @@ namespace Mba.Simplifier.Pipeline
             foreach(var root in roots)
             {
                 var code = ctx.GetOpcode(root);
-                if (code == AstOp.Constant)
+                if(code == AstOp.Constant)
                 {
                     coeffSum += ctx.GetConstantValue(root);
                 }
-                else if (code == AstOp.Symbol)
+                else if(code == AstOp.Symbol)
                 {
                     constantPowers.TryAdd(root, 0);
                     constantPowers[root]++;
@@ -564,9 +567,9 @@ namespace Mba.Simplifier.Pipeline
 
             var op0 = ctx.IsSymbol(a);
             var op1 = ctx.IsSymbol(b);
-            if (op0 && !op1)
+            if(op0 && !op1)
                 return comeFirst;
-            if (op1 && !op0)
+            if(op1 && !op0)
                 return comeLast;
             if(op0 && op1)
                 return ctx.GetSymbolName(a).CompareTo(ctx.GetSymbolName(b));
@@ -584,31 +587,31 @@ namespace Mba.Simplifier.Pipeline
             // Push constants to the left
             var op0 = ctx.GetOpcode(a);
             var op1 = ctx.GetOpcode(b);
-            if (op0 == AstOp.Constant)
+            if(op0 == AstOp.Constant)
                 return comeFirst;
-            if (op1 == AstOp.Constant)
+            if(op1 == AstOp.Constant)
                 return comeLast;
 
             // Sort symbols alphabetically
             if(op0 == AstOp.Symbol && op1 == AstOp.Symbol)
                 return ctx.GetSymbolName(a).CompareTo(ctx.GetSymbolName(b));
-            if (op0 == AstOp.Pow)
+            if(op0 == AstOp.Pow)
                 return comeLast;
-            if (op1 == AstOp.Pow)
+            if(op1 == AstOp.Pow)
                 return comeFirst;
             return -1;
         }
 
         private AstIdx GetSubstitution(AstIdx id, Dictionary<AstIdx, AstIdx> substitutionMapping)
         {
-            if (substitutionMapping.TryGetValue(id, out var existing))
+            if(substitutionMapping.TryGetValue(id, out var existing))
                 return existing;
 
-            while(true)
+            while (true)
             {
                 var subst = ctx.Symbol($"subst{substCount}", ctx.GetWidth(id));
                 substCount++;
-                if (substitutionMapping.Values.Contains(subst))
+                if(substitutionMapping.Values.Contains(subst))
                 {
                     continue;
                 }
@@ -621,11 +624,11 @@ namespace Mba.Simplifier.Pipeline
         private AstIdx TryUnmergeLinCombs(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear)
         {
             // We cannot rewrite substitutions as negations of one another if there is only one substitution.
-            if (substitutionMapping.Count == 1)
+            if(substitutionMapping.Count == 1)
                 return withSubstitutions;
 
             var result = UnmergeDisjointParts(withSubstitutions, substitutionMapping, ref isSemiLinear);
-            if (result != null)
+            if(result != null)
                 withSubstitutions = result.Value;
 
             var rewriteMapping = UnmergeNegatedParts(substitutionMapping);
@@ -634,7 +637,7 @@ namespace Mba.Simplifier.Pipeline
             if(!rewriteMapping.Any())
                 return withSubstitutions;
 
-            withSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, rewriteMapping);
+            withSubstitutions = BackSubstitute(ctx, withSubstitutions, rewriteMapping);
             return withSubstitutions;
         }
 
@@ -647,14 +650,14 @@ namespace Mba.Simplifier.Pipeline
             start:
                 changed = false;
                 var clone = substitutionMapping.ToDictionary();
-                foreach (var (ast, substVariable) in clone)
+                foreach(var (ast, substVariable) in clone)
                 {
                     var neg = ctx.Neg(ast);
                     neg = SimplifyViaRecursiveSiMBA(neg);
 
-                    if (clone.TryGetValue(neg, out var otherSubst))
+                    if(clone.TryGetValue(neg, out var otherSubst))
                     {
-                        rewriteMapping.Add(substVariable, ctx.Neg(otherSubst));
+                        rewriteMapping.TryAdd(substVariable, ctx.Neg(otherSubst));
                         substitutionMapping.Remove(ast);
                         goto start;
                     }
@@ -683,7 +686,7 @@ namespace Mba.Simplifier.Pipeline
 
             var tempSubstMapping = new Dictionary<AstIdx, AstIdx>();
             var results = new List<AstIdx>();
-            for(int i = 0 ; i < inputExpressions.Count; i++)
+            for (int i = 0; i < inputExpressions.Count; i++)
             {
                 // Substitute all of the nonlinear parts for this expression
                 // Here we share the list of substitutions 
@@ -696,12 +699,12 @@ namespace Mba.Simplifier.Pipeline
             tempSubstMapping = tempSubstMapping.ToDictionary(x => x.Value, x => x.Key);
 
             var vars = results.SelectMany(x => ctx.CollectVariables(x)).Distinct().OrderBy(x => ctx.GetSymbolName(x)).ToList();
-            if (vars.Count > 11)
+            if(vars.Count > 11)
                 return null;
 
             // Compute a result vector for each expression
             Dictionary<ResultVectorKey, List<(int index, ulong constantOffset)>> vecToExpr = new();
-            for(int i = 0; i < results.Count; i++)
+            for (int i = 0; i < results.Count; i++)
             {
                 var expr = results[i];
                 var w = ctx.GetWidth(expr);
@@ -731,9 +734,9 @@ namespace Mba.Simplifier.Pipeline
                 // TODO:
                 // (1) If a column of the truth table shares the same coefficient, we can compute knownbits for the entire column in parallel.
                 // (2) Port to C++
-                for(int bitIndex = 0; bitIndex < w; bitIndex++)
+                for (int bitIndex = 0; bitIndex < w; bitIndex++)
                 {
-                    for(ulong i = 0; i < numCombinations; i++)
+                    for (ulong i = 0; i < numCombinations; i++)
                     {
                         var coeff = resultVector[vecIdx];
                         if(coeff == 0)
@@ -765,37 +768,37 @@ namespace Mba.Simplifier.Pipeline
 
                 // Verify that we can rewrite every linear combination to be in the form of sharedBits | (sharedSubst)
                 kb = KnownBits.Add(kb, KnownBits.MakeConstant(union, w));
-                if (members.Any(x => !CanFitConstantInUndemandedBits(kb, x.constantOffset, moduloMask)))
+                if(members.Any(x => !CanFitConstantInUndemandedBits(kb, x.constantOffset, moduloMask)))
                     continue;
 
                 // Replace each substituted var with a new substituted var | some constant offset.
                 var newSubstVar = ctx.Symbol($"subst{substCount}", (byte)w);
                 substCount++;
-                for(int i = 0; i < members.Count; i++)
+                for (int i = 0; i < members.Count; i++)
                 {
                     var member = members[i];
                     var expr = ctx.Or(ctx.Constant(member.constantOffset, w), newSubstVar);
                     var inVar = inputSubstVars[member.index];
-                    if (varToNewSubstValue.ContainsKey(inVar))
+                    if(varToNewSubstValue.ContainsKey(inVar))
                         throw new InvalidOperationException($"Cannot share substituted parts!");
-                    
+
                     varToNewSubstValue[inVar] = expr;
                 }
 
                 var vecExpr = LinearSimplifier.Run(w, ctx, null, false, true, false, vars, null, resultVector); // TODO: ToArray
                 vecExpr = ctx.Add(ctx.Constant(union, w), vecExpr);
                 // Back substitute in the variables we temporarily substituted.
-                vecExpr = ApplyBackSubstitution(ctx, vecExpr, tempSubstMapping);
+                vecExpr = BackSubstitute(ctx, vecExpr, tempSubstMapping);
                 substitutionMapping.Remove(vecExpr);
                 substitutionMapping.TryAdd(vecExpr, newSubstVar);
                 isSemiLinear = true;
             }
 
-            withSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, varToNewSubstValue);
+            withSubstitutions = BackSubstitute(ctx, withSubstitutions, varToNewSubstValue);
             var newVars = ctx.CollectVariables(withSubstitutions).ToHashSet();
             foreach(var (expr, substVar) in substitutionMapping.ToList())
             {
-                if (!newVars.Contains(substVar))
+                if(!newVars.Contains(substVar))
                     substitutionMapping.Remove(expr);
             }
 
@@ -805,9 +808,9 @@ namespace Mba.Simplifier.Pipeline
         // Returns true if the c1+(c2&x) can be rewritten as c1|(c2&x)
         private bool CanFitConstantInUndemandedBits(KnownBits kb, ulong constant, ulong moduloMask)
         {
-            if ((kb.Ones & constant) != 0)
+            if((kb.Ones & constant) != 0)
                 return false;
-            if ((kb.UnknownBits & constant) != 0)
+            if((kb.UnknownBits & constant) != 0)
                 return false;
             return true;
         }
@@ -818,42 +821,46 @@ namespace Mba.Simplifier.Pipeline
         private unsafe AstIdx? SimplifyViaGuessAndProve(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear)
         {
             // If there are no substituted parts, we have a semi-linear MBA.
-            if (substitutionMapping.Count == 0)
+            if(substitutionMapping.Count == 0)
                 return null;
 
             // Compute demanded bits for each variable
             // TODO: Keep track of which bits are demanded by the parent(withSubstitutions)
             Dictionary<AstIdx, ulong> varToDemandedBits = new();
+            var cache = new HashSet<(AstIdx idx, ulong currDemanded)>();
+            int totalDemanded = 0;
             foreach(var (expr, substVar) in substitutionMapping)
-                ComputeSymbolDemandedBits(expr, ModuloReducer.GetMask(ctx.GetWidth(expr)), varToDemandedBits);
+            {
+                ComputeSymbolDemandedBits(expr, ModuloReducer.GetMask(ctx.GetWidth(expr)), varToDemandedBits, cache, ref totalDemanded);
+                if(totalDemanded > 12)
+                    break;
+            }
 
-            // Compute the total number of demanded variable bits in the substituted parts.
-            ulong totalDemanded = 0;
-            foreach (var demandedBits in varToDemandedBits.Values)
-                totalDemanded += (ulong)BitOperations.PopCount(demandedBits);
-            if (totalDemanded > 12)
+
+            // Bail if there are too many demanded bits!
+            if(totalDemanded > 12)
                 return null;
 
             // Partition the MBA into semi-linear, unconstrained, and constrained parts.
             var (semilinearIdx, unconstrainedIdx, constrainedIdx) = PartitionConstrainedParts(withSubstitutions, substitutionMapping);
 
             // If there are no constrained or unconstrained parts then this is a semi-linear MBA.
-            if (unconstrainedIdx == null && constrainedIdx == null)
+            if(unconstrainedIdx == null && constrainedIdx == null)
                 throw new InvalidOperationException($"Expected nonlinear expression!");
 
             // If we have no unconstrained parts, we can prove the equivalence of the entire expression.
-            if (unconstrainedIdx == null)
+            if(unconstrainedIdx == null)
                 return SimplifyConstrained(withSubstitutions, substitutionMapping, varToDemandedBits);
 
             // If we have have no constrained parts, we can simplify the entire expression individually.
-            if (constrainedIdx == null)
+            if(constrainedIdx == null)
             {
                 // Simplify the constrained parts.
-                var withoutSubstitutions = ApplyBackSubstitution(ctx, unconstrainedIdx.Value, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
+                var withoutSubstitutions = BackSubstitute(ctx, unconstrainedIdx.Value, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
                 var r = SimplifyUnconstrained(withoutSubstitutions, varToDemandedBits);
-                if (r == null)
+                if(r == null)
                     return null;
-                if (semilinearIdx == null)
+                if(semilinearIdx == null)
                     return r.Value;
 
                 // If there are some semi-linear parts, combine and simplify.
@@ -863,18 +870,18 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // Otherwise we have both constrained and unconstrained parts, which need to be simplified individually and composed back together.
-            if (semilinearIdx != null)
+            if(semilinearIdx != null)
                 constrainedIdx = ctx.Add(semilinearIdx.Value, constrainedIdx.Value);
 
             // Simplify constrained parts.
             var constrainedSimpl = SimplifyConstrained(constrainedIdx.Value, substitutionMapping, varToDemandedBits);
-            if (constrainedSimpl == null)
+            if(constrainedSimpl == null)
                 return null;
 
             // Simplify unconstrained parts.
-            var unconstrainedBackSub = ApplyBackSubstitution(ctx, unconstrainedIdx.Value, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
+            var unconstrainedBackSub = BackSubstitute(ctx, unconstrainedIdx.Value, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
             var unconstrainedSimpl = SimplifyUnconstrained(unconstrainedBackSub, varToDemandedBits);
-            if (unconstrainedSimpl == null)
+            if(unconstrainedSimpl == null)
                 return null;
 
             // Compose and simplify
@@ -888,7 +895,7 @@ namespace Mba.Simplifier.Pipeline
         {
             // Construct a result vector for the linear part.
             var substVars = substitutionMapping.Values.ToList();
-            var allVars = ctx.CollectVariables(withSubstitutions);
+            IReadOnlyList<AstIdx> allVars = ctx.CollectVariables(withSubstitutions);
             var bitSize = ctx.GetWidth(withSubstitutions);
             var numCombinations = (ulong)Math.Pow(2, allVars.Count);
             var groupSizes = LinearSimplifier.GetGroupSizes(allVars.Count);
@@ -914,37 +921,39 @@ namespace Mba.Simplifier.Pipeline
             ulong substVarMask = 0;
             for (int i = 0; i < allVars.Count; i++)
             {
-                if (!substVars.Contains(allVars[i]))
+                if(!substVars.Contains(allVars[i]))
                     continue;
 
                 substVarMask |= (1ul << (ushort)i);
             }
 
             List<AstIdx> semiLinearParts = new();
-            if (constantOffset != 0)
+            if(constantOffset != 0)
                 semiLinearParts.Add(ctx.Constant(constantOffset, bitSize));
             List<AstIdx> unconstrainedParts = new();
             List<AstIdx> constrainedParts = new();
 
             // Decompose result vector into semi-linear, unconstrained, and constrained parts.
+            // Upcast variables as necessary!
+            allVars = LinearSimplifier.CastVariables(ctx, allVars, bitSize);
             int resultVecIdx = 0;
-            for(int i = 0; i < linearCombinations.Count; i++)
+            for (int i = 0; i < linearCombinations.Count; i++)
             {
                 foreach(var (coeff, bitMask) in linearCombinations[i])
                 {
-                    if (coeff == 0)
+                    if(coeff == 0)
                         goto skip;
 
                     // If the term only contains normal variables, its semi-linear.
                     var varComb = variableCombinations[i];
-                    if ((varComb & substVarMask) == 0)
+                    if((varComb & substVarMask) == 0)
                     {
                         semiLinearParts.Add(LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, varComb, bitMask));
                         goto skip;
                     }
 
                     // If the term only contains substituted variables, it's unconstrained.
-                    if ((varComb & ~substVarMask) == 0)
+                    if((varComb & ~substVarMask) == 0)
                     {
                         unconstrainedParts.Add(LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, coeff, varComb, bitMask));
                         goto skip;
@@ -966,7 +975,7 @@ namespace Mba.Simplifier.Pipeline
         }
 
         // TODO: Refactor out!
-        private static (ulong[], List<List<(ulong coeff, ulong bitMask)>>) GetAnf(uint width, List<AstIdx> variables, List<int> groupSizes, ulong[] resultVector, bool multiBit)
+        private static (ulong[], List<List<(ulong coeff, ulong bitMask)>>) GetAnf(uint width, IReadOnlyList<AstIdx> variables, List<int> groupSizes, ulong[] resultVector, bool multiBit)
         {
             // Get all combinations of variables.
             var moduloMask = ModuloReducer.GetMask(width);
@@ -1013,7 +1022,7 @@ namespace Mba.Simplifier.Pipeline
                             var comb = variableCombinations[i];
                             var (trueMask, index) = combToMaskAndIdx[i];
                             var coeff = ptr[(int)offset + index];
-                            if (coeff == 0)
+                            if(coeff == 0)
                                 continue;
 
                             // Subtract the coefficient from the result vector.
@@ -1033,7 +1042,7 @@ namespace Mba.Simplifier.Pipeline
         private unsafe AstIdx? SimplifyConstrained(AstIdx withSubstitutions, Dictionary<AstIdx, AstIdx> substitutionMapping, Dictionary<AstIdx, ulong> varToDemandedBits)
         {
             // Compute a result vector for the original expression
-            var withoutSubstitutions = ApplyBackSubstitution(ctx, withSubstitutions, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
+            var withoutSubstitutions = BackSubstitute(ctx, withSubstitutions, substitutionMapping.ToDictionary(x => x.Value, x => x.Key));
             var w = ctx.GetWidth(withoutSubstitutions);
             var inputVars = ctx.CollectVariables(withoutSubstitutions);
             var originalResultVec = LinearSimplifier.JitResultVector(ctx, w, ModuloReducer.GetMask(w), inputVars, withoutSubstitutions, true, (ulong)Math.Pow(2, inputVars.Count));
@@ -1042,12 +1051,12 @@ namespace Mba.Simplifier.Pipeline
             var exprToSubstVar = substitutionMapping.OrderBy(x => ctx.GetAstString(x.Value)).ToList();
             var allVars = inputVars.Concat(exprToSubstVar.Select(x => x.Value)).ToList(); // Sort them....
             var pagePtr = JitUtils.AllocateExecutablePage(4096);
-            new Amd64OptimizingJit(ctx).Compile(withSubstitutions, allVars, pagePtr, true);
+            new Amd64OptimizingJit(ctx).Compile(withSubstitutions, allVars, pagePtr, false);
             var jittedWithSubstitutions = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr;
 
             // Return null if the expressions are not provably equivalent
             var demandedVars = varToDemandedBits.OrderBy(x => ctx.GetSymbolName(x.Key)).Select(x => (x.Key, x.Value)).ToList();
-            if (!IsConstrainedExpressionEquivalent(w, inputVars, demandedVars, exprToSubstVar, jittedWithSubstitutions, originalResultVec))
+            if(!IsConstrainedExpressionEquivalent(w, inputVars, demandedVars, exprToSubstVar, jittedWithSubstitutions, originalResultVec))
             {
                 JitUtils.FreeExecutablePage(pagePtr);
                 return null;
@@ -1060,7 +1069,7 @@ namespace Mba.Simplifier.Pipeline
         }
 
         // Returns true if two expressions are guaranteed to be equivalent
-        private unsafe bool IsConstrainedExpressionEquivalent(uint width,List<AstIdx> inputVars, List<(AstIdx demandedVar, ulong demandedMask)> demandedVars, List<KeyValuePair<AstIdx, AstIdx>> exprToSubstVar, delegate* unmanaged[SuppressGCTransition]<ulong*, ulong> jittedWithSubstitutions, ulong[] originalResultVec)
+        private unsafe bool IsConstrainedExpressionEquivalent(uint width, List<AstIdx> inputVars, List<(AstIdx demandedVar, ulong demandedMask)> demandedVars, List<KeyValuePair<AstIdx, AstIdx>> exprToSubstVar, delegate* unmanaged[SuppressGCTransition]<ulong*, ulong> jittedWithSubstitutions, ulong[] originalResultVec)
         {
             int totalDemanded = demandedVars.Sum(x => BitOperations.PopCount(x.demandedMask));
 
@@ -1097,7 +1106,7 @@ namespace Mba.Simplifier.Pipeline
                         for (int vIdx = 0; vIdx < (int)totalDemanded; vIdx++)
                         {
                             // If we've chosen values for all bits in this variable, move onto the next one.
-                            if (currDemandedVarMask == 0)
+                            if(currDemandedVarMask == 0)
                             {
                                 currVarIdx += 1;
                                 currDemandedVarMask = demandedVars[currVarIdx].demandedMask;
@@ -1129,7 +1138,7 @@ namespace Mba.Simplifier.Pipeline
                         fixed (ulong* vPtr = &vArray[0])
                         {
                             var curr = jittedWithSubstitutions(vPtr) >> bitIndex;
-                            if (curr != originalResultVec[vecIdx])
+                            if(curr != originalResultVec[vecIdx])
                                 return false;
                         }
                     }
@@ -1153,12 +1162,12 @@ namespace Mba.Simplifier.Pipeline
 
             // Jit the input expression
             var pagePtr1 = JitUtils.AllocateExecutablePage(4096);
-            new Amd64OptimizingJit(ctx).Compile(withoutSubstitutions, inputVars, pagePtr1, true);
+            new Amd64OptimizingJit(ctx).Compile(withoutSubstitutions, inputVars, pagePtr1, false);
             var jittedBefore = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr1;
 
             // Jit the output expression
             var pagePtr2 = JitUtils.AllocateExecutablePage(4096);
-            new Amd64OptimizingJit(ctx).Compile(expectedExpr, inputVars, pagePtr2, true);
+            new Amd64OptimizingJit(ctx).Compile(expectedExpr, inputVars, pagePtr2, false);
             var jittedAfter = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr2;
 
             // Prove that they are equivalent for all possible input combinations
@@ -1176,7 +1185,7 @@ namespace Mba.Simplifier.Pipeline
                 for (int vIdx = 0; vIdx < (int)totalDemanded; vIdx++)
                 {
                     // If we've chosen values for all bits in this variable, move onto the next one.
-                    if (currDemandedVarMask == 0)
+                    if(currDemandedVarMask == 0)
                     {
                         currVarIdx += 1;
                         currDemandedVarMask = demandedVars[currVarIdx].demandedMask;
@@ -1199,7 +1208,7 @@ namespace Mba.Simplifier.Pipeline
                 {
                     var op1 = jittedBefore(vPtr);
                     var op2 = jittedAfter(vPtr);
-                    if (op1 != op2)
+                    if(op1 != op2)
                     {
                         JitUtils.FreeExecutablePage(pagePtr1);
                         JitUtils.FreeExecutablePage(pagePtr2);
@@ -1208,22 +1217,35 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
+            JitUtils.FreeExecutablePage(pagePtr1);
+            JitUtils.FreeExecutablePage(pagePtr2);
             return expectedExpr;
         }
 
         // TODO: Cache results to avoid exponentially visiting shared nodes
-        private void ComputeSymbolDemandedBits(AstIdx idx, ulong currDemanded, Dictionary<AstIdx, ulong> symbolDemandedBits)
+        private void ComputeSymbolDemandedBits(AstIdx idx, ulong currDemanded, Dictionary<AstIdx, ulong> symbolDemandedBits, HashSet<(AstIdx idx, ulong currDemanded)> seen, ref int totalDemanded)
         {
-            var op0 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp0(idx), demanded, symbolDemandedBits);
-            var op1 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp1(idx), demanded, symbolDemandedBits);
+            if(totalDemanded > 12)
+                return;
+            if(!seen.Add((idx, currDemanded)))
+                return;
+
+            totalDemanded += 1;
+
+            var op0 = (ulong demanded, ref int totalDemanded) => ComputeSymbolDemandedBits(ctx.GetOp0(idx), demanded, symbolDemandedBits, seen, ref totalDemanded);
+            var op1 = (ulong demanded, ref int totalDemanded) => ComputeSymbolDemandedBits(ctx.GetOp1(idx), demanded, symbolDemandedBits, seen, ref totalDemanded);
 
             var opc = ctx.GetOpcode(idx);
-            switch(opc)
+            switch (opc)
             {
                 // If we have a symbol, union the set of demanded bits
                 case AstOp.Symbol:
-                    symbolDemandedBits.TryAdd(idx, 0);
-                    symbolDemandedBits[idx] |= currDemanded;
+                    //symbolDemandedBits.TryAdd(idx, 0);
+                    symbolDemandedBits.TryGetValue(idx, out var oldDemanded);
+                    var newDemanded = oldDemanded | currDemanded;
+                    symbolDemandedBits[idx] = newDemanded;
+                    totalDemanded += BitOperations.PopCount(newDemanded & ~oldDemanded);
+                    
                     break;
                 // If we have a constant, there is nothing to do.
                 case AstOp.Constant:
@@ -1233,26 +1255,27 @@ namespace Mba.Simplifier.Pipeline
                 // For addition by a constant we can also get more precision
                 case AstOp.Add:
                 case AstOp.Mul:
+                case AstOp.Pow:
                     // If we have addition/multiplication, we only care about bits at and below the highest set bit.
                     var demandedWidth = 64 - (uint)BitOperations.LeadingZeroCount(currDemanded);
                     currDemanded = ModuloReducer.GetMask(demandedWidth);
 
-                    op0(currDemanded);
-                    op1(currDemanded);
+                    op0(currDemanded, ref totalDemanded);
+                    op1(currDemanded, ref totalDemanded);
                     break;
                 case AstOp.Lshr:
                     var shiftBy = ctx.GetOp1(idx);
                     var shiftByConstant = ctx.TryGetConstantValue(shiftBy);
-                    if (shiftByConstant == null)
+                    if(shiftByConstant == null)
                     {
-                        op0(currDemanded);
-                        op1(currDemanded);
+                        op0(currDemanded, ref totalDemanded);
+                        op1(currDemanded, ref totalDemanded);
                         break;
                     }
 
                     // If we know the value we are shifting by, we can truncate the demanded bits.
-                    op0(currDemanded >> (ushort)shiftByConstant.Value);
-                    op1(currDemanded);
+                    op0(currDemanded >> (ushort)shiftByConstant.Value, ref totalDemanded);
+                    op1(currDemanded, ref totalDemanded);
                     break;
 
                 case AstOp.And:
@@ -1260,8 +1283,8 @@ namespace Mba.Simplifier.Pipeline
                         // If we have a&b, demandedbits(a) does not include any known zero bits from b. Works both ways.
                         var op0Demanded = ~ctx.GetKnownBits(ctx.GetOp1(idx)).Zeroes & currDemanded;
                         var op1Demanded = ~ctx.GetKnownBits(ctx.GetOp0(idx)).Zeroes & currDemanded;
-                        op0(op0Demanded);
-                        op1(op1Demanded);
+                        op0(op0Demanded, ref totalDemanded);
+                        op1(op1Demanded, ref totalDemanded);
                         break;
                     }
 
@@ -1270,25 +1293,25 @@ namespace Mba.Simplifier.Pipeline
                         // If we have a|b, demandedbits(a) does not include any known one bits from b. Works both ways.
                         var op0Demanded = ~ctx.GetKnownBits(ctx.GetOp1(idx)).Ones & currDemanded;
                         var op1Demanded = ~ctx.GetKnownBits(ctx.GetOp0(idx)).Ones & currDemanded;
-                        op0(op0Demanded);
-                        op1(op1Demanded);
+                        op0(op0Demanded, ref totalDemanded);
+                        op1(op1Demanded, ref totalDemanded);
                         break;
                     }
                 // TODO: We can gain some precision by exploiting XOR known bits.
                 case AstOp.Xor:
-                    op0(currDemanded);
-                    op1(currDemanded);
+                    op0(currDemanded, ref totalDemanded);
+                    op1(currDemanded, ref totalDemanded);
                     break;
                 // TODO: Treat negation as x^-1, then use XOR transfer function
                 case AstOp.Neg:
-                    op0(currDemanded);
+                    op0(currDemanded, ref totalDemanded);
                     break;
                 case AstOp.Trunc:
                     currDemanded &= ModuloReducer.GetMask(ctx.GetWidth(idx));
-                    op0(currDemanded);
+                    op0(currDemanded, ref totalDemanded);
                     break;
                 case AstOp.Zext:
-                    op0(currDemanded & ctx.GetWidth(ctx.GetOp0(idx)));
+                    op0(currDemanded & ModuloReducer.GetMask(ctx.GetWidth(ctx.GetOp0(idx))), ref totalDemanded);
                     break;
                 default:
                     throw new InvalidOperationException($"Cannot compute demanded bits for {opc}");
@@ -1298,7 +1321,7 @@ namespace Mba.Simplifier.Pipeline
         private AstIdx? TrySimplifyMixedPolynomialParts(AstIdx id, Dictionary<AstIdx, AstIdx> substMapping, Dictionary<AstIdx, AstIdx> inverseSubstMapping, List<AstIdx> varList)
         {
             // Back substitute in the (possibly) polynomial parts
-            var newId = ApplyBackSubstitution(ctx, id, inverseSubstMapping);
+            var newId = BackSubstitute(ctx, id, inverseSubstMapping);
 
             // Decompose each term into structured polynomial parts
             var terms = GetRootTerms(ctx, newId);
@@ -1309,7 +1332,7 @@ namespace Mba.Simplifier.Pipeline
 
 
             var result = SimplifyParts(ctx.GetWidth(id), polyParts);
-            if (result == null)
+            if(result == null)
                 return null;
 
             // Add back any banned parts.
@@ -1320,12 +1343,12 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // Do a full back substitution again.
-            result = ApplyBackSubstitution(ctx, result.Value, inverseSubstMapping);
+            result = BackSubstitute(ctx, result.Value, inverseSubstMapping);
 
             // Bail out if this resulted in a worse result.
             var cost1 = ctx.GetCost(result.Value);
             var cost2 = ctx.GetCost(newId);
-            if (cost1 > cost2)
+            if(cost1 > cost2)
             {
                 return null;
             }
@@ -1341,16 +1364,16 @@ namespace Mba.Simplifier.Pipeline
 
             // Try to rewrite substituted parts as negations of one another. Exit early if this fails.
             var rewriteMapping = UnmergeNegatedParts(substitutionMapping);
-            if (rewriteMapping.Count == 0)
+            if(rewriteMapping.Count == 0)
                 return parts;
 
             var output = new List<PolynomialParts>();
-            foreach (var part in parts)
+            foreach(var part in parts)
             {
                 var outPowers = new Dictionary<AstIdx, ulong>();
-                foreach (var (factor, degree) in part.ConstantPowers)
+                foreach(var (factor, degree) in part.ConstantPowers)
                 {
-                    var unmerged = ApplyBackSubstitution(ctx, factor, rewriteMapping);
+                    var unmerged = BackSubstitute(ctx, factor, rewriteMapping);
                     outPowers.TryAdd(unmerged, 0);
                     outPowers[unmerged] += degree;
                 }
@@ -1396,7 +1419,7 @@ namespace Mba.Simplifier.Pipeline
             // Collect all variables.
             var withVars = partsWithSubstitutions.SelectMany(x => x.ConstantPowers.Keys);
             var varSet = new List<AstIdx>();
-            if (withVars.Any())
+            if(withVars.Any())
                 varSet = ctx.CollectVariables(ctx.Add(withVars));
 
             IReadOnlyList<AstIdx> allVars = varSet.OrderBy(x => ctx.GetSymbolName(x)).ToList();
@@ -1418,11 +1441,11 @@ namespace Mba.Simplifier.Pipeline
             var moduloMask = (ulong)ModuloReducer.GetMask(bitSize);
             Dictionary<ulong, AstIdx> basisSubstitutions = new();
             List<AstIdx> polys = new();
-            foreach (var polyPart in partsWithSubstitutions)
+            foreach(var polyPart in partsWithSubstitutions)
             {
                 List<AstIdx> factors = new();
                 ulong size = 1;
-                foreach (var (factor, degree) in polyPart.ConstantPowers)
+                foreach(var (factor, degree) in polyPart.ConstantPowers)
                 {
                     // Construct a result vector for the linear part.
                     var resultVec = LinearSimplifier.JitResultVector(ctx, bitSize, moduloMask, allVars, factor, multiBit: false, numCombinations);
@@ -1437,13 +1460,13 @@ namespace Mba.Simplifier.Pipeline
                     {
                         // Skip zero elements.
                         var coeff = anfVector[i];
-                        if (coeff == 0)
+                        if(coeff == 0)
                             continue;
                         numNonZeroes++;
                     }
 
                     // Calculate the max possible size of the resulting expression when multiplied out.
-                    for(ulong i = 0; i < degree; i++)
+                    for (ulong i = 0; i < degree; i++)
                     {
                         size = SaturatingMul(size, numNonZeroes);
                     }
@@ -1453,7 +1476,7 @@ namespace Mba.Simplifier.Pipeline
                     {
                         // Skip zero elements.
                         var coeff = anfVector[i];
-                        if (coeff == 0)
+                        if(coeff == 0)
                             continue;
 
                         // When the basis element corresponds to the constant offset, we want to make the base bitwise expression be `1`.
@@ -1461,7 +1484,7 @@ namespace Mba.Simplifier.Pipeline
                         AstIdx basis = ctx.Constant(1, (byte)bitSize);
                         if(i != 0)
                         {
-                            if (!basisSubstitutions.TryGetValue((ulong)i, out basis))
+                            if(!basisSubstitutions.TryGetValue((ulong)i, out basis))
                             {
                                 basis = ctx.Symbol($"basis{i}", (byte)bitSize);
                                 basisSubstitutions.Add((ulong)i, basis);
@@ -1473,7 +1496,7 @@ namespace Mba.Simplifier.Pipeline
                     }
 
                     // Add this as a factor.
-                    if (terms.Count == 0)
+                    if(terms.Count == 0)
                         terms.Add(ctx.Constant(0, (byte)bitSize));
                     var sum = ctx.Add(terms);
                     factors.Add(ctx.Pow(sum, ctx.Constant(degree, (byte)bitSize)));
@@ -1490,7 +1513,7 @@ namespace Mba.Simplifier.Pipeline
                 // Add in the coefficient.
                 AstIdx? poly = null;
                 var constOffset = ctx.Constant(polyPart.coeffSum, (byte)bitSize);
-                if (factors.Any())
+                if(factors.Any())
                 {
                     poly = ctx.Mul(factors);
                     poly = ctx.Mul(constOffset, poly.Value);
@@ -1502,12 +1525,12 @@ namespace Mba.Simplifier.Pipeline
                     poly = constOffset;
                 }
 
-  
+
                 polys.Add(poly.Value);
             }
 
             // If there were no polynomial parts we could expand, return null.
-            if (!polys.Any())
+            if(!polys.Any())
                 return null;
 
             // Reduce the polynomial parts.
@@ -1521,15 +1544,15 @@ namespace Mba.Simplifier.Pipeline
             }
 
             var invBases = basisSubstitutions.ToDictionary(x => x.Value, x => LinearSimplifier.ConjunctionFromVarMask(ctx, allVars, 1, x.Key));
-            var backSub = ApplyBackSubstitution(ctx, reduced, invBases);
-            backSub = ApplyBackSubstitution(ctx, backSub, substMapping.ToDictionary(x => x.Value, x => x.Key));
+            var backSub = BackSubstitute(ctx, reduced, invBases);
+            backSub = BackSubstitute(ctx, backSub, substMapping.ToDictionary(x => x.Value, x => x.Key));
             return backSub;
         }
 
         private ulong SaturatingMul(ulong a, ulong b)
         {
             var value = (UInt128)a * (UInt128)b;
-            if (value > ulong.MaxValue)
+            if(value > ulong.MaxValue)
                 return ulong.MaxValue;
             return (ulong)value;
         }
@@ -1543,7 +1566,7 @@ namespace Mba.Simplifier.Pipeline
             {
                 var term = toVisit.Pop();
                 var opcode = ctx.GetOpcode(term);
-                if (opcode == AstOp.Add)
+                if(opcode == AstOp.Add)
                 {
                     toVisit.Push(ctx.GetOp0(term));
                     toVisit.Push(ctx.GetOp1(term));
@@ -1552,11 +1575,11 @@ namespace Mba.Simplifier.Pipeline
                 // If we have coeff*(x+y) and coeff is a constant, rewrite as coeff*x + coeff*y.
                 // If coeff is not a constant then we do not apply it - it would yield exponential growth in the worst case.
                 // TODO: Handle polynomial expansion more uniformly.
-                else if (opcode == AstOp.Mul && ctx.IsConstant(ctx.GetOp0(term)))
+                else if(opcode == AstOp.Mul && ctx.IsConstant(ctx.GetOp0(term)))
                 {
                     var coeff = ctx.GetOp0(term);
                     var other = ctx.GetOp1(term);
-                    if (ctx.IsAdd(other))
+                    if(ctx.IsAdd(other))
                     {
                         var sum1 = ctx.Mul(coeff, ctx.GetOp0(other));
                         var sum2 = ctx.Mul(coeff, ctx.GetOp1(other));
@@ -1588,7 +1611,7 @@ namespace Mba.Simplifier.Pipeline
             {
                 var term = toVisit.Pop();
                 var opcode = ctx.GetOpcode(term);
-                if (opcode == AstOp.Mul)
+                if(opcode == AstOp.Mul)
                 {
                     toVisit.Push(ctx.GetOp0(term));
                     toVisit.Push(ctx.GetOp1(term));
@@ -1602,10 +1625,10 @@ namespace Mba.Simplifier.Pipeline
 
             List<AstIdx> newTerms = new();
             ulong coeff = 1;
-            foreach (var term in terms)
+            foreach(var term in terms)
             {
                 var asConstant = ctx.TryGetConstantValue(term);
-                if (asConstant != null)
+                if(asConstant != null)
                 {
                     coeff *= asConstant.Value;
                 }
@@ -1616,7 +1639,7 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
-            if (coeff != null)
+            if(coeff != null)
                 newTerms.Insert(0, ctx.Constant(coeff, ctx.GetWidth(id)));
 
             return newTerms;
@@ -1635,18 +1658,18 @@ namespace Mba.Simplifier.Pipeline
                 var opcode = ctx.GetOpcode(term);
                 if(opcode != AstOp.Mul && opcode != AstOp.Symbol)
                     goto skip;
-                
+
                 // Search for coeff*subst
                 if(opcode == AstOp.Mul)
                 {
                     // If multiplication, we are looking for coeff*(subst), where coeff is a constant.
                     var coeff = ctx.GetOp0(term);
-                    if (!ctx.IsConstant(coeff))
+                    if(!ctx.IsConstant(coeff))
                         goto skip;
 
                     // Look for a variable on the rhs of the multiplication.
                     var rhs = ctx.GetOp1(term);
-                    if (!IsSubstitutedPolynomialSymbol(rhs, inverseSubstMapping))
+                    if(!IsSubstitutedPolynomialSymbol(rhs, inverseSubstMapping))
                         goto skip;
 
                     // We found a polynomial part, add it to the list.
@@ -1663,7 +1686,7 @@ namespace Mba.Simplifier.Pipeline
                     continue;
                 }
 
-                skip:
+            skip:
                 other.Add(term);
                 continue;
             }
@@ -1673,12 +1696,12 @@ namespace Mba.Simplifier.Pipeline
             polyTerms.RemoveAll(x => x.Others.Any());
 
             // Bail out if we found no polynomial terms.
-            if (!polyTerms.Any())
+            if(!polyTerms.Any())
                 return null;
 
             // Now we have a list of polynomial parts, we want to try to simplify them.
             var uniqueBases = new Dictionary<AstIdx, ulong>();
-            foreach (var poly in polyTerms)
+            foreach(var poly in polyTerms)
             {
                 foreach(var (_base, degree) in poly.ConstantPowers)
                 {
@@ -1696,23 +1719,23 @@ namespace Mba.Simplifier.Pipeline
             // Bail out if there are more than three variables.
             // Nothing prevents more variables, but in general more than 3 variables indicates that there are bitwise parts
             // that we are not handling.
-            if (uniqueBases.Count > 3)
+            if(uniqueBases.Count > 3)
                 return null;
 
             // Compute the dense vector size as a heuristic.
             ulong vecSize = 1;
-            foreach (var degree in uniqueBases.Values)
+            foreach(var degree in uniqueBases.Values)
                 vecSize = SaturatingMul(vecSize, degree);
 
             // If the dense vector size would be greater than 64**3, we bail out.
             // In those cases, we may consider implementing variable partitioning and simplifying each partition separately.
-            if (vecSize > 64*64*64)
+            if(vecSize > 64 * 64 * 64)
                 return null;
 
             // For now we only support polynomials up to degree 255, although this is a somewhat arbitrary limit.
             ulong limit = 254;
             var maxDeg = uniqueBases.MaxBy(x => x.Value).Value;
-            if (maxDeg > limit)
+            if(maxDeg > limit)
                 throw new InvalidOperationException($"Polynomial has degree {maxDeg} which is greater than the limit {limit}");
 
             // Otherwise we can carry on and simplify.
@@ -1724,13 +1747,13 @@ namespace Mba.Simplifier.Pipeline
             orderedVars.Sort((x, y) => { return VarsFirst(ctx, x, y); });
 
             // Fill in the sparse polynomial data structure.
-            foreach (var poly in polyTerms)
+            foreach(var poly in polyTerms)
             {
                 var coeff = poly.coeffSum;
-              
+
                 var constPowers = poly.ConstantPowers;
                 var degrees = new byte[orderedVars.Count];
-                for(int varIdx = 0; varIdx < orderedVars.Count; varIdx++)
+                for (int varIdx = 0; varIdx < orderedVars.Count; varIdx++)
                 {
                     var variable = orderedVars[varIdx];
                     ulong degree = 0;
@@ -1749,7 +1772,7 @@ namespace Mba.Simplifier.Pipeline
             // The polynomial reduction algorithm guarantees a minimal degree result, but it's often not the most simple result.
             // E.g. "x**10" becomes "96*x0 + 40*x0**2 + 84*x0**3 + 210*x0**4 + 161*x0**5 + 171*x0**6 + 42*x0**7 + 220*x0**8 + 1*x0**9" on 8 bits.
             // In the case of a single term solution, we reject the result if it is more complex.
-            if (polyTerms.Count == 1 && simplified.coeffs.Count(x => x.Value != 0) > 1)
+            if(polyTerms.Count == 1 && simplified.coeffs.Count(x => x.Value != 0) > 1)
                 return null;
 
             List<AstIdx> newTerms = new();
@@ -1765,12 +1788,12 @@ namespace Mba.Simplifier.Pipeline
             // Then finally convert the sparse polynomial back to an AST.
             foreach(var (monom, coeff) in simplified.coeffs)
             {
-                if (coeff == 0)
+                if(coeff == 0)
                     continue;
 
                 List<AstIdx> factors = new();
                 factors.Add(ctx.Constant(coeff, width));
-                for(int i = 0; i < orderedVars.Count; i++)
+                for (int i = 0; i < orderedVars.Count; i++)
                 {
                     var deg = monom.GetVarDeg(i);
                     if(deg == 0)
@@ -1780,7 +1803,7 @@ namespace Mba.Simplifier.Pipeline
                     }
 
                     var variable = orderedVars[i];
-                    if (deg == 1)
+                    if(deg == 1)
                     {
                         factors.Add(variable);
                         continue;
@@ -1795,7 +1818,7 @@ namespace Mba.Simplifier.Pipeline
 
 
             // If the whole polynomial was folded to zero, discard it.
-            if (newTerms.Count == 0)
+            if(newTerms.Count == 0)
                 newTerms.Add(ctx.Constant(0, width));
 
             var result = ctx.Add(newTerms);
@@ -1806,11 +1829,11 @@ namespace Mba.Simplifier.Pipeline
 
         private bool IsSubstitutedPolynomialSymbol(AstIdx id, IReadOnlyDictionary<AstIdx, AstIdx> inverseSubstMapping)
         {
-            if (!ctx.IsSymbol(id))
+            if(!ctx.IsSymbol(id))
                 return false;
 
             // Make sure the variable is a substituted part
-            if (!inverseSubstMapping.TryGetValue(id, out var substituted))
+            if(!inverseSubstMapping.TryGetValue(id, out var substituted))
                 return false;
             // Ensure that the substituted part atleast contains a polynomial somewhere.
             if(!ctx.GetHasPoly(substituted))
@@ -1827,7 +1850,7 @@ namespace Mba.Simplifier.Pipeline
             {
                 // If the first operand is not a constant, we have a polynomial part.
                 var rhs = ctx.GetOp0(substituted);
-                if (!ctx.IsConstant(rhs))
+                if(!ctx.IsConstant(rhs))
                     return true;
 
                 // Otherwise we need to look for a polynomial part in the second operand.
@@ -1855,7 +1878,7 @@ namespace Mba.Simplifier.Pipeline
                 foreach(var (varIdx, degree) in monom.varDegrees)
                 {
                     // Skip a constant factor of 1
-                    if (degree == 0)
+                    if(degree == 0)
                         continue;
                     if(degree == 1)
                     {
@@ -1873,20 +1896,20 @@ namespace Mba.Simplifier.Pipeline
 
             // Convert the reduced polynomial to an ast.
             // If we have no terms then we have a zero.
-            if (terms.Count == 0)
+            if(terms.Count == 0)
                 terms.Add(ctx.Constant(0, width));
             var sum = ctx.Add(terms);
 
             // Back substitute the substitute variables.
             var inverseMapping = substMapping.ToDictionary(x => x.Value, x => x.Key);
-            sum = ApplyBackSubstitution(ctx, sum, inverseMapping);
+            sum = BackSubstitute(ctx, sum, inverseMapping);
 
             // Try to simplify using the general simplifier.
             sum = ctx.RecursiveSimplify(sum);
             sum = SimplifyViaRecursiveSiMBA(sum, polySimplify);
 
             // Reject solution if it is more complex.
-            if (ctx.GetCost(sum) > ctx.GetCost(id))
+            if(ctx.GetCost(sum) > ctx.GetCost(id))
                 return id;
 
             return sum;
@@ -1909,12 +1932,12 @@ namespace Mba.Simplifier.Pipeline
                 return poly;
             };
 
-            switch(opcode)
+            switch (opcode)
             {
                 case AstOp.Mul:
                     var factors = GetRootMultiplications(ctx, id);
                     var facPolys = factors.Select(x => TryExpand(x, substMapping, false)).ToList();
-                    var product = IntermediatePoly.Mul(ctx,facPolys);
+                    var product = IntermediatePoly.Mul(ctx, facPolys);
                     resultPoly = product;
 
                     // In this case we should probably distribute the coefficient down always.
@@ -1929,7 +1952,7 @@ namespace Mba.Simplifier.Pipeline
 
                 case AstOp.Pow:
                     var raisedTo = ctx.TryGetConstantValue(ctx.GetOp1(id));
-                    if (raisedTo == null)
+                    if(raisedTo == null)
                         throw new InvalidOperationException($"TODO: Handle powers of nonconstant degree");
 
                     // Unroll the power into repeated multiplications, then recurse down.
@@ -1993,40 +2016,40 @@ namespace Mba.Simplifier.Pipeline
         private IntermediatePoly TryReduce(IntermediatePoly poly)
         {
             var uniqueBases = new Dictionary<AstIdx, ulong>();
-            foreach (var monom in poly.coeffs.Keys)
+            foreach(var monom in poly.coeffs.Keys)
             {
-                foreach (var (basis, degree) in monom.varDegrees)
+                foreach(var (basis, degree) in monom.varDegrees)
                 {
                     uniqueBases.TryAdd(basis, 0);
                     var oldDegree = uniqueBases[basis];
-                    if (degree > oldDegree)
+                    if(degree > oldDegree)
                         uniqueBases[basis] = degree;
                 }
             }
 
             // For now we only support up to 8 variables. Note that in practice this limit could be increased.
-            if (uniqueBases.Count > 8)
+            if(uniqueBases.Count > 8)
                 return poly;
 
             // Place a hard limit on the max degree.
             ulong limit = 254;
-            if (uniqueBases.Any(x => x.Value > limit))
+            if(uniqueBases.Any(x => x.Value > limit))
                 return poly;
 
             ulong matrixSize = 1;
-            foreach (var deg in uniqueBases.Keys)
+            foreach(var deg in uniqueBases.Keys)
             {
                 // Bail out if the result would be too large.
                 UInt128 result = matrixSize * deg;
-                if (result > (UInt128)(64*64*64))
+                if(result > (UInt128)(64 * 64 * 64))
                     return poly;
 
                 matrixSize = SaturatingMul(matrixSize, deg);
                 matrixSize &= poly.moduloMask;
             }
-            
+
             // Place a limit on the matrix size.
-            if (matrixSize > (ulong)(64*64*64))
+            if(matrixSize > (ulong)(64 * 64 * 64))
                 return poly;
 
             var width = poly.bitWidth;
@@ -2038,9 +2061,9 @@ namespace Mba.Simplifier.Pipeline
 
             // Fill in the sparse polynomial data structure.
             var degrees = new byte[orderedVars.Count];
-            foreach (var (monom, coeff) in poly.coeffs)
+            foreach(var (monom, coeff) in poly.coeffs)
             {
-                for(int varIdx = 0; varIdx < orderedVars.Count; varIdx++)
+                for (int varIdx = 0; varIdx < orderedVars.Count; varIdx++)
                 {
                     var variable = orderedVars[varIdx];
                     ulong degree = 0;
@@ -2066,14 +2089,14 @@ namespace Mba.Simplifier.Pipeline
             // Otherwise we can convert the sparse polynomial back to an AST.
             foreach(var (monom, coeff) in simplified.coeffs)
             {
-                if (coeff == 0)
+                if(coeff == 0)
                     continue;
 
                 Dictionary<AstIdx, ulong> varDegrees = new();
-                for(int i = 0; i < orderedVars.Count; i++)
+                for (int i = 0; i < orderedVars.Count; i++)
                 {
                     var deg = monom.GetVarDeg(i);
-                    if (deg == 0)
+                    if(deg == 0)
                         continue;
                     varDegrees.Add(orderedVars[i], deg);
                 }
@@ -2091,18 +2114,19 @@ namespace Mba.Simplifier.Pipeline
             return outPoly;
         }
 
-        public static AstIdx ApplyBackSubstitution(AstCtx ctx, AstIdx id, Dictionary<AstIdx, AstIdx> backSubstitutions, Dictionary<AstIdx, AstIdx> cache = null)
+        public static AstIdx BackSubstitute(AstCtx ctx, AstIdx id, Dictionary<AstIdx, AstIdx> backSubstitutions)
+            => BackSubstitute(ctx, id, backSubstitutions, new(16));
+
+        public static AstIdx BackSubstitute(AstCtx ctx, AstIdx id, Dictionary<AstIdx, AstIdx> backSubstitutions, Dictionary<AstIdx, AstIdx> cache)
         {
-            if (cache == null)
-                cache = new();
-            if (backSubstitutions.TryGetValue(id, out var backSub))
+            if(backSubstitutions.TryGetValue(id, out var backSub))
                 return backSub;
-            if (cache.TryGetValue(id, out var existing))
+            if(cache.TryGetValue(id, out var existing))
                 return existing;
 
 
-            var op0 = () => ApplyBackSubstitution(ctx, ctx.GetOp0(id), backSubstitutions, cache);
-            var op1 = () => ApplyBackSubstitution(ctx, ctx.GetOp1(id), backSubstitutions, cache);
+            var op0 = () => BackSubstitute(ctx, ctx.GetOp0(id), backSubstitutions, cache);
+            var op1 = () => BackSubstitute(ctx, ctx.GetOp1(id), backSubstitutions, cache);
 
             var opcode = ctx.GetOpcode(id);
             var width = ctx.GetWidth(id);

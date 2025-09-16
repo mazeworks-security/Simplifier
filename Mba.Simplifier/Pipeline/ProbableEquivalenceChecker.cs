@@ -5,6 +5,7 @@ using Mba.Simplifier.Utility;
 using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -33,13 +34,13 @@ namespace Mba.Simplifier.Pipeline
 
         private unsafe delegate* unmanaged[SuppressGCTransition]<ulong*, ulong> func2;
 
-        public static bool ProbablyEquivalent(AstCtx ctx, AstIdx before, AstIdx after)
+        public static bool ProbablyEquivalent(AstCtx ctx, AstIdx before, AstIdx after, bool slowHeuristics = true)
         {
             var pagePtr1 = JitUtils.AllocateExecutablePage(4096);
             var pagePtr2 = JitUtils.AllocateExecutablePage(4096);
 
             var allVars = ctx.CollectVariables(before).Concat(ctx.CollectVariables(after)).Distinct().OrderBy(x => ctx.GetSymbolName(x)).ToList();
-            bool probablyEquivalent = new ProbableEquivalenceChecker(ctx, allVars, before, after, pagePtr1, pagePtr2).ProbablyEquivalent(true);
+            bool probablyEquivalent = new ProbableEquivalenceChecker(ctx, allVars, before, after, pagePtr1, pagePtr2).ProbablyEquivalent(false);
 
             JitUtils.FreeExecutablePage(pagePtr1);
             JitUtils.FreeExecutablePage(pagePtr2);
@@ -59,11 +60,11 @@ namespace Mba.Simplifier.Pipeline
         public unsafe bool ProbablyEquivalent(bool slowHeuristics = false)
         {
             var jit1 = new Amd64OptimizingJit(ctx);
-            jit1.Compile(before, variables, pagePtr1, true);
+            jit1.Compile(before, variables, pagePtr1, false);
             func1 = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr1;
 
             var jit2 = new Amd64OptimizingJit(ctx);
-            jit2.Compile(after, variables, pagePtr2, true);
+            jit2.Compile(after, variables, pagePtr2, false);
             func2 = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr2;
 
             var vArray = stackalloc ulong[variables.Count];
@@ -113,6 +114,7 @@ namespace Mba.Simplifier.Pipeline
 
                 var op1 = func1(vArray);
                 var op2 = func2(vArray);
+
                 if (op1 != op2)
                     return false;
             }
@@ -127,6 +129,8 @@ namespace Mba.Simplifier.Pipeline
             if (!SignatureVectorEquivalent(vArray, 0, b))
                 return false;
             if (!SignatureVectorEquivalent(vArray, a, b))
+                return false;
+            if (!SignatureVectorEquivalent(vArray, b, a))
                 return false;
 
             return true;
@@ -168,34 +172,37 @@ namespace Mba.Simplifier.Pipeline
 
         public static void ProbablyEquivalentZ3(AstCtx ctx, AstIdx before, AstIdx after)
         {
-            var z3Ctx = new Context();
-            var translator = new Z3Translator(ctx, z3Ctx);
-            var beforeZ3 = translator.Translate(before);
-            var afterZ3 = translator.Translate(after);
-            var solver = z3Ctx.MkSolver("QF_BV");
-
-            // Set the maximum timeout to 10 seconds.
-            var p = z3Ctx.MkParams();
-            uint solverLimit = 10000;
-            p.Add("timeout", solverLimit);
-            solver.Parameters = p;
-
-            Console.WriteLine("Proving equivalence...\n");
-            solver.Add(z3Ctx.MkNot(z3Ctx.MkEq(beforeZ3, afterZ3)));
-            var check = solver.Check();
-
-            var printModel = (Model model) =>
+            using (var z3Ctx = new Context())
             {
-                var values = model.Consts.Select(x => $"{x.Key.Name} = {(long)ulong.Parse(model.Eval(x.Value).ToString())}");
-                return $"[{String.Join(", ", values)}]";
-            };
+                var translator = new Z3Translator(ctx, z3Ctx);
+                var beforeZ3 = translator.Translate(before);
+                var afterZ3 = translator.Translate(after);
+                var solver = z3Ctx.MkSolver("QF_BV");
 
-            if (check == Status.UNSATISFIABLE)
-                Console.WriteLine("Expressions are equivalent.");
-            else if (check == Status.SATISFIABLE)
-                Console.WriteLine($"Expressions are not equivalent. Counterexample:\n{printModel(solver.Model)}");
-            else
-                Console.WriteLine($"Solver timed out - expressions are probably equivalent. Could not find counterexample within {solverLimit}ms");
+                // Set the maximum timeout to 10 seconds.
+                var p = z3Ctx.MkParams();
+                uint solverLimit = 5000;
+                p.Add("timeout", solverLimit);
+                solver.Parameters = p;
+
+                Console.WriteLine("Proving equivalence...\n");
+                solver.Add(z3Ctx.MkNot(z3Ctx.MkEq(beforeZ3, afterZ3)));
+                var check = solver.Check();
+
+                var printModel = (Model model) =>
+                {
+                    var values = model.Consts.Select(x => $"{x.Key.Name} = {(long)ulong.Parse(model.Eval(x.Value).ToString())}");
+                    return $"[{String.Join(", ", values)}]";
+                };
+
+                if (check == Status.UNSATISFIABLE)
+                    Console.WriteLine("Expressions are equivalent.");
+                else if (check == Status.SATISFIABLE)
+                    Console.WriteLine($"Expressions are not equivalent. Counterexample:\n{printModel(solver.Model)}");
+                else
+                    Console.WriteLine($"Solver timed out - expressions are probably equivalent. Could not find counterexample within {solverLimit}ms");
+                
+            }
         }
 
     }

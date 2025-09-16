@@ -7,7 +7,7 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
-path = "src/main.rs"
+path = "src/lib.rs"
 
 
 [dependencies]
@@ -20,9 +20,17 @@ mimalloc = { version = "*", default-features = false }
 # egraph = { path = "./egraph" }
 foldhash = "=0.1.0"
 
+[dependencies.iced-x86]
+version = "1.21.0"
+features = ["code_asm"]
+
 [profile.release]
 debug = true
 debuginfo-level = 2
-panic = "abort"
 lto = true
 codegen-units = 1
+panic = "abort"
+opt-level = 3
+
+[build]
+rustflags = ["-C", "target-cpu=native"]

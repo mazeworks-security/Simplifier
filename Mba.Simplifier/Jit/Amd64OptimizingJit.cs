@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Net.Mail;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -41,21 +42,108 @@ namespace Mba.Simplifier.Interpreter
         public bool IsRegister => Register != Register.None;
     }
 
+    [StructLayout(LayoutKind.Explicit)]
     public struct NodeInfo
     {
-        public uint numUses;
+        [FieldOffset(0)]
+        public ushort numUses;
+        [FieldOffset(2)]
+        public ushort varIdx;
+        [FieldOffset(4)]
+        public ushort slotIdx = ushort.MaxValue;
+        [FieldOffset(6)]
+        public ushort exists = 1;
 
-        // Allocate stack slot for the node if numUses > 1
-        public uint slotIdx = uint.MaxValue;
-
-        public NodeInfo(uint numInstances)
+        public NodeInfo(ushort numInstances)
         {
             this.numUses = numInstances;
+        }
+
+        public unsafe ulong ToUlong()
+        {
+            return Unsafe.As<NodeInfo, ulong>(ref this);
+        }
+
+        public unsafe static NodeInfo FromUlong(ulong x)
+        {
+            return *((NodeInfo*)&x);
         }
 
         public override string ToString()
         {
             return $"numInstances:{numUses}, slotIdx: {slotIdx}";
+        }
+
+        public bool Equivalent(NodeInfo other)
+        {
+            return this.ToUlong() == other.ToUlong();
+        }
+    }
+
+    public interface IInfoStorage
+    {
+        public bool Contains(AstIdx idx);
+
+        public NodeInfo Get(AstIdx idx);
+
+        public void Set(AstIdx idx, NodeInfo info);
+
+        public bool TryGet(AstIdx idx, out NodeInfo info);
+    }
+
+    public class MapInfoStorage : IInfoStorage
+    {
+        public readonly Dictionary<AstIdx, NodeInfo> map = new();
+
+        public bool Contains(AstIdx idx)
+        {
+            return map.ContainsKey(idx);
+        }
+
+        public NodeInfo Get(AstIdx idx)
+        {
+            return map[idx];
+        }
+
+        public void Set(AstIdx idx, NodeInfo info)
+        {
+            map[idx] = info;
+        }
+
+        public bool TryGet(AstIdx idx, out NodeInfo info)
+        {
+            return map.TryGetValue(idx, out info);
+        }
+    }
+
+    public class AuxInfoStorage : IInfoStorage
+    {
+        private readonly AstCtx ctx;
+
+        public AuxInfoStorage(AstCtx ctx)
+        {
+            this.ctx = ctx;
+        }
+
+        public bool Contains(AstIdx idx)
+        {
+            return Get(idx).exists != 0;
+        }
+
+        public NodeInfo Get(AstIdx idx)
+        {
+            return NodeInfo.FromUlong(ctx.GetImutData(idx));
+        }
+
+        public void Set(AstIdx idx, NodeInfo info)
+        {
+            ctx.SetImutData(idx, info.ToUlong());
+        }
+
+        public bool TryGet(AstIdx idx, out NodeInfo info)
+        {
+            info = Get(idx);
+            return info.exists != 0;
         }
     }
 
@@ -71,9 +159,9 @@ namespace Mba.Simplifier.Interpreter
 
         private readonly List<AstIdx> dfs = new(16);
 
-        private readonly Dictionary<AstIdx, NodeInfo> seen = new();
+        IInfoStorage seen;
 
-        private uint slotCount = 0;
+        private ushort slotCount = 0;
 
         Stack<Location> stack = new(16);
 
@@ -92,6 +180,7 @@ namespace Mba.Simplifier.Interpreter
         public Amd64OptimizingJit(AstCtx ctx)
         {
             this.ctx = ctx;
+            seen = new AuxInfoStorage(ctx);
         }
 
         public unsafe void Compile(AstIdx idx, List<AstIdx> variables, nint pagePtr, bool useIcedBackend = false)
@@ -99,11 +188,27 @@ namespace Mba.Simplifier.Interpreter
             Assembler icedAssembler = useIcedBackend ? new Assembler(64) : null;
             assembler = useIcedBackend ? new IcedAmd64Assembler(icedAssembler) : new FastAmd64Assembler((byte*)pagePtr);
 
+            
             // Collect information about the nodes necessary for JITing (dfs order, how many users a value has)
-            CollectInfo(idx);
+            CollectInfo(ctx, idx, dfs, seen);
+
+            // Store each variables argument index
+            for (int i = 0; i < variables.Count; i++)
+            {
+                var vIdx = variables[i];
+                var data = seen.Get(vIdx);
+                data.varIdx = (byte)i;
+                seen.Set(vIdx, data);
+            }
 
             // Compile the instructions to x86.
-            LowerToX86(variables);
+            LowerToX86();
+
+            // Clear each node's mutable data
+            foreach (var id in dfs)
+            {
+                seen.Set(id, NodeInfo.FromUlong(0));
+            }
 
             // If using the fast assembler backend, we've already emitted x86.
             // However the stack pointer adjustment needs to fixed up, because it wasn't known during prologue emission.
@@ -123,11 +228,17 @@ namespace Mba.Simplifier.Interpreter
             WriteInstructions(pagePtr, instructions);
         }
 
-        private void CollectInfo(AstIdx idx)
+        static ushort Inc(ushort cl)
         {
-            if (seen.TryGetValue(idx, out var existing))
+            cl += 1;
+            return cl == 0 ? ushort.MaxValue : cl;
+        }
+
+
+        private static void CollectInfo(AstCtx ctx, AstIdx idx, List<AstIdx> dfs, IInfoStorage seen)
+        {
+            if (seen.TryGet(idx, out var existing))
             {
-                seen[idx] = new NodeInfo(existing.numUses); 
                 dfs.Add(idx);
                 return;
             }
@@ -143,31 +254,32 @@ namespace Mba.Simplifier.Interpreter
                 case AstOp.Xor:
                 case AstOp.Lshr:
                     var op0 = ctx.GetOp0(idx);
-                    CollectInfo(op0);
+                    CollectInfo(ctx,op0, dfs, seen);
                     var op1 = ctx.GetOp1(idx);
-                    CollectInfo(op1);
+                    CollectInfo(ctx, op1, dfs, seen);
 
-                    seen[op0] = new NodeInfo(seen[op0].numUses + 1);
-                    seen[op1] = new NodeInfo(seen[op1].numUses + 1);
+                    seen.Set(op0, new NodeInfo(Inc(seen.Get(op0).numUses)));
+                    seen.Set(op1, new NodeInfo(Inc(seen.Get(op1).numUses)));
                     break;
                 case AstOp.Neg:
                 case AstOp.Zext:
                 case AstOp.Trunc:
                     var single = ctx.GetOp0(idx);
-                    CollectInfo(single);
-                    seen[single] = new NodeInfo(seen[single].numUses + 1);
+                    CollectInfo(ctx, single, dfs, seen);
+                    seen.Set(single, new NodeInfo(Inc(seen.Get(single).numUses)));
                     break;
+                case AstOp.Constant:
                 default:
                     break;
             }
 
             dfs.Add(idx);
-            seen[idx] = new NodeInfo(0);
+            seen.Set(idx, new NodeInfo(0));
         }
 
         // Compile the provided DAG to x86
         // TODO: Optionally disabled hashmap lookup/use tracking stuff for faster codegen. Pretend DAG is an AST if the duplicated cost is not too high
-        private unsafe void LowerToX86(List<AstIdx> vars)
+        private unsafe void LowerToX86()
         {
             // rcx reserved for local variables ptr (or all vars in the case of a semi-linear result vector)
             // RSI, RDI reserved for temporary use
@@ -187,9 +299,9 @@ namespace Mba.Simplifier.Interpreter
             for(int i = 0; i < dfs.Count; i++)
             {
                 var idx = dfs[i];
-                var nodeInfo = seen[idx];
+                var nodeInfo = seen.Get(idx);
                 // If we've seen this value, load it's value from a local variable slot
-                if (nodeInfo.numUses > 1 && nodeInfo.slotIdx != uint.MaxValue)
+                if (nodeInfo.numUses > 1 && nodeInfo.slotIdx != ushort.MaxValue)
                 {
                     LoadSlotValue(nodeInfo.slotIdx);
                     continue;
@@ -215,7 +327,7 @@ namespace Mba.Simplifier.Interpreter
                         break;
 
                     case AstOp.Symbol:
-                        LowerVariable(idx, width, vars);
+                        LowerVariable(nodeInfo.varIdx, width);
                         break;
 
                     case AstOp.Neg:
@@ -302,12 +414,12 @@ namespace Mba.Simplifier.Interpreter
                 case AstOp.Lshr:
                     // TODO: For logical shifts, we need to reduce the other side modulo some constant!
                     // Actually maybe not, we should have already reduced modulo?
-                    var w = (uint)ctx.GetWidth(idx);
-                    if (w % 8 != 0)
+                    if (width % 8 != 0)
                         throw new InvalidOperationException($"Cannot jit shr of non power of 2 width");
                     // Reduce shift count modulo bit width of operation
                     // TODO: Hand non power of two bit widths
-                    assembler.AndRegImm32(rhsDest, w - 1);
+                    // TODO: Shift beyond bounds should yield zero
+                    assembler.AndRegImm32(rhsDest, width - 1);
 
                     // Execute lshr
                     assembler.PushReg(Register.RCX);
@@ -338,7 +450,7 @@ namespace Mba.Simplifier.Interpreter
 
                     break;
                 default:
-                    throw new InvalidOperationException($"{opc} is not a valid binop");
+                    throw new InvalidOperationException($"{opc} is not a valid binop ");
             }
 
             ReduceRegisterModulo(width, lhsDest, scratch1);
@@ -350,7 +462,6 @@ namespace Mba.Simplifier.Interpreter
             bool multipleUsers = nodeInfo.numUses > 1;
             if (multipleUsers)
             {
-                // Otherwise there are multiple users. This needs to go on a stack slot
                 assembler.MovMem64Reg(localsRegister, 8 * (int)slotCount, lhsDest);
                 AssignValueSlot(idx, nodeInfo);
             }
@@ -398,19 +509,18 @@ namespace Mba.Simplifier.Interpreter
             stack.Push(Location.Stack());
         }
 
-        private void LowerVariable(AstIdx idx, uint width, IReadOnlyList<AstIdx> vars)
+        private void LowerVariable(int varArrIdx, uint width)
         {
-            uint offset = (uint)vars.IndexOf(idx);
             if (freeRegisters.Count != 0)
             {
                 var dest = freeRegisters.Pop();
-                assembler.MovRegMem64(dest, argsRegister, 8 * (int)offset);
+                assembler.MovRegMem64(dest, argsRegister, 8 * varArrIdx);
                 ReduceRegisterModulo(width, dest, scratch1);
                 stack.Push(Location.Reg(dest));
                 return;
             }
 
-            assembler.PushMem64(argsRegister, 8 * (int)offset);
+            assembler.PushMem64(argsRegister, 8 * varArrIdx);
             stack.Push(Location.Stack());
             ReduceLocationModulo(stack.Peek(), width);
         }
@@ -433,7 +543,7 @@ namespace Mba.Simplifier.Interpreter
 
             else
             {
-                assembler.MovabsRegImm64(scratch2, (ulong)ModuloReducer.GetMask(ctx.GetWidth(idx)));
+                assembler.MovabsRegImm64(scratch2, (ulong)ModuloReducer.GetMask(width));
                 assembler.AndRegReg(destReg, scratch2);
             }
 
@@ -519,9 +629,12 @@ namespace Mba.Simplifier.Interpreter
         private void AssignValueSlot(AstIdx idx, NodeInfo nodeInfo)
         {
             nodeInfo.slotIdx = slotCount;
-            seen[idx] = nodeInfo;
-            // Bump slot count up
-            slotCount += 1;
+            seen.Set(idx, nodeInfo);
+            // Bump slot count up. Throw if we hit the max slot limit
+            checked
+            {
+                slotCount += 1;
+            }
         }
 
         private static void EmitPrologue(IAmd64Assembler assembler, Register localsRegister, uint numStackSlots)

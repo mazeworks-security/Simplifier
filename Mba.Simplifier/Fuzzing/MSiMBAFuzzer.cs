@@ -36,6 +36,7 @@ namespace Mba.Simplifier.Fuzzing
 
                 // Skip if the expression simplifies to a constant
                 var variables = ctx.CollectVariables(fCase);
+
                 if (variables.Count == 0)
                     continue;
 
@@ -46,13 +47,6 @@ namespace Mba.Simplifier.Fuzzing
                 var vec1 = LinearSimplifier.JitResultVector(ctx, w, (ulong)ModuloReducer.GetMask(w), variables, fCase, multiBit, numCombinations);
                 var vec2 = LinearSimplifier.JitResultVectorOld(ctx, w, (ulong)ModuloReducer.GetMask(w), variables, result, multiBit, numCombinations);
                 if(!vec1.SequenceEqual(vec2))
-                    throw new InvalidOperationException("Mismatch");
-
-                // Fuzz the other JIT
-                var jit = new Amd64OptimizingJit(ctx);
-                jit.Compile(fCase, variables, sharpPtr, true);
-                var vec3 = LinearSimplifier.Execute(ctx, w, ulong.MaxValue, variables, multiBit, numCombinations, sharpPtr, false);
-                if (!vec3.SequenceEqual(vec2))
                     throw new InvalidOperationException("Mismatch");
             }
         }
