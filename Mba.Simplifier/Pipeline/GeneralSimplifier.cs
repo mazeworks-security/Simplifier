@@ -1290,7 +1290,7 @@ namespace Mba.Simplifier.Pipeline
                     op0(currDemanded);
                     break;
                 case AstOp.Zext:
-                    op0(currDemanded & ctx.GetWidth(ctx.GetOp0(idx)));
+                    op0(currDemanded & ModuloReducer.GetMask(ctx.GetWidth(ctx.GetOp0(idx))));
                     break;
                 default:
                     throw new InvalidOperationException($"Cannot compute demanded bits for {opc}");
