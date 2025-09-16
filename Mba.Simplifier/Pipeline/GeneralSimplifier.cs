@@ -825,7 +825,7 @@ namespace Mba.Simplifier.Pipeline
             // TODO: Keep track of which bits are demanded by the parent(withSubstitutions)
             Dictionary<AstIdx, ulong> varToDemandedBits = new();
             foreach (var (expr, substVar) in substitutionMapping)
-                ComputeSymbolDemandedBits(expr, ModuloReducer.GetMask(ctx.GetWidth(expr)), varToDemandedBits);
+                ComputeSymbolDemandedBits(expr, ModuloReducer.GetMask(ctx.GetWidth(expr)), varToDemandedBits, new());
 
             // Compute the total number of demanded variable bits in the substituted parts.
             ulong totalDemanded = 0;
@@ -1210,14 +1210,20 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
+            JitUtils.FreeExecutablePage(pagePtr1);
+            JitUtils.FreeExecutablePage(pagePtr2);
             return expectedExpr;
         }
 
         // TODO: Cache results to avoid exponentially visiting shared nodes
-        private void ComputeSymbolDemandedBits(AstIdx idx, ulong currDemanded, Dictionary<AstIdx, ulong> symbolDemandedBits)
+        private void ComputeSymbolDemandedBits(AstIdx idx, ulong currDemanded, Dictionary<AstIdx, ulong> symbolDemandedBits, HashSet<(AstIdx idx, ulong currDemanded)> seen)
         {
-            var op0 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp0(idx), demanded, symbolDemandedBits);
-            var op1 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp1(idx), demanded, symbolDemandedBits);
+            if (seen.Contains((idx, currDemanded)))
+                return;
+            seen.Add((idx, currDemanded));
+
+            var op0 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp0(idx), demanded, symbolDemandedBits, seen);
+            var op1 = (ulong demanded) => ComputeSymbolDemandedBits(ctx.GetOp1(idx), demanded, symbolDemandedBits, seen);
 
             var opc = ctx.GetOpcode(idx);
             switch (opc)

@@ -46,7 +46,7 @@ namespace Mba.Simplifier.Pipeline
         private readonly bool tryDecomposeMultiBitBases;
 
         private readonly Action<ulong[], ulong>? resultVectorHook;
-
+        private readonly int depth;
         private readonly ApInt moduloMask = 0;
 
         // Number of combinations of input variables(2^n), for a single bit index.
@@ -69,14 +69,14 @@ namespace Mba.Simplifier.Pipeline
 
         private AstIdx? initialInput = null;
 
-        public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx? ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
+        public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx? ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null, int depth = 0)
         {
             if (variables == null)
                 variables = ctx.CollectVariables(ast.Value);
-            return new LinearSimplifier(ctx, ast, variables, bitSize, refine: true, multiBit, tryDecomposeMultiBitBases, resultVectorHook, inVec).Simplify(false, alreadySplit);
+            return new LinearSimplifier(ctx, ast, variables, bitSize, refine: true, multiBit, tryDecomposeMultiBitBases, resultVectorHook, inVec, depth).Simplify(false, alreadySplit);
         }
 
-        public LinearSimplifier(AstCtx ctx, AstIdx? ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
+        public LinearSimplifier(AstCtx ctx, AstIdx? ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null, int depth = 0)
         {
             // If we are given an AST, verify that the correct width was passed.
             if (ast != null && bitSize != ctx.GetWidth(ast.Value))
@@ -90,6 +90,7 @@ namespace Mba.Simplifier.Pipeline
             this.multiBit = multiBit;
             this.tryDecomposeMultiBitBases = tryDecomposeMultiBitBases;
             this.resultVectorHook = resultVectorHook;
+            this.depth = depth;
             moduloMask = (ApInt)ModuloReducer.GetMask(bitSize);
             groupSizes = GetGroupSizes(variables.Count);
             numCombinations = (ApInt)Math.Pow(2, variables.Count);
@@ -610,6 +611,20 @@ namespace Mba.Simplifier.Pipeline
 
         private AstIdx EliminateDeadVarsAndSimplify(ApInt constantOffset, ApInt demandedMask, ApInt[] variableCombinations, List<List<(ApInt coeff, ApInt bitMask)>> linearCombinations)
         {
+
+            var vNames = this.variables.Select(x => ctx.GetAstString(x));
+            //var expected = new List<string>() { "subst594:i32", "subst595:i32", "subst596:i32", "subst597:i32", "(uns45:i64 tr i32)", "(uns48:i64 tr i32)"};
+
+            /*
+            var expected = new List<string>() { "subst27:i32", "(uns41:i64 tr i32)", "(uns74:i64 tr i32)", "(uns75:i64 tr i32)" };
+            if (expected.All(x => vNames.Any(y => y.Contains(x))))
+                Debugger.Break();
+
+            if (depth > 10)
+                Debugger.Break();
+            */
+
+            
             // Collect all variables used in the output expression.
             List<AstIdx> mutVars = new(variables.Count);
             while (demandedMask != 0)
@@ -619,6 +634,8 @@ namespace Mba.Simplifier.Pipeline
                 demandedMask &= ~(1ul << xorIdx);
             }
 
+
+            var clone = variables.ToList();
             AstIdx sum = ctx.Constant(constantOffset, width);
             for (int i = 0; i < linearCombinations.Count; i++)
             {
@@ -628,14 +645,23 @@ namespace Mba.Simplifier.Pipeline
                     continue;
 
                 var combMask = variableCombinations[i];
-                var vComb = ctx.GetConjunctionFromVarMask(mutVars, combMask);
+                var widths = variables.Select(x => ctx.GetWidth(x)).ToList();
+                Console.WriteLine(widths.Distinct().Count());
+                foreach (var vIdx in variables)
+                    Console.WriteLine($"{ctx.GetAstString(vIdx)}   => {ctx.GetWidth(vIdx)}");
+                Console.WriteLine("\n\n");
+                if (widths.Distinct().Count() != 1)
+                {
+                    Debugger.Break();
+                }
+                var vComb = ctx.GetConjunctionFromVarMask(clone, combMask);
                 var term = Term(vComb, curr[0].coeff);
                 sum = ctx.Add(sum, term);
             }
 
             // TODO: Instead of constructing a result vector inside the recursive linear simplifier call, we could instead convert the ANF vector back to DNF.
             // This should be much more efficient than constructing a result vector via JITing and evaluating an AST representation of the ANF vector.
-            return LinearSimplifier.Run(width, ctx, sum, false, false, false, variables);
+            return LinearSimplifier.Run(width, ctx, sum, false, false, false, mutVars, depth: depth + 1);
         }
 
         private void EliminateUniqueValues(Dictionary<ApInt, TruthTable> coeffToTable)
