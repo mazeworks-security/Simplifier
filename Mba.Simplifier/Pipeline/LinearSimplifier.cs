@@ -646,14 +646,11 @@ namespace Mba.Simplifier.Pipeline
 
                 var combMask = variableCombinations[i];
                 var widths = variables.Select(x => ctx.GetWidth(x)).ToList();
-                Console.WriteLine(widths.Distinct().Count());
-                foreach (var vIdx in variables)
-                    Console.WriteLine($"{ctx.GetAstString(vIdx)}   => {ctx.GetWidth(vIdx)}");
-                Console.WriteLine("\n\n");
-                if (widths.Distinct().Count() != 1)
-                {
-                    Debugger.Break();
-                }
+                //Console.WriteLine(widths.Distinct().Count());
+                //foreach (var vIdx in variables)
+                //    Console.WriteLine($"{ctx.GetAstString(vIdx)}   => {ctx.GetWidth(vIdx)}");
+                //Console.WriteLine("\n\n");
+
                 var vComb = ctx.GetConjunctionFromVarMask(clone, combMask);
                 var term = Term(vComb, curr[0].coeff);
                 sum = ctx.Add(sum, term);

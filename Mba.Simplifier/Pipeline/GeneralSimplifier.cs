@@ -20,8 +20,14 @@ using System.Xml.Linq;
 
 namespace Mba.Simplifier.Pipeline
 {
+
+
     public class GeneralSimplifier
     {
+        public static bool DbgLog = false;
+
+        private const bool REDUCE_POLYS = false;
+
         private readonly AstCtx ctx;
 
         // For any given node, we store the best possible ISLE result.
@@ -170,7 +176,7 @@ namespace Mba.Simplifier.Pipeline
 
             // If there are any substitutions, we want to try simplifying the polynomial parts.
             var variables = ctx.CollectVariables(withSubstitutions);
-            if (polySimplify && substMapping.Count > 0 && ctx.GetHasPoly(id))
+            if (REDUCE_POLYS && polySimplify && substMapping.Count > 0 && ctx.GetHasPoly(id))
             {
                 var maybeSimplified = TrySimplifyMixedPolynomialParts(withSubstitutions, substMapping, inverseMapping, variables);
                 if (maybeSimplified != null && maybeSimplified.Value != id)
@@ -241,6 +247,7 @@ namespace Mba.Simplifier.Pipeline
 
         private AstIdx GetAstWithSubstitutions(AstIdx id, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear, bool inBitwise = false)
         {
+            /*
             // This is dubious: Do we actually need to run simba here... for some reason performance degrades if not
             // TODO: Maybe comment this out
             var cls = ctx.GetClass(id);
@@ -252,6 +259,7 @@ namespace Mba.Simplifier.Pipeline
                 return SimplifyViaRecursiveSiMBA(id);
             }
 
+            // Note: These two checks seem to hurt performance too!
             if (cls == AstClassification.Linear && !inBitwise)
                 return SimplifyViaRecursiveSiMBA(id);
             if (cls == AstClassification.SemiLinear && !inBitwise)
@@ -259,6 +267,7 @@ namespace Mba.Simplifier.Pipeline
                 isSemiLinear = true;
                 return SimplifyViaRecursiveSiMBA(id);
             }
+            */
             
 
             // Sometimes we perform constant folding in this method.
@@ -334,6 +343,14 @@ namespace Mba.Simplifier.Pipeline
                             var oldSum = sum;
                             var newSum = ctx.SingleSimplify(sum);
                             sum = newSum;
+
+
+                            if(GeneralSimplifier.DbgLog)
+                            {
+                                Console.WriteLine($"ConstTerm = {DagFormatter.Format(ctx, v0)}");
+                                Console.WriteLine($"\nWhole dag: {DagFormatter.Format(ctx, sum)}\n\n\n\n\n");
+                            }
+
                             // In this case, we apply constant folding(but we do not search recursively).
 
                             return GetAstWithSubstitutions(sum, substitutionMapping, ref isSemiLinear, inBitwise);

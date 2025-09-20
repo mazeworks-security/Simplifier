@@ -5,6 +5,7 @@ using Mba.Simplifier.Utility;
 using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -128,6 +129,8 @@ namespace Mba.Simplifier.Pipeline
                 return false;
             if (!SignatureVectorEquivalent(vArray, a, b))
                 return false;
+            if (!SignatureVectorEquivalent(vArray, b, a))
+                return false;
 
             return true;
         }
@@ -168,34 +171,45 @@ namespace Mba.Simplifier.Pipeline
 
         public static void ProbablyEquivalentZ3(AstCtx ctx, AstIdx before, AstIdx after)
         {
-            var z3Ctx = new Context();
-            var translator = new Z3Translator(ctx, z3Ctx);
-            var beforeZ3 = translator.Translate(before);
-            var afterZ3 = translator.Translate(after);
-            var solver = z3Ctx.MkSolver("QF_BV");
-
-            // Set the maximum timeout to 10 seconds.
-            var p = z3Ctx.MkParams();
-            uint solverLimit = 10000;
-            p.Add("timeout", solverLimit);
-            solver.Parameters = p;
-
-            Console.WriteLine("Proving equivalence...\n");
-            solver.Add(z3Ctx.MkNot(z3Ctx.MkEq(beforeZ3, afterZ3)));
-            var check = solver.Check();
-
-            var printModel = (Model model) =>
+            using (var z3Ctx = new Context())
             {
-                var values = model.Consts.Select(x => $"{x.Key.Name} = {(long)ulong.Parse(model.Eval(x.Value).ToString())}");
-                return $"[{String.Join(", ", values)}]";
-            };
+                var translator = new Z3Translator(ctx, z3Ctx);
+                var beforeZ3 = translator.Translate(before);
+                var afterZ3 = translator.Translate(after);
+                var solver = z3Ctx.MkSolver("QF_BV");
 
-            if (check == Status.UNSATISFIABLE)
-                Console.WriteLine("Expressions are equivalent.");
-            else if (check == Status.SATISFIABLE)
-                Console.WriteLine($"Expressions are not equivalent. Counterexample:\n{printModel(solver.Model)}");
-            else
-                Console.WriteLine($"Solver timed out - expressions are probably equivalent. Could not find counterexample within {solverLimit}ms");
+                // Set the maximum timeout to 10 seconds.
+                var p = z3Ctx.MkParams();
+                uint solverLimit = 5000;
+                p.Add("timeout", solverLimit);
+                solver.Parameters = p;
+
+                Console.WriteLine("Proving equivalence...\n");
+                solver.Add(z3Ctx.MkNot(z3Ctx.MkEq(beforeZ3, afterZ3)));
+                var check = solver.Check();
+
+                var printModel = (Model model) =>
+                {
+                    var values = model.Consts.Select(x => $"{x.Key.Name} = {(long)ulong.Parse(model.Eval(x.Value).ToString())}");
+                    return $"[{String.Join(", ", values)}]";
+                };
+
+                if (check == Status.UNSATISFIABLE)
+                {
+                    //Console.WriteLine("Expressions are equivalent.");
+                }
+                else if (check == Status.SATISFIABLE)
+                {
+                    Console.WriteLine($"Expressions are not equivalent. Counterexample:\n{printModel(solver.Model)}");
+                    Debugger.Break();
+                    throw new InvalidOperationException();
+
+                }
+                else
+                {
+                    //Console.WriteLine($"Solver timed out - expressions are probably equivalent. Could not find counterexample within {solverLimit}ms");
+                }
+            }
         }
 
     }
