@@ -22,6 +22,11 @@ namespace Mba.Simplifier.Bindings
             return ctx.GetAstString(Idx);
         }
 
+        public override int GetHashCode()
+        {
+            return Idx.GetHashCode();
+        }
+
         public unsafe static implicit operator uint(AstIdx reg) => reg.Idx;
 
         public unsafe static implicit operator AstIdx(uint reg) => new AstIdx(reg);

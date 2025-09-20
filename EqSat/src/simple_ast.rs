@@ -27,6 +27,7 @@ pub struct AstIdx(pub u32);
 pub struct Arena {
     pub elements: Vec<(SimpleAst, AstData)>,
     ast_to_idx: AHashMap<SimpleAst, AstIdx>,
+    isle_cache: AHashMap<AstIdx, AstIdx>,
 
     // Map a name to it's corresponds symbol index.
     symbol_ids: Vec<(String, AstIdx)>,
@@ -37,6 +38,7 @@ impl Arena {
     pub fn new() -> Self {
         let elements = Vec::with_capacity(65536);
         let ast_to_idx = AHashMap::with_capacity(65536);
+        let isle_cache = AHashMap::with_capacity(65536);
 
         let symbol_ids = Vec::with_capacity(255);
         let name_to_symbol = AHashMap::with_capacity(255);
@@ -44,6 +46,7 @@ impl Arena {
         Arena {
             elements: elements,
             ast_to_idx: ast_to_idx,
+            isle_cache: isle_cache,
 
             symbol_ids: symbol_ids,
             name_to_symbol: name_to_symbol,
@@ -813,6 +816,9 @@ pub fn eval_ast(ctx: &Context, idx: AstIdx, value_mapping: &HashMap<AstIdx, u64>
 
 // Recursively apply ISLE over an AST.
 pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
+    if ctx.arena.isle_cache.get(&idx).is_some() {
+        return *ctx.arena.isle_cache.get(&idx).unwrap();
+    }
     let mut ast = ctx.arena.get_node(idx).clone();
 
     match ast {
@@ -862,7 +868,9 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
         ast = result.unwrap();
     }
 
-    return ctx.arena.ast_to_idx[&ast];
+    let result = ctx.arena.ast_to_idx[&ast];
+    ctx.arena.isle_cache.insert(idx, result);
+    result
 }
 
 // Evaluate the current AST for all possible combinations of zeroes and ones as inputs.
