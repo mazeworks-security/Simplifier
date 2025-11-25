@@ -6,16 +6,52 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics.Arm;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Mba.Simplifier.Jit
 {
+    unsafe ref struct StackBuffer
+    {
+        public byte* Ptr;
+
+        public uint Offset;
+
+        public StackBuffer(byte* ptr)
+        {
+            this.Ptr = ptr;
+        }
+
+        public void PushU8(byte value)
+        {
+            Ptr[Offset++] = value;
+        }
+
+        public void PushI32(int value)
+            => PushU32((uint)value);
+
+        public void PushU32(uint value)
+        {
+            *(uint*)&Ptr[Offset] = value;
+            Offset += 4;
+        }
+
+        public void PushU64(ulong value)
+        {
+            *(ulong*)&Ptr[Offset] = value;
+            Offset += 8;
+        }
+    }
+
     public unsafe class FastAmd64Assembler : IAmd64Assembler
     {
         private byte* start;
 
         private byte* ptr;
+
+        private int offset = 0;
 
         public List<Instruction> Instructions => GetInstructions();
 
@@ -25,62 +61,73 @@ namespace Mba.Simplifier.Jit
             this.ptr = ptr;
         }
 
+        private unsafe void EmitBytes(params byte[] bytes)
+        {
+            fixed(byte* p = &bytes[0])
+            {
+                Memcpy(ptr, p, (uint)bytes.Length);
+            }
+
+            ptr += bytes.Length;
+        }
+
+        private void EmitBuffer(StackBuffer buffer)
+        {
+            Memcpy(ptr, buffer.Ptr, buffer.Offset);
+            ptr += buffer.Offset;
+        }
+
+        private void Memcpy(void* destination, void* source, uint byteCount)
+        {
+            Unsafe.CopyBlockUnaligned(destination, source, byteCount);
+        }
+
         public void PushReg(Register reg)
         {
             if (reg >= Register.RAX && reg <= Register.RDI)
             {
                 byte opcode = (byte)(0x50 + GetRegisterCode(reg));
-                *ptr++ = opcode; 
+                EmitBytes(opcode);
+                return;
             }
 
-            else if (reg >= Register.R8 && reg <= Register.R15)
+            if (reg >= Register.R8 && reg <= Register.R15)
             {
-                byte rex = 0x41; 
-                *ptr++ = rex; 
-
+                byte rex = 0x41;
                 byte opcode = (byte)(0x50 + (int)reg - (int)Register.R8);
-                *ptr++ = opcode; 
+                EmitBytes(rex, opcode);
+                return;
             }
 
-            else
-            {
-                throw new ArgumentException("Invalid register for PUSH instruction.");
-            }
+            throw new ArgumentException("Invalid register for PUSH instruction.");
+            
         }
-
         // push qword ptr [baseReg+offset]
         public void PushMem64(Register baseReg, int offset)
         {
-            byte rex = 0x48; 
-            if (IsExtended(baseReg)) rex |= 0x01; 
+            byte* p = stackalloc byte[8];
+            var arr = new StackBuffer(ptr);
+
+            if (IsExtended(baseReg))
+            {
+                byte rex = 0x49;
+                arr.PushU8(rex);
+            }
 
             byte opcode = 0xFF;
             byte modrm = (byte)(0x80 | (0x06 << 3) | (GetRegisterCode(baseReg) & 0x07));
+            arr.PushU8(opcode);
+            arr.PushU8(modrm);
 
             if (baseReg == Register.RSP || baseReg == Register.R12)
             {
-                if (IsExtended(baseReg))
-                    *ptr++ = rex;
-                *ptr++ = opcode; 
-                *ptr++ = modrm; 
-
                 byte sib = (byte)(0x00 | (0x04 << 3) | (GetRegisterCode(baseReg) & 0x07));
-                *ptr++ = sib; 
+                arr.PushU8(sib); 
             }
 
-            else
-            {
-                if (IsExtended(baseReg))
-                    *ptr++ = rex;
-                *ptr++ = opcode; 
-                *ptr++ = modrm; 
-            }
+            arr.PushI32(offset);
 
-            for (int i = 0; i < 4; i++)
-            {
-                *ptr++ = (byte)(offset & 0xFF);
-                offset >>= 8;
-            }
+            EmitBuffer(arr);
         }
 
         public void PopReg(Register reg)
@@ -88,22 +135,20 @@ namespace Mba.Simplifier.Jit
             if (reg >= Register.RAX && reg <= Register.RDI)
             {
                 byte opcode = (byte)(0x58 + GetRegisterCode(reg));
-                *ptr++ = opcode; 
+                EmitBytes(opcode);
+                return;
             }
 
-            else if (reg >= Register.R8 && reg <= Register.R15)
+            if (reg >= Register.R8 && reg <= Register.R15)
             {
                 byte rex = 0x41;
-                *ptr++ = rex;
-
                 byte opcode = (byte)(0x58 + GetRegisterCode(reg) - 8);
-                *ptr++ = opcode; 
+                EmitBytes(rex, opcode);
+                return;
             }
 
-            else
-            {
-                throw new ArgumentException($"Cannot pop {reg}");
-            }
+            throw new ArgumentException($"Cannot pop {reg}");
+            
         }
 
         public void OpcodeRegReg(byte opcode, Register reg1, Register reg2)
@@ -113,9 +158,7 @@ namespace Mba.Simplifier.Jit
             if (IsExtended(reg2)) rex |= 0x04;
 
             byte modrm = (byte)(0xC0 | ((GetRegisterCode(reg2) & 0x07) << 3) | (GetRegisterCode(reg1) & 0x07));
-            *ptr++ = rex;  
-            *ptr++ = opcode; 
-            *ptr++ = modrm; 
+            EmitBytes(rex, opcode, modrm);
         }
 
         public void MovRegReg(Register reg1, Register reg2)
@@ -123,6 +166,9 @@ namespace Mba.Simplifier.Jit
 
         public void MovRegMem64(Register dstReg, Register baseReg, int offset)
         {
+            byte* p = stackalloc byte[8];
+            var arr = new StackBuffer(ptr);
+
             byte rex = 0x48; 
             if (IsExtended(dstReg)) rex |= 0x04;
             if (IsExtended(baseReg)) rex |= 0x01; 
@@ -130,32 +176,27 @@ namespace Mba.Simplifier.Jit
             byte opcode = 0x8B;
             byte modrm = (byte)(0x80 | ((GetRegisterCode(dstReg) & 0x07) << 3) | (GetRegisterCode(baseReg) & 0x07));
 
+            arr.PushU8(rex);
+            arr.PushU8(opcode);
+            arr.PushU8(modrm);
+
             if (baseReg == Register.RSP || baseReg == Register.R12)
             {
-                *ptr++ = rex; 
-                *ptr++ = opcode;
-                *ptr++ = modrm;
                 byte sib = (byte)(0x00 | (0x04 << 3) | (GetRegisterCode(baseReg) & 0x07));
-                *ptr++ = sib; 
+                arr.PushU8(sib);
             }
 
-            else
-            {
-                *ptr++ = rex;
-                *ptr++ = opcode;
-                *ptr++ = modrm;
-            }
+            arr.PushI32(offset);
 
-            for (int i = 0; i < 4; i++)
-            {
-                *ptr++ = (byte)(offset & 0xFF);
-                offset >>= 8;
-            }
+            EmitBuffer(arr);
         }
 
         // mov qword ptr [baseReg + offset], srcReg
         public void MovMem64Reg(Register baseReg, int offset, Register srcReg)
         {
+            byte* p = stackalloc byte[8];
+            var arr = new StackBuffer(ptr);
+
             byte rex = 0x48; 
             if (IsExtended(srcReg)) rex |= 0x04; 
             if (IsExtended(baseReg)) rex |= 0x01; 
@@ -163,27 +204,18 @@ namespace Mba.Simplifier.Jit
             byte opcode = 0x89;
             byte modrm = (byte)(0x80 | ((GetRegisterCode(srcReg) & 0x07) << 3) | (GetRegisterCode(baseReg) & 0x07));
 
+            arr.PushU8(rex);
+            arr.PushU8(opcode);
+            arr.PushU8(modrm);
+
             if (baseReg == Register.RSP || baseReg == Register.R12)
             {
-                *ptr++ = rex;
-                *ptr++ = opcode;
-                *ptr++ = modrm;
                 byte sib = (byte)(0x00 | (0x04 << 3) | (GetRegisterCode(baseReg) & 0x07));
-                *ptr++ = sib;
+                arr.PushU8(sib);
             }
 
-            else
-            {
-                *ptr++ = rex;
-                *ptr++ = opcode;
-                *ptr++ = modrm;
-            }
-
-            for (int i = 0; i < 4; i++)
-            {
-                *ptr++ = (byte)(offset & 0xFF);
-                offset >>= 8;
-            }
+            arr.PushI32(offset);
+            EmitBuffer(arr);
         }
 
         public void MovabsRegImm64(Register reg1, ulong imm64)
@@ -193,14 +225,14 @@ namespace Mba.Simplifier.Jit
 
             var cond = (reg1 >= Register.RAX && reg1 <= Register.RDI);
             byte opcode = (byte)(0xB8 + (cond ? GetRegisterCode(reg1) : GetRegisterCode(reg1) - 8));
-            *ptr++ = rex;
-            *ptr++ = opcode;
 
-            for (int i = 0; i < 8; i++)
-            {
-                *ptr++ = (byte)(imm64 & 0xFF);
-                imm64 >>= 8;
-            }
+            byte* p = stackalloc byte[10];
+            var arr = new StackBuffer(ptr);
+            arr.PushU8(rex);
+            arr.PushU8(opcode);
+            arr.PushU64(imm64);
+
+            EmitBuffer(arr);
         }
 
         public void AddRegReg(Register reg1, Register reg2)
@@ -221,15 +253,15 @@ namespace Mba.Simplifier.Jit
 
             byte opcode = 0x81;
             byte modrm = (byte)(0xC0 | (mask << 3) | (GetRegisterCode(reg1) & 0x07));
-            *ptr++ = rex;
-            *ptr++ = opcode;
-            *ptr++ = modrm;
 
-            for (int i = 0; i < 4; i++)
-            {
-                *ptr++ = (byte)(imm32 & 0xFF);
-                imm32 >>= 8;
-            }
+            byte* p = stackalloc byte[7];
+            var arr = new StackBuffer(ptr);
+            arr.PushU8(rex);
+            arr.PushU8(opcode);
+            arr.PushU8(modrm);
+            arr.PushU32(imm32);
+
+            EmitBuffer(arr);
         }
 
         public void ImulRegReg(Register reg1, Register reg2)
@@ -241,10 +273,7 @@ namespace Mba.Simplifier.Jit
             byte opcode1 = 0x0F;
             byte opcode2 = 0xAF;
             byte modrm = (byte)(0xC0 | ((GetRegisterCode(reg1) & 0x07) << 3) | (GetRegisterCode(reg2) & 0x07));
-            *ptr++ = rex;
-            *ptr++ = opcode1;
-            *ptr++ = opcode2;
-            *ptr++ = modrm;
+            EmitBytes(rex, opcode1, opcode2, modrm);
         }
 
         public void AndRegReg(Register reg1, Register reg2)
@@ -262,27 +291,22 @@ namespace Mba.Simplifier.Jit
             byte opcode = 0x21;
             byte modrm = (byte)(0x80 | ((GetRegisterCode(srcReg) & 0x07) << 3) | (GetRegisterCode(baseReg) & 0x07));
 
+            byte* p = stackalloc byte[8];
+            var arr = new StackBuffer(ptr);
+            arr.PushU8(rex);
+            arr.PushU8(opcode);
+            arr.PushU8(modrm);
+
+
             if (baseReg == Register.RSP || baseReg == Register.R12)
             {
-                *ptr++ = rex;
-                *ptr++ = opcode;
-                *ptr++ = modrm;
-
                 byte sib = (byte)(0x00 | (0x04 << 3) | (GetRegisterCode(baseReg) & 0x07));
-                *ptr++ = sib;
-            }
-            else
-            {
-                *ptr++ = rex;
-                *ptr++ = opcode;
-                *ptr++ = modrm;
+                arr.PushU8(sib);
             }
 
-            for (int i = 0; i < 4; i++)
-            {
-                *ptr++ = (byte)(offset & 0xFF);
-                offset >>= 8;
-            }
+            arr.PushI32(offset);
+
+            EmitBuffer(arr);
         }
 
         public void OrRegReg(Register reg1, Register reg2)
@@ -298,9 +322,7 @@ namespace Mba.Simplifier.Jit
 
             byte opcode = 0xF7;
             byte modrm = (byte)(0xC0 | (0x02 << 3) | (GetRegisterCode(reg1) & 0x07));
-            *ptr++ = rex;
-            *ptr++ = opcode;
-            *ptr++ = modrm;
+            EmitBytes(rex, opcode, modrm);
         }
 
         public void ShlRegCl(Register reg)
@@ -317,9 +339,7 @@ namespace Mba.Simplifier.Jit
             byte opcode = 0xD3;
             var m1 = shl ? 0x04 : 0x05;
             byte modrm = (byte)(0xC0 | (m1 << 3) | (GetRegisterCode(reg) & 0x07));
-            *ptr++ = rex;
-            *ptr++ = opcode;
-            *ptr++ = modrm;
+            EmitBytes(rex, opcode, modrm);
         }
 
         public void ShrRegImm8(Register reg, byte imm8)
@@ -329,10 +349,7 @@ namespace Mba.Simplifier.Jit
 
             byte opcode = 0xC1;
             byte modrm = (byte)(0xC0 | (0x05 << 3) | (GetRegisterCode(reg) & 0x07));
-            *ptr++ = rex;
-            *ptr++ = opcode;
-            *ptr++ = modrm;
-            *ptr++ = imm8;
+            EmitBytes(rex, opcode, modrm, imm8);
         }
 
         public void CallReg(Register reg1)
@@ -343,20 +360,20 @@ namespace Mba.Simplifier.Jit
 
             byte opcode = 0xFF;
             byte modrm = (byte)(0xC0 | (0x02 << 3) | (GetRegisterCode(reg1) & 0x07));
-            if (rex != 0x00)
-                *ptr++ = rex;
-            *ptr++ = opcode;
-            *ptr++ = modrm;
+            if (rex != 0)
+                EmitBytes(rex, opcode, modrm);
+            else
+                EmitBytes(opcode, modrm);
         }
 
         public void Ret()
-            => *ptr++ = 0xC3;
+            => EmitBytes(0xC3);
 
         private bool IsExtended(Register reg)
             => reg >= Register.R8 && reg <= Register.R15;
 
-        private int GetRegisterCode(Register reg)
-            => (int)reg - (int)Register.RAX;
+        private uint GetRegisterCode(Register reg)
+            => (uint)reg - (uint)Register.RAX;
 
         public List<Instruction> GetInstructions()
         {

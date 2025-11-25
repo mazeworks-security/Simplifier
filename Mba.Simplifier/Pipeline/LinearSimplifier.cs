@@ -23,6 +23,7 @@ using System.Reflection.Metadata;
 using static Antlr4.Runtime.Atn.SemanticContext;
 using Mba.Simplifier.Interpreter;
 using Mba.Simplifier.Utility;
+using Microsoft.VisualBasic;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -45,7 +46,14 @@ namespace Mba.Simplifier.Pipeline
         // If enabled, we try to find a simpler representation of grouping of basis expressions.
         private readonly bool tryDecomposeMultiBitBases;
 
+        // For internal use in private projects (do not use)
         private readonly Action<ulong[], ulong>? resultVectorHook;
+
+        private readonly int depth;
+
+        // For internal use in private projects (do not use)
+        // Optionally used to track which variables bits are demanded in the expression
+        private readonly Dictionary<ApInt, ApInt> anfDemandedBits;
 
         private readonly ApInt moduloMask = 0;
 
@@ -69,14 +77,14 @@ namespace Mba.Simplifier.Pipeline
 
         private AstIdx? initialInput = null;
 
-        public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx? ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
+        public static AstIdx Run(uint bitSize, AstCtx ctx, AstIdx? ast, bool alreadySplit = false, bool multiBit = false, bool tryDecomposeMultiBitBases = false, IReadOnlyList<AstIdx> variables = null, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null, int depth = 0, Dictionary<ApInt, ApInt> anfDemandedBits = null)
         {
             if (variables == null)
                 variables = ctx.CollectVariables(ast.Value);
-            return new LinearSimplifier(ctx, ast, variables, bitSize, refine: true, multiBit, tryDecomposeMultiBitBases, resultVectorHook, inVec).Simplify(false, alreadySplit);
+            return new LinearSimplifier(ctx, ast, variables, bitSize, refine: true, multiBit, tryDecomposeMultiBitBases, resultVectorHook, inVec, depth, anfDemandedBits).Simplify(false, alreadySplit);
         }
 
-        public LinearSimplifier(AstCtx ctx, AstIdx? ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null)
+        public LinearSimplifier(AstCtx ctx, AstIdx? ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null, int depth = 0, Dictionary<ApInt, ApInt> anfDemandedBits = null)
         {
             // If we are given an AST, verify that the correct width was passed.
             if (ast != null && bitSize != ctx.GetWidth(ast.Value))
@@ -90,6 +98,8 @@ namespace Mba.Simplifier.Pipeline
             this.multiBit = multiBit;
             this.tryDecomposeMultiBitBases = tryDecomposeMultiBitBases;
             this.resultVectorHook = resultVectorHook;
+            this.depth = depth;
+            this.anfDemandedBits = anfDemandedBits;
             moduloMask = (ApInt)ModuloReducer.GetMask(bitSize);
             groupSizes = GetGroupSizes(variables.Count);
             numCombinations = (ApInt)Math.Pow(2, variables.Count);
@@ -124,7 +134,7 @@ namespace Mba.Simplifier.Pipeline
             }
         }
 
-        private static IReadOnlyList<AstIdx> CastVariables(AstCtx ctx, IReadOnlyList<AstIdx> variables, uint bitSize)
+        public static IReadOnlyList<AstIdx> CastVariables(AstCtx ctx, IReadOnlyList<AstIdx> variables, uint bitSize)
         {
             // If all variables are of a correct size, no casting is necessary.
             if (!variables.Any(x => ctx.GetWidth(x) != bitSize))
@@ -179,15 +189,14 @@ namespace Mba.Simplifier.Pipeline
 
         public unsafe static ApInt[] JitResultVectorNew(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, bool multiBit, ApInt numCombinations)
         {
-            var jit = new Amd64OptimizingJit(ctx);
-            jit.Compile(ast, variables.ToList(), MultibitSiMBA.JitPage.Value, false);
+            ctx.Compile(ast, ModuloReducer.GetMask(bitWidth), variables.ToArray(), MultibitSiMBA.JitPage.Value);
             var vec = LinearSimplifier.Execute(ctx, bitWidth, mask, variables, multiBit, numCombinations, MultibitSiMBA.JitPage.Value, false);
             return vec;
         }
 
-        public unsafe static nint Compile(AstCtx ctx, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, nint codePtr)
+        public unsafe static nint CompileLegacy(AstCtx ctx, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, nint codePtr)
         {
-            return ctx.Compile(ast, mask, variables.ToArray(), codePtr);
+            return ctx.CompileLegacy(ast, mask, variables.ToArray(), codePtr);
         }
 
         public unsafe static ApInt[] Execute(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, bool multiBit, ApInt numCombinations, nint codePtr, bool isOneBitVars)
@@ -222,7 +231,7 @@ namespace Mba.Simplifier.Pipeline
 
             // If we were given a semi-linear expression, and the ground truth of that expression is linear,
             // truncate the size of the result vector down to 2^t, then treat it as a linear MBA.
-            if (multiBit && IsLinearResultVector())
+           if (multiBit && IsLinearResultVector())
             {
                 multiBit = false;
                 Array.Resize(ref resultVector, (int)numCombinations);
@@ -239,6 +248,14 @@ namespace Mba.Simplifier.Pipeline
         // If we have a multi-bit result vector, try to rewrite as a linear result vector. If possible, update state accordingly.
         private unsafe bool IsLinearResultVector()
         {
+            foreach(var v in variables)
+            {
+                // If the variable is zero extended or truncated, we treat this as a semi-linear signature vector.
+                // Truncation cannot be treated as linear, though in the future we may be able to get away with treating zero extension as linear?
+                if (!ctx.IsSymbol(v))
+                    return false;
+            }
+
             fixed (ApInt* ptr = &resultVector[0])
             {
                 ushort bitIndex = 0;
@@ -619,6 +636,8 @@ namespace Mba.Simplifier.Pipeline
                 demandedMask &= ~(1ul << xorIdx);
             }
 
+
+            var clone = variables.ToList();
             AstIdx sum = ctx.Constant(constantOffset, width);
             for (int i = 0; i < linearCombinations.Count; i++)
             {
@@ -628,14 +647,16 @@ namespace Mba.Simplifier.Pipeline
                     continue;
 
                 var combMask = variableCombinations[i];
-                var vComb = ctx.GetConjunctionFromVarMask(mutVars, combMask);
+                var widths = variables.Select(x => ctx.GetWidth(x)).ToList();
+
+                var vComb = ctx.GetConjunctionFromVarMask(clone, combMask);
                 var term = Term(vComb, curr[0].coeff);
                 sum = ctx.Add(sum, term);
             }
 
             // TODO: Instead of constructing a result vector inside the recursive linear simplifier call, we could instead convert the ANF vector back to DNF.
             // This should be much more efficient than constructing a result vector via JITing and evaluating an AST representation of the ANF vector.
-            return LinearSimplifier.Run(width, ctx, sum, false, false, false, variables);
+            return LinearSimplifier.Run(width, ctx, sum, false, false, false, mutVars, depth: depth + 1);
         }
 
         private void EliminateUniqueValues(Dictionary<ApInt, TruthTable> coeffToTable)
@@ -908,7 +929,7 @@ namespace Mba.Simplifier.Pipeline
 
             if (multiBit)
             {
-                var r = SimplifyOneValueMultibit(constant, resultVector.ToArray(), variableCombinations);
+                var r = SimplifyOneValueMultibit(constant, resultVector.ToArray());
                 if (r != null)
                 {
                     CheckSolutionComplexity(r.Value, 1, null);
@@ -967,6 +988,18 @@ namespace Mba.Simplifier.Pipeline
                             // Add an entry to the linear combination list.
                             linearCombinations[i].Add((coeff, maskForIndex));
                         }
+                    }
+                }
+            }
+
+            if(anfDemandedBits != null)
+            {
+                for(int i = 0; i < linearCombinations.Count; i++)
+                {
+                    anfDemandedBits.TryAdd((ApInt)i, 0);
+                    foreach(var (coeff, mask) in linearCombinations[i])
+                    {
+                        anfDemandedBits[(ApInt)i] |= mask;
                     }
                 }
             }
@@ -1367,29 +1400,9 @@ namespace Mba.Simplifier.Pipeline
             return null;
         }
 
-        private AstIdx? SimplifyOneValueMultibit(ulong constant, ApInt[] withoutConstant, ApInt[] variableCombinations)
+        // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
+        private AstIdx? SimplifyOneValueMultibit(ulong constant, ApInt[] withoutConstant)
         {
-            // Algorithm: Start at some point, check if you can change every coefficient to the target coefficient
-            bool truthTableIdx = true;
-            if (!truthTableIdx)
-                variableCombinations = new List<ApInt>() { 0 }.Concat(variableCombinations).ToArray();
-
-            var getConj = (ApInt i, ApInt? mask) =>
-            {
-                if (truthTableIdx)
-                {
-                    var boolean = GetBooleanForIndex((int)i);
-                    if (mask == null)
-                        return boolean;
-
-                    return ctx.And(ctx.Constant(mask.Value, width), boolean);
-                }
-
-                return ConjunctionFromVarMask(1, i, mask);
-            };
-
-            AstIdx.ctx = ctx;
-
             // Reduce each row to a canonical form. If a row cannot be canonicalized, there is no solution.
             var uniqueCoeffs = TryReduceRows(constant, withoutConstant);
             if (uniqueCoeffs == null)

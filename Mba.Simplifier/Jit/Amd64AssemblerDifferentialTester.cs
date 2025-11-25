@@ -33,6 +33,15 @@ namespace Mba.Simplifier.Jit
             icedAssembler = new IcedAmd64Assembler(new Assembler(64));
         }
 
+        public static void Test()
+        {
+            var buffer = new byte[64 * 4096];
+            fixed(byte* p = buffer) 
+            {
+                new Amd64AssemblerDifferentialTester(p).Run();
+            }
+        }
+
         public void Run()
         {
             for (int i = 0; i < registers.Length; i++)
@@ -56,13 +65,15 @@ namespace Mba.Simplifier.Jit
             for (int _ = 0; _ < 100; _++)
             {
                 var c = (ulong)rand.NextInt64();
+                c |= rand.Next(0, 2) == 0 ? 0 : (1ul << 63);
+
                 Diff(nameof(IAmd64Assembler.MovabsRegImm64), reg1, c);
-                Diff(nameof(IAmd64Assembler.AddRegImm32), reg1, c);
-                Diff(nameof(IAmd64Assembler.SubRegImm32), reg1, c);
-                Diff(nameof(IAmd64Assembler.AndRegImm32), reg1, c);
-                Diff(nameof(IAmd64Assembler.ShrRegImm8), reg1, c);
+                Diff(nameof(IAmd64Assembler.AddRegImm32), reg1, (uint)c);
+                Diff(nameof(IAmd64Assembler.SubRegImm32), reg1, (uint)c);
+                Diff(nameof(IAmd64Assembler.AndRegImm32), reg1, (uint)c);
+                Diff(nameof(IAmd64Assembler.ShrRegImm8), reg1, (byte)c);
                 if (reg1 != rsp)
-                    Diff(nameof(IAmd64Assembler.PushMem64), reg1, c);
+                    Diff(nameof(IAmd64Assembler.PushMem64), reg1, (int)c);
             }
         }
 
@@ -90,6 +101,8 @@ namespace Mba.Simplifier.Jit
                 Diff(nameof(IAmd64Assembler.MovMem64Reg), reg2, (int)c, reg1);
                 Diff(nameof(IAmd64Assembler.MovRegMem64), reg1, reg2, (int)c);
                 Diff(nameof(IAmd64Assembler.MovRegMem64), reg2, reg1, (int)c);
+                Diff(nameof(IAmd64Assembler.AndMem64Reg), reg1, (int)c, reg2);
+                Diff(nameof(IAmd64Assembler.AndMem64Reg), reg2, (int)c, reg1);
             }
         }
 

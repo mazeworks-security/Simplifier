@@ -1,16 +1,26 @@
 type Unit = ();
 
+use core::num;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     f32::consts::PI,
     ffi::{CStr, CString},
-    u64, vec,
+    ops::Add,
+    u16, u64, vec,
 };
 
 use ahash::AHashMap;
+use iced_x86::{
+    code_asm::{st, CodeAssembler},
+    Code, Instruction, Register,
+};
 use libc::{c_char, c_void};
+use std::marker::PhantomData;
 
 use crate::{
+    assembler::{
+        self, amd64_assembler::IAmd64Assembler, fast_amd64_assembler::FastAmd64Assembler, *,
+    },
     known_bits::{self, *},
     mba::{self, Context as MbaContext},
     truth_table_database::{TruthTable, TruthTableDatabase},
@@ -27,6 +37,7 @@ pub struct AstIdx(pub u32);
 pub struct Arena {
     pub elements: Vec<(SimpleAst, AstData)>,
     ast_to_idx: AHashMap<SimpleAst, AstIdx>,
+    isle_cache: AHashMap<AstIdx, AstIdx>,
 
     // Map a name to it's corresponds symbol index.
     symbol_ids: Vec<(String, AstIdx)>,
@@ -37,6 +48,7 @@ impl Arena {
     pub fn new() -> Self {
         let elements = Vec::with_capacity(65536);
         let ast_to_idx = AHashMap::with_capacity(65536);
+        let isle_cache = AHashMap::with_capacity(65536);
 
         let symbol_ids = Vec::with_capacity(255);
         let name_to_symbol = AHashMap::with_capacity(255);
@@ -44,6 +56,7 @@ impl Arena {
         Arena {
             elements: elements,
             ast_to_idx: ast_to_idx,
+            isle_cache: isle_cache,
 
             symbol_ids: symbol_ids,
             name_to_symbol: name_to_symbol,
@@ -73,6 +86,7 @@ impl Arena {
             has_poly: has_poly,
             class: max,
             known_bits: known_bits,
+            imut_data: 0,
         };
 
         return self.insert_ast_node(SimpleAst::Add { a, b }, data);
@@ -128,6 +142,7 @@ impl Arena {
             has_poly: has_poly,
             class: max,
             known_bits: known_bits,
+            imut_data: 0,
         };
 
         return self.insert_ast_node(SimpleAst::Mul { a, b }, data);
@@ -154,6 +169,7 @@ impl Arena {
             has_poly: true,
             class: AstClass::Nonlinear,
             known_bits: known_bits,
+            imut_data: 0,
         };
 
         return self.insert_ast_node(SimpleAst::Pow { a, b }, data);
@@ -201,6 +217,7 @@ impl Arena {
             has_poly: has_poly,
             class: max,
             known_bits: known_bits,
+            imut_data: 0,
         };
         return self.insert_ast_node(SimpleAst::Neg { a }, data);
     }
@@ -219,6 +236,7 @@ impl Arena {
             has_poly: has_poly,
             class: class,
             known_bits: known_bits,
+            imut_data: 0,
         };
         return self.insert_ast_node(SimpleAst::Lshr { a, b }, data);
     }
@@ -242,6 +260,7 @@ impl Arena {
             has_poly: has_poly,
             class: class,
             known_bits: known_bits,
+            imut_data: 0,
         };
 
         return self.insert_ast_node(SimpleAst::Zext { a, to: width }, data);
@@ -266,6 +285,7 @@ impl Arena {
             has_poly: has_poly,
             class: class,
             known_bits: known_bits,
+            imut_data: 0,
         };
 
         return self.insert_ast_node(SimpleAst::Trunc { a, to: width }, data);
@@ -278,6 +298,7 @@ impl Arena {
             has_poly: false,
             class: AstClass::Bitwise,
             known_bits: KnownBits::constant(c, width),
+            imut_data: 0,
         };
 
         // Reduce the constant modulo 2**width
@@ -293,6 +314,7 @@ impl Arena {
             has_poly: false,
             class: AstClass::Bitwise,
             known_bits: KnownBits::empty(width),
+            imut_data: 0,
         };
 
         return self.insert_ast_node(
@@ -319,6 +341,7 @@ impl Arena {
             has_poly: false,
             class: AstClass::Bitwise,
             known_bits: KnownBits::empty(width),
+            imut_data: 0,
         };
 
         let symbol_ast_idx = self.insert_ast_node(
@@ -380,6 +403,14 @@ impl Arena {
         unsafe { self.elements.get_unchecked(idx.0 as usize).1 }
     }
 
+    pub fn get_data_mut(&mut self, idx: AstIdx) -> &mut AstData {
+        unsafe { &mut self.elements.get_unchecked_mut(idx.0 as usize).1 }
+    }
+
+    pub fn set_data(&mut self, idx: AstIdx, data: AstData) {
+        unsafe { self.elements.get_unchecked_mut(idx.0 as usize).1 = data }
+    }
+
     pub fn get_bin_width(&self, a: AstIdx, b: AstIdx) -> u8 {
         let a_width = self.get_width(a);
         let b_width = self.get_width(b);
@@ -414,6 +445,7 @@ impl Arena {
             has_poly: has_poly,
             class: max,
             known_bits: known_bits,
+            imut_data: 0,
         };
 
         return data;
@@ -487,7 +519,13 @@ pub struct AstData {
     // Classification of the ast
     class: AstClass,
 
+    // Known zero or one bits
     known_bits: KnownBits,
+
+    // Internal mutable data for use in different algorithms.
+    // Specifically we use this field to avoid unnecessarily storing data in hashmaps.
+    //  e.g "how many users does this node have?" can be stored here temporarily.
+    imut_data: u64,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -813,6 +851,9 @@ pub fn eval_ast(ctx: &Context, idx: AstIdx, value_mapping: &HashMap<AstIdx, u64>
 
 // Recursively apply ISLE over an AST.
 pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
+    if ctx.arena.isle_cache.get(&idx).is_some() {
+        return *ctx.arena.isle_cache.get(&idx).unwrap();
+    }
     let mut ast = ctx.arena.get_node(idx).clone();
 
     match ast {
@@ -862,7 +903,9 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
         ast = result.unwrap();
     }
 
-    return ctx.arena.ast_to_idx[&ast];
+    let result = ctx.arena.ast_to_idx[&ast];
+    ctx.arena.isle_cache.insert(idx, result);
+    result
 }
 
 // Evaluate the current AST for all possible combinations of zeroes and ones as inputs.
@@ -1207,6 +1250,24 @@ pub extern "C" fn ContextGetKnownBits(ctx: *mut Context, id: AstIdx) -> KnownBit
         let kb = (*ctx).arena.get_data(id).known_bits;
 
         return kb;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ContextGetImutData(ctx: *mut Context, id: AstIdx) -> u64 {
+    unsafe {
+        let kb = (*ctx).arena.get_data(id).imut_data;
+
+        return kb;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ContextSetImutData(ctx: *mut Context, id: AstIdx, imut: u64) {
+    unsafe {
+        let mut data = (*ctx).arena.get_data(id).clone();
+        data.imut_data = imut;
+        (*ctx).arena.set_data(id, data);
     }
 }
 
@@ -1606,7 +1667,7 @@ unsafe fn jit_constant(c: u64, page: *mut u8, offset: &mut usize) {
 }
 
 #[no_mangle]
-pub extern "C" fn GetPowPtr(mut base: u64, mut exp: u64) -> u64 {
+pub extern "C" fn GetPowPtr() -> u64 {
     return Pow as *const () as u64;
 }
 
@@ -1625,7 +1686,7 @@ pub extern "C" fn Pow(mut base: u64, mut exp: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn ContextCompile(
+pub unsafe extern "C" fn ContextCompileLegacy(
     ctx_p: *mut Context,
     node: AstIdx,
     mask: u64,
@@ -1672,6 +1733,28 @@ pub unsafe extern "C" fn ContextCompile(
     emit_u8(page, &mut offset, POP_RBX);
 
     emit_u8(page, &mut offset, RET);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn ContextCompile(
+    ctx_p: *mut Context,
+    node: AstIdx,
+    mask: u64,
+    variables: *const AstIdx,
+    var_count: u64,
+    page: *mut u8,
+) {
+    let mut ctx: &mut Context = &mut (*ctx_p);
+
+    let mut vars: Vec<AstIdx> = Vec::new();
+    // JIT code
+    for i in 0..var_count {
+        vars.push(*variables.add(i as usize));
+    }
+
+    let mut assembler = FastAmd64Assembler::new(page);
+    let mut compiler = Amd64OptimizingJit::<FastAmd64Assembler>::new();
+    compiler.compile(ctx, &mut assembler, node, &vars, page, false);
 }
 
 #[no_mangle]
@@ -2464,4 +2547,693 @@ pub fn get_group_size_index(mask: u64) -> u32 {
 
 pub fn get_group_size(idx: u32) -> u32 {
     return 1 << idx;
+}
+
+#[derive(Copy, Clone)]
+struct Location {
+    pub register: Register,
+}
+
+impl Location {
+    pub fn is_register(&self) -> bool {
+        return self.register != Register::None;
+    }
+
+    pub fn reg(r: Register) -> Location {
+        return Location { register: r };
+    }
+
+    pub fn stack() -> Location {
+        return Location {
+            register: Register::None,
+        };
+    }
+}
+
+trait Exists {
+    fn exists(&self) -> bool;
+}
+
+// Assert that `NodeInfo` is 8 bytes in size
+const _: () = [(); 1][(core::mem::size_of::<NodeInfo>() == 8) as usize ^ 1];
+
+#[derive(Copy, Clone)]
+struct NodeInfo {
+    pub num_uses: u16,
+    pub var_idx: u16,
+    pub slot_idx: u16,
+    pub exists: u16,
+}
+
+impl NodeInfo {
+    pub fn new(num_instances: u16) -> Self {
+        return NodeInfo {
+            num_uses: num_instances,
+            var_idx: 0,
+            slot_idx: u16::MAX,
+            exists: 1,
+        };
+    }
+}
+
+impl From<u64> for NodeInfo {
+    fn from(value: u64) -> Self {
+        unsafe {
+            let ptr = (&value) as *const u64 as *const NodeInfo;
+            *ptr
+        }
+    }
+}
+
+impl Into<u64> for NodeInfo {
+    fn into(self) -> u64 {
+        unsafe {
+            let ptr = (&self) as *const NodeInfo as *const u64;
+            *ptr
+        }
+    }
+}
+
+impl Exists for NodeInfo {
+    fn exists(&self) -> bool {
+        return self.exists != 0;
+    }
+}
+
+struct AuxInfoStorage<T: From<u64> + Into<u64> + Exists> {
+    _marker: PhantomData<T>,
+}
+
+impl<T: From<u64> + Into<u64> + Exists> AuxInfoStorage<T> {
+    pub fn contains(ctx: &mut Context, idx: AstIdx) -> bool {
+        let value = Self::get(ctx, idx);
+        return value.exists();
+    }
+
+    pub fn get(ctx: &mut Context, idx: AstIdx) -> T {
+        let value = ctx.arena.get_data(idx).imut_data;
+        return T::from(value);
+    }
+
+    pub fn get_unsafe(ptr: *mut (SimpleAst, AstData), idx: AstIdx) -> T {
+        unsafe {
+            let value = (*ptr.add(idx.0 as usize)).1.imut_data;
+            return T::from(value);
+        }
+    }
+
+    pub fn get_ptr_unsafe(ptr: *mut (SimpleAst, AstData), idx: AstIdx) -> *mut NodeInfo {
+        unsafe {
+            let data = &mut (*ptr.add(idx.0 as usize)).1;
+            return (&mut (*ptr).1.imut_data) as *mut u64 as *mut NodeInfo;
+        }
+    }
+
+    pub fn set(ctx: &mut Context, idx: AstIdx, value: T) {
+        ctx.arena.get_data_mut(idx).imut_data = value.into();
+    }
+
+    pub fn set_unsafe(ptr: *mut (SimpleAst, AstData), idx: AstIdx, value: T) {
+        unsafe {
+            let data = &mut (*ptr.add(idx.0 as usize)).1;
+            data.imut_data = value.into();
+        }
+    }
+
+    pub fn try_get(ctx: &mut Context, idx: AstIdx) -> Option<T> {
+        let value = Self::get(ctx, idx);
+        if value.exists() {
+            return Some(value);
+        }
+
+        return None;
+    }
+
+    pub fn try_get_unsafe(ptr: *mut (SimpleAst, AstData), idx: AstIdx) -> Option<T> {
+        let value = Self::get_unsafe(ptr, idx);
+        if value.exists() {
+            return Some(value);
+        }
+
+        return None;
+    }
+}
+
+const ARGS_REGISTER: Register = Register::RCX;
+const LOCALS_REGISTER: Register = Register::RBP;
+const SCRATCH1: Register = Register::RSI;
+const SCRATCH2: Register = Register::RDI;
+
+static VOLATILE_REGS: &'static [Register] = &[
+    Register::RAX,
+    Register::RCX,
+    Register::RDX,
+    Register::R8,
+    Register::R9,
+    Register::R10,
+    Register::R11,
+];
+static NONVOLATILE_REGS: &'static [Register] = &[
+    Register::RBP,
+    Register::RBX,
+    Register::RDI,
+    Register::RSI,
+    Register::R12,
+    Register::R13,
+    Register::R14,
+    Register::R15,
+];
+
+struct Amd64OptimizingJit<T: IAmd64Assembler> {
+    // Available registers for allocation.
+    free_registers: Vec<Register>,
+    // Post order traversal of the DAG.
+    dfs: Vec<AstIdx>,
+    // Number of allocated stack slots
+    slot_count: u16,
+    // Stack of in-use locations.
+    stack: Vec<Location>,
+    _marker: PhantomData<T>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+struct StTuple {
+    owner: AstIdx,
+    value: AstIdx,
+}
+
+impl StTuple {
+    pub fn new(owner: AstIdx, value: AstIdx) -> Self {
+        return StTuple { owner, value };
+    }
+}
+
+impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
+    fn new() -> Self {
+        return Amd64OptimizingJit {
+            free_registers: vec![
+                Register::RAX,
+                Register::RDX,
+                Register::RBX,
+                Register::R8,
+                Register::R9,
+                Register::R10,
+                Register::R11,
+                Register::R12,
+                Register::R13,
+                Register::R14,
+                Register::R15,
+            ],
+            dfs: Vec::with_capacity(64),
+            slot_count: 0,
+            stack: Vec::with_capacity(16),
+            _marker: PhantomData,
+        };
+    }
+
+    #[inline(never)]
+    fn compile(
+        &mut self,
+        ctx: &mut Context,
+        assembler: &mut T,
+        idx: AstIdx,
+        variables: &Vec<AstIdx>,
+        page_ptr: *mut u8,
+        use_iced_backend: bool,
+    ) {
+        // Collect necessary information about nodes for JITing (dfs order, how many users a node has).
+        Self::collect_info(ctx, idx, &mut self.dfs);
+
+        // Store each variables argument index
+        for i in 0..variables.len() {
+            let var_idx = variables[i];
+            let mut info = AuxInfoStorage::<NodeInfo>::get(ctx, var_idx);
+            info.var_idx = i as u16;
+            AuxInfoStorage::<NodeInfo>::set(ctx, var_idx, info);
+        }
+
+        // Compile the instructions to x86.
+        self.lower_to_x86(ctx, assembler);
+
+        // Clear each node's mutable data.
+        for id in self.dfs.iter() {
+            let mut info = AuxInfoStorage::<NodeInfo>::get(ctx, *id);
+            AuxInfoStorage::<NodeInfo>::set(ctx, *id, NodeInfo::from(0));
+        }
+
+        // If using the fast assembler backend, we've already emitted x86.
+        // However the stack pointer adjustment needs to fixed up, because it wasn't known during prologue emission.
+        if !use_iced_backend {
+            Self::fixup_frame_ptr(page_ptr, self.slot_count.into());
+            return;
+        }
+
+        // Otherwise adjust the rsp in iced.
+        let mut instructions = assembler.get_instructions();
+        Self::fixup_iced_frame_ptr(&mut instructions, self.slot_count.into());
+
+        // Write the instructions to memory.
+        // ICED internally emits a list of assembled instructions rather than raw x86 bytes
+        // so this must be done after the fact.
+        Self::write_instructions(page_ptr, &instructions);
+    }
+
+    fn collect_info(ctx: &mut Context, idx: AstIdx, dfs: &mut Vec<AstIdx>) {
+        let existing = AuxInfoStorage::<NodeInfo>::try_get(ctx, idx);
+        if existing.is_some() {
+            dfs.push(idx);
+            return;
+        }
+
+        let node = ctx.arena.get_node(idx).clone();
+        match node {
+            SimpleAst::Add { a, b }
+            | SimpleAst::Mul { a, b }
+            | SimpleAst::Pow { a, b }
+            | SimpleAst::And { a, b }
+            | SimpleAst::Or { a, b }
+            | SimpleAst::Xor { a, b }
+            | SimpleAst::Lshr { a, b } => {
+                Self::collect_info(ctx, a, dfs);
+                Self::collect_info(ctx, b, dfs);
+
+                Self::inc_users(ctx, a);
+                Self::inc_users(ctx, b);
+            }
+            SimpleAst::Neg { a } | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
+                Self::collect_info(ctx, a, dfs);
+                Self::inc_users(ctx, a);
+            }
+            SimpleAst::Constant { .. } | SimpleAst::Symbol { .. } => (),
+        }
+
+        dfs.push(idx);
+        AuxInfoStorage::<NodeInfo>::set(ctx, idx, NodeInfo::new(0));
+    }
+
+    fn inc_users(ctx: &mut Context, idx: AstIdx) {
+        let mut info = AuxInfoStorage::<NodeInfo>::get(ctx, idx);
+        info.num_uses = info.num_uses.add(1);
+        AuxInfoStorage::<NodeInfo>::set(ctx, idx, info);
+    }
+
+    fn inc_users_unsafe(ptr: *mut (SimpleAst, AstData), idx: AstIdx) {
+        let mut info = AuxInfoStorage::<NodeInfo>::get_unsafe(ptr, idx);
+        info.num_uses = info.num_uses.add(1);
+        AuxInfoStorage::<NodeInfo>::set_unsafe(ptr, idx, info);
+    }
+
+    #[inline(never)]
+    fn lower_to_x86(&mut self, ctx: &mut Context, assembler: &mut T) {
+        // rcx reserved for local variables ptr (or all vars in the case of a semi-linear result vector)
+        // RSI, RDI reserved for temporary use
+
+        // Emit the prologue. Initially we reserve space for u32::MAX slots, which we will adjust later.
+        Self::emit_prologue(assembler, u32::MAX);
+
+        for i in 0..self.dfs.len() {
+            let idx = unsafe { *self.dfs.get_unchecked(i) };
+            let node_info = AuxInfoStorage::<NodeInfo>::get(ctx, idx);
+            if node_info.num_uses > 1 && node_info.slot_idx != u16::MAX {
+                self.load_slot_value(assembler, node_info.slot_idx as u32);
+                continue;
+            }
+
+            let width = ctx.arena.get_width(idx) as u32;
+            let node = ctx.arena.get_node(idx).clone();
+            match node {
+                SimpleAst::Add { a, b }
+                | SimpleAst::Mul { a, b }
+                | SimpleAst::Pow { a, b }
+                | SimpleAst::And { a, b }
+                | SimpleAst::Or { a, b }
+                | SimpleAst::Xor { a, b }
+                | SimpleAst::Lshr { a, b } => {
+                    self.lower_binop(ctx, assembler, idx, node, width, node_info)
+                }
+                SimpleAst::Constant { c, width } => self.lower_constant(assembler, c),
+                SimpleAst::Symbol { .. } => {
+                    self.lower_variable(assembler, node_info.var_idx.into(), width)
+                }
+                SimpleAst::Neg { .. } | SimpleAst::Zext { .. } => self.lower_unary_op(
+                    ctx,
+                    assembler,
+                    idx,
+                    width,
+                    node_info,
+                    matches!(node, SimpleAst::Neg { .. }),
+                ),
+                SimpleAst::Trunc { a, to } => {
+                    let w = ctx.get_width(a);
+                    self.lower_zext(ctx, assembler, idx, w.into(), node_info)
+                }
+            }
+        }
+
+        if self.stack.len() != 1 {
+            panic!("Unbalanced stack after lowering!");
+        }
+
+        let result = self.stack.pop().unwrap();
+        if result.is_register() {
+            assembler.mov_reg_reg(Register::RAX, result.register);
+        } else {
+            assembler.pop_reg(Register::RAX);
+        }
+
+        // Reduce the result modulo 2**w
+        let w = ctx.get_width(*self.dfs.last().unwrap());
+        assembler.movabs_reg_imm64(SCRATCH1, get_modulo_mask(w));
+        assembler.and_reg_reg(Register::RAX, SCRATCH1);
+
+        Self::emit_epilogue(assembler, self.slot_count as u32);
+    }
+
+    fn load_slot_value(&mut self, assembler: &mut T, slot_idx: u32) {
+        if !self.free_registers.is_empty() {
+            let t = self.free_registers.pop().unwrap();
+            assembler.mov_reg_mem64(t, LOCALS_REGISTER, (slot_idx * 8) as i32);
+            self.stack.push(Location::reg(t));
+            return;
+        }
+
+        assembler.push_mem64(LOCALS_REGISTER, 8 * (slot_idx as i32));
+        self.stack.push(Location::stack());
+    }
+
+    fn lower_binop(
+        &mut self,
+        ctx: &mut Context,
+        assembler: &mut T,
+        idx: AstIdx,
+        node: SimpleAst,
+        width: u32,
+        node_info: NodeInfo,
+    ) {
+        let rhs_loc = self.stack.pop().unwrap();
+
+        // If the rhs is stored in a register, we use it.
+        let mut rhs_dest = SCRATCH1;
+        if rhs_loc.is_register() {
+            rhs_dest = rhs_loc.register;
+        }
+        // If stored on the stack, pop into scratch register
+        else {
+            assembler.pop_reg(rhs_dest);
+        }
+
+        // Regardless we have the rhs in a register now.
+        let lhs_loc = self.stack.pop().unwrap();
+        let mut lhs_dest = SCRATCH2;
+        if lhs_loc.is_register() {
+            lhs_dest = lhs_loc.register;
+        } else {
+            assembler.pop_reg(lhs_dest);
+        }
+
+        match node {
+            SimpleAst::Add { a, b } => assembler.add_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Mul { a, b } => assembler.imul_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::And { a, b } => assembler.and_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Or { a, b } => assembler.or_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Xor { a, b } => assembler.xor_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Lshr { a, b } => {
+                if width % 8 != 0 {
+                    panic!("Cannot jit lshr with non power of 2 width!");
+                }
+
+                // Reduce shift count modulo the bit width of the operation
+                // TODO: (a) Handle non power of two bit widths,
+                //       (b) shift beyond bounds should yield zero
+                assembler.and_reg_imm32(rhs_dest, width - 1);
+
+                assembler.push_reg(Register::RCX);
+                assembler.mov_reg_reg(Register::RCX, rhs_dest);
+                assembler.shr_reg_cl(lhs_dest);
+                assembler.pop_reg(Register::RCX);
+            }
+            SimpleAst::Pow { a, b } => {
+                for r in VOLATILE_REGS.iter() {
+                    assembler.push_reg(*r);
+                }
+
+                assembler.mov_reg_reg(Register::RCX, lhs_dest);
+                assembler.mov_reg_reg(Register::RDX, rhs_dest);
+
+                // TODO: Inline 'pow' function
+                assembler.movabs_reg_imm64(Register::R11, Pow as *const () as u64);
+                assembler.sub_reg_imm32(Register::RSP, 32);
+                assembler.call_reg(Register::R11);
+                assembler.add_reg_imm32(Register::RSP, 32);
+                assembler.mov_reg_reg(SCRATCH1, Register::RAX);
+
+                // Restore volatile registers
+                for &reg in VOLATILE_REGS.iter().rev() {
+                    assembler.pop_reg(reg);
+                }
+
+                assembler.mov_reg_reg(lhs_dest, SCRATCH1);
+            }
+            _ => unreachable!("Node is not a binary operator"),
+        }
+
+        Self::reduce_register_modulo(assembler, width, lhs_dest, SCRATCH1);
+
+        if rhs_loc.is_register() {
+            self.free_registers.push(rhs_loc.register);
+        }
+
+        // If there are multiple users of this value, throw it in a stack slot.
+        let multiple_users = node_info.num_uses > 1;
+        if multiple_users {
+            assembler.mov_mem64_reg(LOCALS_REGISTER, 8 * (self.slot_count as i32), lhs_dest);
+            self.assign_value_slot(ctx, idx, node_info);
+        }
+
+        // If the lhs is already in a register, don't move it!
+        if lhs_dest != SCRATCH2 {
+            self.stack.push(Location::reg(lhs_dest));
+            return;
+        }
+
+        // Try to allocate a reg for this value
+        if self.free_registers.len() > 0 {
+            let dest = self.free_registers.pop().unwrap();
+            assembler.mov_reg_reg(dest, lhs_dest);
+            self.stack.push(Location::reg(dest));
+        }
+        // Otherwise this goes on the stack
+        else {
+            assembler.push_reg(lhs_dest);
+            self.stack.push(Location::stack());
+        }
+
+        if lhs_loc.is_register() {
+            self.free_registers.push(lhs_loc.register);
+        }
+    }
+
+    fn lower_constant(&mut self, assembler: &mut T, c: u64) {
+        if !self.free_registers.is_empty() {
+            let dest = self.free_registers.pop().unwrap();
+            assembler.movabs_reg_imm64(dest, c);
+            self.stack.push(Location::reg(dest));
+            return;
+        }
+
+        assembler.movabs_reg_imm64(SCRATCH1, c);
+        assembler.push_reg(SCRATCH1);
+        self.stack.push(Location::stack());
+    }
+
+    fn lower_variable(&mut self, assembler: &mut T, var_arr_idx: i32, width: u32) {
+        if !self.free_registers.is_empty() {
+            let dest = self.free_registers.pop().unwrap();
+            assembler.mov_reg_mem64(dest, ARGS_REGISTER, var_arr_idx * 8);
+            Self::reduce_register_modulo(assembler, width, dest, SCRATCH1);
+            self.stack.push(Location::reg(dest));
+            return;
+        }
+
+        assembler.push_mem64(ARGS_REGISTER, var_arr_idx * 8);
+        self.stack.push(Location::stack());
+        Self::reduce_location_modulo(assembler, Location::stack(), width);
+    }
+
+    fn lower_unary_op(
+        &mut self,
+        ctx: &mut Context,
+        assembler: &mut T,
+        idx: AstIdx,
+        width: u32,
+        node_info: NodeInfo,
+        is_neg: bool,
+    ) {
+        let curr = self.stack.pop().unwrap();
+        let mut dest_reg = SCRATCH1;
+        if curr.is_register() {
+            dest_reg = curr.register;
+        } else {
+            assembler.pop_reg(dest_reg);
+        }
+
+        if is_neg {
+            assembler.not_reg(dest_reg);
+            Self::reduce_register_modulo(assembler, width, dest_reg, SCRATCH2);
+        } else {
+            assembler.movabs_reg_imm64(SCRATCH2, get_modulo_mask(width as u8));
+            assembler.and_reg_reg(dest_reg, SCRATCH2);
+        }
+
+        // If there are multiple users, store the value in a slot.
+        let multiple_users = node_info.num_uses > 1;
+        if multiple_users {
+            assembler.mov_mem64_reg(LOCALS_REGISTER, 8 * (self.slot_count as i32), dest_reg);
+            self.assign_value_slot(ctx, idx, node_info);
+        }
+
+        if dest_reg != SCRATCH1 {
+            self.stack.push(Location::reg(dest_reg));
+            return;
+        }
+
+        if !self.free_registers.is_empty() {
+            let dest = self.free_registers.pop().unwrap();
+            assembler.mov_reg_reg(dest, dest_reg);
+            self.stack.push(Location::reg(dest));
+            return;
+        }
+
+        // Otherwise this goes on the stack
+        assembler.push_reg(dest_reg);
+        self.stack.push(Location::stack());
+    }
+
+    fn lower_zext(
+        &mut self,
+        ctx: &mut Context,
+        assembler: &mut T,
+        idx: AstIdx,
+        from_width: u32,
+        node_info: NodeInfo,
+    ) {
+        // If we only have one user, this is a no-op. The result we care about is already on the location stack,
+        // and the zero-extension is implicit.
+        let peek = self.stack.pop().unwrap();
+        self.stack.push(peek);
+
+        // Because we are zero extending, we need to reduce the value modulo 2**w
+        // In other places we can get away with omitting this step.
+        Self::reduce_location_modulo(assembler, peek, from_width);
+
+        if node_info.num_uses <= 1 {
+            return;
+        }
+
+        if peek.is_register() {
+            assembler.mov_mem64_reg(LOCALS_REGISTER, 8 * (self.slot_count as i32), peek.register);
+        } else {
+            assembler.mov_reg_mem64(SCRATCH1, Register::RSP, 0);
+            assembler.mov_mem64_reg(LOCALS_REGISTER, 8 * (self.slot_count as i32), SCRATCH1);
+        }
+
+        self.assign_value_slot(ctx, idx, node_info);
+    }
+
+    fn reduce_register_modulo(
+        assembler: &mut T,
+        width: u32,
+        dst_reg: Register,
+        free_reg: Register,
+    ) {
+        debug_assert!(dst_reg != free_reg);
+        if width == 64 {
+            return;
+        }
+
+        let mask = get_modulo_mask(width as u8);
+        assembler.movabs_reg_imm64(free_reg, mask);
+        assembler.and_reg_reg(dst_reg, free_reg);
+    }
+
+    fn reduce_location_modulo(assembler: &mut T, loc: Location, width: u32) {
+        if width == 64 {
+            return;
+        }
+
+        let mask = get_modulo_mask(width as u8);
+        assembler.movabs_reg_imm64(SCRATCH1, mask);
+        if loc.is_register() {
+            assembler.and_reg_reg(loc.register, SCRATCH1);
+        } else {
+            assembler.and_mem64_reg(Register::RSP, 0, SCRATCH1);
+        }
+    }
+
+    fn assign_value_slot(&mut self, ctx: &mut Context, idx: AstIdx, mut node_info: NodeInfo) {
+        node_info.slot_idx = self.slot_count;
+        AuxInfoStorage::<NodeInfo>::set(ctx, idx, node_info);
+        self.slot_count = self.slot_count.checked_add(1).unwrap();
+    }
+
+    fn emit_prologue(assembler: &mut T, num_stack_slots: u32) {
+        // Push all nonvolatile registers
+        for reg in NONVOLATILE_REGS.iter() {
+            assembler.push_reg(*reg);
+        }
+
+        // Allocate stack space for local variables
+        assembler.sub_reg_imm32(Register::RSP, (num_stack_slots * 8));
+        // Point rbp to the local var array
+        assembler.mov_reg_reg(LOCALS_REGISTER, Register::RSP);
+        // mov rbp, rsp
+        assembler.mov_reg_reg(Register::RBP, Register::RSP);
+    }
+
+    fn emit_epilogue(assembler: &mut T, num_stack_slots: u32) {
+        // Reset rsp
+        assembler.add_reg_imm32(Register::RSP, 8 * num_stack_slots);
+        // Restore nonvolatile registers (including rbp)
+        for i in NONVOLATILE_REGS.iter().rev() {
+            assembler.pop_reg(*i);
+        }
+
+        assembler.ret();
+    }
+
+    fn fixup_frame_ptr(ptr: *mut u8, slot_count: u32) {
+        unsafe {
+            let sub_rsp_start = ptr.add(12);
+            let encoding = (*sub_rsp_start.cast::<u64>()) & 0xFF00FFFFFFFFFFFF;
+            if encoding != 0x4800fffff8ec8148 {
+                panic!("Rsp fixup position changed!");
+            }
+
+            let conv = slot_count * 8;
+            *(sub_rsp_start.add(3).cast::<u32>()) = conv;
+        }
+    }
+
+    fn fixup_iced_frame_ptr(instructions: &mut Vec<Instruction>, slot_count: u32) {
+        let sub = instructions[8];
+        if sub.code() != Code::Sub_rm64_imm8 && sub.code() != Code::Sub_rm64_imm32 {
+            panic!("Rsp fixup position changed!");
+        }
+
+        instructions[8] =
+            Instruction::with2(Code::Sub_rm64_imm32, Register::RSP, (slot_count * 8) as i32)
+                .unwrap();
+    }
+
+    fn write_instructions(ptr: *mut u8, instructions: &Vec<Instruction>) {
+        let mut assembler = CodeAssembler::new(64).unwrap();
+        for inst in instructions.iter() {
+            assembler.add_instruction(*inst);
+        }
+
+        let bytes = assembler.assemble(ptr as u64).unwrap();
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
+        }
+    }
 }

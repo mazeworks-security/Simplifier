@@ -191,7 +191,7 @@ namespace Mba.Simplifier.Minimization
             }
 
             var r = ctx.MinimizeAnf(TableDatabase.Instance.db, truthTable, tempVars, MultibitSiMBA.JitPage.Value);
-            var backSubst = GeneralSimplifier.ApplyBackSubstitution(ctx, r, invSubstMapping);
+            var backSubst = GeneralSimplifier.BackSubstitute(ctx, r, invSubstMapping);
             return backSubst;
         }
     }

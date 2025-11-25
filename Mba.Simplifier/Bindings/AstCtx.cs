@@ -49,6 +49,7 @@ namespace Mba.Simplifier.Bindings
 
         // Constructors
         public unsafe AstIdx Add(AstIdx a, AstIdx b) => Api.ContextAdd(this, a, b);
+        public unsafe AstIdx Sub(AstIdx a, AstIdx b) => Add(a, Mul(Constant(ulong.MaxValue, GetWidth(b)), b));
         public unsafe AstIdx Mul(AstIdx a, AstIdx b) => Api.ContextMul(this, a, b);
         public unsafe AstIdx Pow(AstIdx a, AstIdx b) => Api.ContextPow(this, a, b);
         public unsafe AstIdx And(AstIdx a, AstIdx b) => Api.ContextAnd(this, a, b);
@@ -161,6 +162,8 @@ namespace Mba.Simplifier.Bindings
         public unsafe bool GetHasPoly(AstIdx id) => Api.ContextGetHasPoly(this, id);
         public unsafe AstClassification GetClass(AstIdx id) => Api.ContextGetClass(this, id);
         public unsafe KnownBits GetKnownBits(AstIdx id) => Api.ContextGetKnownBits(this, id);
+        public unsafe ulong GetImutData(AstIdx id) => Api.ContextGetImutData(this, id);
+        public unsafe void SetImutData(AstIdx id, ulong imut) => Api.ContextSetImutData(this, id, imut);
         public unsafe AstIdx GetOp0(AstIdx id) => Api.ContextGetOp0(this, id);
         public unsafe AstIdx GetOp1(AstIdx id)
         {
@@ -273,11 +276,19 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
-        public unsafe nint Compile(AstIdx id, ulong mask, AstIdx[] variables, nint rwxPagePtr)
+        public unsafe nint CompileLegacy(AstIdx id, ulong mask, AstIdx[] variables, nint rwxPagePtr)
         {
             fixed (AstIdx* arrPtr = &variables[0])
             {
-                return (nint)Api.ContextCompile(this, id, mask, arrPtr, (ulong)variables.Length, (ulong*)rwxPagePtr);
+                return (nint)Api.ContextCompileLegacy(this, id, mask, arrPtr, (ulong)variables.Length, (ulong*)rwxPagePtr);
+            }
+        }
+
+        public unsafe void Compile(AstIdx id, ulong mask, AstIdx[] variables, nint rwxPagePtr)
+        {
+            fixed (AstIdx* arrPtr = variables)
+            {
+                Api.ContextCompile(this, id, mask, arrPtr, (ulong)variables.Length, (ulong*)rwxPagePtr);
             }
         }
 
@@ -352,7 +363,7 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern uint ContextGetCost(OpaqueAstCtx* ctx, AstIdx id);
 
             [DllImport("eq_sat")]
-            [SuppressGCTransition]
+            [SuppressGCTransition] 
             [return: MarshalAs(UnmanagedType.U1)]
             public unsafe static extern bool ContextGetHasPoly(OpaqueAstCtx* ctx, AstIdx id);
 
@@ -363,6 +374,14 @@ namespace Mba.Simplifier.Bindings
             [DllImport("eq_sat")]
             [SuppressGCTransition]
             public unsafe static extern KnownBits ContextGetKnownBits(OpaqueAstCtx* ctx, AstIdx id);
+
+            [DllImport("eq_sat")]
+            [SuppressGCTransition]
+            public unsafe static extern ulong ContextGetImutData(OpaqueAstCtx* ctx, AstIdx id);
+
+            [DllImport("eq_sat")]
+            [SuppressGCTransition]
+            public unsafe static extern void ContextSetImutData(OpaqueAstCtx* ctx, AstIdx id, ulong data);
 
             [DllImport("eq_sat")]
             [SuppressGCTransition]
@@ -404,7 +423,10 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern ulong* ContextJit(OpaqueAstCtx* ctx, AstIdx id, ulong mask, uint isMultiBit, uint bitWidth, AstIdx* variableArray, ulong varCount, ulong numCombinations, ulong* rwxJitPage, ulong* outputArray);
 
             [DllImport("eq_sat")]
-            public unsafe static extern ulong* ContextCompile(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);
+            public unsafe static extern ulong* ContextCompileLegacy(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern void ContextCompile(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);
 
             [DllImport("eq_sat")]
             public unsafe static extern ulong* ContextExecute(uint isMultiBit, uint bitWidth, ulong varCount, ulong numCombinations, ulong* rwxJitPage, ulong* outputArray, uint isOneBitVars);

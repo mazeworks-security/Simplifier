@@ -15,7 +15,7 @@ using System.Diagnostics;
 bool printUsage = false;
 uint bitWidth = 64;
 bool useEqsat = false;
-bool proveEquivalence = true;
+bool proveEquivalence = false;
 string inputText = null;
 
 var printHelp = () =>
@@ -37,7 +37,7 @@ for (int i = 0; i < args.Length; i++)
         case "-h":
             printUsage = true;
             break;
-        case "-b":  
+        case "-b":
             bitWidth = uint.Parse(args[i + 1]);
             i++;
             break;
@@ -81,7 +81,7 @@ for (int i = 0; i < 3; i++)
     // Run the simplification pipeline.
     id = simplifier.SimplifyGeneral(id);
     // Try to expand and reduce the polynomial parts(if any exist).
-    if(ctx.GetHasPoly(id))
+    if (ctx.GetHasPoly(id))
         id = simplifier.ExpandReduce(id);
 
     if (!useEqsat)
