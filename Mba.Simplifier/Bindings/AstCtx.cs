@@ -292,6 +292,14 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
+        public unsafe void CompileBenchmark(AstIdx id, ulong mask, AstIdx[] variables, nint rwxPagePtr)
+        {
+            fixed (AstIdx* arrPtr = variables)
+            {
+                Api.ContextBenchmarkCompile(this, id, mask, arrPtr, (ulong)variables.Length, (ulong*)rwxPagePtr);
+            }
+        }
+
         public unsafe void Execute(bool isMultibit, uint bitWidth, AstIdx[] variables, ulong numCombinations, nint rwxPagePtr, nint outputArrayPtr, bool isOneBitVars)
         {
             Api.ContextExecute(isMultibit ? 1u : 0, bitWidth, (ulong)variables.Length, numCombinations, (ulong*)rwxPagePtr, (ulong*)outputArrayPtr, isOneBitVars ? 1u : 0);
@@ -312,11 +320,11 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
-        public unsafe static ulong SubtractConstantOffset(ulong[] vec, ulong numCombinations, ulong width)
+        public unsafe static ulong SubtractConstantOffset(ulong[] vec, ulong numCombinations, ulong width, bool multiBit)
         {
             fixed (ulong* ptr = vec)
             {
-                return Api.SubtractConstantOffset(ptr, (ulong)vec.Length, numCombinations, width);
+                return Api.SubtractConstantOffset(ptr, (ulong)vec.Length, numCombinations, width, multiBit ? 1u : 0);
             }
         }
 
@@ -448,6 +456,9 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern void ContextCompile(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);
 
             [DllImport("eq_sat")]
+            public unsafe static extern void ContextBenchmarkCompile(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);
+
+            [DllImport("eq_sat")]
             public unsafe static extern ulong* ContextExecute(uint isMultiBit, uint bitWidth, ulong varCount, ulong numCombinations, ulong* rwxJitPage, ulong* outputArray, uint isOneBitVars);
 
             [DllImport("eq_sat")]
@@ -467,7 +478,7 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern bool IsLinearResultVector(ulong* vec, ulong len, ulong numCombinations, ulong width);
 
             [DllImport("eq_sat")]
-            public unsafe static extern ulong SubtractConstantOffset(ulong* vec, ulong len, ulong numCombinations, ulong width);
+            public unsafe static extern ulong SubtractConstantOffset(ulong* vec, ulong len, ulong numCombinations, ulong width, uint isMultiBit);
         }
     }
 }

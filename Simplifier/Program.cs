@@ -9,6 +9,7 @@ using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
 using Microsoft.Z3;
+using Simplifier;
 using System.ComponentModel;
 using System.Diagnostics;
 
@@ -18,6 +19,10 @@ bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
 
+//MSiMBAFuzzer.Run();
+JitBenchmark.Run();
+Console.WriteLine("done                    ");
+Console.ReadLine();
 
 MSiMBAFuzzer.Run();
 

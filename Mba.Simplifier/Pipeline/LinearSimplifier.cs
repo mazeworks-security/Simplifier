@@ -136,10 +136,12 @@ namespace Mba.Simplifier.Pipeline
 
         public static IReadOnlyList<AstIdx> CastVariables(AstCtx ctx, IReadOnlyList<AstIdx> variables, uint bitSize)
         {
+            //Console.WriteLine("casting vars");
             // If all variables are of a correct size, no casting is necessary.
             if (!variables.Any(x => ctx.GetWidth(x) != bitSize))
                 return variables;
 
+            //Console.WriteLine("bar");
             var result = new List<AstIdx>();
             foreach(var v in variables)
             {
@@ -156,6 +158,7 @@ namespace Mba.Simplifier.Pipeline
                 result.Add(w < bitSize ? ctx.Zext(v, (byte)bitSize) : ctx.Trunc(v, (byte)bitSize));
             }
 
+            //Console.WriteLine("Casted");
             return result;
         }
 
@@ -227,8 +230,9 @@ namespace Mba.Simplifier.Pipeline
         private AstIdx Simplify(bool useZ3 = false, bool alreadySplit = false)
         {
             // Remove the constant offset
-            var constant = SubtractConstantOffset(resultVector, (int)numCombinations, width);
-
+            //Console.WriteLine("sub");
+            var constant = SubtractConstantOffset(resultVector, (int)numCombinations, width, multiBit);
+            //Console.WriteLine("subbed");
             // If we were given a semi-linear expression, and the ground truth of that expression is linear,
             // truncate the size of the result vector down to 2^t, then treat it as a linear MBA.
            if (multiBit && IsLinearResultVector())
@@ -877,9 +881,9 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
-        public static ApInt SubtractConstantOffset(ApInt[] resultVector, int numCombinations, uint width )
+        public static ApInt SubtractConstantOffset(ApInt[] resultVector, int numCombinations, uint width, bool multiBit)
         {
-            return AstCtx.SubtractConstantOffset(resultVector, (ulong)numCombinations, width);
+            return AstCtx.SubtractConstantOffset(resultVector, (ulong)numCombinations, width, multiBit);
             var moduloMask = ModuloReducer.GetMask(width);
             var l = resultVector.Length;
 

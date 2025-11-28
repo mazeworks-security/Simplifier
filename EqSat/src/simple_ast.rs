@@ -1781,6 +1781,29 @@ pub unsafe extern "C" fn ContextCompile(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn ContextBenchmarkCompile(
+    ctx_p: *mut Context,
+    node: AstIdx,
+    mask: u64,
+    variables: *const AstIdx,
+    var_count: u64,
+    page: *mut u8,
+) {
+    let mut ctx: &mut Context = &mut (*ctx_p);
+
+    let mut vars: Vec<AstIdx> = Vec::new();
+    // JIT code
+    for i in 0..var_count {
+        vars.push(*variables.add(i as usize));
+    }
+
+    let mut assembler = FastAmd64Assembler::new(page);
+    let mut compiler = Amd64OptimizingJit::<FastAmd64Assembler>::new();
+    //compiler.compile(ctx, &mut assembler, node, &vars, page, false);
+    compiler.compile_benchmark(ctx, &mut assembler, node, &vars, page, false);
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn ContextExecute(
     multi_bit_u: u32,
     bit_width: u32,
@@ -1940,6 +1963,7 @@ pub extern "C" fn SubtractConstantOffset(
     len: u64,
     mut num_combinations: u64,
     mut width: u64,
+    multi_bit_u: u32,
 ) -> u64 {
     // Fetch the constant offset. If the offset is zero then there is nothing to subtract.
     let constant = unsafe { *vec.add(0) };
@@ -1964,7 +1988,15 @@ pub extern "C" fn SubtractConstantOffset(
     }
     */
 
-    for bit_index in 0..width {
+    let num_bit_iterations = if multi_bit_u != 0 { width } else { 1 };
+    /*
+    dbg!(
+        "SubtractConstantOffset: num_bit_iterations = {}, multi_bit_u = {}",
+        num_bit_iterations,
+        multi_bit_u
+    );
+    */
+    for bit_index in 0..num_bit_iterations {
         let mask: u64 = 1 << bit_index;
         let i = bit_index * num_combinations;
 
@@ -2769,8 +2801,9 @@ impl<T: From<u64> + Into<u64> + Exists> AuxInfoStorage<T> {
 
     pub fn get_ptr_unsafe(ptr: *mut (SimpleAst, AstData), idx: AstIdx) -> *mut NodeInfo {
         unsafe {
-            let data = &mut (*ptr.add(idx.0 as usize)).1;
-            return (&mut (*ptr).1.imut_data) as *mut u64 as *mut NodeInfo;
+            //let data = &mut (*ptr.add(idx.0 as usize)).1;
+            //return (&mut (*ptr).1.imut_data) as *mut u64 as *mut NodeInfo;
+            return (&mut (*ptr.add(idx.0 as usize)).1.imut_data) as *mut u64 as *mut NodeInfo;
         }
     }
 
@@ -2887,7 +2920,12 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         use_iced_backend: bool,
     ) {
         // Collect necessary information about nodes for JITing (dfs order, how many users a node has).
-        Self::collect_info(ctx, idx, &mut self.dfs);
+        //Self::collect_info_fast(ctx, idx, &mut self.dfs);
+
+        unsafe {
+            let p = ctx.arena.elements.as_mut_ptr();
+            Self::collect_info_unsafe(p, idx, &mut self.dfs);
+        }
 
         // Store each variables argument index
         for i in 0..variables.len() {
@@ -2923,6 +2961,52 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         Self::write_instructions(page_ptr, &instructions);
     }
 
+    #[inline(never)]
+    fn compile_benchmark(
+        &mut self,
+        ctx: &mut Context,
+        assembler: &mut T,
+        idx: AstIdx,
+        variables: &Vec<AstIdx>,
+        page_ptr: *mut u8,
+        use_iced_backend: bool,
+    ) {
+        let arr = ctx.arena.elements.as_mut_ptr();
+        let mut st: Vec<StTuple> = Vec::with_capacity(1024);
+
+        for i in 0..500000 {
+            st.clear();
+            self.dfs.clear();
+            //Self::collect_info(ctx, idx, &mut self.dfs);
+
+            unsafe {
+                let p = ctx.arena.elements.as_mut_ptr();
+                Self::collect_info_unsafe(p, idx, &mut self.dfs);
+            }
+
+            /*
+            if i % 10000 == 0 || i == 1 {
+                for id in self.dfs.iter() {
+                    let ast = ctx.arena.get_node(*id);
+                    let str = AstPrinter::print(ctx, &ast.clone());
+                    println!("DFS[{}]: {} ", id.0, str);
+                }
+                println!("\n\n\nReceived {} dfs members.", self.dfs.len());
+            }
+            */
+
+            // Clear each node's mutable data.
+            for id in self.dfs.iter() {
+                let mut info = AuxInfoStorage::<NodeInfo>::get(ctx, *id);
+                AuxInfoStorage::<NodeInfo>::set(ctx, *id, NodeInfo::from(0));
+            }
+        }
+
+        unsafe {
+            *page_ptr = self.dfs.last().unwrap().0 as u8;
+        }
+    }
+
     fn collect_info(ctx: &mut Context, idx: AstIdx, dfs: &mut Vec<AstIdx>) {
         let existing = AuxInfoStorage::<NodeInfo>::try_get(ctx, idx);
         if existing.is_some() {
@@ -2955,6 +3039,72 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         dfs.push(idx);
         AuxInfoStorage::<NodeInfo>::set(ctx, idx, NodeInfo::new(0));
     }
+
+    fn collect_info_unsafe(arr: *mut (SimpleAst, AstData), idx: AstIdx, dfs: &mut Vec<AstIdx>) {
+        //let existing = AuxInfoStorage::<NodeInfo>::try_get(ctx, idx);
+        let existing = AuxInfoStorage::<NodeInfo>::get_unsafe(arr, idx);
+        if existing.exists() {
+            dfs.push(idx);
+            Self::inc_users_unsafe(arr, idx);
+            return;
+        }
+
+        //let node = ctx.arena.get_node(idx).clone();
+        let ptr = unsafe { arr.add(idx.0 as usize) };
+        let node = unsafe { (*ptr).0.clone() };
+        match node {
+            SimpleAst::Add { a, b }
+            | SimpleAst::Mul { a, b }
+            | SimpleAst::Pow { a, b }
+            | SimpleAst::And { a, b }
+            | SimpleAst::Or { a, b }
+            | SimpleAst::Xor { a, b }
+            | SimpleAst::Lshr { a, b } => {
+                Self::collect_info_unsafe(arr, a, dfs);
+                Self::collect_info_unsafe(arr, b, dfs);
+            }
+            SimpleAst::Neg { a } | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
+                Self::collect_info_unsafe(arr, a, dfs);
+            }
+            SimpleAst::Constant { .. } | SimpleAst::Symbol { .. } => (),
+        }
+
+        dfs.push(idx);
+        //AuxInfoStorage::<NodeInfo>::set(ctx, idx, NodeInfo::new(0));
+        AuxInfoStorage::<NodeInfo>::set_unsafe(arr, idx, NodeInfo::new(1));
+    }
+
+    /*
+    fn collect_info_fast(ctx: &mut Context, idx: AstIdx, dfs: &mut Vec<AstIdx>) {
+        let existing = AuxInfoStorage::<NodeInfo>::try_get(ctx, idx);
+        if existing.is_some() {
+            dfs.push(idx);
+            Self::inc_users(ctx, idx);
+            return;
+        }
+
+        let node = ctx.arena.get_node(idx).clone();
+        match node {
+            SimpleAst::Add { a, b }
+            | SimpleAst::Mul { a, b }
+            | SimpleAst::Pow { a, b }
+            | SimpleAst::And { a, b }
+            | SimpleAst::Or { a, b }
+            | SimpleAst::Xor { a, b }
+            | SimpleAst::Lshr { a, b } => {
+                Self::collect_info_fast(ctx, a, dfs);
+                Self::collect_info_fast(ctx, b, dfs);
+            }
+            SimpleAst::Neg { a } | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
+                Self::collect_info_fast(ctx, a, dfs);
+            }
+            SimpleAst::Constant { .. } | SimpleAst::Symbol { .. } => (),
+        }
+
+        dfs.push(idx);
+        AuxInfoStorage::<NodeInfo>::set(ctx, idx, NodeInfo::new(1));
+    }
+    */
 
     fn inc_users(ctx: &mut Context, idx: AstIdx) {
         let mut info = AuxInfoStorage::<NodeInfo>::get(ctx, idx);
