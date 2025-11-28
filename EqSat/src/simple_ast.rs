@@ -2,6 +2,7 @@ type Unit = ();
 
 use core::num;
 use std::{
+    cmp,
     collections::{hash_map::Entry, HashMap, HashSet},
     f32::consts::PI,
     ffi::{CStr, CString},
@@ -1946,7 +1947,23 @@ pub extern "C" fn SubtractConstantOffset(
         return 0;
     }
 
+    // Try to inform the optimizer that the width is at most 64 bits.
+    width = cmp::min(width, 64);
+
     let modulo_mask = get_modulo_mask(width as u8);
+
+    /*
+    for bit_index in 0..width {
+        let i = bit_index * num_combinations;
+        let constant_offset = modulo_mask & (constant >> bit_index);
+        let new_coeff = modulo_mask & (unsafe { *vec.add((i) as usize) } - constant_offset);
+        unsafe {
+            *vec.add((i) as usize) = new_coeff;
+            continue;
+        };
+    }
+    */
+
     for bit_index in 0..width {
         let mask: u64 = 1 << bit_index;
         let i = bit_index * num_combinations;
@@ -1955,12 +1972,15 @@ pub extern "C" fn SubtractConstantOffset(
         for comb in 0..num_combinations {
             let new_coeff =
                 modulo_mask & (unsafe { *vec.add((comb + i) as usize) } - constant_offset);
+
+            /*
             if comb == 0 {
                 unsafe {
                     *vec.add((comb + i) as usize) = new_coeff;
                     continue;
                 };
             }
+            */
 
             let new_coeff = (modulo_mask & (new_coeff * (1 << bit_index)) >> bit_index);
             unsafe {
