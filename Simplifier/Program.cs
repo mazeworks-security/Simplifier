@@ -18,6 +18,11 @@ bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
 
+
+MSiMBAFuzzer.Run();
+
+
+
 var printHelp = () =>
 {
     Console.WriteLine("Usage: Simplifier.exe");

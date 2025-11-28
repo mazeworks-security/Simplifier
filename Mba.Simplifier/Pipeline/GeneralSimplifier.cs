@@ -712,7 +712,7 @@ namespace Mba.Simplifier.Pipeline
                 var numCombinations = (ulong)Math.Pow(2, vars.Count);
 
                 var resultVec = LinearSimplifier.JitResultVector(ctx, ctx.GetWidth(expr), moduloMask, vars, expr, true, numCombinations);
-                var constantOffset = LinearSimplifier.SubtractConstantOffset(moduloMask, resultVec, (int)numCombinations);
+                var constantOffset = LinearSimplifier.SubtractConstantOffset(resultVec, (int)numCombinations, w);
 
                 var key = new ResultVectorKey(resultVec);
                 vecToExpr.TryAdd(key, new());
@@ -902,7 +902,7 @@ namespace Mba.Simplifier.Pipeline
             var moduloMask = ModuloReducer.GetMask(bitSize);
             var resultVec = LinearSimplifier.JitResultVector(ctx, bitSize, moduloMask, allVars, withSubstitutions, multiBit: true, numCombinations);
             // Subtract the constant offset
-            var constantOffset = LinearSimplifier.SubtractConstantOffset(moduloMask, resultVec, (int)numCombinations);
+            var constantOffset = LinearSimplifier.SubtractConstantOffset(resultVec, (int)numCombinations, bitSize);
 
             // Get all possible conjunctions of variables.
             var variableCombinations = LinearSimplifier.GetVariableCombinations(allVars.Count);

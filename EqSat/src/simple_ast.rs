@@ -64,6 +64,11 @@ impl Arena {
     }
 
     pub fn add(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let node = SimpleAst::Add { a, b };
+        if let Some(&idx) = self.ast_to_idx.get(&node) {
+            return idx;
+        }
+
         let width = self.get_bin_width(a, b);
         let cost = self.get_bin_cost(a, b);
         let has_poly = self.union_contains_poly_part(a, b);
@@ -89,10 +94,15 @@ impl Arena {
             imut_data: 0,
         };
 
-        return self.insert_ast_node(SimpleAst::Add { a, b }, data);
+        return self.add_ast_node(node, data);
     }
 
     pub fn mul(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let node = SimpleAst::Mul { a, b };
+        if let Some(&idx) = self.ast_to_idx.get(&node) {
+            return idx;
+        }
+
         let a_value = self.get_node(a);
         let b_value = self.get_node(b);
 
@@ -145,7 +155,7 @@ impl Arena {
             imut_data: 0,
         };
 
-        return self.insert_ast_node(SimpleAst::Mul { a, b }, data);
+        return self.add_ast_node(node, data);
     }
 
     pub fn pow(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
@@ -292,19 +302,24 @@ impl Arena {
     }
 
     pub fn constant(&mut self, c: u64, width: u8) -> AstIdx {
+        // Reduce the constant modulo 2**width
+        let constant = get_modulo_mask(width) & c;
+        let node = SimpleAst::Constant { c: constant, width };
+
+        if let Some(&idx) = self.ast_to_idx.get(&node) {
+            return idx;
+        }
+
         let data = AstData {
             width: width,
             cost: 1,
             has_poly: false,
             class: AstClass::Bitwise,
-            known_bits: KnownBits::constant(c, width),
+            known_bits: KnownBits::constant(constant, width),
             imut_data: 0,
         };
 
-        // Reduce the constant modulo 2**width
-        let constant = get_modulo_mask(width) & c;
-
-        return self.insert_ast_node(SimpleAst::Constant { c: constant, width }, data);
+        return self.add_ast_node(node, data);
     }
 
     pub fn symbol(&mut self, id: u32, width: u8) -> AstIdx {
@@ -364,6 +379,13 @@ impl Arena {
             return idx;
         }
 
+        let idx = AstIdx(self.elements.len() as u32);
+        self.elements.push((node.clone(), data));
+        self.ast_to_idx.insert(node, idx);
+        idx
+    }
+
+    pub fn add_ast_node(&mut self, node: SimpleAst, data: AstData) -> AstIdx {
         let idx = AstIdx(self.elements.len() as u32);
         self.elements.push((node.clone(), data));
         self.ast_to_idx.insert(node, idx);
@@ -1897,6 +1919,89 @@ pub extern "C" fn ContextRecursiveSimplify(ctx: *mut Context, id: AstIdx) -> Ast
         let mut deref: &mut Context = &mut (*ctx);
         return recursive_simplify(deref, id);
     }
+}
+
+#[no_mangle]
+pub extern "C" fn ContextBenchmark(ctx: *mut Context, seed: u64) {
+    let mut deref: &mut Context = unsafe { &mut (*ctx) };
+
+    let mut s = seed;
+    for i in 0..50000000 {
+        s *= 17;
+
+        let _ = deref.arena.constant(s, 16);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn SubtractConstantOffset(
+    vec: *mut u64,
+    len: u64,
+    mut num_combinations: u64,
+    mut width: u64,
+) -> u64 {
+    // Fetch the constant offset. If the offset is zero then there is nothing to subtract.
+    let constant = unsafe { *vec.add(0) };
+    if constant == 0 {
+        return 0;
+    }
+
+    let modulo_mask = get_modulo_mask(width as u8);
+    for bit_index in 0..width {
+        let mask: u64 = 1 << bit_index;
+        let i = bit_index * num_combinations;
+
+        let constant_offset = modulo_mask & (constant >> bit_index);
+        for comb in 0..num_combinations {
+            let new_coeff =
+                modulo_mask & (unsafe { *vec.add((comb + i) as usize) } - constant_offset);
+            if comb == 0 {
+                unsafe {
+                    *vec.add((comb + i) as usize) = new_coeff;
+                    continue;
+                };
+            }
+
+            let new_coeff = (modulo_mask & (new_coeff * (1 << bit_index)) >> bit_index);
+            unsafe {
+                *vec.add((comb + i) as usize) = new_coeff;
+                continue;
+            };
+        }
+    }
+
+    return constant;
+}
+
+#[no_mangle]
+pub extern "C" fn IsLinearResultVector(
+    vec: *const u64,
+    len: u64,
+    mut num_combinations: u64,
+    mut width: u64,
+) -> bool {
+    let modulo_mask = get_modulo_mask(width as u8);
+    for bit_index in 0..width {
+        let mask: u64 = 1 << bit_index;
+        let i = bit_index * num_combinations;
+
+        let mut nonlinear = false;
+        for comb in 0..num_combinations {
+            let bit_0_coeff = unsafe { *vec.add(comb as usize) };
+            let bit_i_coeff = unsafe { *vec.add((comb + i) as usize) };
+
+            let op0 = modulo_mask & (bit_0_coeff * mask);
+            let op1 = modulo_mask & (bit_i_coeff * mask);
+
+            nonlinear |= (op0 != op1);
+        }
+
+        if nonlinear {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 const VARIABLE_COMBINATIONS_1: &[u16] = &get_variable_combinations::<1, 1>();

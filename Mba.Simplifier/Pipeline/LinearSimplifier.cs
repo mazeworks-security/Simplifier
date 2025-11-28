@@ -227,7 +227,7 @@ namespace Mba.Simplifier.Pipeline
         private AstIdx Simplify(bool useZ3 = false, bool alreadySplit = false)
         {
             // Remove the constant offset
-            var constant = SubtractConstantOffset(moduloMask, resultVector, (int)numCombinations);
+            var constant = SubtractConstantOffset(resultVector, (int)numCombinations, width);
 
             // If we were given a semi-linear expression, and the ground truth of that expression is linear,
             // truncate the size of the result vector down to 2^t, then treat it as a linear MBA.
@@ -256,6 +256,9 @@ namespace Mba.Simplifier.Pipeline
                     return false;
             }
 
+            return AstCtx.IsLinearResultVector(resultVector, numCombinations, width);
+            
+            /*
             fixed (ApInt* ptr = &resultVector[0])
             {
                 ushort bitIndex = 0;
@@ -274,6 +277,86 @@ namespace Mba.Simplifier.Pipeline
                     }
 
                     bitIndex += 1;
+                }
+            }
+
+            return true;
+            */
+
+            fixed (ApInt* vec = &resultVector[0])
+            {
+                for (ulong bitIndex = 0; bitIndex < width; bitIndex++)
+                {
+                    ApInt mask = 1ul << (ushort)bitIndex;
+                    var i = bitIndex * (ulong)numCombinations;
+                    for (int comb = 0; comb < (int)numCombinations; comb++)
+                    {
+                        var bit0Coeff = vec[comb];
+                        var bitICoeff = vec[comb + (int)i];
+
+                        var op0 = moduloMask & (bit0Coeff * mask);
+                        var op1 = moduloMask & (bitICoeff * mask);
+                        if (op0 != op1)
+                            return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        // If we have a multi-bit result vector, try to rewrite as a linear result vector. If possible, update state accordingly.
+        private static unsafe bool IsLinearResultVector(AstCtx ctx, List<AstIdx> variables, ulong[] resultVector, int numCombinations, ushort width)
+        {
+            foreach (var v in variables)
+            {
+                // If the variable is zero extended or truncated, we treat this as a semi-linear signature vector.
+                // Truncation cannot be treated as linear, though in the future we may be able to get away with treating zero extension as linear?
+                if (!ctx.IsSymbol(v))
+                    return false;
+            }
+
+            var moduloMask = ModuloReducer.GetMask(width);
+
+            /*
+            fixed (ApInt* vec = &resultVector[0])
+            {
+                ushort bitIndex = 0;
+                for (int comb = 0; comb < resultVector.Length; comb += (int)numCombinations)
+                {
+                    ApInt mask = 1ul << bitIndex;
+                    for (int i = 0; i < (int)numCombinations; i++)
+                    {
+                        var bit0Coeff = vec[i];
+                        var bitICoeff = vec[comb + i];
+
+                        var op0 = moduloMask & (bit0Coeff * mask);
+                        var op1 = moduloMask & (bitICoeff * mask);
+                        if (op0 != op1)
+                            return false;
+                    }
+
+                    bitIndex += 1;
+                }
+            }
+            */
+
+            fixed (ApInt* vec = &resultVector[0])
+            {
+                for (ulong bitIndex = 0; bitIndex < width; bitIndex++)
+                {
+                    ApInt mask = 1ul << (ushort)bitIndex;
+                    var i = bitIndex * (ulong)numCombinations;
+                    for (int comb = 0; comb < numCombinations; comb++)
+                    {
+                        var bit0Coeff = vec[comb];
+                        var bitICoeff = vec[comb + (int)i];
+
+                        var op0 = moduloMask & (bit0Coeff * mask);
+                        var op1 = moduloMask & (bitICoeff * mask);
+                        if (op0 != op1)
+                            return false;
+                    }
                 }
             }
 
@@ -794,8 +877,10 @@ namespace Mba.Simplifier.Pipeline
             CheckSolutionComplexity(ctx.Constant(coefficient, width), 1);
         }
 
-        public static ApInt SubtractConstantOffset(ApInt moduloMask, ApInt[] resultVector, int numCombinations)
+        public static ApInt SubtractConstantOffset(ApInt[] resultVector, int numCombinations, uint width )
         {
+            return AstCtx.SubtractConstantOffset(resultVector, (ulong)numCombinations, width);
+            var moduloMask = ModuloReducer.GetMask(width);
             var l = resultVector.Length;
 
             // Fetch the constant offset. If the offset is zero then there is nothing to subtract.
@@ -813,7 +898,7 @@ namespace Mba.Simplifier.Pipeline
                     ushort bitIndex = 0;
                     for (int comb = 0; comb < l; comb += (int)numCombinations)
                     {
-                        ApInt constantOffset = moduloMask & constant >> bitIndex;
+                        ApInt constantOffset = moduloMask & (constant >> bitIndex);
                         for (int i = 0; i < (int)numCombinations; i++)
                         {
                             var newCoeff = moduloMask & (ptr[comb + i] - constantOffset);

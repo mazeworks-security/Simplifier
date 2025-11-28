@@ -302,9 +302,28 @@ namespace Mba.Simplifier.Bindings
         // Apply recursive term rewriting via ISLE.
         public unsafe AstIdx RecursiveSimplify(AstIdx id) => Api.ContextRecursiveSimplify(this, id);
 
+        public unsafe AstIdx Benchmark(ulong seed) => Api.ContextBenchmark(this, seed);
+
+        public unsafe static bool IsLinearResultVector(ulong[] vec, ulong numCombinations, ulong width)
+        {
+            fixed (ulong* ptr = vec)
+            {
+                return Api.IsLinearResultVector(ptr, (ulong)vec.Length, numCombinations, width);
+            }
+        }
+
+        public unsafe static ulong SubtractConstantOffset(ulong[] vec, ulong numCombinations, ulong width)
+        {
+            fixed (ulong* ptr = vec)
+            {
+                return Api.SubtractConstantOffset(ptr, (ulong)vec.Length, numCombinations, width);
+            }
+        }
+
         public unsafe static implicit operator OpaqueAstCtx*(AstCtx ctx) => (OpaqueAstCtx*)ctx.handle;
 
         public unsafe static implicit operator AstCtx(OpaqueAstCtx* ctx) => new AstCtx((nint)ctx);
+
 
         public static class Api
         {
@@ -438,7 +457,17 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern AstIdx ContextRecursiveSimplify(OpaqueAstCtx* ctx, AstIdx id);
 
             [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextBenchmark(OpaqueAstCtx* ctx, ulong seed);
+
+            [DllImport("eq_sat")]
             public unsafe static extern nint GetPowPtr();
+
+            [DllImport("eq_sat")]
+            [return: MarshalAs(UnmanagedType.U1)]
+            public unsafe static extern bool IsLinearResultVector(ulong* vec, ulong len, ulong numCombinations, ulong width);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern ulong SubtractConstantOffset(ulong* vec, ulong len, ulong numCombinations, ulong width);
         }
     }
 }
