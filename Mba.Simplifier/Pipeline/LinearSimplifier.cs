@@ -937,7 +937,7 @@ namespace Mba.Simplifier.Pipeline
             // Term = coeff*(bitMask&basisExpression).
             var linearCombinations = new List<List<(ApInt coeff, ApInt bitMask)>>(variableCombinations.Length);
             for (int i = 0; i < variableCombinations.Length; i++)
-                linearCombinations.Add(new((int)width));
+                linearCombinations.Add(new(GetNumBitIterations(multiBit, width)));
 
             // Keep track of which variables are demanded by which combination,
             // as well as which result vector idx corresponds to which combination.

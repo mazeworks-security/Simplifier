@@ -21,7 +21,7 @@ string inputText = null;
 
 //MSiMBAFuzzer.Run();
 JitBenchmark.Run();
-Console.WriteLine("done                    ");
+Console.WriteLine("done                         ");
 Console.ReadLine();
 
 MSiMBAFuzzer.Run();

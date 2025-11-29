@@ -47,11 +47,11 @@ namespace Mba.Simplifier.Jit
 
     public unsafe class FastAmd64Assembler : IAmd64Assembler
     {
-        private byte* start;
+        public byte* start;
 
-        private byte* ptr;
+        public byte* ptr;
 
-        private int offset = 0;
+        public int offset = 0;
 
         public List<Instruction> Instructions => GetInstructions();
 

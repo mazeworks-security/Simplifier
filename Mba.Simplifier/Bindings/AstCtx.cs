@@ -284,11 +284,11 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
-        public unsafe void Compile(AstIdx id, ulong mask, AstIdx[] variables, nint rwxPagePtr)
+        public unsafe ulong Compile(AstIdx id, ulong mask, AstIdx[] variables, nint rwxPagePtr)
         {
             fixed (AstIdx* arrPtr = variables)
             {
-                Api.ContextCompile(this, id, mask, arrPtr, (ulong)variables.Length, (ulong*)rwxPagePtr);
+                return Api.ContextCompile(this, id, mask, arrPtr, (ulong)variables.Length, (ulong*)rwxPagePtr);
             }
         }
 
@@ -453,7 +453,7 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern ulong* ContextCompileLegacy(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);
 
             [DllImport("eq_sat")]
-            public unsafe static extern void ContextCompile(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);
+            public unsafe static extern ulong ContextCompile(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);
 
             [DllImport("eq_sat")]
             public unsafe static extern void ContextBenchmarkCompile(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);

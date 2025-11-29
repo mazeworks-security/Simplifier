@@ -1766,7 +1766,7 @@ pub unsafe extern "C" fn ContextCompile(
     variables: *const AstIdx,
     var_count: u64,
     page: *mut u8,
-) {
+) -> u64 {
     let mut ctx: &mut Context = &mut (*ctx_p);
 
     let mut vars: Vec<AstIdx> = Vec::new();
@@ -1778,6 +1778,7 @@ pub unsafe extern "C" fn ContextCompile(
     let mut assembler = FastAmd64Assembler::new(page);
     let mut compiler = Amd64OptimizingJit::<FastAmd64Assembler>::new();
     compiler.compile(ctx, &mut assembler, node, &vars, page, false);
+    return assembler.offset as u64;
 }
 
 #[no_mangle]
@@ -2918,7 +2919,7 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         variables: &Vec<AstIdx>,
         page_ptr: *mut u8,
         use_iced_backend: bool,
-    ) {
+    ) -> u64 {
         // Collect necessary information about nodes for JITing (dfs order, how many users a node has).
         //Self::collect_info_fast(ctx, idx, &mut self.dfs);
 
@@ -2948,7 +2949,7 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         // However the stack pointer adjustment needs to fixed up, because it wasn't known during prologue emission.
         if !use_iced_backend {
             Self::fixup_frame_ptr(page_ptr, self.slot_count.into());
-            return;
+            return 0;
         }
 
         // Otherwise adjust the rsp in iced.
@@ -2958,7 +2959,7 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         // Write the instructions to memory.
         // ICED internally emits a list of assembled instructions rather than raw x86 bytes
         // so this must be done after the fact.
-        Self::write_instructions(page_ptr, &instructions);
+        return Self::write_instructions(page_ptr, &instructions);
     }
 
     #[inline(never)]
@@ -2974,7 +2975,7 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         let arr = ctx.arena.elements.as_mut_ptr();
         let mut st: Vec<StTuple> = Vec::with_capacity(1024);
 
-        for i in 0..500000 {
+        for i in 0..5000000 {
             st.clear();
             self.dfs.clear();
             //Self::collect_info(ctx, idx, &mut self.dfs);
@@ -3042,16 +3043,17 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
 
     fn collect_info_unsafe(arr: *mut (SimpleAst, AstData), idx: AstIdx, dfs: &mut Vec<AstIdx>) {
         //let existing = AuxInfoStorage::<NodeInfo>::try_get(ctx, idx);
-        let existing = AuxInfoStorage::<NodeInfo>::get_unsafe(arr, idx);
-        if existing.exists() {
-            dfs.push(idx);
+        //let existing = AuxInfoStorage::<NodeInfo>::get_unsafe(arr, idx);
+        let p_existing = AuxInfoStorage::<NodeInfo>::get_ptr_unsafe(arr, idx);
+        if unsafe { (*p_existing).exists() } {
             Self::inc_users_unsafe(arr, idx);
+            dfs.push(idx);
             return;
         }
 
         //let node = ctx.arena.get_node(idx).clone();
         let ptr = unsafe { arr.add(idx.0 as usize) };
-        let node = unsafe { (*ptr).0.clone() };
+        let node = unsafe { &(*ptr).0 };
         match node {
             SimpleAst::Add { a, b }
             | SimpleAst::Mul { a, b }
@@ -3060,18 +3062,18 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
             | SimpleAst::Or { a, b }
             | SimpleAst::Xor { a, b }
             | SimpleAst::Lshr { a, b } => {
-                Self::collect_info_unsafe(arr, a, dfs);
-                Self::collect_info_unsafe(arr, b, dfs);
+                Self::collect_info_unsafe(arr, *a, dfs);
+                Self::collect_info_unsafe(arr, *b, dfs);
             }
             SimpleAst::Neg { a } | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
-                Self::collect_info_unsafe(arr, a, dfs);
+                Self::collect_info_unsafe(arr, *a, dfs);
             }
             SimpleAst::Constant { .. } | SimpleAst::Symbol { .. } => (),
         }
 
+        AuxInfoStorage::<NodeInfo>::set_unsafe(arr, idx, NodeInfo::new(1));
         dfs.push(idx);
         //AuxInfoStorage::<NodeInfo>::set(ctx, idx, NodeInfo::new(0));
-        AuxInfoStorage::<NodeInfo>::set_unsafe(arr, idx, NodeInfo::new(1));
     }
 
     /*
@@ -3500,7 +3502,7 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
                 .unwrap();
     }
 
-    fn write_instructions(ptr: *mut u8, instructions: &Vec<Instruction>) {
+    fn write_instructions(ptr: *mut u8, instructions: &Vec<Instruction>) -> u64 {
         let mut assembler = CodeAssembler::new(64).unwrap();
         for inst in instructions.iter() {
             assembler.add_instruction(*inst);
@@ -3510,5 +3512,7 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         unsafe {
             std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
         }
+
+        return bytes.len() as u64;
     }
 }

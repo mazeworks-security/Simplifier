@@ -180,10 +180,10 @@ namespace Mba.Simplifier.Interpreter
         public Amd64OptimizingJit(AstCtx ctx)
         {
             this.ctx = ctx;
-            seen = new AuxInfoStorage(ctx);
+            seen = new MapInfoStorage();
         }
 
-        public unsafe void Compile(AstIdx idx, List<AstIdx> variables, nint pagePtr, bool useIcedBackend = false)
+        public unsafe ulong Compile(AstIdx idx, List<AstIdx> variables, nint pagePtr, bool useIcedBackend = false)
         {
             Assembler icedAssembler = useIcedBackend ? new Assembler(64) : null;
             assembler = useIcedBackend ? new IcedAmd64Assembler(icedAssembler) : new FastAmd64Assembler((byte*)pagePtr);
@@ -191,6 +191,19 @@ namespace Mba.Simplifier.Interpreter
             
             // Collect information about the nodes necessary for JITing (dfs order, how many users a value has)
             CollectInfo(ctx, idx, dfs, seen);
+
+            var dfs2 = new List<AstIdx>();
+            CollectInfoFast(ctx, idx, dfs2, new MapInfoStorage());
+            dfs2.Reverse();
+
+            var dfs1 = dfs;
+            if (!dfs.SequenceEqual(dfs2))
+            {
+                Console.WriteLine("Not equal");
+                Debugger.Break();
+            }
+
+            Debugger.Break();
 
             // Store each variables argument index
             for (int i = 0; i < variables.Count; i++)
@@ -215,7 +228,8 @@ namespace Mba.Simplifier.Interpreter
             if (!useIcedBackend)
             {
                 FixupFramePtr(pagePtr, slotCount);
-                return;
+                var asm = (assembler as FastAmd64Assembler);
+                return (ulong)((ulong)asm.ptr - (ulong)asm.start);
             }
 
             // Otherwise adjust the RSP in ICED
@@ -225,7 +239,56 @@ namespace Mba.Simplifier.Interpreter
             // Write the instructions to memory. 
             // ICED internally emits a list of assembled instructions rather than raw x86 bytes
             // so this must be done after the fact.
-            WriteInstructions(pagePtr, instructions);
+            return WriteInstructions(pagePtr, instructions);
+        }
+
+        private static void CollectInfoFast(AstCtx ctx, AstIdx idx, List<AstIdx> dfs, IInfoStorage seen)
+        {
+            var s1 = new Stack<AstIdx>();
+            var s2 = new Stack<AstIdx>(0);
+            s1.Push(idx);
+
+            while(s1.Any())
+            {
+                var current = s1.Peek();
+                s1.Pop();
+                dfs.Add(current);
+
+                if (seen.Contains(current))
+                    continue;
+                seen.Set(current, new(1));
+
+                var left = GetLeft(ctx, current);
+                if (left != null)
+                {
+                    s1.Push(left.Value.value);
+                }
+
+                var right = GetRight(ctx, current);
+                if (right != null)
+                {
+                    s1.Push(right.Value.value);
+                }
+            }
+        }
+
+
+        private static (AstIdx owner, AstIdx value)? GetLeft(AstCtx ctx, AstIdx idx)
+        {
+            return ctx.GetOpcode(idx) switch
+            {
+                AstOp.Add or AstOp.Mul or AstOp.Pow or AstOp.And or AstOp.Or or AstOp.Xor or AstOp.Lshr or AstOp.Neg or AstOp.Zext or AstOp.Trunc => (idx, ctx.GetOp0(idx)),
+                _ => null,
+            };
+        }
+
+        private static (AstIdx owner, AstIdx value)? GetRight(AstCtx ctx, AstIdx idx)
+        {
+            return ctx.GetOpcode(idx) switch
+            {
+                AstOp.Add or AstOp.Mul or AstOp.Pow or AstOp.And or AstOp.Or or AstOp.Xor or AstOp.Lshr => (idx, ctx.GetOp1(idx)),
+                _ => null,
+            };
         }
 
         static ushort Inc(ushort cl)
@@ -680,13 +743,14 @@ namespace Mba.Simplifier.Interpreter
             instructions[8] = Instruction.Create(Code.Sub_rm64_imm32, Register.RSP, (int)slotCount * 8);
         }
 
-        private unsafe void WriteInstructions(nint page, List<Instruction> instructions)
+        private unsafe ulong WriteInstructions(nint page, List<Instruction> instructions)
         {
             var bytes = JitUtils.EncodeInstructions(instructions, (ulong)page, out ulong _);
             for(int i = 0; i < bytes.Length; i++)
             {
                 *(byte*)(page + i) = bytes[i];
             }
+            return (ulong)bytes.Length;
         }
     }
 }
