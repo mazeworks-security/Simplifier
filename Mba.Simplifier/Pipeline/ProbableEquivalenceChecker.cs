@@ -2,6 +2,7 @@
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Interpreter;
 using Mba.Simplifier.Utility;
+using Mba.Utility;
 using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
@@ -50,7 +51,8 @@ namespace Mba.Simplifier.Pipeline
         public ProbableEquivalenceChecker(AstCtx ctx, List<AstIdx> variables, AstIdx before, AstIdx after, nint pagePtr1, nint pagePtr2)
         {
             this.ctx = ctx;
-            this.variables = variables;
+            // this.variables = variables;
+            this.variables = ctx.CollectVariables(before).Concat(ctx.CollectVariables(after)).Distinct().OrderBy(x => ctx.GetSymbolName(x)).ToList();
             this.before = before;
             this.after = after;
             this.pagePtr1 = pagePtr1;
@@ -59,12 +61,15 @@ namespace Mba.Simplifier.Pipeline
 
         public unsafe bool ProbablyEquivalent(bool slowHeuristics = false)
         {
-            var jit1 = new Amd64OptimizingJit(ctx);
-            jit1.Compile(before, variables, pagePtr1, false);
+            //var jit1 = new Amd64OptimizingJit(ctx);
+            //jit1.Compile(before, variables, pagePtr1, false);
+            var w = ctx.GetWidth(before);
+            ctx.Compile(before, ModuloReducer.GetMask(w), variables.ToArray(), pagePtr1);
             func1 = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr1;
 
-            var jit2 = new Amd64OptimizingJit(ctx);
-            jit2.Compile(after, variables, pagePtr2, false);
+            //var jit2 = new Amd64OptimizingJit(ctx);
+            //jit2.Compile(after, variables, pagePtr2, false);
+            ctx.Compile(after, ModuloReducer.GetMask(w), variables.ToArray(), pagePtr2);
             func2 = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr2;
 
             var vArray = stackalloc ulong[variables.Count];
@@ -82,34 +87,37 @@ namespace Mba.Simplifier.Pipeline
             if (!SignatureVectorEquivalent(vArray, 0, ulong.MaxValue))
                 return false;
 
+            //return true;
+
             // Too slow
             if (slowHeuristics)
             {
-                if (!AllCombs(vArray, 0x5555555555555555ul, ~0x5555555555555555ul))
+                bool allBits = variables.Count <= 6;
+
+                if (!AllCombs(vArray, 0x5555555555555555ul, ~0x5555555555555555ul, allBits))
                     return false;
-                if (!AllCombs(vArray, 0x5555555555555555, 0xAAAAAAAAAAAAAAA))
+                if (!AllCombs(vArray, 0x5555555555555555, 0xAAAAAAAAAAAAAAA, allBits))
                     return false;
-                if (!AllCombs(vArray, 0x5555555555555555, 0xCCCCCCCCCCCCCCC))
+                if (!AllCombs(vArray, 0x5555555555555555, 0xCCCCCCCCCCCCCCC, allBits))
                     return false;
-                if (!AllCombs(vArray, 0xAAAAAAAAAAAAAAA, 0xCCCCCCCCCCCCCCC))
+                if (!AllCombs(vArray, 0xAAAAAAAAAAAAAAA, 0xCCCCCCCCCCCCCCC, allBits))
                     return false;
             }
 
-            if (!RandomlyEquivalent(vArray, 10000))
+            if (!RandomlyEquivalent(vArray, 1000))
                 return false;
             return true;
         }
 
         private unsafe bool RandomlyEquivalent(ulong* vArray, int numGuesses)
         {
-            var clone = new ulong[variables.Count];
+            int varCount = variables.Count;
             for(int _ = 0; _ < numGuesses; _++)
             {
-                for (int i = 0; i < variables.Count; i++)
+                for (int i = 0; i < varCount; i++)
                 {
                     var next = Next();
                     vArray[i] = next;
-                    clone[i] = next;
                 }
 
                 var op1 = func1(vArray);
@@ -122,15 +130,15 @@ namespace Mba.Simplifier.Pipeline
             return true;
         }
 
-        private unsafe bool AllCombs(ulong* vArray, ulong a, ulong b)
+        private unsafe bool AllCombs(ulong* vArray, ulong a, ulong b, bool allBits)
         {
-            if (!SignatureVectorEquivalent(vArray, 0, a))
+            if (!SignatureVectorEquivalent(vArray, 0, a, allBits))
                 return false;
-            if (!SignatureVectorEquivalent(vArray, 0, b))
+            if (!SignatureVectorEquivalent(vArray, 0, b, allBits))
                 return false;
-            if (!SignatureVectorEquivalent(vArray, a, b))
+            if (!SignatureVectorEquivalent(vArray, a, b, allBits))
                 return false;
-            if (!SignatureVectorEquivalent(vArray, b, a))
+            if (!SignatureVectorEquivalent(vArray, b, a, allBits))
                 return false;
 
             return true;

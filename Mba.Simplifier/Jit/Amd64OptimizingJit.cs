@@ -211,6 +211,9 @@ namespace Mba.Simplifier.Interpreter
             for (int i = 0; i < variables.Count; i++)
             {
                 var vIdx = variables[i];
+                if (!seen.Contains(vIdx))
+                    continue;
+
                 var data = seen.Get(vIdx);
                 data.varIdx = (byte)i;
                 seen.Set(vIdx, data);

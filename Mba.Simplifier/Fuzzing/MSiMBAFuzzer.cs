@@ -8,6 +8,7 @@ using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -56,14 +57,23 @@ namespace Mba.Simplifier.Fuzzing
 
             var vs = ctx.CollectVariables(fCase2);
 
-            
+
+
+
+            nint pagePtr1 = JitUtils.AllocateExecutablePage(1000);
+
+            nint pagePtr2 = JitUtils.AllocateExecutablePage(1000);
             while(true)
             {
                 var s = Stopwatch.StartNew();
-                int limit = 200000;
+                int limit = 1000;
                 for (int i = 0; i < limit; i++)
                 {
-                    var resulttt = LinearSimplifier.Run(ctx.GetWidth(fCase2), fuzzer.ctx, fCase2, false, false, variables: vs);
+
+                    //var resulttt = LinearSimplifier.Run(ctx.GetWidth(fCase2), fuzzer.ctx, fCase2, false, true, variables: vs);
+                    var checker = new ProbableEquivalenceChecker(ctx, vs, fCase2, fr, pagePtr1, pagePtr2);
+                    bool equiv = checker.ProbablyEquivalent(true);
+                    //var r = ProbableEquivalenceChecker.ProbablyEquivalent(fuzzer.ctx, fCase2, fr, false)
                 }
 
                 s.Stop();
