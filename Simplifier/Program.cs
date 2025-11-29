@@ -19,7 +19,7 @@ bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
 
-//MSiMBAFuzzer.Run();
+MSiMBAFuzzer.Run();
 JitBenchmark.Run();
 Console.WriteLine("done                         ");
 Console.ReadLine();

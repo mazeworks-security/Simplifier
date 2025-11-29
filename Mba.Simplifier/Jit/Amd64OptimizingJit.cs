@@ -192,6 +192,7 @@ namespace Mba.Simplifier.Interpreter
             // Collect information about the nodes necessary for JITing (dfs order, how many users a value has)
             CollectInfo(ctx, idx, dfs, seen);
 
+            /*
             var dfs2 = new List<AstIdx>();
             CollectInfoFast(ctx, idx, dfs2, new MapInfoStorage());
             dfs2.Reverse();
@@ -204,6 +205,7 @@ namespace Mba.Simplifier.Interpreter
             }
 
             Debugger.Break();
+            */
 
             // Store each variables argument index
             for (int i = 0; i < variables.Count; i++)
