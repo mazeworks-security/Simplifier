@@ -7,6 +7,8 @@
 #![allow(unused_imports, unused_variables, non_snake_case, unused_mut)]
 #![allow(irrefutable_let_patterns, unused_assignments, non_camel_case_types)]
 
+use crate::simple_ast::Predicate;
+
 use super::*; // Pulls in all external types.
 use std::marker::PhantomData;
 
@@ -29,6 +31,8 @@ pub trait Context {
     fn symbol(&mut self, arg0: u32, arg1: u8) -> SimpleAst;
     fn zext(&mut self, arg0: AstIdx, arg1: u8) -> SimpleAst;
     fn trunc(&mut self, arg0: AstIdx, arg1: u8) -> SimpleAst;
+    fn icmp(&mut self, pred: Predicate, arg0: AstIdx, arg1: AstIdx) -> SimpleAst;
+    fn select(&mut self, arg0: AstIdx, arg1: AstIdx, arg2: AstIdx) -> SimpleAst;
     fn fold_add(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst;
     fn get_width(&mut self, arg0: AstIdx) -> u8;
     fn is_constant_modulo(&mut self, arg0: u64, arg1: u64, arg2: u8) -> Option<Empty>;

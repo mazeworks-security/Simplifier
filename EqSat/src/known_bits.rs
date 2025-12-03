@@ -1,6 +1,8 @@
 use libc::{c_char, c_void};
 use std::{ffi::CStr, ptr};
 
+use crate::simple_ast::Predicate;
+
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Default)]
 #[repr(C)]
 pub struct KnownBits {
@@ -125,6 +127,22 @@ impl KnownBits {
         out
     }
 
+    pub fn icmp(pred: Predicate, lhs: &KnownBits, rhs: &KnownBits) -> KnownBits {
+        let mut out = KnownBits::default();
+        unsafe {
+            GetIcmpKnownBits(pred, lhs, rhs, &mut out);
+        }
+        out
+    }
+
+    pub fn select(a: &KnownBits, b: &KnownBits, c: &KnownBits) -> KnownBits {
+        let mut out = KnownBits::default();
+        unsafe {
+            GetSelectKnownBits(a, b, c, &mut out);
+        }
+        out
+    }
+
     pub fn get_unknown_bits(&self) -> u64 {
         let unknown_bits = (!(self.zeroes | self.ones)) & Self::get_modulo_mask(self.width as u8);
         return unknown_bits;
@@ -212,4 +230,18 @@ extern "C" {
     fn GetZextKnownBits(lhs: *const KnownBits, width: u32, out: *mut KnownBits) -> *const c_void;
 
     fn GetTruncKnownBits(lhs: *const KnownBits, width: u32, out: *mut KnownBits) -> *const c_void;
+
+    fn GetIcmpKnownBits(
+        pred: Predicate,
+        a: *const KnownBits,
+        b: *const KnownBits,
+        out: *mut KnownBits,
+    ) -> *const c_void;
+
+    fn GetSelectKnownBits(
+        a: *const KnownBits,
+        b: *const KnownBits,
+        c: *const KnownBits,
+        out: *mut KnownBits,
+    ) -> *const c_void;
 }

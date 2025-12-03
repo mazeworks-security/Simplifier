@@ -267,7 +267,7 @@ pub trait INodeUtil {
 
     fn lshr_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
         let width = self.get_width(a);
-        let cost = (1 as u32).saturating_add(self.get_data(a).cost);
+        let cost = self.get_bin_cost(a, b);
         let has_poly = self.get_data(a).has_poly;
         let class = AstClass::Nonlinear;
 
@@ -340,6 +340,50 @@ pub trait INodeUtil {
             has_poly: false,
             class: AstClass::Bitwise,
             known_bits: KnownBits::empty(width),
+            imut_data: 0,
+        };
+        return data;
+    }
+
+    fn icmp_transfer(&mut self, pred: Predicate, a: AstIdx, b: AstIdx) -> AstData {
+        let width = 1;
+        let cost = self.get_bin_cost(a, b);
+        let has_poly = self.get_data(a).has_poly;
+        let class = AstClass::Nonlinear;
+
+        let known_bits = KnownBits::icmp(
+            pred,
+            &self.get_data(a).known_bits,
+            &self.get_data(b).known_bits,
+        );
+        let data = AstData {
+            width: width,
+            cost: cost,
+            has_poly: has_poly,
+            class: class,
+            known_bits: known_bits,
+            imut_data: 0,
+        };
+        return data;
+    }
+
+    fn select_transfer(&mut self, a: AstIdx, b: AstIdx, c: AstIdx) -> AstData {
+        let width = self.get_bin_width(b, c);
+        let cost = (self.get_data(c).cost).saturating_add(self.get_bin_cost(b, c));
+        let has_poly = self.union_contains_poly_part(b, c) || self.get_data(a).has_poly;
+        let class = AstClass::Nonlinear;
+
+        let known_bits = KnownBits::select(
+            &self.get_data(a).known_bits,
+            &self.get_data(b).known_bits,
+            &self.get_data(c).known_bits,
+        );
+        let data = AstData {
+            width: width,
+            cost: cost,
+            has_poly: has_poly,
+            class: class,
+            known_bits: known_bits,
             imut_data: 0,
         };
         return data;
@@ -665,6 +709,11 @@ impl Language for SimpleAst {
             SimpleAst::Symbol { .. } => &[],
             SimpleAst::Zext { a, .. } => std::slice::from_ref(a),
             SimpleAst::Trunc { a, .. } => std::slice::from_ref(a),
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => children,
+            SimpleAst::Select { children } => children,
         }
     }
     /// Returns a mutable slice of the children of this e-node.
@@ -682,6 +731,11 @@ impl Language for SimpleAst {
             SimpleAst::Symbol { .. } => &mut [],
             SimpleAst::Zext { a, .. } => std::slice::from_mut(a),
             SimpleAst::Trunc { a, .. } => std::slice::from_mut(a),
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => children,
+            SimpleAst::Select { children } => children,
         }
     }
 }
@@ -701,6 +755,11 @@ impl ::std::fmt::Display for SimpleAst {
             SimpleAst::Symbol { id, width } => f.write_str(format!("v{}:{}", id, width).as_str()),
             SimpleAst::Zext { a, to } => f.write_str(format!("zx i{}", to).as_str()),
             SimpleAst::Trunc { a, to } => f.write_str(format!("tr i{}", to).as_str()),
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => f.write_str(format!("icmp {}", predicate).as_str()),
+            SimpleAst::Select { children } => f.write_str("select"),
         }
     }
 }
@@ -877,17 +936,34 @@ impl Analysis<SimpleAst> for MbaAnalysis {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-enum Predicate {
-    Eq,
-    Ne,
-    Ugt,
-    Uge,
-    Ult,
-    Ule,
-    Sgt,
-    Sge,
-    Slt,
-    Sle,
+pub enum Predicate {
+    Eq = 0,
+    Ne = 1,
+    Ugt = 2,
+    Uge = 3,
+    Ult = 4,
+    Ule = 5,
+    Sgt = 6,
+    Sge = 7,
+    Slt = 8,
+    Sle = 9,
+}
+
+impl ::std::fmt::Display for Predicate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Predicate::Eq => write!(f, "=="),
+            Predicate::Ne => write!(f, "!="),
+            Predicate::Ugt => write!(f, ">"),
+            Predicate::Uge => write!(f, ">="),
+            Predicate::Ult => write!(f, "<"),
+            Predicate::Ule => write!(f, "<="),
+            Predicate::Sgt => write!(f, ">s"),
+            Predicate::Sge => write!(f, ">=s"),
+            Predicate::Slt => write!(f, "<s"),
+            Predicate::Sle => write!(f, "<=s"),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
@@ -1159,6 +1235,11 @@ impl AstPrinter {
             SimpleAst::Symbol { id, width } => "",
             SimpleAst::Zext { .. } => "zx",
             SimpleAst::Trunc { .. } => "tr",
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => &predicate.clone().to_string(),
+            SimpleAst::Select { children } => "",
         };
 
         // Don't put parens for constants or symbols
@@ -1199,6 +1280,23 @@ impl AstPrinter {
                 ctx.arena.get_symbol_name(*id).clone(),
                 width
             )),
+            // (a) >= (b)
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => {
+                self.print_node(ctx, ctx.arena.get_node(children[0]));
+                self.output.push_str(&format!("{}", operator));
+                self.print_node(ctx, ctx.arena.get_node(children[1]));
+            }
+            // a ? b : c
+            SimpleAst::Select { children } => {
+                self.print_node(ctx, ctx.arena.get_node(children[0]));
+                self.output.push_str(&format!("?"));
+                self.print_node(ctx, ctx.arena.get_node(children[1]));
+                self.output.push_str(&format!(":"));
+                self.print_node(ctx, ctx.arena.get_node(children[2]));
+            }
         }
 
         if operator != "" {
@@ -1211,10 +1309,27 @@ pub fn get_modulo_mask(width: u8) -> u64 {
     return u64::MAX >> (64 - width);
 }
 
+fn cmp(pred: Predicate, a: u64, b: u64) -> bool {
+    let sa = a as i64;
+    let sb = b as i64;
+    match pred {
+        Predicate::Eq => a == b,
+        Predicate::Ne => a != b,
+        Predicate::Ugt => a > b,
+        Predicate::Uge => a >= b,
+        Predicate::Ult => a < b,
+        Predicate::Ule => a <= b,
+        Predicate::Sgt => sa > sb,
+        Predicate::Sge => sa >= sb,
+        Predicate::Slt => sa < sb,
+        Predicate::Sle => sa <= sb,
+    }
+}
+
 pub fn eval_ast(ctx: &Context, idx: AstIdx, value_mapping: &HashMap<AstIdx, u64>) -> u64 {
     let ast = ctx.arena.get_node(idx);
     let e = |i: &AstIdx| eval_ast(ctx, *i, value_mapping);
-    match ast {
+    let r = match ast {
         SimpleAst::Add([a, b]) => e(a).wrapping_add(e(b)),
         SimpleAst::Mul([a, b]) => e(a).wrapping_mul(e(b)),
         SimpleAst::Pow([a, b]) => todo!(),
@@ -1227,7 +1342,20 @@ pub fn eval_ast(ctx: &Context, idx: AstIdx, value_mapping: &HashMap<AstIdx, u64>
         SimpleAst::Symbol { id, width } => *value_mapping.get(&idx).unwrap(),
         SimpleAst::Zext { a, to } => get_modulo_mask(ctx.arena.get_width(*a)) & e(a),
         SimpleAst::Trunc { a, to } => get_modulo_mask(*to) & e(a),
-    }
+        SimpleAst::ICmp {
+            predicate,
+            children,
+        } => cmp(predicate.clone(), e(&children[0]), e(&children[1])) as u64,
+        SimpleAst::Select { children } => {
+            if e(&children[0]) != 0 {
+                e(&children[1])
+            } else {
+                e(&children[2])
+            }
+        }
+    };
+
+    r & get_modulo_mask(ctx.arena.get_width(idx))
 }
 
 // Recursively apply ISLE over an AST.
@@ -1586,6 +1714,11 @@ pub fn get_opcode(ctx: &Context, id: AstIdx) -> u8 {
         SimpleAst::Symbol { .. } => 10,
         SimpleAst::Zext { .. } => 11,
         SimpleAst::Trunc { .. } => 12,
+        SimpleAst::ICmp {
+            predicate,
+            children,
+        } => 13,
+        SimpleAst::Select { children } => 14,
     };
 }
 
