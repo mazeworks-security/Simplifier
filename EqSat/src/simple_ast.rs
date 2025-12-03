@@ -610,27 +610,6 @@ pub struct AstData {
     imut_data: u64,
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub enum Expr {
-    // Arithmetic operators:
-    Add([Id; 2]),
-    Mul([Id; 2]),
-    Pow([Id; 2]),
-    // Bitwise operators:
-    And([Id; 2]),
-    Or([Id; 2]),
-    Xor([Id; 2]),
-    Neg([Id; 1]),
-    // Shift operators:
-    Lshr([Id; 2]),
-    // Literals:
-    Constant { c: u64, width: u8 },
-    Symbol { id: u32, width: u8 },
-    // Special operators
-    Zext { id: Id, to: u8 },
-    Trunc { id: Id, to: u8 },
-}
-
 impl Language for SimpleAst {
     type Discriminant = std::mem::Discriminant<Self>;
 
@@ -898,27 +877,17 @@ impl Analysis<SimpleAst> for MbaAnalysis {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-struct Const {
-    c: u64,
-    width: u8,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-struct Symb {
-    c: u64,
-    width: u8,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-struct Zext {
-    c: u64,
-    width: u8,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-struct Trunc {
-    c: u64,
-    width: u8,
+enum Predicate {
+    Eq,
+    Ne,
+    Ugt,
+    Uge,
+    Ult,
+    Ule,
+    Sgt,
+    Sge,
+    Slt,
+    Sle,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
@@ -935,11 +904,30 @@ pub enum SimpleAst {
     // Shift operators:
     Lshr([AstIdx; 2]),
     // Literals:
-    Constant { c: u64, width: u8 },
-    Symbol { id: u32, width: u8 },
+    Constant {
+        c: u64,
+        width: u8,
+    },
+    Symbol {
+        id: u32,
+        width: u8,
+    },
     // Special operators
-    Zext { a: AstIdx, to: u8 },
-    Trunc { a: AstIdx, to: u8 },
+    Zext {
+        a: AstIdx,
+        to: u8,
+    },
+    Trunc {
+        a: AstIdx,
+        to: u8,
+    },
+    ICmp {
+        predicate: Predicate,
+        children: [AstIdx; 2],
+    },
+    Select {
+        children: [AstIdx; 3],
+    },
 }
 
 pub struct Context {
