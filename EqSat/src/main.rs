@@ -20,7 +20,7 @@ use crate::{
 };
 
 // use egg::*;
-use simple_ast::{marshal_string, AstData, AstIdx, Empty, SimpleAst};
+use simple_ast::{marshal_string, AstData, AstIdx, Context, Empty, SimpleAst};
 
 use mimalloc::MiMalloc;
 
@@ -57,4 +57,12 @@ fn read_expr_from_args() -> String {
     }
 }
 
-fn main() {}
+fn main() {
+    let mut arena = Arena::new();
+
+    let mut ctx = Context { arena };
+
+    let x = ctx.arena.symbol_with_name("x".to_string(), 8);
+    let y = ctx.arena.symbol_with_name("y".to_string(), 8);
+    let add = ctx.arena.add(x, y);
+}
