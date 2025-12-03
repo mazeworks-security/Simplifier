@@ -519,6 +519,27 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Trunc { a: a, to: width }, data);
     }
 
+    pub fn icmp(&mut self, pred: Predicate, a: AstIdx, b: AstIdx) -> AstIdx {
+        let data = self.icmp_transfer(pred, a, b);
+        return self.insert_ast_node(
+            SimpleAst::ICmp {
+                predicate: pred,
+                children: [a, b],
+            },
+            data,
+        );
+    }
+
+    pub fn select(&mut self, a: AstIdx, b: AstIdx, c: AstIdx) -> AstIdx {
+        let data = self.select_transfer(a, b, c);
+        return self.insert_ast_node(
+            SimpleAst::Select {
+                children: [a, b, c],
+            },
+            data,
+        );
+    }
+
     pub fn constant(&mut self, c: u64, width: u8) -> AstIdx {
         let data = self.constant_transfer(c, width);
         // Reduce the constant modulo 2**width
@@ -877,6 +898,13 @@ impl Analysis<SimpleAst> for MbaAnalysis {
             SimpleAst::Trunc { a, to } => util.trunc_transfer(*a, *to),
             SimpleAst::Constant { c, width } => util.constant_transfer(*c, *width),
             SimpleAst::Symbol { id: _, width } => util.symbol_transfer(*width),
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => util.icmp_transfer(*predicate, children[0], children[1]),
+            SimpleAst::Select { children } => {
+                util.select_transfer(children[0], children[1], children[2])
+            }
         };
 
         return data;
@@ -935,7 +963,7 @@ impl Analysis<SimpleAst> for MbaAnalysis {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
 pub enum Predicate {
     Eq = 0,
     Ne = 1,
@@ -1142,6 +1170,16 @@ impl mba::Context for Context {
         let trunc = self.arena.trunc(arg0, width);
 
         self.arena.get_node(trunc).clone()
+    }
+
+    fn icmp(&mut self, pred: Predicate, arg0: AstIdx, arg1: AstIdx) -> SimpleAst {
+        let icmp = self.arena.icmp(pred, arg0, arg1);
+        return self.arena.get_node(icmp).clone();
+    }
+
+    fn select(&mut self, arg0: AstIdx, arg1: AstIdx, arg2: AstIdx) -> SimpleAst {
+        let select = self.arena.select(arg0, arg1, arg2);
+        return self.arena.get_node(select).clone();
     }
 
     fn any(&mut self, arg0: AstIdx) -> SimpleAst {
@@ -1400,6 +1438,20 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
         }
         SimpleAst::Constant { c, width } => return idx,
         SimpleAst::Symbol { id, width } => return idx,
+        SimpleAst::ICmp {
+            predicate,
+            children,
+        } => {
+            let op1 = recursive_simplify(ctx, children[0]);
+            let op2 = recursive_simplify(ctx, children[1]);
+            ast = ctx.icmp(predicate, op1, op2);
+        }
+        SimpleAst::Select { children } => {
+            let op1 = recursive_simplify(ctx, children[0]);
+            let op2 = recursive_simplify(ctx, children[1]);
+            let op3 = recursive_simplify(ctx, children[2]);
+            ast = ctx.select(op1, op2, op3);
+        }
     }
 
     // Repeatedly invoke ISLE until a fixed point is reached.
@@ -1483,6 +1535,7 @@ fn collect_var_indices_internal(
         collect_var_indices_internal(ctx, a, visited, out_vars);
         collect_var_indices_internal(ctx, b, visited, out_vars);
     };
+
     match ast {
         SimpleAst::Add([a, b])
         | SimpleAst::Mul([a, b])
@@ -1498,6 +1551,15 @@ fn collect_var_indices_internal(
         SimpleAst::Symbol { id, width } => {
             out_vars.insert(idx);
             return;
+        }
+        SimpleAst::ICmp {
+            predicate,
+            children,
+        } => vbin(children[0], children[1]),
+        SimpleAst::Select { children } => {
+            for c in children {
+                collect_var_indices_internal(ctx, *c, visited, out_vars);
+            }
         }
     }
 
@@ -2158,6 +2220,11 @@ unsafe fn jit_rec(
             emit(page, offset, &[0x48, 0x21, 0x04, 0x24]);
         }
         SimpleAst::Lshr([a, b]) => todo!(),
+        SimpleAst::ICmp {
+            predicate,
+            children,
+        } => todo!(),
+        SimpleAst::Select { children } => todo!(),
     };
 
     // mov rax, constant
@@ -3339,6 +3406,11 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
                 Self::inc_users(ctx, a);
             }
             SimpleAst::Constant { .. } | SimpleAst::Symbol { .. } => (),
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => todo!(),
+            SimpleAst::Select { children } => todo!(),
         }
 
         dfs.push(idx);
@@ -3401,6 +3473,11 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
                     let w = ctx.get_width(a);
                     self.lower_zext(ctx, assembler, idx, w.into(), node_info)
                 }
+                SimpleAst::ICmp {
+                    predicate,
+                    children,
+                } => todo!(),
+                SimpleAst::Select { children } => todo!(),
             }
         }
 
