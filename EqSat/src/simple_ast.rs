@@ -384,35 +384,6 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Add([a, b]), data);
     }
 
-    pub fn add_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
-        let width = self.get_bin_width(a, b);
-        let cost = self.get_bin_cost(a, b);
-        let has_poly = self.union_contains_poly_part(a, b);
-
-        // Determine the "highest" classification of the two operands, defaulting to linear.
-        let d1 = self.get_data(a);
-        let d2 = self.get_data(b);
-
-        let mut max = max_class(d1.class, d2.class, AstClass::Linear);
-
-        // If the resulting option is not linear or semilinear, we need to check if one of the operands
-        // is a bitwise operation with a constant. If so, the result is semilinear.
-        max = try_make_semilinear(max, d1.class, d2.class);
-
-        let known_bits = KnownBits::add(&d1.known_bits, &d2.known_bits);
-
-        let data = AstData {
-            width: width,
-            cost: cost,
-            has_poly: has_poly,
-            class: max,
-            known_bits: known_bits,
-            imut_data: 0,
-        };
-
-        return data;
-    }
-
     pub fn mul(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
         let a_value = self.get_node(a);
         let b_value = self.get_node(b);
@@ -436,40 +407,6 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Mul([a, b]), data);
     }
 
-    pub fn mul_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
-        let width = self.get_bin_width(a, b);
-        let cost = self.get_bin_cost(a, b);
-        // If neither operand is a constant, or either operand contains a polynomial part, the result will contain a polynomial part.
-        let is_one_part_constant = self.is_constant(a) || self.is_constant(b);
-
-        let has_poly = !is_one_part_constant || self.union_contains_poly_part(a, b);
-
-        // Determine the "highest" classification of the two operands, defaulting to linear.
-        let d1 = self.get_data(a);
-        let d2 = self.get_data(b);
-        let mut max = max_class(
-            d1.class,
-            d2.class,
-            if !is_one_part_constant {
-                AstClass::Nonlinear
-            } else {
-                AstClass::Linear
-            },
-        );
-
-        max = try_make_semilinear(max, d1.class, d2.class);
-        let known_bits = KnownBits::mul(&d1.known_bits, &d2.known_bits);
-        let data = AstData {
-            width: width,
-            cost: cost,
-            has_poly: has_poly,
-            class: max,
-            known_bits: known_bits,
-            imut_data: 0,
-        };
-        return data;
-    }
-
     pub fn pow(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
         let op1 = self.get_node(a);
         let op2 = self.get_node(b);
@@ -484,33 +421,9 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Pow([a, b]), data);
     }
 
-    pub fn pow_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
-        let width = self.get_bin_width(a, b);
-        let cost = self.get_bin_cost(a, b);
-        // TODO: If we have e.g. x**3, computed known bits using repeated squaring.
-        // If we have 2**y... compute knownbits for 1 << y..
-        // In the multiplication constructor, look for x*(2**y) and use transfer function for x<<y instead
-        let known_bits = KnownBits::empty(width);
-        let data = AstData {
-            width: width,
-            cost: cost,
-            has_poly: true,
-            class: AstClass::Nonlinear,
-            known_bits: known_bits,
-            imut_data: 0,
-        };
-        return data;
-    }
-
     pub fn and(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
         let data = self.and_transfer(a, b);
         return self.insert_ast_node(SimpleAst::And([a, b]), data);
-    }
-
-    pub fn and_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
-        let kb = KnownBits::and(&self.get_data(a).known_bits, &self.get_data(b).known_bits);
-        let data = self.compute_bitwise_data(a, b, kb);
-        return data;
     }
 
     pub fn or(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
@@ -518,21 +431,9 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Or([a, b]), data);
     }
 
-    pub fn or_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
-        let kb = KnownBits::or(&self.get_data(a).known_bits, &self.get_data(b).known_bits);
-        let data = self.compute_bitwise_data(a, b, kb);
-        return data;
-    }
-
     pub fn xor(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
         let data = self.xor_transfer(a, b);
         return self.insert_ast_node(SimpleAst::Xor([a, b]), data);
-    }
-
-    pub fn xor_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
-        let kb = KnownBits::xor(&self.get_data(a).known_bits, &self.get_data(b).known_bits);
-        let data = self.compute_bitwise_data(a, b, kb);
-        return data;
     }
 
     pub fn xor_many(&mut self, nodes: &Vec<AstIdx>) -> AstIdx {
@@ -549,47 +450,9 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Neg([a]), data);
     }
 
-    pub fn neg_transfer(&mut self, a: AstIdx) -> AstData {
-        let width = self.get_width(a);
-        let cost = (1 as u32).saturating_add(self.get_data(a).cost);
-        let has_poly = self.get_data(a).has_poly;
-
-        let c1 = self.get_class(a);
-        let max = max_class(c1, c1, AstClass::Bitwise);
-        let known_bits = KnownBits::neg(&self.get_data(a).known_bits);
-        let data = AstData {
-            width: width,
-            cost: cost,
-            has_poly: has_poly,
-            class: max,
-            known_bits: known_bits,
-            imut_data: 0,
-        };
-        return data;
-    }
-
     pub fn lshr(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
         let data = self.lshr_transfer(a, b);
         return self.insert_ast_node(SimpleAst::Lshr([a, b]), data);
-    }
-
-    pub fn lshr_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
-        let width = self.get_width(a);
-        let cost = (1 as u32).saturating_add(self.get_data(a).cost);
-        let has_poly = self.get_data(a).has_poly;
-        let class = AstClass::Nonlinear;
-
-        let known_bits =
-            KnownBits::lshr(&self.get_data(a).known_bits, &self.get_data(b).known_bits);
-        let data = AstData {
-            width: width,
-            cost: cost,
-            has_poly: has_poly,
-            class: class,
-            known_bits: known_bits,
-            imut_data: 0,
-        };
-        return data;
     }
 
     pub fn zext(&mut self, a: AstIdx, width: u8) -> AstIdx {
@@ -602,25 +465,6 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Zext { a: a, to: width }, data);
     }
 
-    pub fn zext_transfer(&mut self, a: AstIdx, width: u8) -> AstData {
-        let cost = (1 as u32).saturating_add(self.get_data(a).cost);
-        let has_poly = self.get_has_poly(a);
-
-        let mask = get_modulo_mask(self.get_width(a));
-        let mask_node = self.constant(mask, width);
-        let class = self.compute_bitwise_class(a, mask_node);
-        let known_bits = KnownBits::zext(&self.get_data(a).known_bits, width as u32);
-        let data = AstData {
-            width: width,
-            cost: cost,
-            has_poly: has_poly,
-            class: class,
-            known_bits: known_bits,
-            imut_data: 0,
-        };
-        return data;
-    }
-
     pub fn trunc(&mut self, a: AstIdx, width: u8) -> AstIdx {
         if let SimpleAst::Constant { c: c1, .. } = self.get_node(a) {
             let result = self.constant(*c1, width);
@@ -631,44 +475,12 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Trunc { a: a, to: width }, data);
     }
 
-    pub fn trunc_transfer(&mut self, a: AstIdx, width: u8) -> AstData {
-        let cost = (1 as u32).saturating_add(self.get_data(a).cost);
-        let has_poly = self.get_has_poly(a);
-
-        let mask = get_modulo_mask(width);
-        let mask_node = self.constant(mask, width);
-        let class = self.compute_bitwise_class(a, mask_node);
-        let known_bits = KnownBits::trunc(&self.get_data(a).known_bits, width as u32);
-        let data = AstData {
-            width: width,
-            cost: cost,
-            has_poly: has_poly,
-            class: class,
-            known_bits: known_bits,
-            imut_data: 0,
-        };
-        return data;
-    }
-
     pub fn constant(&mut self, c: u64, width: u8) -> AstIdx {
         let data = self.constant_transfer(c, width);
         // Reduce the constant modulo 2**width
         let constant = get_modulo_mask(width) & c;
 
         return self.insert_ast_node(SimpleAst::Constant { c: constant, width }, data);
-    }
-
-    pub fn constant_transfer(&mut self, c: u64, width: u8) -> AstData {
-        let data = AstData {
-            width: width,
-            cost: 1,
-            has_poly: false,
-            class: AstClass::Bitwise,
-            known_bits: KnownBits::constant(c, width),
-            imut_data: 0,
-        };
-
-        return data;
     }
 
     pub fn symbol(&mut self, id: u32, width: u8) -> AstIdx {
@@ -680,18 +492,6 @@ impl Arena {
             },
             data,
         );
-    }
-
-    pub fn symbol_transfer(&mut self, width: u8) -> AstData {
-        let data = AstData {
-            width: width,
-            cost: 1,
-            has_poly: false,
-            class: AstClass::Bitwise,
-            known_bits: KnownBits::empty(width),
-            imut_data: 0,
-        };
-        return data;
     }
 
     pub fn symbol_with_name(&mut self, name: String, width: u8) -> AstIdx {
@@ -736,22 +536,6 @@ impl Arena {
         unsafe { &self.elements.get_unchecked(idx.0 as usize).0 }
     }
 
-    pub fn get_width(&self, idx: AstIdx) -> u8 {
-        self.get_data(idx).width
-    }
-
-    pub fn get_cost(&self, idx: AstIdx) -> u32 {
-        self.get_data(idx).cost
-    }
-
-    pub fn get_has_poly(&self, idx: AstIdx) -> bool {
-        self.get_data(idx).has_poly
-    }
-
-    pub fn get_class(&self, a: AstIdx) -> AstClass {
-        self.get_data(a).class
-    }
-
     pub fn is_constant(&self, idx: AstIdx) -> bool {
         let ast = self.get_node(idx);
         match ast {
@@ -770,69 +554,6 @@ impl Arena {
 
     pub fn set_data(&mut self, idx: AstIdx, data: AstData) {
         unsafe { self.elements.get_unchecked_mut(idx.0 as usize).1 = data }
-    }
-
-    pub fn get_bin_width(&self, a: AstIdx, b: AstIdx) -> u8 {
-        let a_width = self.get_width(a);
-        let b_width = self.get_width(b);
-        if a_width != b_width {
-            panic!("Width mismatch! {} != {}", a_width, b_width);
-        }
-
-        return a_width;
-    }
-
-    pub fn get_bin_cost(&self, a: AstIdx, b: AstIdx) -> u32 {
-        let c1 = self.get_data(a).cost;
-        let c2 = self.get_data(b).cost;
-        (1 as u32).saturating_add(c1.saturating_add(c2))
-    }
-
-    pub fn union_contains_poly_part(&self, a: AstIdx, b: AstIdx) -> bool {
-        let a_data = self.get_data(a);
-        let b_data = self.get_data(b);
-        return a_data.has_poly || b_data.has_poly;
-    }
-
-    pub fn compute_bitwise_data(&self, a: AstIdx, b: AstIdx, known_bits: KnownBits) -> AstData {
-        let width = self.get_bin_width(a, b);
-        let cost = self.get_bin_cost(a, b);
-        let has_poly = self.union_contains_poly_part(a, b);
-
-        let max = self.compute_bitwise_class(a, b);
-        let data = AstData {
-            width: width,
-            cost: cost,
-            has_poly: has_poly,
-            class: max,
-            known_bits: known_bits,
-            imut_data: 0,
-        };
-
-        return data;
-    }
-
-    pub fn compute_bitwise_class(&self, a: AstIdx, b: AstIdx) -> AstClass {
-        let c1 = self.get_class(a);
-        let c2 = self.get_class(b);
-
-        let has_constant = self.is_constant(a) || self.is_constant(b);
-
-        let mut max = max_class(
-            c1,
-            c2,
-            if has_constant {
-                AstClass::BitwiseWithConstants
-            } else {
-                AstClass::Bitwise
-            },
-        );
-
-        if max > AstClass::BitwiseWithConstants {
-            max = AstClass::Nonlinear;
-        }
-
-        return max;
     }
 
     pub fn clear(&mut self) {
