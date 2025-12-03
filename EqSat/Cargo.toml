@@ -11,7 +11,7 @@ path = "src/lib.rs"
 
 
 [dependencies]
-# egg = { git = "https://github.com/egraphs-good/egg.git" }
+egg = { git = "https://github.com/egraphs-good/egg.git" }
 rand = "0.8.5"
 libc = "0.2.149"
 cranelift-isle = "0.102.1"
