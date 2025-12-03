@@ -17,7 +17,9 @@ bool onlyLinear = false;
 uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = false;
-string inputText = null;
+string inputText = "a ? b : c ";
+inputText = "a+b+c";
+inputText = "a>=c";
 
 var printHelp = () =>
 {
@@ -75,6 +77,8 @@ AstIdx.ctx = ctx;
 var id = RustAstParser.Parse(ctx, inputText, bitWidth);
 
 Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n\n");
+
+var opc = ctx.GetOpcode(id);
 
 var input = id;
 

@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Mba.Utility;
 using Mba.Simplifier.Minimization;
 using System.Diagnostics;
+using Mba.Common.Ast;
 
 namespace Mba.Simplifier.Bindings
 {
@@ -59,6 +60,8 @@ namespace Mba.Simplifier.Bindings
         public unsafe AstIdx Lshr(AstIdx a, AstIdx b) => Api.ContextLshr(this, a, b);
         public unsafe AstIdx Zext(AstIdx a, byte width) => Api.ContextZext(this, a, width);
         public unsafe AstIdx Trunc(AstIdx a, byte width) => Api.ContextTrunc(this, a, width);
+        public unsafe AstIdx ICmp(Predicate pred, AstIdx a, AstIdx b) => Api.ContextICmp(this, pred, a, b);
+        public unsafe AstIdx Select(AstIdx a, AstIdx b, AstIdx c) => Api.ContextSelect(this, a, b, c);
         public unsafe AstIdx Constant(ulong c, byte width) => Api.ContextConstant(this, c, width);
         public unsafe AstIdx Constant(ulong c, uint width) => Api.ContextConstant(this, c, (byte)width);
         public unsafe AstIdx Symbol(string s, byte width) => Api.ContextSymbol(this, new MarshaledString(s), width);
@@ -343,6 +346,12 @@ namespace Mba.Simplifier.Bindings
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextTrunc(OpaqueAstCtx* ctx, AstIdx a, byte width);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextICmp(OpaqueAstCtx* ctx, Predicate pred, AstIdx a, AstIdx b);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextSelect(OpaqueAstCtx* ctx, AstIdx a, AstIdx b, AstIdx c);
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextConstant(OpaqueAstCtx* ctx, ulong c, byte width);

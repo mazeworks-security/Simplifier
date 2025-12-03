@@ -1324,15 +1324,15 @@ impl AstPrinter {
                 children,
             } => {
                 self.print_node(ctx, ctx.arena.get_node(children[0]));
-                self.output.push_str(&format!("{}", operator));
+                self.output.push_str(&format!(" {} ", operator));
                 self.print_node(ctx, ctx.arena.get_node(children[1]));
             }
             // a ? b : c
             SimpleAst::Select { children } => {
                 self.print_node(ctx, ctx.arena.get_node(children[0]));
-                self.output.push_str(&format!("?"));
+                self.output.push_str(&format!(" ? "));
                 self.print_node(ctx, ctx.arena.get_node(children[1]));
-                self.output.push_str(&format!(":"));
+                self.output.push_str(&format!(" : "));
                 self.print_node(ctx, ctx.arena.get_node(children[2]));
             }
         }
@@ -1722,6 +1722,22 @@ pub extern "C" fn ContextZext(ctx: *mut Context, a: AstIdx, width: u8) -> AstIdx
 pub extern "C" fn ContextTrunc(ctx: *mut Context, a: AstIdx, width: u8) -> AstIdx {
     unsafe {
         let id = (*ctx).arena.trunc(a, width);
+        return id;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ContextICmp(ctx: *mut Context, pred: Predicate, a: AstIdx, b: AstIdx) -> AstIdx {
+    unsafe {
+        let id = (*ctx).arena.icmp(pred, a, b);
+        return id;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ContextSelect(ctx: *mut Context, a: AstIdx, b: AstIdx, c: AstIdx) -> AstIdx {
+    unsafe {
+        let id = (*ctx).arena.select(a, b, c);
         return id;
     }
 }
