@@ -644,6 +644,31 @@ impl Language for SimpleAst {
     /// not the children `Id`s.
     fn matches(&self, other: &Self) -> bool {
         std::mem::discriminant(self) == ::std::mem::discriminant(other)
+            && match (self, other) {
+                (SimpleAst::Add(_), SimpleAst::Add(_))
+                | (SimpleAst::Mul(_), SimpleAst::Mul(_))
+                | (SimpleAst::Pow(_), SimpleAst::Pow(_))
+                | (SimpleAst::And(_), SimpleAst::And(_))
+                | (SimpleAst::Or(_), SimpleAst::Or(_))
+                | (SimpleAst::Xor(_), SimpleAst::Xor(_))
+                | (SimpleAst::Neg(_), SimpleAst::Neg(_))
+                | (SimpleAst::Lshr(_), SimpleAst::Lshr(_)) => true,
+                (
+                    SimpleAst::Constant { c: c1, width: w1 },
+                    SimpleAst::Constant { c: c2, width: w2 },
+                ) => c1 == c2 && w1 == w2,
+                (
+                    SimpleAst::Symbol { id: id1, width: w1 },
+                    SimpleAst::Symbol { id: id2, width: w2 },
+                ) => id1 == id2 && w1 == w2,
+                (SimpleAst::Zext { a: _, to: to1 }, SimpleAst::Zext { a: _, to: to2 }) => {
+                    to1 == to2
+                }
+                (SimpleAst::Trunc { a: _, to: to1 }, SimpleAst::Trunc { a: _, to: to2 }) => {
+                    to1 == to2
+                }
+                _ => false,
+            }
     }
 
     /// Returns the children of thsi e-node.
@@ -678,6 +703,78 @@ impl Language for SimpleAst {
             SimpleAst::Symbol { .. } => &mut [],
             SimpleAst::Zext { a, .. } => std::slice::from_mut(a),
             SimpleAst::Trunc { a, .. } => std::slice::from_mut(a),
+        }
+    }
+}
+
+impl ::std::fmt::Display for SimpleAst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SimpleAst::Add(_) => f.write_str("+"),
+            SimpleAst::Mul(_) => f.write_str("*"),
+            SimpleAst::Pow(_) => f.write_str("**"),
+            SimpleAst::And(_) => f.write_str("&"),
+            SimpleAst::Or(_) => f.write_str("|"),
+            SimpleAst::Xor(_) => f.write_str("^"),
+            SimpleAst::Neg(_) => f.write_str("~"),
+            SimpleAst::Lshr(_) => f.write_str(">>"),
+            SimpleAst::Constant { c, width } => f.write_str(format!("{}:{}", c, width).as_str()),
+            SimpleAst::Symbol { id, width } => f.write_str(format!("v{}:{}", id, width).as_str()),
+            SimpleAst::Zext { a, to } => todo!("zx"),
+            SimpleAst::Trunc { a, to } => todo!("tr"),
+        }
+    }
+}
+
+fn parse_constant(op: &str) -> Option<(u64, u8)> {
+    let parts: Vec<&str> = op.split(':').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let c = parts[0].parse::<u64>().ok()?;
+    let width = parts[1].parse::<u8>().ok()?;
+    Some((c, width))
+}
+
+fn parse_symbol(op: &str) -> Option<(u32, u8)> {
+    let parts: Vec<&str> = op.split(':').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let id_str = parts[0];
+    if !id_str.starts_with('v') {
+        return None;
+    }
+
+    let id = id_str[1..].parse::<u32>().ok()?;
+    let width = parts[1].parse::<u8>().ok()?;
+    Some((id, width))
+}
+
+impl egg::FromOp for SimpleAst {
+    type Error = egg::FromOpError;
+
+    fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
+        match op {
+            "+" => Ok(SimpleAst::Add([children[0], children[1]])),
+            "*" => Ok(SimpleAst::Mul([children[0], children[1]])),
+            "**" => Ok(SimpleAst::Pow([children[0], children[1]])),
+            "&" => Ok(SimpleAst::And([children[0], children[1]])),
+            "|" => Ok(SimpleAst::Or([children[0], children[1]])),
+            "^" => Ok(SimpleAst::Xor([children[0], children[1]])),
+            "~" => Ok(SimpleAst::Neg([children[0]])),
+            ">>" => Ok(SimpleAst::Lshr([children[0], children[1]])),
+            _ => {
+                if let Some((c, width)) = parse_constant(op) {
+                    Ok(SimpleAst::Constant { c, width })
+                } else if let Some((id, width)) = parse_symbol(op) {
+                    Ok(SimpleAst::Symbol { id, width })
+                } else {
+                    panic!("Cannot parse enode with op {}", op)
+                }
+            }
         }
     }
 }
