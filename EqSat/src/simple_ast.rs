@@ -90,7 +90,7 @@ impl Arena {
             imut_data: 0,
         };
 
-        return self.insert_ast_node(SimpleAst::Add { a, b }, data);
+        return self.insert_ast_node(SimpleAst::Add([a, b]), data);
     }
 
     pub fn mul(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
@@ -146,7 +146,7 @@ impl Arena {
             imut_data: 0,
         };
 
-        return self.insert_ast_node(SimpleAst::Mul { a, b }, data);
+        return self.insert_ast_node(SimpleAst::Mul([a, b]), data);
     }
 
     pub fn pow(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
@@ -173,26 +173,26 @@ impl Arena {
             imut_data: 0,
         };
 
-        return self.insert_ast_node(SimpleAst::Pow { a, b }, data);
+        return self.insert_ast_node(SimpleAst::Pow([a, b]), data);
     }
 
     pub fn and(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
         let kb = KnownBits::and(&self.get_data(a).known_bits, &self.get_data(b).known_bits);
         let data = self.compute_bitwise_data(a, b, kb);
-        return self.insert_ast_node(SimpleAst::And { a, b }, data);
+        return self.insert_ast_node(SimpleAst::And([a, b]), data);
     }
 
     pub fn or(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
         let kb = KnownBits::or(&self.get_data(a).known_bits, &self.get_data(b).known_bits);
         let data = self.compute_bitwise_data(a, b, kb);
 
-        return self.insert_ast_node(SimpleAst::Or { a, b }, data);
+        return self.insert_ast_node(SimpleAst::Or([a, b]), data);
     }
 
     pub fn xor(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
         let kb = KnownBits::xor(&self.get_data(a).known_bits, &self.get_data(b).known_bits);
         let data = self.compute_bitwise_data(a, b, kb);
-        return self.insert_ast_node(SimpleAst::Xor { a, b }, data);
+        return self.insert_ast_node(SimpleAst::Xor([a, b]), data);
     }
 
     pub fn xor_many(&mut self, nodes: &Vec<AstIdx>) -> AstIdx {
@@ -220,7 +220,7 @@ impl Arena {
             known_bits: known_bits,
             imut_data: 0,
         };
-        return self.insert_ast_node(SimpleAst::Neg { a }, data);
+        return self.insert_ast_node(SimpleAst::Neg([a]), data);
     }
 
     pub fn lshr(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
@@ -239,7 +239,7 @@ impl Arena {
             known_bits: known_bits,
             imut_data: 0,
         };
-        return self.insert_ast_node(SimpleAst::Lshr { a, b }, data);
+        return self.insert_ast_node(SimpleAst::Lshr([a, b]), data);
     }
 
     pub fn zext(&mut self, a: AstIdx, width: u8) -> AstIdx {
@@ -264,7 +264,7 @@ impl Arena {
             imut_data: 0,
         };
 
-        return self.insert_ast_node(SimpleAst::Zext { a, to: width }, data);
+        return self.insert_ast_node(SimpleAst::Zext { a: a, to: width }, data);
     }
 
     pub fn trunc(&mut self, a: AstIdx, width: u8) -> AstIdx {
@@ -289,7 +289,7 @@ impl Arena {
             imut_data: 0,
         };
 
-        return self.insert_ast_node(SimpleAst::Trunc { a, to: width }, data);
+        return self.insert_ast_node(SimpleAst::Trunc { a: a, to: width }, data);
     }
 
     pub fn constant(&mut self, c: u64, width: u8) -> AstIdx {
@@ -590,16 +590,16 @@ impl Language for Expr {
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum SimpleAst {
     // Arithmetic operators:
-    Add { a: AstIdx, b: AstIdx },
-    Mul { a: AstIdx, b: AstIdx },
-    Pow { a: AstIdx, b: AstIdx },
+    Add([AstIdx; 2]),
+    Mul([AstIdx; 2]),
+    Pow([AstIdx; 2]),
     // Bitwise operators:
-    And { a: AstIdx, b: AstIdx },
-    Or { a: AstIdx, b: AstIdx },
-    Xor { a: AstIdx, b: AstIdx },
-    Neg { a: AstIdx },
+    And([AstIdx; 2]),
+    Or([AstIdx; 2]),
+    Xor([AstIdx; 2]),
+    Neg([AstIdx; 1]),
     // Shift operators:
-    Lshr { a: AstIdx, b: AstIdx },
+    Lshr([AstIdx; 2]),
     // Literals:
     Constant { c: u64, width: u8 },
     Symbol { id: u32, width: u8 },
@@ -825,18 +825,18 @@ impl AstPrinter {
 
     fn print_node(&mut self, ctx: &Context, ast: &SimpleAst) {
         let operator = match ast {
-            SimpleAst::Add { a, b } => "+",
-            SimpleAst::Mul { a, b } => "*",
-            SimpleAst::Pow { a, b } => "**",
-            SimpleAst::And { a, b } => "&",
-            SimpleAst::Or { a, b } => "|",
-            SimpleAst::Xor { a, b } => "^",
-            SimpleAst::Neg { a } => "~",
-            SimpleAst::Lshr { a, b } => ">>",
+            SimpleAst::Add { .. } => "+",
+            SimpleAst::Mul { .. } => "*",
+            SimpleAst::Pow { .. } => "**",
+            SimpleAst::And { .. } => "&",
+            SimpleAst::Or { .. } => "|",
+            SimpleAst::Xor { .. } => "^",
+            SimpleAst::Neg(a) => "~",
+            SimpleAst::Lshr { .. } => ">>",
             SimpleAst::Constant { c, width } => "",
             SimpleAst::Symbol { id, width } => "",
-            SimpleAst::Zext { a, to } => "zx",
-            SimpleAst::Trunc { a, to } => "tr",
+            SimpleAst::Zext { .. } => "zx",
+            SimpleAst::Trunc { .. } => "tr",
         };
 
         // Don't put parens for constants or symbols
@@ -845,13 +845,13 @@ impl AstPrinter {
         }
 
         match ast {
-            SimpleAst::Add { a, b }
-            | SimpleAst::Mul { a, b }
-            | SimpleAst::Pow { a, b }
-            | SimpleAst::And { a, b }
-            | SimpleAst::Or { a, b }
-            | SimpleAst::Xor { a, b }
-            | SimpleAst::Lshr { a, b } => {
+            SimpleAst::Add([a, b])
+            | SimpleAst::Mul([a, b])
+            | SimpleAst::Pow([a, b])
+            | SimpleAst::And([a, b])
+            | SimpleAst::Or([a, b])
+            | SimpleAst::Xor([a, b])
+            | SimpleAst::Lshr([a, b]) => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
                 self.output.push_str(&format!("{}", operator));
                 self.print_node(ctx, ctx.arena.get_node(*b));
@@ -864,7 +864,7 @@ impl AstPrinter {
                 self.print_node(ctx, ctx.arena.get_node(*a));
                 self.output.push_str(&format!(" {} i{}", operator, to));
             }
-            SimpleAst::Neg { a } => {
+            SimpleAst::Neg([a]) => {
                 self.output.push('~');
                 self.print_node(ctx, ctx.arena.get_node(*a));
             }
@@ -893,14 +893,14 @@ pub fn eval_ast(ctx: &Context, idx: AstIdx, value_mapping: &HashMap<AstIdx, u64>
     let ast = ctx.arena.get_node(idx);
     let e = |i: &AstIdx| eval_ast(ctx, *i, value_mapping);
     match ast {
-        SimpleAst::Add { a, b } => e(a).wrapping_add(e(b)),
-        SimpleAst::Mul { a, b } => e(a).wrapping_mul(e(b)),
-        SimpleAst::Pow { a, b } => todo!(),
-        SimpleAst::And { a, b } => e(a) & e(b),
-        SimpleAst::Or { a, b } => e(a) | e(b),
-        SimpleAst::Xor { a, b } => e(a) ^ e(b),
-        SimpleAst::Lshr { a, b } => e(a) >> e(b),
-        SimpleAst::Neg { a } => !e(a),
+        SimpleAst::Add([a, b]) => e(a).wrapping_add(e(b)),
+        SimpleAst::Mul([a, b]) => e(a).wrapping_mul(e(b)),
+        SimpleAst::Pow([a, b]) => todo!(),
+        SimpleAst::And([a, b]) => e(a) & e(b),
+        SimpleAst::Or([a, b]) => e(a) | e(b),
+        SimpleAst::Xor([a, b]) => e(a) ^ e(b),
+        SimpleAst::Lshr([a, b]) => e(a) >> e(b),
+        SimpleAst::Neg([a]) => !e(a),
         SimpleAst::Constant { c, width } => *c,
         SimpleAst::Symbol { id, width } => *value_mapping.get(&idx).unwrap(),
         SimpleAst::Zext { a, to } => get_modulo_mask(ctx.arena.get_width(*a)) & e(a),
@@ -916,27 +916,27 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
     let mut ast = ctx.arena.get_node(idx).clone();
 
     match ast {
-        SimpleAst::Add { a, b }
-        | SimpleAst::Mul { a, b }
-        | SimpleAst::Pow { a, b }
-        | SimpleAst::And { a, b }
-        | SimpleAst::Or { a, b }
-        | SimpleAst::Xor { a, b }
-        | SimpleAst::Lshr { a, b } => {
+        SimpleAst::Add([a, b])
+        | SimpleAst::Mul([a, b])
+        | SimpleAst::Pow([a, b])
+        | SimpleAst::And([a, b])
+        | SimpleAst::Or([a, b])
+        | SimpleAst::Xor([a, b])
+        | SimpleAst::Lshr([a, b]) => {
             let op1 = recursive_simplify(ctx, a);
             let op2 = recursive_simplify(ctx, b);
             ast = match ast {
-                SimpleAst::Add { a, b } => ctx.add(op1, op2),
-                SimpleAst::Mul { a, b } => ctx.mul(op1, op2),
-                SimpleAst::Pow { a, b } => ctx.pow(op1, op2),
-                SimpleAst::And { a, b } => ctx.and(op1, op2),
-                SimpleAst::Or { a, b } => ctx.or(op1, op2),
-                SimpleAst::Xor { a, b } => ctx.xor(op1, op2),
-                SimpleAst::Lshr { a, b } => ctx.lshr(op1, op2),
+                SimpleAst::Add(_) => ctx.add(op1, op2),
+                SimpleAst::Mul(_) => ctx.mul(op1, op2),
+                SimpleAst::Pow(_) => ctx.pow(op1, op2),
+                SimpleAst::And(_) => ctx.and(op1, op2),
+                SimpleAst::Or(_) => ctx.or(op1, op2),
+                SimpleAst::Xor(_) => ctx.xor(op1, op2),
+                SimpleAst::Lshr(_) => ctx.lshr(op1, op2),
                 _ => unreachable!(),
             };
         }
-        SimpleAst::Neg { a } => {
+        SimpleAst::Neg([a]) => {
             let op1 = recursive_simplify(ctx, a);
             ast = ctx.neg(op1)
         }
@@ -1034,14 +1034,14 @@ fn collect_var_indices_internal(
         collect_var_indices_internal(ctx, b, visited, out_vars);
     };
     match ast {
-        SimpleAst::Add { a, b }
-        | SimpleAst::Mul { a, b }
-        | SimpleAst::Pow { a, b }
-        | SimpleAst::And { a, b }
-        | SimpleAst::Or { a, b }
-        | SimpleAst::Xor { a, b }
-        | SimpleAst::Lshr { a, b } => vbin(*a, *b),
-        SimpleAst::Neg { a } | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
+        SimpleAst::Add([a, b])
+        | SimpleAst::Mul([a, b])
+        | SimpleAst::Pow([a, b])
+        | SimpleAst::And([a, b])
+        | SimpleAst::Or([a, b])
+        | SimpleAst::Xor([a, b])
+        | SimpleAst::Lshr([a, b]) => vbin(*a, *b),
+        SimpleAst::Neg([a]) | SimpleAst::Zext { a: a, .. } | SimpleAst::Trunc { a: a, .. } => {
             collect_var_indices_internal(ctx, *a, visited, out_vars)
         }
         SimpleAst::Constant { c, width } => return,
@@ -1252,18 +1252,18 @@ pub extern "C" fn ContextGetOpcode(ctx: *const Context, id: AstIdx) -> u8 {
 pub fn get_opcode(ctx: &Context, id: AstIdx) -> u8 {
     let ast = ctx.arena.get_node(id);
     return match ast {
-        SimpleAst::Add { a, b } => 1,
-        SimpleAst::Mul { a, b } => 2,
-        SimpleAst::Pow { a, b } => 3,
-        SimpleAst::And { a, b } => 4,
-        SimpleAst::Or { a, b } => 5,
-        SimpleAst::Xor { a, b } => 6,
-        SimpleAst::Neg { a } => 7,
-        SimpleAst::Lshr { a, b } => 8,
-        SimpleAst::Constant { c, width } => 9,
-        SimpleAst::Symbol { id, width } => 10,
-        SimpleAst::Zext { a, to } => 11,
-        SimpleAst::Trunc { a, to } => 12,
+        SimpleAst::Add { .. } => 1,
+        SimpleAst::Mul { .. } => 2,
+        SimpleAst::Pow { .. } => 3,
+        SimpleAst::And { .. } => 4,
+        SimpleAst::Or { .. } => 5,
+        SimpleAst::Xor { .. } => 6,
+        SimpleAst::Neg { .. } => 7,
+        SimpleAst::Lshr { .. } => 8,
+        SimpleAst::Constant { .. } => 9,
+        SimpleAst::Symbol { .. } => 10,
+        SimpleAst::Zext { .. } => 11,
+        SimpleAst::Trunc { .. } => 12,
     };
 }
 
@@ -1340,14 +1340,14 @@ pub extern "C" fn ContextGetOp0(ctx: *const Context, id: AstIdx) -> AstIdx {
 pub fn get_op0(ctx: &Context, id: AstIdx) -> AstIdx {
     let ast = ctx.arena.get_node(id);
     return match ast {
-        SimpleAst::Add { a, b } => *a,
-        SimpleAst::Mul { a, b } => *a,
-        SimpleAst::Pow { a, b } => *a,
-        SimpleAst::And { a, b } => *a,
-        SimpleAst::Or { a, b } => *a,
-        SimpleAst::Xor { a, b } => *a,
-        SimpleAst::Neg { a } => *a,
-        SimpleAst::Lshr { a, b } => *a,
+        SimpleAst::Add([a, b]) => *a,
+        SimpleAst::Mul([a, b]) => *a,
+        SimpleAst::Pow([a, b]) => *a,
+        SimpleAst::And([a, b]) => *a,
+        SimpleAst::Or([a, b]) => *a,
+        SimpleAst::Xor([a, b]) => *a,
+        SimpleAst::Neg([a]) => *a,
+        SimpleAst::Lshr([a, b]) => *a,
         SimpleAst::Zext { a, to } => *a,
         SimpleAst::Trunc { a, to } => *a,
         _ => unreachable!("Type has no first operand!"),
@@ -1366,13 +1366,13 @@ pub extern "C" fn ContextGetOp1(ctx: *mut Context, id: AstIdx) -> AstIdx {
 pub fn get_op1(ctx: &Context, id: AstIdx) -> AstIdx {
     let ast = (*ctx).arena.get_node(id);
     return match ast {
-        SimpleAst::Add { a, b } => *b,
-        SimpleAst::Mul { a, b } => *b,
-        SimpleAst::Pow { a, b } => *b,
-        SimpleAst::And { a, b } => *b,
-        SimpleAst::Or { a, b } => *b,
-        SimpleAst::Xor { a, b } => *b,
-        SimpleAst::Lshr { a, b } => *b,
+        SimpleAst::Add([a, b]) => *b,
+        SimpleAst::Mul([a, b]) => *b,
+        SimpleAst::Pow([a, b]) => *b,
+        SimpleAst::And([a, b]) => *b,
+        SimpleAst::Or([a, b]) => *b,
+        SimpleAst::Xor([a, b]) => *b,
+        SimpleAst::Lshr([a, b]) => *b,
         _ => unreachable!("Type has no second operand!"),
     };
 }
@@ -1619,15 +1619,15 @@ unsafe fn jit_rec(
         SimpleAst::Constant { c, width } => {
             jit_constant(*c, page, offset);
         }
-        SimpleAst::Neg { a } => {
+        SimpleAst::Neg([a]) => {
             jit_rec(ctx, *a, node_to_var, page, offset);
             emit_u8(page, offset, POP_RSI);
             emit(page, offset, &[0x48, 0xF7, 0xD6]);
             emit_u8(page, offset, PUSH_RSI);
         }
-        SimpleAst::Add { a, b } => binop(*a, *b, &[0x48, 0x01, 0xFE], offset),
-        SimpleAst::Mul { a, b } => binop(*a, *b, &[0x48, 0x0F, 0xAF, 0xF7], offset),
-        SimpleAst::Pow { a, b } => {
+        SimpleAst::Add([a, b]) => binop(*a, *b, &[0x48, 0x01, 0xFE], offset),
+        SimpleAst::Mul([a, b]) => binop(*a, *b, &[0x48, 0x0F, 0xAF, 0xF7], offset),
+        SimpleAst::Pow([a, b]) => {
             // Save the value of rcx/rdx on the stack, because these are used throughout the rest of the jitted function.
             emit_u8(page, offset, PUSH_RCX);
             emit_u8(page, offset, PUSH_RDX);
@@ -1654,9 +1654,9 @@ unsafe fn jit_rec(
             // push rax
             emit_u8(page, offset, PUSH_RAX);
         }
-        SimpleAst::And { a, b } => binop(*a, *b, &[0x48, 0x21, 0xFE], offset),
-        SimpleAst::Or { a, b } => binop(*a, *b, &[0x48, 0x09, 0xFE], offset),
-        SimpleAst::Xor { a, b } => binop(*a, *b, &[0x48, 0x31, 0xFE], offset),
+        SimpleAst::And([a, b]) => binop(*a, *b, &[0x48, 0x21, 0xFE], offset),
+        SimpleAst::Or([a, b]) => binop(*a, *b, &[0x48, 0x09, 0xFE], offset),
+        SimpleAst::Xor([a, b]) => binop(*a, *b, &[0x48, 0x31, 0xFE], offset),
         SimpleAst::Symbol { id, width } => {
             let var_idx = node_to_var[&node];
 
@@ -1702,7 +1702,7 @@ unsafe fn jit_rec(
             // and [rsp+8], rax
             emit(page, offset, &[0x48, 0x21, 0x04, 0x24]);
         }
-        SimpleAst::Lshr { a, b } => todo!(),
+        SimpleAst::Lshr([a, b]) => todo!(),
     };
 
     // mov rax, constant
@@ -2338,10 +2338,10 @@ pub fn get_demanded_vars_mask(
 
             1 << var_idx
         }
-        SimpleAst::Neg { a } => {
+        SimpleAst::Neg([a]) => {
             get_demanded_vars_mask(ctx, *a, variables, variable_count, demanded_vars_map)
         }
-        SimpleAst::And { a, b } | SimpleAst::Xor { a, b } | SimpleAst::And { a, b } => {
+        SimpleAst::And([a, b]) | SimpleAst::Xor([a, b]) | SimpleAst::And([a, b]) => {
             let a_mask =
                 get_demanded_vars_mask(ctx, *a, variables, variable_count, demanded_vars_map);
             let b_mask =
@@ -2374,7 +2374,7 @@ pub fn simplify_rec(
     if let SimpleAst::Constant { c, width } = ast {
         return idx;
     }
-    if let SimpleAst::Neg { a } = ast {
+    if let SimpleAst::Neg([a]) = ast {
         let child = simplify_rec(
             ctx,
             db,
@@ -2452,9 +2452,9 @@ pub fn simplify_rec(
             if sum.count_ones() <= 4 {
                 //let new_id = ctx.arena.or(old_id, *term);
                 let new_id = match ast {
-                    SimpleAst::And { a, b } => ctx.arena.and(old_id, *term),
-                    SimpleAst::Or { a, b } => ctx.arena.or(old_id, *term),
-                    SimpleAst::Xor { a, b } => ctx.arena.xor(old_id, *term),
+                    SimpleAst::And([a, b]) => ctx.arena.and(old_id, *term),
+                    SimpleAst::Or([a, b]) => ctx.arena.or(old_id, *term),
+                    SimpleAst::Xor([a, b]) => ctx.arena.xor(old_id, *term),
                     _ => panic!("Unexpected node type!"),
                 };
                 decompositions[i] = (sum, new_id);
@@ -2488,9 +2488,9 @@ pub fn simplify_rec(
             simplified = Some(reduced);
         } else {
             simplified = match ast {
-                SimpleAst::And { a, b } => Some(ctx.arena.and(simplified.unwrap(), reduced)),
-                SimpleAst::Or { a, b } => Some(ctx.arena.or(simplified.unwrap(), reduced)),
-                SimpleAst::Xor { a, b } => Some(ctx.arena.xor(simplified.unwrap(), reduced)),
+                SimpleAst::And([a, b]) => Some(ctx.arena.and(simplified.unwrap(), reduced)),
+                SimpleAst::Or([a, b]) => Some(ctx.arena.or(simplified.unwrap(), reduced)),
+                SimpleAst::Xor([a, b]) => Some(ctx.arena.xor(simplified.unwrap(), reduced)),
                 _ => panic!("Unexpected node type!"),
             };
         }
@@ -2866,20 +2866,20 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
 
         let node = ctx.arena.get_node(idx).clone();
         match node {
-            SimpleAst::Add { a, b }
-            | SimpleAst::Mul { a, b }
-            | SimpleAst::Pow { a, b }
-            | SimpleAst::And { a, b }
-            | SimpleAst::Or { a, b }
-            | SimpleAst::Xor { a, b }
-            | SimpleAst::Lshr { a, b } => {
+            SimpleAst::Add([a, b])
+            | SimpleAst::Mul([a, b])
+            | SimpleAst::Pow([a, b])
+            | SimpleAst::And([a, b])
+            | SimpleAst::Or([a, b])
+            | SimpleAst::Xor([a, b])
+            | SimpleAst::Lshr([a, b]) => {
                 Self::collect_info(ctx, a, dfs);
                 Self::collect_info(ctx, b, dfs);
 
                 Self::inc_users(ctx, a);
                 Self::inc_users(ctx, b);
             }
-            SimpleAst::Neg { a } | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
+            SimpleAst::Neg([a]) | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
                 Self::collect_info(ctx, a, dfs);
                 Self::inc_users(ctx, a);
             }
@@ -2921,13 +2921,13 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
             let width = ctx.arena.get_width(idx) as u32;
             let node = ctx.arena.get_node(idx).clone();
             match node {
-                SimpleAst::Add { a, b }
-                | SimpleAst::Mul { a, b }
-                | SimpleAst::Pow { a, b }
-                | SimpleAst::And { a, b }
-                | SimpleAst::Or { a, b }
-                | SimpleAst::Xor { a, b }
-                | SimpleAst::Lshr { a, b } => {
+                SimpleAst::Add([a, b])
+                | SimpleAst::Mul([a, b])
+                | SimpleAst::Pow([a, b])
+                | SimpleAst::And([a, b])
+                | SimpleAst::Or([a, b])
+                | SimpleAst::Xor([a, b])
+                | SimpleAst::Lshr([a, b]) => {
                     self.lower_binop(ctx, assembler, idx, node, width, node_info)
                 }
                 SimpleAst::Constant { c, width } => self.lower_constant(assembler, c),
@@ -3011,12 +3011,12 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         }
 
         match node {
-            SimpleAst::Add { a, b } => assembler.add_reg_reg(lhs_dest, rhs_dest),
-            SimpleAst::Mul { a, b } => assembler.imul_reg_reg(lhs_dest, rhs_dest),
-            SimpleAst::And { a, b } => assembler.and_reg_reg(lhs_dest, rhs_dest),
-            SimpleAst::Or { a, b } => assembler.or_reg_reg(lhs_dest, rhs_dest),
-            SimpleAst::Xor { a, b } => assembler.xor_reg_reg(lhs_dest, rhs_dest),
-            SimpleAst::Lshr { a, b } => {
+            SimpleAst::Add([a, b]) => assembler.add_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Mul([a, b]) => assembler.imul_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::And([a, b]) => assembler.and_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Or([a, b]) => assembler.or_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Xor([a, b]) => assembler.xor_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Lshr([a, b]) => {
                 if width % 8 != 0 {
                     panic!("Cannot jit lshr with non power of 2 width!");
                 }
@@ -3031,7 +3031,7 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
                 assembler.shr_reg_cl(lhs_dest);
                 assembler.pop_reg(Register::RCX);
             }
-            SimpleAst::Pow { a, b } => {
+            SimpleAst::Pow([a, b]) => {
                 for r in VOLATILE_REGS.iter() {
                     assembler.push_reg(*r);
                 }
