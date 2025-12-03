@@ -554,7 +554,7 @@ pub enum Expr {
     Trunc { id: Id, to: u8 },
 }
 
-impl Language for Expr {
+impl Language for SimpleAst {
     type Discriminant = std::mem::Discriminant<Self>;
 
     /// Return the `Discriminant` of this node.
@@ -569,29 +569,43 @@ impl Language for Expr {
         std::mem::discriminant(self) == ::std::mem::discriminant(other)
     }
 
-    /// Returns the children of this e-node.
+    /// Returns the children of thsi e-node.
     fn children(&self) -> &[Id] {
-        return match self {
-            Expr::Add(children) => children,
-            Expr::Mul(children) => children,
-            Expr::Pow(children) => children,
-            Expr::And(children) => children,
-            Expr::Or(children) => children,
-            Expr::Xor(children) => children,
-            Expr::Neg(children) => children,
-            Expr::Lshr(children) => children,
-            Expr::Zext { id, .. } => std::slice::from_ref(id),
-            Expr::Trunc { id, .. } => std::slice::from_ref(id),
-            Expr::Constant { .. } | Expr::Symbol { .. } => &[],
-        };
+        match self {
+            SimpleAst::Add(children) => children,
+            SimpleAst::Mul(children) => children,
+            SimpleAst::Pow(children) => children,
+            SimpleAst::And(children) => children,
+            SimpleAst::Or(children) => children,
+            SimpleAst::Xor(children) => children,
+            SimpleAst::Neg(children) => children,
+            SimpleAst::Lshr(children) => children,
+            SimpleAst::Constant { .. } => &[],
+            SimpleAst::Symbol { .. } => &[],
+            SimpleAst::Zext { a, .. } => std::slice::from_ref(a),
+            SimpleAst::Trunc { a, .. } => std::slice::from_ref(a),
+        }
     }
     /// Returns a mutable slice of the children of this e-node.
     fn children_mut(&mut self) -> &mut [Id] {
-        todo!()
+        match self {
+            SimpleAst::Add(children) => children,
+            SimpleAst::Mul(children) => children,
+            SimpleAst::Pow(children) => children,
+            SimpleAst::And(children) => children,
+            SimpleAst::Or(children) => children,
+            SimpleAst::Xor(children) => children,
+            SimpleAst::Neg(children) => children,
+            SimpleAst::Lshr(children) => children,
+            SimpleAst::Constant { .. } => &mut [],
+            SimpleAst::Symbol { .. } => &mut [],
+            SimpleAst::Zext { a, .. } => std::slice::from_mut(a),
+            SimpleAst::Trunc { a, .. } => std::slice::from_mut(a),
+        }
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub enum SimpleAst {
     // Arithmetic operators:
     Add([AstIdx; 2]),
