@@ -31,9 +31,13 @@ use crate::{
 #[repr(C)]
 pub struct Empty();
 
+/*
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 #[repr(C)]
 pub struct AstIdx(pub u32);
+*/
+//use egg::Id as pubAstIdx;
+pub type AstIdx = egg::Id;
 
 pub struct Arena {
     pub elements: Vec<(SimpleAst, AstData)>,
@@ -365,7 +369,7 @@ impl Arena {
             return idx;
         }
 
-        let idx = AstIdx(self.elements.len() as u32);
+        let idx = AstIdx::from(self.elements.len() as usize);
         self.elements.push((node.clone(), data));
         self.ast_to_idx.insert(node, idx);
         idx
@@ -2258,7 +2262,7 @@ pub fn factor(
         let mut elems = maybe_elems.unwrap();
 
         // Get the variable
-        let mut result: AstIdx = AstIdx(0);
+        let mut result: AstIdx = AstIdx::from(0);
         unsafe {
             result = *variables.wrapping_add(var_idx as usize);
         }
