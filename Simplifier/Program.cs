@@ -13,6 +13,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 
 bool printUsage = false;
+bool onlyLinear = false;
 uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = false;
@@ -36,6 +37,9 @@ for (int i = 0; i < args.Length; i++)
     {
         case "-h":
             printUsage = true;
+            break;
+        case "-l":
+            onlyLinear = true;
             break;
         case "-b":
             bitWidth = uint.Parse(args[i + 1]);
@@ -73,6 +77,14 @@ var id = RustAstParser.Parse(ctx, inputText, bitWidth);
 Console.WriteLine($"\nExpression: {ctx.GetAstString(id)}\n\n\n");
 
 var input = id;
+
+// Run only the linear simplifier if requested
+if (onlyLinear)
+{
+    id = LinearSimplifier.Run(bitWidth, ctx, input, false, true);
+    goto done;
+}
+
 id = ctx.RecursiveSimplify(id);
 for (int i = 0; i < 3; i++)
 {
@@ -101,6 +113,7 @@ for (int i = 0; i < 3; i++)
     Console.WriteLine($"Eqsat run {i} yielded: {ctx.GetAstString(id)}\n\n");
 }
 
+done:
 Console.WriteLine($"Simplified to: {ctx.GetAstString(id)}\n\nwith cost: {ctx.GetCost(id)}");
 
 if (!proveEquivalence)
