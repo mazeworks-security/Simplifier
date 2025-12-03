@@ -59,6 +59,10 @@ namespace Mba.Simplifier.Jit
             Diff(nameof(IAmd64Assembler.NotReg), reg1);
             Diff(nameof(IAmd64Assembler.ShlRegCl), reg1);
             Diff(nameof(IAmd64Assembler.ShrRegCl), reg1);
+            Diff(nameof(IAmd64Assembler.SeteReg), reg1);
+            Diff(nameof(IAmd64Assembler.SetneReg), reg1);
+            Diff(nameof(IAmd64Assembler.SetaReg), reg1);
+            Diff(nameof(IAmd64Assembler.SetbReg), reg1);
             Diff(nameof(IAmd64Assembler.CallReg), reg1);
 
             // Diff reg, constant instants
@@ -92,6 +96,13 @@ namespace Mba.Simplifier.Jit
             Diff(nameof(IAmd64Assembler.XorRegReg), reg2, reg1);
             Diff(nameof(IAmd64Assembler.ImulRegReg), reg1, reg2);
             Diff(nameof(IAmd64Assembler.ImulRegReg), reg2, reg1);
+            Diff(nameof(IAmd64Assembler.CmpRegReg), reg1, reg2);
+            Diff(nameof(IAmd64Assembler.CmpRegReg), reg2, reg1);
+            Diff(nameof(IAmd64Assembler.TestRegReg), reg1, reg2);
+            Diff(nameof(IAmd64Assembler.TestRegReg), reg2, reg1);
+            Diff(nameof(IAmd64Assembler.CmoveRegReg), reg1, reg2);
+            Diff(nameof(IAmd64Assembler.CmoveRegReg), reg2, reg1);
+
 
             // Diff reg, reg, constant insts
             for (int _ = 0; _ < 100; _++)

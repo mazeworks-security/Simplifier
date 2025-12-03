@@ -6,10 +6,15 @@ use std::{
     f32::consts::PI,
     ffi::{CStr, CString},
     ops::Add,
+    time::Duration,
     u16, u64, vec,
 };
 
 use ahash::AHashMap;
+use egg::{
+    define_language, rewrite, Analysis, Applier, BackoffScheduler, DidMerge, EClass, Extractor, Id,
+    Language, PatternAst, RecExpr, Runner, Subst, Symbol, Var,
+};
 use iced_x86::{
     code_asm::{st, CodeAssembler},
     Code, Instruction, Register,
@@ -23,16 +28,22 @@ use crate::{
     },
     known_bits::{self, *},
     mba::{self, Context as MbaContext},
+    rules::get_generated_rules,
     truth_table_database::{TruthTable, TruthTableDatabase},
+    EGraphCostFn,
 };
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 #[repr(C)]
 pub struct Empty();
 
+/*
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 #[repr(C)]
 pub struct AstIdx(pub u32);
+*/
+//use egg::Id as pubAstIdx;
+pub type AstIdx = egg::Id;
 
 pub struct Arena {
     pub elements: Vec<(SimpleAst, AstData)>,
@@ -44,26 +55,105 @@ pub struct Arena {
     name_to_symbol: AHashMap<(String, u8), u32>,
 }
 
-impl Arena {
-    pub fn new() -> Self {
-        let elements = Vec::with_capacity(65536);
-        let ast_to_idx = AHashMap::with_capacity(65536);
-        let isle_cache = AHashMap::with_capacity(65536);
-
-        let symbol_ids = Vec::with_capacity(255);
-        let name_to_symbol = AHashMap::with_capacity(255);
-
-        Arena {
-            elements: elements,
-            ast_to_idx: ast_to_idx,
-            isle_cache: isle_cache,
-
-            symbol_ids: symbol_ids,
-            name_to_symbol: name_to_symbol,
-        }
+pub trait INodeUtil {
+    fn get_width(&self, idx: AstIdx) -> u8 {
+        self.get_data(idx).width
     }
 
-    pub fn add(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+    fn get_cost(&self, idx: AstIdx) -> u32 {
+        self.get_data(idx).cost
+    }
+
+    fn get_has_poly(&self, idx: AstIdx) -> bool {
+        self.get_data(idx).has_poly
+    }
+
+    fn get_class(&self, a: AstIdx) -> AstClass {
+        self.get_data(a).class
+    }
+
+    fn get_data(&self, idx: AstIdx) -> AstData;
+
+    fn get_bin_width(&self, a: AstIdx, b: AstIdx) -> u8 {
+        let a_width = self.get_width(a);
+        let b_width = self.get_width(b);
+        if a_width != b_width {
+            panic!("Width mismatch! {} != {}", a_width, b_width);
+        }
+
+        return a_width;
+    }
+
+    fn get_bin_cost(&self, a: AstIdx, b: AstIdx) -> u32 {
+        let c1 = self.get_data(a).cost;
+        let c2 = self.get_data(b).cost;
+        (1 as u32).saturating_add(c1.saturating_add(c2))
+    }
+
+    fn union_contains_poly_part(&self, a: AstIdx, b: AstIdx) -> bool {
+        let a_data = self.get_data(a);
+        let b_data = self.get_data(b);
+        return a_data.has_poly || b_data.has_poly;
+    }
+
+    fn compute_bitwise_data(&self, a: AstIdx, b: AstIdx, known_bits: KnownBits) -> AstData {
+        let width = self.get_bin_width(a, b);
+        let cost = self.get_bin_cost(a, b);
+        let has_poly = self.union_contains_poly_part(a, b);
+
+        let max = self.compute_bitwise_class(a, b);
+        let data = AstData {
+            width: width,
+            cost: cost,
+            has_poly: has_poly,
+            class: max,
+            known_bits: known_bits,
+            imut_data: 0,
+        };
+
+        return data;
+    }
+
+    fn compute_bitwise_class(&self, a: AstIdx, b: AstIdx) -> AstClass {
+        let c1 = self.get_class(a);
+        let c2 = self.get_class(b);
+
+        let has_constant = self.is_constant(a) || self.is_constant(b);
+
+        let mut max = max_class(
+            c1,
+            c2,
+            if has_constant {
+                AstClass::BitwiseWithConstants
+            } else {
+                AstClass::Bitwise
+            },
+        );
+
+        if max > AstClass::BitwiseWithConstants {
+            max = AstClass::Nonlinear;
+        }
+
+        return max;
+    }
+
+    fn compute_bitwise_with_const_class(&self, a: AstIdx) -> AstClass {
+        let c1 = self.get_class(a);
+
+        let has_constant = true;
+
+        let mut max = max_class(c1, c1, AstClass::BitwiseWithConstants);
+
+        if max > AstClass::BitwiseWithConstants {
+            max = AstClass::Nonlinear;
+        }
+
+        return max;
+    }
+
+    fn is_constant(&self, idx: AstIdx) -> bool;
+
+    fn add_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
         let width = self.get_bin_width(a, b);
         let cost = self.get_bin_cost(a, b);
         let has_poly = self.union_contains_poly_part(a, b);
@@ -89,36 +179,15 @@ impl Arena {
             imut_data: 0,
         };
 
-        return self.insert_ast_node(SimpleAst::Add { a, b }, data);
+        return data;
     }
 
-    pub fn mul(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
-        let a_value = self.get_node(a);
-        let b_value = self.get_node(b);
-
-        // Apply constant folding for 1*x and 0*x.
-        let mut is_one_part_constant = false;
-        if let SimpleAst::Constant { c: c1, width } = a_value {
-            is_one_part_constant = true;
-            if *c1 == 1 {
-                return b;
-            } else if *c1 == 0 {
-                return self.constant(0, self.get_width(a));
-            }
-        // TODO: If the second part is a constant, swap the operands and apply constant folding.
-        } else if let SimpleAst::Constant { c: c1, width } = b_value {
-            is_one_part_constant = true;
-
-            if *c1 == 1 {
-                return a;
-            } else if *c1 == 0 {
-                return self.constant(0, self.get_width(a));
-            }
-        }
-
+    fn mul_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
         let width = self.get_bin_width(a, b);
         let cost = self.get_bin_cost(a, b);
         // If neither operand is a constant, or either operand contains a polynomial part, the result will contain a polynomial part.
+        let is_one_part_constant = self.is_constant(a) || self.is_constant(b);
+
         let has_poly = !is_one_part_constant || self.union_contains_poly_part(a, b);
 
         // Determine the "highest" classification of the two operands, defaulting to linear.
@@ -144,19 +213,10 @@ impl Arena {
             known_bits: known_bits,
             imut_data: 0,
         };
-
-        return self.insert_ast_node(SimpleAst::Mul { a, b }, data);
+        return data;
     }
 
-    pub fn pow(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
-        let op1 = self.get_node(a);
-        let op2 = self.get_node(b);
-        if let SimpleAst::Constant { c: c1, width } = op1 {
-            if let SimpleAst::Constant { c: c2, width } = op2 {
-                let result = self.constant(Pow(*c1, *c2), self.get_width(a));
-                return result;
-            }
-        }
+    fn pow_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
         let width = self.get_bin_width(a, b);
         let cost = self.get_bin_cost(a, b);
         // TODO: If we have e.g. x**3, computed known bits using repeated squaring.
@@ -171,39 +231,28 @@ impl Arena {
             known_bits: known_bits,
             imut_data: 0,
         };
-
-        return self.insert_ast_node(SimpleAst::Pow { a, b }, data);
+        return data;
     }
 
-    pub fn and(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+    fn and_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
         let kb = KnownBits::and(&self.get_data(a).known_bits, &self.get_data(b).known_bits);
         let data = self.compute_bitwise_data(a, b, kb);
-        return self.insert_ast_node(SimpleAst::And { a, b }, data);
+        return data;
     }
 
-    pub fn or(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+    fn or_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
         let kb = KnownBits::or(&self.get_data(a).known_bits, &self.get_data(b).known_bits);
         let data = self.compute_bitwise_data(a, b, kb);
-
-        return self.insert_ast_node(SimpleAst::Or { a, b }, data);
+        return data;
     }
 
-    pub fn xor(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+    fn xor_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
         let kb = KnownBits::xor(&self.get_data(a).known_bits, &self.get_data(b).known_bits);
         let data = self.compute_bitwise_data(a, b, kb);
-        return self.insert_ast_node(SimpleAst::Xor { a, b }, data);
+        return data;
     }
 
-    pub fn xor_many(&mut self, nodes: &Vec<AstIdx>) -> AstIdx {
-        let mut initial = nodes[0];
-        for i in 1..nodes.len() {
-            initial = self.xor(initial, nodes[i]);
-        }
-
-        return initial;
-    }
-
-    pub fn neg(&mut self, a: AstIdx) -> AstIdx {
+    fn neg_transfer(&mut self, a: AstIdx) -> AstData {
         let width = self.get_width(a);
         let cost = (1 as u32).saturating_add(self.get_data(a).cost);
         let has_poly = self.get_data(a).has_poly;
@@ -219,12 +268,12 @@ impl Arena {
             known_bits: known_bits,
             imut_data: 0,
         };
-        return self.insert_ast_node(SimpleAst::Neg { a }, data);
+        return data;
     }
 
-    pub fn lshr(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+    fn lshr_transfer(&mut self, a: AstIdx, b: AstIdx) -> AstData {
         let width = self.get_width(a);
-        let cost = (1 as u32).saturating_add(self.get_data(a).cost);
+        let cost = self.get_bin_cost(a, b);
         let has_poly = self.get_data(a).has_poly;
         let class = AstClass::Nonlinear;
 
@@ -238,21 +287,15 @@ impl Arena {
             known_bits: known_bits,
             imut_data: 0,
         };
-        return self.insert_ast_node(SimpleAst::Lshr { a, b }, data);
+        return data;
     }
 
-    pub fn zext(&mut self, a: AstIdx, width: u8) -> AstIdx {
-        if let SimpleAst::Constant { c: c1, .. } = self.get_node(a) {
-            let result = self.constant(*c1, width);
-            return result;
-        }
-
+    fn zext_transfer(&mut self, a: AstIdx, width: u8) -> AstData {
         let cost = (1 as u32).saturating_add(self.get_data(a).cost);
         let has_poly = self.get_has_poly(a);
 
         let mask = get_modulo_mask(self.get_width(a));
-        let mask_node = self.constant(mask, width);
-        let class = self.compute_bitwise_class(a, mask_node);
+        let class = self.compute_bitwise_with_const_class(a);
         let known_bits = KnownBits::zext(&self.get_data(a).known_bits, width as u32);
         let data = AstData {
             width: width,
@@ -262,22 +305,15 @@ impl Arena {
             known_bits: known_bits,
             imut_data: 0,
         };
-
-        return self.insert_ast_node(SimpleAst::Zext { a, to: width }, data);
+        return data;
     }
 
-    pub fn trunc(&mut self, a: AstIdx, width: u8) -> AstIdx {
-        if let SimpleAst::Constant { c: c1, .. } = self.get_node(a) {
-            let result = self.constant(*c1, width);
-            return result;
-        }
-
+    fn trunc_transfer(&mut self, a: AstIdx, width: u8) -> AstData {
         let cost = (1 as u32).saturating_add(self.get_data(a).cost);
         let has_poly = self.get_has_poly(a);
 
         let mask = get_modulo_mask(width);
-        let mask_node = self.constant(mask, width);
-        let class = self.compute_bitwise_class(a, mask_node);
+        let class = self.compute_bitwise_with_const_class(a);
         let known_bits = KnownBits::trunc(&self.get_data(a).known_bits, width as u32);
         let data = AstData {
             width: width,
@@ -287,11 +323,10 @@ impl Arena {
             known_bits: known_bits,
             imut_data: 0,
         };
-
-        return self.insert_ast_node(SimpleAst::Trunc { a, to: width }, data);
+        return data;
     }
 
-    pub fn constant(&mut self, c: u64, width: u8) -> AstIdx {
+    fn constant_transfer(&mut self, c: u64, width: u8) -> AstData {
         let data = AstData {
             width: width,
             cost: 1,
@@ -301,13 +336,10 @@ impl Arena {
             imut_data: 0,
         };
 
-        // Reduce the constant modulo 2**width
-        let constant = get_modulo_mask(width) & c;
-
-        return self.insert_ast_node(SimpleAst::Constant { c: constant, width }, data);
+        return data;
     }
 
-    pub fn symbol(&mut self, id: u32, width: u8) -> AstIdx {
+    fn symbol_transfer(&mut self, width: u8) -> AstData {
         let data = AstData {
             width: width,
             cost: 1,
@@ -316,7 +348,216 @@ impl Arena {
             known_bits: KnownBits::empty(width),
             imut_data: 0,
         };
+        return data;
+    }
 
+    fn icmp_transfer(&mut self, pred: Predicate, a: AstIdx, b: AstIdx) -> AstData {
+        let width = 1;
+        let cost = self.get_bin_cost(a, b);
+        let has_poly = self.get_data(a).has_poly;
+        let class = AstClass::Nonlinear;
+
+        let known_bits = KnownBits::icmp(
+            pred,
+            &self.get_data(a).known_bits,
+            &self.get_data(b).known_bits,
+        );
+        let data = AstData {
+            width: width,
+            cost: cost,
+            has_poly: has_poly,
+            class: class,
+            known_bits: known_bits,
+            imut_data: 0,
+        };
+        return data;
+    }
+
+    fn select_transfer(&mut self, a: AstIdx, b: AstIdx, c: AstIdx) -> AstData {
+        let width = self.get_bin_width(b, c);
+        let cost = (self.get_data(c).cost).saturating_add(self.get_bin_cost(b, c));
+        let has_poly = self.union_contains_poly_part(b, c) || self.get_data(a).has_poly;
+        let class = AstClass::Nonlinear;
+
+        let known_bits = KnownBits::select(
+            &self.get_data(a).known_bits,
+            &self.get_data(b).known_bits,
+            &self.get_data(c).known_bits,
+        );
+        let data = AstData {
+            width: width,
+            cost: cost,
+            has_poly: has_poly,
+            class: class,
+            known_bits: known_bits,
+            imut_data: 0,
+        };
+        return data;
+    }
+}
+
+impl INodeUtil for Arena {
+    fn get_data(&self, idx: AstIdx) -> AstData {
+        unsafe { self.elements.get_unchecked(idx.0 as usize).1 }
+    }
+
+    fn is_constant(&self, idx: AstIdx) -> bool {
+        let ast = self.get_node(idx);
+        match ast {
+            SimpleAst::Constant { .. } => true,
+            _ => false,
+        }
+    }
+}
+
+impl Arena {
+    pub fn new() -> Self {
+        let elements = Vec::with_capacity(65536);
+        let ast_to_idx = AHashMap::with_capacity(65536);
+        let isle_cache = AHashMap::with_capacity(65536);
+
+        let symbol_ids = Vec::with_capacity(255);
+        let name_to_symbol = AHashMap::with_capacity(255);
+
+        Arena {
+            elements: elements,
+            ast_to_idx: ast_to_idx,
+            isle_cache: isle_cache,
+
+            symbol_ids: symbol_ids,
+            name_to_symbol: name_to_symbol,
+        }
+    }
+
+    pub fn add(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let data = self.add_transfer(a, b);
+        return self.insert_ast_node(SimpleAst::Add([a, b]), data);
+    }
+
+    pub fn mul(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let a_value = self.get_node(a);
+        let b_value = self.get_node(b);
+
+        // Apply constant folding for 1*x and 0*x.
+        if let SimpleAst::Constant { c: c1, width } = a_value {
+            if *c1 == 1 {
+                return b;
+            } else if *c1 == 0 {
+                return self.constant(0, self.get_width(a));
+            }
+        // TODO: If the second part is a constant, swap the operands and apply constant folding.
+        } else if let SimpleAst::Constant { c: c1, width } = b_value {
+            if *c1 == 1 {
+                return a;
+            } else if *c1 == 0 {
+                return self.constant(0, self.get_width(a));
+            }
+        }
+        let data = self.mul_transfer(a, b);
+        return self.insert_ast_node(SimpleAst::Mul([a, b]), data);
+    }
+
+    pub fn pow(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let op1 = self.get_node(a);
+        let op2 = self.get_node(b);
+        if let SimpleAst::Constant { c: c1, width } = op1 {
+            if let SimpleAst::Constant { c: c2, width } = op2 {
+                let result = self.constant(Pow(*c1, *c2), self.get_width(a));
+                return result;
+            }
+        }
+
+        let data = self.pow_transfer(a, b);
+        return self.insert_ast_node(SimpleAst::Pow([a, b]), data);
+    }
+
+    pub fn and(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let data = self.and_transfer(a, b);
+        return self.insert_ast_node(SimpleAst::And([a, b]), data);
+    }
+
+    pub fn or(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let data = self.or_transfer(a, b);
+        return self.insert_ast_node(SimpleAst::Or([a, b]), data);
+    }
+
+    pub fn xor(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let data = self.xor_transfer(a, b);
+        return self.insert_ast_node(SimpleAst::Xor([a, b]), data);
+    }
+
+    pub fn xor_many(&mut self, nodes: &Vec<AstIdx>) -> AstIdx {
+        let mut initial = nodes[0];
+        for i in 1..nodes.len() {
+            initial = self.xor(initial, nodes[i]);
+        }
+
+        return initial;
+    }
+
+    pub fn neg(&mut self, a: AstIdx) -> AstIdx {
+        let data = self.neg_transfer(a);
+        return self.insert_ast_node(SimpleAst::Neg([a]), data);
+    }
+
+    pub fn lshr(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let data = self.lshr_transfer(a, b);
+        return self.insert_ast_node(SimpleAst::Lshr([a, b]), data);
+    }
+
+    pub fn zext(&mut self, a: AstIdx, width: u8) -> AstIdx {
+        if let SimpleAst::Constant { c: c1, .. } = self.get_node(a) {
+            let result = self.constant(*c1, width);
+            return result;
+        }
+
+        let data = self.zext_transfer(a, width);
+        let c = self.constant(width as u64, 8);
+        return self.insert_ast_node(SimpleAst::Zext([a, c]), data);
+    }
+
+    pub fn trunc(&mut self, a: AstIdx, width: u8) -> AstIdx {
+        if let SimpleAst::Constant { c: c1, .. } = self.get_node(a) {
+            let result = self.constant(*c1, width);
+            return result;
+        }
+
+        let data = self.trunc_transfer(a, width);
+        let c = self.constant(width as u64, 8);
+        return self.insert_ast_node(SimpleAst::Trunc([a, c]), data);
+    }
+
+    pub fn icmp(&mut self, pred: Predicate, a: AstIdx, b: AstIdx) -> AstIdx {
+        let data = self.icmp_transfer(pred, a, b);
+        return self.insert_ast_node(
+            SimpleAst::ICmp {
+                predicate: pred,
+                children: [a, b],
+            },
+            data,
+        );
+    }
+
+    pub fn select(&mut self, a: AstIdx, b: AstIdx, c: AstIdx) -> AstIdx {
+        let data = self.select_transfer(a, b, c);
+        return self.insert_ast_node(
+            SimpleAst::Select {
+                children: [a, b, c],
+            },
+            data,
+        );
+    }
+
+    pub fn constant(&mut self, c: u64, width: u8) -> AstIdx {
+        let data = self.constant_transfer(c, width);
+        // Reduce the constant modulo 2**width
+        let constant = get_modulo_mask(width) & c;
+
+        return self.insert_ast_node(SimpleAst::Constant { c: constant, width }, data);
+    }
+
+    pub fn symbol(&mut self, id: u32, width: u8) -> AstIdx {
+        let data = self.symbol_transfer(width);
         return self.insert_ast_node(
             SimpleAst::Symbol {
                 id: id,
@@ -335,14 +576,7 @@ impl Arena {
         let symbol_id = self.symbol_ids.len() as u32;
         self.name_to_symbol.insert((name.clone(), width), symbol_id);
 
-        let data = AstData {
-            width: width,
-            cost: 1,
-            has_poly: false,
-            class: AstClass::Bitwise,
-            known_bits: KnownBits::empty(width),
-            imut_data: 0,
-        };
+        let data = self.symbol_transfer(width);
 
         let symbol_ast_idx = self.insert_ast_node(
             SimpleAst::Symbol {
@@ -364,10 +598,34 @@ impl Arena {
             return idx;
         }
 
-        let idx = AstIdx(self.elements.len() as u32);
+        let idx = AstIdx::from(self.elements.len() as usize);
         self.elements.push((node.clone(), data));
         self.ast_to_idx.insert(node, idx);
         idx
+    }
+
+    pub fn insert_node(&mut self, node: SimpleAst) -> AstIdx {
+        match node {
+            SimpleAst::Add([a, b]) => self.add(a, b),
+            SimpleAst::Mul([a, b]) => self.mul(a, b),
+            SimpleAst::Pow([a, b]) => self.pow(a, b),
+            SimpleAst::And([a, b]) => self.and(a, b),
+            SimpleAst::Or([a, b]) => self.or(a, b),
+            SimpleAst::Xor([a, b]) => self.xor(a, b),
+            SimpleAst::Neg([a]) => self.neg(a),
+            SimpleAst::Lshr([a, b]) => self.lshr(a, b),
+            SimpleAst::Zext([a, to]) => self.zext(a, self.get_constant(to) as u8),
+            SimpleAst::Trunc([a, to]) => self.trunc(a, self.get_constant(to) as u8),
+            SimpleAst::Constant { c, width } => self.constant(c, width),
+            SimpleAst::Symbol { id, width } => self.symbol(id, width),
+            SimpleAst::ICmp {
+                predicate,
+                children: [a, b],
+            } => self.icmp(predicate, a, b),
+            SimpleAst::Select {
+                children: [a, b, c],
+            } => self.select(a, b, c),
+        }
     }
 
     #[inline(always)]
@@ -375,27 +633,19 @@ impl Arena {
         unsafe { &self.elements.get_unchecked(idx.0 as usize).0 }
     }
 
-    pub fn get_width(&self, idx: AstIdx) -> u8 {
-        self.get_data(idx).width
-    }
-
-    pub fn get_cost(&self, idx: AstIdx) -> u32 {
-        self.get_data(idx).cost
-    }
-
-    pub fn get_has_poly(&self, idx: AstIdx) -> bool {
-        self.get_data(idx).has_poly
-    }
-
-    pub fn get_class(&self, a: AstIdx) -> AstClass {
-        self.get_data(a).class
-    }
-
     pub fn is_constant(&self, idx: AstIdx) -> bool {
         let ast = self.get_node(idx);
         match ast {
             SimpleAst::Constant { .. } => true,
             _ => false,
+        }
+    }
+
+    pub fn get_constant(&self, idx: AstIdx) -> u64 {
+        let ast = self.get_node(idx);
+        match ast {
+            SimpleAst::Constant { c, width } => *c,
+            _ => panic!("Node is not a constant!"),
         }
     }
 
@@ -409,69 +659,6 @@ impl Arena {
 
     pub fn set_data(&mut self, idx: AstIdx, data: AstData) {
         unsafe { self.elements.get_unchecked_mut(idx.0 as usize).1 = data }
-    }
-
-    pub fn get_bin_width(&self, a: AstIdx, b: AstIdx) -> u8 {
-        let a_width = self.get_width(a);
-        let b_width = self.get_width(b);
-        if a_width != b_width {
-            panic!("Width mismatch! {} != {}", a_width, b_width);
-        }
-
-        return a_width;
-    }
-
-    pub fn get_bin_cost(&self, a: AstIdx, b: AstIdx) -> u32 {
-        let c1 = self.get_data(a).cost;
-        let c2 = self.get_data(b).cost;
-        (1 as u32).saturating_add(c1.saturating_add(c2))
-    }
-
-    pub fn union_contains_poly_part(&self, a: AstIdx, b: AstIdx) -> bool {
-        let a_data = self.get_data(a);
-        let b_data = self.get_data(b);
-        return a_data.has_poly || b_data.has_poly;
-    }
-
-    pub fn compute_bitwise_data(&self, a: AstIdx, b: AstIdx, known_bits: KnownBits) -> AstData {
-        let width = self.get_bin_width(a, b);
-        let cost = self.get_bin_cost(a, b);
-        let has_poly = self.union_contains_poly_part(a, b);
-
-        let max = self.compute_bitwise_class(a, b);
-        let data = AstData {
-            width: width,
-            cost: cost,
-            has_poly: has_poly,
-            class: max,
-            known_bits: known_bits,
-            imut_data: 0,
-        };
-
-        return data;
-    }
-
-    pub fn compute_bitwise_class(&self, a: AstIdx, b: AstIdx) -> AstClass {
-        let c1 = self.get_class(a);
-        let c2 = self.get_class(b);
-
-        let has_constant = self.is_constant(a) || self.is_constant(b);
-
-        let mut max = max_class(
-            c1,
-            c2,
-            if has_constant {
-                AstClass::BitwiseWithConstants
-            } else {
-                AstClass::Bitwise
-            },
-        );
-
-        if max > AstClass::BitwiseWithConstants {
-            max = AstClass::Nonlinear;
-        }
-
-        return max;
     }
 
     pub fn clear(&mut self) {
@@ -505,48 +692,493 @@ pub fn try_make_semilinear(max: AstClass, c1: AstClass, c2: AstClass) -> AstClas
     return max;
 }
 
-#[derive(Clone, Hash, PartialEq, Eq, Copy)]
+#[derive(Clone, Hash, PartialEq, Eq, Copy, Debug)]
 pub struct AstData {
     // Bit width
-    width: u8,
+    pub width: u8,
 
     // Size of the AST(note that this is the AST size rather than DAG size)
-    cost: u32,
+    pub cost: u32,
 
     // Indicates whether the node contains any nonlinear polynomial parts.
-    has_poly: bool,
+    pub has_poly: bool,
 
     // Classification of the ast
-    class: AstClass,
+    pub class: AstClass,
 
     // Known zero or one bits
-    known_bits: KnownBits,
+    pub known_bits: KnownBits,
 
     // Internal mutable data for use in different algorithms.
     // Specifically we use this field to avoid unnecessarily storing data in hashmaps.
     //  e.g "how many users does this node have?" can be stored here temporarily.
-    imut_data: u64,
+    pub imut_data: u64,
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+impl Language for SimpleAst {
+    type Discriminant = std::mem::Discriminant<Self>;
+
+    /// Return the `Discriminant` of this node.
+    fn discriminant(&self) -> Self::Discriminant {
+        std::mem::discriminant(self)
+    }
+
+    /// Returns true if this enode matches another enode.
+    /// This should only consider the operator and the arity,
+    /// not the children `Id`s.
+    fn matches(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == ::std::mem::discriminant(other)
+            && match (self, other) {
+                (SimpleAst::Add(_), SimpleAst::Add(_))
+                | (SimpleAst::Mul(_), SimpleAst::Mul(_))
+                | (SimpleAst::Pow(_), SimpleAst::Pow(_))
+                | (SimpleAst::And(_), SimpleAst::And(_))
+                | (SimpleAst::Or(_), SimpleAst::Or(_))
+                | (SimpleAst::Xor(_), SimpleAst::Xor(_))
+                | (SimpleAst::Neg(_), SimpleAst::Neg(_))
+                | (SimpleAst::Lshr(_), SimpleAst::Lshr(_))
+                | (SimpleAst::Zext(_), SimpleAst::Zext(_))
+                | (SimpleAst::Trunc(_), SimpleAst::Trunc(_)) => true,
+                (
+                    SimpleAst::Constant { c: c1, width: w1 },
+                    SimpleAst::Constant { c: c2, width: w2 },
+                ) => c1 == c2 && w1 == w2,
+                (
+                    SimpleAst::Symbol { id: id1, width: w1 },
+                    SimpleAst::Symbol { id: id2, width: w2 },
+                ) => id1 == id2 && w1 == w2,
+                (
+                    SimpleAst::ICmp {
+                        predicate: p1,
+                        children: c1,
+                    },
+                    SimpleAst::ICmp {
+                        predicate: p2,
+                        children: c2,
+                    },
+                ) => p1 == p2,
+                (SimpleAst::Select { children: c1 }, SimpleAst::Select { children: c2 }) => true,
+                _ => false,
+            }
+    }
+
+    /// Returns the children of thsi e-node.
+    fn children(&self) -> &[Id] {
+        match self {
+            SimpleAst::Add(children) => egg::LanguageChildren::as_slice(children),
+            SimpleAst::Mul(children) => children,
+            SimpleAst::Pow(children) => children,
+            SimpleAst::And(children) => children,
+            SimpleAst::Or(children) => children,
+            SimpleAst::Xor(children) => children,
+            SimpleAst::Neg(children) => children,
+            SimpleAst::Lshr(children) => children,
+            SimpleAst::Constant { .. } => &[],
+            SimpleAst::Symbol { .. } => &[],
+            SimpleAst::Zext(children) => children,
+            SimpleAst::Trunc(children) => children,
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => children,
+            SimpleAst::Select { children } => children,
+        }
+    }
+    /// Returns a mutable slice of the children of this e-node.
+    fn children_mut(&mut self) -> &mut [Id] {
+        match self {
+            SimpleAst::Add(children) => egg::LanguageChildren::as_mut_slice(children),
+            SimpleAst::Mul(children) => children,
+            SimpleAst::Pow(children) => children,
+            SimpleAst::And(children) => children,
+            SimpleAst::Or(children) => children,
+            SimpleAst::Xor(children) => children,
+            SimpleAst::Neg(children) => children,
+            SimpleAst::Lshr(children) => children,
+            SimpleAst::Constant { .. } => &mut [],
+            SimpleAst::Symbol { .. } => &mut [],
+            SimpleAst::Zext(children) => children,
+            SimpleAst::Trunc(children) => children,
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => children,
+            SimpleAst::Select { children } => children,
+        }
+    }
+}
+
+impl ::std::fmt::Display for SimpleAst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SimpleAst::Add(_) => f.write_str("+"),
+            SimpleAst::Mul(_) => f.write_str("*"),
+            SimpleAst::Pow(_) => f.write_str("**"),
+            SimpleAst::And(_) => f.write_str("&"),
+            SimpleAst::Or(_) => f.write_str("|"),
+            SimpleAst::Xor(_) => f.write_str("^"),
+            SimpleAst::Neg(_) => f.write_str("~"),
+            SimpleAst::Lshr(_) => f.write_str(">>"),
+            SimpleAst::Constant { c, width } => f.write_str(format!("{}:{}", c, width).as_str()),
+            SimpleAst::Symbol { id, width } => f.write_str(format!("v{}:{}", id, width).as_str()),
+            SimpleAst::Zext(_) => f.write_str("zx"),
+            SimpleAst::Trunc(_) => f.write_str("tr"),
+            //SimpleAst::Zext { a, to } => f.write_str(format!("zx i{}", to).as_str()),
+            //SimpleAst::Trunc { a, to } => f.write_str(format!("tr i{}", to).as_str()),
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => f.write_str(format!("icmp {}", predicate).as_str()),
+            SimpleAst::Select { children } => f.write_str("select"),
+        }
+    }
+}
+
+fn parse_constant(op: &str) -> Option<(u64, u8)> {
+    let parts: Vec<&str> = op.split(':').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let c = parts[0].parse::<u64>().ok()?;
+    let width = parts[1].parse::<u8>().ok()?;
+    Some((c, width))
+}
+
+fn parse_symbol(op: &str) -> Option<(u32, u8)> {
+    let parts: Vec<&str> = op.split(':').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let id_str = parts[0];
+    if !id_str.starts_with('v') {
+        return None;
+    }
+
+    let id = id_str[1..].parse::<u32>().ok()?;
+    let width = parts[1].parse::<u8>().ok()?;
+    Some((id, width))
+}
+
+fn parse_size_change(op: &str, is_zx: bool) -> Option<u8> {
+    if !op.starts_with(if is_zx { "zx i" } else { "tr i" }) {
+        return None;
+    }
+
+    let width_str = &op[4..];
+    let width = width_str.parse::<u8>().ok()?;
+    Some(width)
+}
+
+fn parse_icmp(op: &str) -> Option<Predicate> {
+    if !op.starts_with("icmp ") {
+        return None;
+    }
+
+    let pred_str = &op[5..];
+    let predicate = match pred_str {
+        "==" => Predicate::Eq,
+        "!=" => Predicate::Ne,
+        ">" => Predicate::Ugt,
+        ">=" => Predicate::Uge,
+        "<" => Predicate::Ult,
+        "<=" => Predicate::Ule,
+        ">s" => Predicate::Sgt,
+        ">=s" => Predicate::Sge,
+        "<s" => Predicate::Slt,
+        "<=s" => Predicate::Sle,
+        _ => return None,
+    };
+
+    Some(predicate)
+}
+
+impl egg::FromOp for SimpleAst {
+    type Error = egg::FromOpError;
+
+    fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
+        match op {
+            "+" => Ok(SimpleAst::Add([children[0], children[1]])),
+            "*" => Ok(SimpleAst::Mul([children[0], children[1]])),
+            "**" => Ok(SimpleAst::Pow([children[0], children[1]])),
+            "&" => Ok(SimpleAst::And([children[0], children[1]])),
+            "|" => Ok(SimpleAst::Or([children[0], children[1]])),
+            "^" => Ok(SimpleAst::Xor([children[0], children[1]])),
+            "~" => Ok(SimpleAst::Neg([children[0]])),
+            ">>" => Ok(SimpleAst::Lshr([children[0], children[1]])),
+            "zx" => Ok(SimpleAst::Zext([children[0], children[1]])),
+            "tr" => Ok(SimpleAst::Trunc([children[0], children[1]])),
+            "select" => Ok(SimpleAst::Select {
+                children: [children[0], children[1], children[2]],
+            }),
+            _ => {
+                if let Some((c, width)) = parse_constant(op) {
+                    //panic!("hello2");
+                    Ok(SimpleAst::Constant { c, width })
+                } else if let Some((id, width)) = parse_symbol(op) {
+                    //panic!("hello1");
+                    Ok(SimpleAst::Symbol { id, width })
+                // } else if let Some(to) = parse_size_change(op, true) {
+                //     Ok(SimpleAst::Zext { a: children[0], to })
+                // } else if let Some(to) = parse_size_change(op, false) {
+                //     Ok(SimpleAst::Trunc { a: children[0], to })
+                } else if let Some(predicate) = parse_icmp(op) {
+                    Ok(SimpleAst::ICmp {
+                        predicate,
+                        children: [children[0], children[1]],
+                    })
+                } else {
+                    panic!(
+                        "Cannot parse enode with op {} with {} children",
+                        op,
+                        children.len()
+                    )
+                }
+            }
+        }
+    }
+}
+
+pub type EEGraph = egg::EGraph<SimpleAst, MbaAnalysis>;
+pub type Rewrite = egg::Rewrite<SimpleAst, MbaAnalysis>;
+
+// Since Egg only supports a single analysis class per egraph,
+// we must perform multiple analyses at once. Namely constant folding, classification(e.g., "is this mba linear?"), and known bits analysis.
+#[derive(Default)]
+pub struct MbaAnalysis;
+
+pub struct EGraphUtil<'a> {
+    pub egraph: &'a egg::EGraph<SimpleAst, MbaAnalysis>,
+}
+
+impl<'a> INodeUtil for EGraphUtil<'a> {
+    fn get_data(&self, idx: Id) -> AstData {
+        self.egraph[idx].data.clone()
+    }
+
+    fn is_constant(&self, idx: Id) -> bool {
+        let data = self.egraph[idx].data;
+        return data.known_bits.is_constant();
+    }
+}
+
+impl Analysis<SimpleAst> for MbaAnalysis {
+    type Data = AstData;
+
+    fn make(egraph: &mut egg::EGraph<SimpleAst, Self>, enode: &SimpleAst, id: Id) -> Self::Data {
+        let mut util = EGraphUtil { egraph: &egraph };
+
+        let data = match enode {
+            SimpleAst::Add([a, b]) => util.add_transfer(*a, *b),
+            SimpleAst::Mul([a, b]) => util.mul_transfer(*a, *b),
+            SimpleAst::Pow([a, b]) => util.pow_transfer(*a, *b),
+            SimpleAst::And([a, b]) => util.and_transfer(*a, *b),
+            SimpleAst::Or([a, b]) => util.or_transfer(*a, *b),
+            SimpleAst::Xor([a, b]) => util.xor_transfer(*a, *b),
+            SimpleAst::Neg([a]) => util.neg_transfer(*a),
+            SimpleAst::Lshr([a, b]) => util.lshr_transfer(*a, *b),
+            // SimpleAst::Zext([a, to]) => util.zext_transfer(*a, *to),
+            // SimpleAst::Trunc([a, to]) => util.trunc_transfer(*a, *to),
+            SimpleAst::Zext([a, to]) => util.zext_transfer(
+                *a,
+                util.get_data(*to).known_bits.as_constant().unwrap() as u8,
+            ),
+            SimpleAst::Trunc([a, to]) => util.trunc_transfer(
+                *a,
+                util.get_data(*to).known_bits.as_constant().unwrap() as u8,
+            ),
+            SimpleAst::Constant { c, width } => util.constant_transfer(*c, *width),
+            SimpleAst::Symbol { id: _, width } => util.symbol_transfer(*width),
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => util.icmp_transfer(*predicate, children[0], children[1]),
+            SimpleAst::Select { children } => {
+                util.select_transfer(children[0], children[1], children[2])
+            }
+        };
+
+        return data;
+    }
+
+    fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
+        let to = a;
+        let from = b;
+
+        let kb1 = to.known_bits;
+        let kb2 = from.known_bits;
+        if let Some(c) = to.known_bits.as_constant() {
+            return DidMerge(false, true /* maybe */);
+        }
+
+        if let Some(new_cst) = from.known_bits.as_constant() {
+            to.known_bits = from.known_bits.clone();
+            to.cost = 1;
+            return DidMerge(true, false);
+        }
+
+        // Union until a fixedpoint is reached
+        if kb1 != kb2 {
+            let new = kb1.union(&kb2);
+            to.known_bits = new;
+
+            if new.is_constant() {
+                to.cost = 1;
+                return DidMerge(true, true); // yep
+            }
+
+            let new_for_to = new != kb1;
+            let new_for_from = new != kb2;
+            return DidMerge(new_for_to, new_for_from);
+        }
+
+        return DidMerge(false, false);
+    }
+
+    fn modify(egraph: &mut egg::EGraph<SimpleAst, Self>, id: Id) {
+        let kb = &egraph[id].data.known_bits;
+        if !kb.is_constant() {
+            return;
+        }
+
+        let c = SimpleAst::Constant {
+            c: kb.ones,
+            width: egraph[id].data.width,
+        };
+
+        let new_id = egraph.add(c);
+        egraph.union(id, new_id);
+
+        // To not prune, comment this out
+        egraph[id].nodes.retain(|n| n.is_leaf());
+    }
+}
+
+// NOTE: Remember to call `egraph.rebuild()` after invoking this function.
+pub fn add_to_egraph(
+    ctx: &Context,
+    egraph: &mut EEGraph,
+    idx: AstIdx,
+    idx_to_eclass: &mut AHashMap<AstIdx, Id>,
+) -> Id {
+    if let Some(&existing) = idx_to_eclass.get(&idx) {
+        return existing;
+    }
+
+    let mut v = |a| {
+        return add_to_egraph(ctx, egraph, a, idx_to_eclass);
+    };
+
+    // Update the children
+    let mut node = ctx.arena.get_node(idx).clone();
+    for child in node.children_mut() {
+        *child = v(*child);
+    }
+
+    let eclass = egraph.add(node.clone());
+    idx_to_eclass.insert(idx, eclass);
+
+    return eclass;
+}
+
+pub fn extract_from_egraph(ctx: &mut Context, egraph: &EEGraph, eclass: Id) -> AstIdx {
+    let cost_func = EGraphCostFn { egraph: &egraph };
+    let extractor = Extractor::new(&egraph, cost_func);
+    let rec_expr = extractor.find_best(eclass);
+    return from_rec_expr(ctx, egraph, &rec_expr.1);
+}
+/*
+pub fn extract_all_from_egraph(ctx: &mut Context, egraph: &EEGraph, eclass: Id) -> AstIdx {
+    let cost_func = EGraphCostFn { egraph: &egraph };
+    let extractor = Extractor::new(&egraph, cost_func);
+    let rec_expr = extractor.find_best(eclass);
+    return from_rec_expr(ctx, egraph, &rec_expr.1);
+}
+    */
+
+#[inline(never)]
+pub fn from_rec_expr(ctx: &mut Context, egraph: &EEGraph, rec_expr: &RecExpr<SimpleAst>) -> AstIdx {
+    let mut ids = vec![AstIdx::from(usize::MAX); rec_expr.len()];
+
+    // Update the children.
+    let vec = rec_expr.as_ref();
+    for node_idx in 0..vec.len() {
+        // Update the children.
+        let mut node = vec[node_idx].clone();
+        for child in node.children_mut() {
+            *child = ids[child.0 as usize];
+        }
+        ids[node_idx] = ctx.arena.insert_node(node);
+    }
+
+    return *ids.last().unwrap();
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
+#[repr(C)]
+pub enum Predicate {
+    Eq = 0,
+    Ne = 1,
+    Ugt = 2,
+    Uge = 3,
+    Ult = 4,
+    Ule = 5,
+    Sgt = 6,
+    Sge = 7,
+    Slt = 8,
+    Sle = 9,
+}
+
+impl ::std::fmt::Display for Predicate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Predicate::Eq => write!(f, "=="),
+            Predicate::Ne => write!(f, "!="),
+            Predicate::Ugt => write!(f, ">"),
+            Predicate::Uge => write!(f, ">="),
+            Predicate::Ult => write!(f, "<"),
+            Predicate::Ule => write!(f, "<="),
+            Predicate::Sgt => write!(f, ">s"),
+            Predicate::Sge => write!(f, ">=s"),
+            Predicate::Slt => write!(f, "<s"),
+            Predicate::Sle => write!(f, "<=s"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub enum SimpleAst {
     // Arithmetic operators:
-    Add { a: AstIdx, b: AstIdx },
-    Mul { a: AstIdx, b: AstIdx },
-    Pow { a: AstIdx, b: AstIdx },
+    Add([AstIdx; 2]),
+    Mul([AstIdx; 2]),
+    Pow([AstIdx; 2]),
     // Bitwise operators:
-    And { a: AstIdx, b: AstIdx },
-    Or { a: AstIdx, b: AstIdx },
-    Xor { a: AstIdx, b: AstIdx },
-    Neg { a: AstIdx },
+    And([AstIdx; 2]),
+    Or([AstIdx; 2]),
+    Xor([AstIdx; 2]),
+    Neg([AstIdx; 1]),
     // Shift operators:
-    Lshr { a: AstIdx, b: AstIdx },
+    Lshr([AstIdx; 2]),
     // Literals:
-    Constant { c: u64, width: u8 },
-    Symbol { id: u32, width: u8 },
+    Constant {
+        c: u64,
+        width: u8,
+    },
+    Symbol {
+        id: u32,
+        width: u8,
+    },
     // Special operators
-    Zext { a: AstIdx, to: u8 },
-    Trunc { a: AstIdx, to: u8 },
+    Zext([AstIdx; 2]),
+    Trunc([AstIdx; 2]),
+    ICmp {
+        predicate: Predicate,
+        children: [AstIdx; 2],
+    },
+    Select {
+        children: [AstIdx; 3],
+    },
 }
 
 pub struct Context {
@@ -687,6 +1319,16 @@ impl mba::Context for Context {
         self.arena.get_node(trunc).clone()
     }
 
+    fn icmp(&mut self, pred: Predicate, arg0: AstIdx, arg1: AstIdx) -> SimpleAst {
+        let icmp = self.arena.icmp(pred, arg0, arg1);
+        return self.arena.get_node(icmp).clone();
+    }
+
+    fn select(&mut self, arg0: AstIdx, arg1: AstIdx, arg2: AstIdx) -> SimpleAst {
+        let select = self.arena.select(arg0, arg1, arg2);
+        return self.arena.get_node(select).clone();
+    }
+
     fn any(&mut self, arg0: AstIdx) -> SimpleAst {
         return self.arena.get_node(arg0).clone();
     }
@@ -766,46 +1408,54 @@ impl AstPrinter {
 
     fn print_node(&mut self, ctx: &Context, ast: &SimpleAst) {
         let operator = match ast {
-            SimpleAst::Add { a, b } => "+",
-            SimpleAst::Mul { a, b } => "*",
-            SimpleAst::Pow { a, b } => "**",
-            SimpleAst::And { a, b } => "&",
-            SimpleAst::Or { a, b } => "|",
-            SimpleAst::Xor { a, b } => "^",
-            SimpleAst::Neg { a } => "~",
-            SimpleAst::Lshr { a, b } => ">>",
+            SimpleAst::Add { .. } => "+",
+            SimpleAst::Mul { .. } => "*",
+            SimpleAst::Pow { .. } => "**",
+            SimpleAst::And { .. } => "&",
+            SimpleAst::Or { .. } => "|",
+            SimpleAst::Xor { .. } => "^",
+            SimpleAst::Neg(a) => "~",
+            SimpleAst::Lshr { .. } => ">>",
             SimpleAst::Constant { c, width } => "",
             SimpleAst::Symbol { id, width } => "",
-            SimpleAst::Zext { a, to } => "zx",
-            SimpleAst::Trunc { a, to } => "tr",
+            SimpleAst::Zext { .. } => "zx",
+            SimpleAst::Trunc { .. } => "tr",
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => &predicate.clone().to_string(),
+            SimpleAst::Select { children } => "",
         };
 
         // Don't put parens for constants or symbols
-        if operator != "" {
+        let parens = operator != "" || matches!(ast, SimpleAst::Select { .. });
+        if parens {
             self.output.push_str("(")
         }
 
         match ast {
-            SimpleAst::Add { a, b }
-            | SimpleAst::Mul { a, b }
-            | SimpleAst::Pow { a, b }
-            | SimpleAst::And { a, b }
-            | SimpleAst::Or { a, b }
-            | SimpleAst::Xor { a, b }
-            | SimpleAst::Lshr { a, b } => {
+            SimpleAst::Add([a, b])
+            | SimpleAst::Mul([a, b])
+            | SimpleAst::Pow([a, b])
+            | SimpleAst::And([a, b])
+            | SimpleAst::Or([a, b])
+            | SimpleAst::Xor([a, b])
+            | SimpleAst::Lshr([a, b]) => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
                 self.output.push_str(&format!("{}", operator));
                 self.print_node(ctx, ctx.arena.get_node(*b));
             }
-            SimpleAst::Zext { a, to } => {
+            SimpleAst::Zext([a, to_id]) => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
+                let to = ctx.arena.get_constant(*to_id);
                 self.output.push_str(&format!(" {} i{}", operator, to));
             }
-            SimpleAst::Trunc { a, to } => {
+            SimpleAst::Trunc([a, to_id]) => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
+                let to = ctx.arena.get_constant(*to_id);
                 self.output.push_str(&format!(" {} i{}", operator, to));
             }
-            SimpleAst::Neg { a } => {
+            SimpleAst::Neg([a]) => {
                 self.output.push('~');
                 self.print_node(ctx, ctx.arena.get_node(*a));
             }
@@ -818,9 +1468,26 @@ impl AstPrinter {
                 ctx.arena.get_symbol_name(*id).clone(),
                 width
             )),
+            // (a) >= (b)
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => {
+                self.print_node(ctx, ctx.arena.get_node(children[0]));
+                self.output.push_str(&format!(" {} ", operator));
+                self.print_node(ctx, ctx.arena.get_node(children[1]));
+            }
+            // a ? b : c
+            SimpleAst::Select { children } => {
+                self.print_node(ctx, ctx.arena.get_node(children[0]));
+                self.output.push_str(&format!(" ? "));
+                self.print_node(ctx, ctx.arena.get_node(children[1]));
+                self.output.push_str(&format!(" : "));
+                self.print_node(ctx, ctx.arena.get_node(children[2]));
+            }
         }
 
-        if operator != "" {
+        if parens {
             self.output.push_str(")")
         }
     }
@@ -830,23 +1497,53 @@ pub fn get_modulo_mask(width: u8) -> u64 {
     return u64::MAX >> (64 - width);
 }
 
+fn cmp(pred: Predicate, a: u64, b: u64) -> bool {
+    let sa = a as i64;
+    let sb = b as i64;
+    match pred {
+        Predicate::Eq => a == b,
+        Predicate::Ne => a != b,
+        Predicate::Ugt => a > b,
+        Predicate::Uge => a >= b,
+        Predicate::Ult => a < b,
+        Predicate::Ule => a <= b,
+        Predicate::Sgt => sa > sb,
+        Predicate::Sge => sa >= sb,
+        Predicate::Slt => sa < sb,
+        Predicate::Sle => sa <= sb,
+    }
+}
+
 pub fn eval_ast(ctx: &Context, idx: AstIdx, value_mapping: &HashMap<AstIdx, u64>) -> u64 {
     let ast = ctx.arena.get_node(idx);
     let e = |i: &AstIdx| eval_ast(ctx, *i, value_mapping);
-    match ast {
-        SimpleAst::Add { a, b } => e(a).wrapping_add(e(b)),
-        SimpleAst::Mul { a, b } => e(a).wrapping_mul(e(b)),
-        SimpleAst::Pow { a, b } => todo!(),
-        SimpleAst::And { a, b } => e(a) & e(b),
-        SimpleAst::Or { a, b } => e(a) | e(b),
-        SimpleAst::Xor { a, b } => e(a) ^ e(b),
-        SimpleAst::Lshr { a, b } => e(a) >> e(b),
-        SimpleAst::Neg { a } => !e(a),
+    let r = match ast {
+        SimpleAst::Add([a, b]) => e(a).wrapping_add(e(b)),
+        SimpleAst::Mul([a, b]) => e(a).wrapping_mul(e(b)),
+        SimpleAst::Pow([a, b]) => todo!(),
+        SimpleAst::And([a, b]) => e(a) & e(b),
+        SimpleAst::Or([a, b]) => e(a) | e(b),
+        SimpleAst::Xor([a, b]) => e(a) ^ e(b),
+        SimpleAst::Lshr([a, b]) => e(a) >> e(b),
+        SimpleAst::Neg([a]) => !e(a),
         SimpleAst::Constant { c, width } => *c,
         SimpleAst::Symbol { id, width } => *value_mapping.get(&idx).unwrap(),
-        SimpleAst::Zext { a, to } => get_modulo_mask(ctx.arena.get_width(*a)) & e(a),
-        SimpleAst::Trunc { a, to } => get_modulo_mask(*to) & e(a),
-    }
+        SimpleAst::Zext([a, to]) => get_modulo_mask(ctx.arena.get_width(*a)) & e(a),
+        SimpleAst::Trunc([a, to]) => get_modulo_mask(ctx.arena.get_constant(*to) as u8) & e(a),
+        SimpleAst::ICmp {
+            predicate,
+            children,
+        } => cmp(predicate.clone(), e(&children[0]), e(&children[1])) as u64,
+        SimpleAst::Select { children } => {
+            if e(&children[0]) != 0 {
+                e(&children[1])
+            } else {
+                e(&children[2])
+            }
+        }
+    };
+
+    r & get_modulo_mask(ctx.arena.get_width(idx))
 }
 
 // Recursively apply ISLE over an AST.
@@ -857,40 +1554,56 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
     let mut ast = ctx.arena.get_node(idx).clone();
 
     match ast {
-        SimpleAst::Add { a, b }
-        | SimpleAst::Mul { a, b }
-        | SimpleAst::Pow { a, b }
-        | SimpleAst::And { a, b }
-        | SimpleAst::Or { a, b }
-        | SimpleAst::Xor { a, b }
-        | SimpleAst::Lshr { a, b } => {
+        SimpleAst::Add([a, b])
+        | SimpleAst::Mul([a, b])
+        | SimpleAst::Pow([a, b])
+        | SimpleAst::And([a, b])
+        | SimpleAst::Or([a, b])
+        | SimpleAst::Xor([a, b])
+        | SimpleAst::Lshr([a, b]) => {
             let op1 = recursive_simplify(ctx, a);
             let op2 = recursive_simplify(ctx, b);
             ast = match ast {
-                SimpleAst::Add { a, b } => ctx.add(op1, op2),
-                SimpleAst::Mul { a, b } => ctx.mul(op1, op2),
-                SimpleAst::Pow { a, b } => ctx.pow(op1, op2),
-                SimpleAst::And { a, b } => ctx.and(op1, op2),
-                SimpleAst::Or { a, b } => ctx.or(op1, op2),
-                SimpleAst::Xor { a, b } => ctx.xor(op1, op2),
-                SimpleAst::Lshr { a, b } => ctx.lshr(op1, op2),
+                SimpleAst::Add(_) => ctx.add(op1, op2),
+                SimpleAst::Mul(_) => ctx.mul(op1, op2),
+                SimpleAst::Pow(_) => ctx.pow(op1, op2),
+                SimpleAst::And(_) => ctx.and(op1, op2),
+                SimpleAst::Or(_) => ctx.or(op1, op2),
+                SimpleAst::Xor(_) => ctx.xor(op1, op2),
+                SimpleAst::Lshr(_) => ctx.lshr(op1, op2),
                 _ => unreachable!(),
             };
         }
-        SimpleAst::Neg { a } => {
+        SimpleAst::Neg([a]) => {
             let op1 = recursive_simplify(ctx, a);
             ast = ctx.neg(op1)
         }
-        SimpleAst::Zext { a, to } => {
+        SimpleAst::Zext([a, to_id]) => {
             let op1 = recursive_simplify(ctx, a);
-            ast = ctx.zext(op1, to);
+            let to = ctx.arena.get_constant(to_id);
+            ast = ctx.zext(op1, to as u8);
         }
-        SimpleAst::Trunc { a, to } => {
+        SimpleAst::Trunc([a, to_id]) => {
             let op1 = recursive_simplify(ctx, a);
-            ast = ctx.trunc(op1, to)
+            let to = ctx.arena.get_constant(to_id);
+            ast = ctx.trunc(op1, to as u8);
         }
         SimpleAst::Constant { c, width } => return idx,
         SimpleAst::Symbol { id, width } => return idx,
+        SimpleAst::ICmp {
+            predicate,
+            children,
+        } => {
+            let op1 = recursive_simplify(ctx, children[0]);
+            let op2 = recursive_simplify(ctx, children[1]);
+            ast = ctx.icmp(predicate, op1, op2);
+        }
+        SimpleAst::Select { children } => {
+            let op1 = recursive_simplify(ctx, children[0]);
+            let op2 = recursive_simplify(ctx, children[1]);
+            let op3 = recursive_simplify(ctx, children[2]);
+            ast = ctx.select(op1, op2, op3);
+        }
     }
 
     // Repeatedly invoke ISLE until a fixed point is reached.
@@ -974,21 +1687,31 @@ fn collect_var_indices_internal(
         collect_var_indices_internal(ctx, a, visited, out_vars);
         collect_var_indices_internal(ctx, b, visited, out_vars);
     };
+
     match ast {
-        SimpleAst::Add { a, b }
-        | SimpleAst::Mul { a, b }
-        | SimpleAst::Pow { a, b }
-        | SimpleAst::And { a, b }
-        | SimpleAst::Or { a, b }
-        | SimpleAst::Xor { a, b }
-        | SimpleAst::Lshr { a, b } => vbin(*a, *b),
-        SimpleAst::Neg { a } | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
+        SimpleAst::Add([a, b])
+        | SimpleAst::Mul([a, b])
+        | SimpleAst::Pow([a, b])
+        | SimpleAst::And([a, b])
+        | SimpleAst::Or([a, b])
+        | SimpleAst::Xor([a, b])
+        | SimpleAst::Lshr([a, b]) => vbin(*a, *b),
+        SimpleAst::Neg([a]) | SimpleAst::Zext([a, _]) | SimpleAst::Trunc([a, _]) => {
             collect_var_indices_internal(ctx, *a, visited, out_vars)
         }
         SimpleAst::Constant { c, width } => return,
         SimpleAst::Symbol { id, width } => {
             out_vars.insert(idx);
             return;
+        }
+        SimpleAst::ICmp {
+            predicate,
+            children,
+        } => vbin(children[0], children[1]),
+        SimpleAst::Select { children } => {
+            for c in children {
+                collect_var_indices_internal(ctx, *c, visited, out_vars);
+            }
         }
     }
 
@@ -1156,6 +1879,22 @@ pub extern "C" fn ContextTrunc(ctx: *mut Context, a: AstIdx, width: u8) -> AstId
 }
 
 #[no_mangle]
+pub extern "C" fn ContextICmp(ctx: *mut Context, pred: Predicate, a: AstIdx, b: AstIdx) -> AstIdx {
+    unsafe {
+        let id = (*ctx).arena.icmp(pred, a, b);
+        return id;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ContextSelect(ctx: *mut Context, a: AstIdx, b: AstIdx, c: AstIdx) -> AstIdx {
+    unsafe {
+        let id = (*ctx).arena.select(a, b, c);
+        return id;
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn ContextConstant(ctx: *mut Context, c: u64, width: u8) -> AstIdx {
     unsafe {
         let id = (*ctx).arena.constant(c, width);
@@ -1193,18 +1932,23 @@ pub extern "C" fn ContextGetOpcode(ctx: *const Context, id: AstIdx) -> u8 {
 pub fn get_opcode(ctx: &Context, id: AstIdx) -> u8 {
     let ast = ctx.arena.get_node(id);
     return match ast {
-        SimpleAst::Add { a, b } => 1,
-        SimpleAst::Mul { a, b } => 2,
-        SimpleAst::Pow { a, b } => 3,
-        SimpleAst::And { a, b } => 4,
-        SimpleAst::Or { a, b } => 5,
-        SimpleAst::Xor { a, b } => 6,
-        SimpleAst::Neg { a } => 7,
-        SimpleAst::Lshr { a, b } => 8,
-        SimpleAst::Constant { c, width } => 9,
-        SimpleAst::Symbol { id, width } => 10,
-        SimpleAst::Zext { a, to } => 11,
-        SimpleAst::Trunc { a, to } => 12,
+        SimpleAst::Add { .. } => 1,
+        SimpleAst::Mul { .. } => 2,
+        SimpleAst::Pow { .. } => 3,
+        SimpleAst::And { .. } => 4,
+        SimpleAst::Or { .. } => 5,
+        SimpleAst::Xor { .. } => 6,
+        SimpleAst::Neg { .. } => 7,
+        SimpleAst::Lshr { .. } => 8,
+        SimpleAst::Constant { .. } => 9,
+        SimpleAst::Symbol { .. } => 10,
+        SimpleAst::Zext { .. } => 11,
+        SimpleAst::Trunc { .. } => 12,
+        SimpleAst::ICmp {
+            predicate,
+            children,
+        } => 13,
+        SimpleAst::Select { children } => 14,
     };
 }
 
@@ -1280,19 +2024,7 @@ pub extern "C" fn ContextGetOp0(ctx: *const Context, id: AstIdx) -> AstIdx {
 
 pub fn get_op0(ctx: &Context, id: AstIdx) -> AstIdx {
     let ast = ctx.arena.get_node(id);
-    return match ast {
-        SimpleAst::Add { a, b } => *a,
-        SimpleAst::Mul { a, b } => *a,
-        SimpleAst::Pow { a, b } => *a,
-        SimpleAst::And { a, b } => *a,
-        SimpleAst::Or { a, b } => *a,
-        SimpleAst::Xor { a, b } => *a,
-        SimpleAst::Neg { a } => *a,
-        SimpleAst::Lshr { a, b } => *a,
-        SimpleAst::Zext { a, to } => *a,
-        SimpleAst::Trunc { a, to } => *a,
-        _ => unreachable!("Type has no first operand!"),
-    };
+    return ast.children()[0];
 }
 
 #[no_mangle]
@@ -1306,16 +2038,37 @@ pub extern "C" fn ContextGetOp1(ctx: *mut Context, id: AstIdx) -> AstIdx {
 
 pub fn get_op1(ctx: &Context, id: AstIdx) -> AstIdx {
     let ast = (*ctx).arena.get_node(id);
-    return match ast {
-        SimpleAst::Add { a, b } => *b,
-        SimpleAst::Mul { a, b } => *b,
-        SimpleAst::Pow { a, b } => *b,
-        SimpleAst::And { a, b } => *b,
-        SimpleAst::Or { a, b } => *b,
-        SimpleAst::Xor { a, b } => *b,
-        SimpleAst::Lshr { a, b } => *b,
-        _ => unreachable!("Type has no second operand!"),
-    };
+    return ast.children()[1];
+}
+
+#[no_mangle]
+pub extern "C" fn ContextGetOp2(ctx: *mut Context, id: AstIdx) -> AstIdx {
+    unsafe {
+        unsafe {
+            return get_op2(&(*ctx), id);
+        }
+    }
+}
+
+pub fn get_op2(ctx: &Context, id: AstIdx) -> AstIdx {
+    let ast = (*ctx).arena.get_node(id);
+    return ast.children()[2];
+}
+
+#[no_mangle]
+pub extern "C" fn ContextGetPredicate(ctx: *mut Context, id: AstIdx) -> u8 {
+    unsafe {
+        let ast = (*ctx).arena.get_node(id);
+        if let SimpleAst::ICmp {
+            predicate,
+            children,
+        } = ast
+        {
+            return (*predicate) as u8;
+        }
+    }
+
+    panic!("ast is not a constant!");
 }
 
 #[no_mangle]
@@ -1560,15 +2313,15 @@ unsafe fn jit_rec(
         SimpleAst::Constant { c, width } => {
             jit_constant(*c, page, offset);
         }
-        SimpleAst::Neg { a } => {
+        SimpleAst::Neg([a]) => {
             jit_rec(ctx, *a, node_to_var, page, offset);
             emit_u8(page, offset, POP_RSI);
             emit(page, offset, &[0x48, 0xF7, 0xD6]);
             emit_u8(page, offset, PUSH_RSI);
         }
-        SimpleAst::Add { a, b } => binop(*a, *b, &[0x48, 0x01, 0xFE], offset),
-        SimpleAst::Mul { a, b } => binop(*a, *b, &[0x48, 0x0F, 0xAF, 0xF7], offset),
-        SimpleAst::Pow { a, b } => {
+        SimpleAst::Add([a, b]) => binop(*a, *b, &[0x48, 0x01, 0xFE], offset),
+        SimpleAst::Mul([a, b]) => binop(*a, *b, &[0x48, 0x0F, 0xAF, 0xF7], offset),
+        SimpleAst::Pow([a, b]) => {
             // Save the value of rcx/rdx on the stack, because these are used throughout the rest of the jitted function.
             emit_u8(page, offset, PUSH_RCX);
             emit_u8(page, offset, PUSH_RDX);
@@ -1595,9 +2348,9 @@ unsafe fn jit_rec(
             // push rax
             emit_u8(page, offset, PUSH_RAX);
         }
-        SimpleAst::And { a, b } => binop(*a, *b, &[0x48, 0x21, 0xFE], offset),
-        SimpleAst::Or { a, b } => binop(*a, *b, &[0x48, 0x09, 0xFE], offset),
-        SimpleAst::Xor { a, b } => binop(*a, *b, &[0x48, 0x31, 0xFE], offset),
+        SimpleAst::And([a, b]) => binop(*a, *b, &[0x48, 0x21, 0xFE], offset),
+        SimpleAst::Or([a, b]) => binop(*a, *b, &[0x48, 0x09, 0xFE], offset),
+        SimpleAst::Xor([a, b]) => binop(*a, *b, &[0x48, 0x31, 0xFE], offset),
         SimpleAst::Symbol { id, width } => {
             let var_idx = node_to_var[&node];
 
@@ -1627,23 +2380,29 @@ unsafe fn jit_rec(
             // Push the result.
             emit_u8(page, offset, PUSH_RDI);
         }
-        SimpleAst::Zext { a, to } => {
+        SimpleAst::Zext([a, to_id]) => {
             // Zero extend is a no-op in our JIT, since we always AND with a mask after every operation.
             jit_rec(ctx, *a, node_to_var, page, offset);
         }
-        SimpleAst::Trunc { a, to } => {
+        SimpleAst::Trunc([a, to_id]) => {
             jit_rec(ctx, *a, node_to_var, page, offset);
 
             // mov rax, constant
             emit_u8(page, offset, 0x48);
             emit_u8(page, offset, 0xB8);
             // Fill in the constant
-            let trunc_mask = get_modulo_mask(*to);
+            let to = ctx.arena.get_constant(*to_id);
+            let trunc_mask = get_modulo_mask(to as u8);
             emit_u64(page, offset, trunc_mask);
             // and [rsp+8], rax
             emit(page, offset, &[0x48, 0x21, 0x04, 0x24]);
         }
-        SimpleAst::Lshr { a, b } => todo!(),
+        SimpleAst::Lshr([a, b]) => todo!(),
+        SimpleAst::ICmp {
+            predicate,
+            children,
+        } => todo!(),
+        SimpleAst::Select { children } => todo!(),
     };
 
     // mov rax, constant
@@ -2199,7 +2958,7 @@ pub fn factor(
         let mut elems = maybe_elems.unwrap();
 
         // Get the variable
-        let mut result: AstIdx = AstIdx(0);
+        let mut result: AstIdx = AstIdx::from(0);
         unsafe {
             result = *variables.wrapping_add(var_idx as usize);
         }
@@ -2279,10 +3038,10 @@ pub fn get_demanded_vars_mask(
 
             1 << var_idx
         }
-        SimpleAst::Neg { a } => {
+        SimpleAst::Neg([a]) => {
             get_demanded_vars_mask(ctx, *a, variables, variable_count, demanded_vars_map)
         }
-        SimpleAst::And { a, b } | SimpleAst::Xor { a, b } | SimpleAst::And { a, b } => {
+        SimpleAst::And([a, b]) | SimpleAst::Xor([a, b]) | SimpleAst::And([a, b]) => {
             let a_mask =
                 get_demanded_vars_mask(ctx, *a, variables, variable_count, demanded_vars_map);
             let b_mask =
@@ -2315,7 +3074,7 @@ pub fn simplify_rec(
     if let SimpleAst::Constant { c, width } = ast {
         return idx;
     }
-    if let SimpleAst::Neg { a } = ast {
+    if let SimpleAst::Neg([a]) = ast {
         let child = simplify_rec(
             ctx,
             db,
@@ -2393,9 +3152,9 @@ pub fn simplify_rec(
             if sum.count_ones() <= 4 {
                 //let new_id = ctx.arena.or(old_id, *term);
                 let new_id = match ast {
-                    SimpleAst::And { a, b } => ctx.arena.and(old_id, *term),
-                    SimpleAst::Or { a, b } => ctx.arena.or(old_id, *term),
-                    SimpleAst::Xor { a, b } => ctx.arena.xor(old_id, *term),
+                    SimpleAst::And([a, b]) => ctx.arena.and(old_id, *term),
+                    SimpleAst::Or([a, b]) => ctx.arena.or(old_id, *term),
+                    SimpleAst::Xor([a, b]) => ctx.arena.xor(old_id, *term),
                     _ => panic!("Unexpected node type!"),
                 };
                 decompositions[i] = (sum, new_id);
@@ -2429,9 +3188,9 @@ pub fn simplify_rec(
             simplified = Some(reduced);
         } else {
             simplified = match ast {
-                SimpleAst::And { a, b } => Some(ctx.arena.and(simplified.unwrap(), reduced)),
-                SimpleAst::Or { a, b } => Some(ctx.arena.or(simplified.unwrap(), reduced)),
-                SimpleAst::Xor { a, b } => Some(ctx.arena.xor(simplified.unwrap(), reduced)),
+                SimpleAst::And([a, b]) => Some(ctx.arena.and(simplified.unwrap(), reduced)),
+                SimpleAst::Or([a, b]) => Some(ctx.arena.or(simplified.unwrap(), reduced)),
+                SimpleAst::Xor([a, b]) => Some(ctx.arena.xor(simplified.unwrap(), reduced)),
                 _ => panic!("Unexpected node type!"),
             };
         }
@@ -2807,24 +3566,29 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
 
         let node = ctx.arena.get_node(idx).clone();
         match node {
-            SimpleAst::Add { a, b }
-            | SimpleAst::Mul { a, b }
-            | SimpleAst::Pow { a, b }
-            | SimpleAst::And { a, b }
-            | SimpleAst::Or { a, b }
-            | SimpleAst::Xor { a, b }
-            | SimpleAst::Lshr { a, b } => {
+            SimpleAst::Add([a, b])
+            | SimpleAst::Mul([a, b])
+            | SimpleAst::Pow([a, b])
+            | SimpleAst::And([a, b])
+            | SimpleAst::Or([a, b])
+            | SimpleAst::Xor([a, b])
+            | SimpleAst::Lshr([a, b]) => {
                 Self::collect_info(ctx, a, dfs);
                 Self::collect_info(ctx, b, dfs);
 
                 Self::inc_users(ctx, a);
                 Self::inc_users(ctx, b);
             }
-            SimpleAst::Neg { a } | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
+            SimpleAst::Neg([a]) | SimpleAst::Zext([a, _]) | SimpleAst::Trunc([a, _]) => {
                 Self::collect_info(ctx, a, dfs);
                 Self::inc_users(ctx, a);
             }
             SimpleAst::Constant { .. } | SimpleAst::Symbol { .. } => (),
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => todo!(),
+            SimpleAst::Select { children } => todo!(),
         }
 
         dfs.push(idx);
@@ -2862,13 +3626,13 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
             let width = ctx.arena.get_width(idx) as u32;
             let node = ctx.arena.get_node(idx).clone();
             match node {
-                SimpleAst::Add { a, b }
-                | SimpleAst::Mul { a, b }
-                | SimpleAst::Pow { a, b }
-                | SimpleAst::And { a, b }
-                | SimpleAst::Or { a, b }
-                | SimpleAst::Xor { a, b }
-                | SimpleAst::Lshr { a, b } => {
+                SimpleAst::Add([a, b])
+                | SimpleAst::Mul([a, b])
+                | SimpleAst::Pow([a, b])
+                | SimpleAst::And([a, b])
+                | SimpleAst::Or([a, b])
+                | SimpleAst::Xor([a, b])
+                | SimpleAst::Lshr([a, b]) => {
                     self.lower_binop(ctx, assembler, idx, node, width, node_info)
                 }
                 SimpleAst::Constant { c, width } => self.lower_constant(assembler, c),
@@ -2883,10 +3647,15 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
                     node_info,
                     matches!(node, SimpleAst::Neg { .. }),
                 ),
-                SimpleAst::Trunc { a, to } => {
+                SimpleAst::Trunc([a, to_id]) => {
                     let w = ctx.get_width(a);
                     self.lower_zext(ctx, assembler, idx, w.into(), node_info)
                 }
+                SimpleAst::ICmp {
+                    predicate,
+                    children,
+                } => todo!(),
+                SimpleAst::Select { children } => todo!(),
             }
         }
 
@@ -2952,12 +3721,12 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         }
 
         match node {
-            SimpleAst::Add { a, b } => assembler.add_reg_reg(lhs_dest, rhs_dest),
-            SimpleAst::Mul { a, b } => assembler.imul_reg_reg(lhs_dest, rhs_dest),
-            SimpleAst::And { a, b } => assembler.and_reg_reg(lhs_dest, rhs_dest),
-            SimpleAst::Or { a, b } => assembler.or_reg_reg(lhs_dest, rhs_dest),
-            SimpleAst::Xor { a, b } => assembler.xor_reg_reg(lhs_dest, rhs_dest),
-            SimpleAst::Lshr { a, b } => {
+            SimpleAst::Add([a, b]) => assembler.add_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Mul([a, b]) => assembler.imul_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::And([a, b]) => assembler.and_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Or([a, b]) => assembler.or_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Xor([a, b]) => assembler.xor_reg_reg(lhs_dest, rhs_dest),
+            SimpleAst::Lshr([a, b]) => {
                 if width % 8 != 0 {
                     panic!("Cannot jit lshr with non power of 2 width!");
                 }
@@ -2972,7 +3741,7 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
                 assembler.shr_reg_cl(lhs_dest);
                 assembler.pop_reg(Register::RCX);
             }
-            SimpleAst::Pow { a, b } => {
+            SimpleAst::Pow([a, b]) => {
                 for r in VOLATILE_REGS.iter() {
                     assembler.push_reg(*r);
                 }
@@ -3236,4 +4005,158 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
             std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
         }
     }
+}
+
+pub fn as_constant(data: &AstData) -> Option<u64> {
+    return data.known_bits.as_constant();
+}
+
+pub fn eqmod(c1: u64, c2: u64, width: u8) -> bool {
+    let mask = get_modulo_mask(width);
+    return (c1 & mask) == (c2 & mask);
+}
+
+// Below is an FFI interface for egraphs and Expr instances.
+#[no_mangle]
+pub extern "C" fn CreateEGraph() -> *mut EEGraph {
+    let analysis = MbaAnalysis {};
+    let egraph = EEGraph::new(analysis);
+    let pgraph = Box::new(egraph);
+    return Box::into_raw(pgraph);
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphAddFromContext(
+    egraph_p: *mut EEGraph,
+    ctx_p: *mut Context,
+    idx: AstIdx,
+) -> AstIdx {
+    let mut ctx: &mut Context = unsafe { &mut (*ctx_p) };
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    let mut cache = AHashMap::new();
+    return add_to_egraph(ctx, egraph, idx, &mut cache);
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphRun(egraph_p: *mut EEGraph, ms_limit: u64, iter_limit: u64) {
+    let mut egraph = unsafe { std::mem::take(&mut *egraph_p) };
+
+    let mut runner: Runner<SimpleAst, MbaAnalysis> = Runner::default()
+        .with_time_limit(Duration::from_millis(ms_limit))
+        .with_scheduler(
+            BackoffScheduler::default()
+                .with_ban_length(5)
+                .with_initial_match_limit(1_000_00),
+        )
+        .with_node_limit(1000000 * 10)
+        .with_iter_limit(iter_limit as usize)
+        .with_egraph(egraph);
+
+    // Run equality saturation
+    let rules = get_generated_rules();
+    runner = runner.run(&rules);
+
+    dbg!("{}", runner.stop_reason);
+
+    unsafe {
+        std::mem::swap(&mut *egraph_p, &mut runner.egraph);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphGetClasses(egraph_p: *mut EEGraph, out_len: *mut u64) -> *mut Id {
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    let mut classes = Vec::new();
+    for c in egraph.classes() {
+        classes.push(c.id);
+    }
+
+    unsafe { *out_len = classes.len() as u64 };
+    let boxed = classes.into_boxed_slice();
+    let released = Box::into_raw(boxed);
+
+    // https://stackoverflow.com/a/57616981/6855629
+    return released as *mut _;
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphExtractAll(
+    egraph_p: *mut EEGraph,
+    ctx_p: *mut Context,
+    out_len: *mut u64,
+) -> *mut Id {
+    let mut ctx: &mut Context = unsafe { &mut (*ctx_p) };
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    let mut classes = Vec::new();
+    let cost_func = EGraphCostFn { egraph: &egraph };
+    let extractor = Extractor::new(&egraph, cost_func);
+    for c in egraph.classes() {
+        classes.push(c.id);
+        let rec_expr = extractor.find_best(c.id);
+        classes.push(from_rec_expr(ctx, egraph, &rec_expr.1));
+    }
+
+    unsafe { *out_len = classes.len() as u64 };
+    let boxed = classes.into_boxed_slice();
+    let released = Box::into_raw(boxed);
+
+    // https://stackoverflow.com/a/57616981/6855629
+    return released as *mut _;
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphExtract(
+    egraph_p: *mut EEGraph,
+    ctx_p: *mut Context,
+    eclass: AstIdx,
+) -> AstIdx {
+    let mut ctx: &mut Context = unsafe { &mut (*ctx_p) };
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    return extract_from_egraph(ctx, egraph, eclass);
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphUnion(egraph_p: *mut EEGraph, a: AstIdx, b: AstIdx) {
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    egraph.union(a, b);
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphRebuild(egraph_p: *mut EEGraph) {
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    egraph.rebuild();
+}
+
+pub fn is_const(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> bool {
+    return node.data.known_bits.is_constant();
+}
+
+pub fn get_const(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
+    return node.data.known_bits.as_constant().unwrap();
+}
+
+pub fn const_eq(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>, c1: u64) -> bool {
+    return node.data.known_bits.as_constant().unwrap() == c1;
+}
+
+pub fn get_width(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
+    return node.data.width as u64;
+}
+
+pub fn get_known_zeroes(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
+    return node.data.known_bits.zeroes;
+}
+
+pub fn get_known_ones(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
+    return node.data.known_bits.ones;
+}
+
+pub fn popcount(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
+    return node.data.known_bits.as_constant().unwrap().count_ones() as u64;
 }

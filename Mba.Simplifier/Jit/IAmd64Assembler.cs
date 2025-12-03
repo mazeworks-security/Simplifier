@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -48,6 +49,20 @@ namespace Mba.Simplifier.Jit
         public void ShrRegCl(Register reg1);
 
         public void ShrRegImm8(Register reg, byte imm8);
+
+        public void CmpRegReg(Register reg1, Register reg2);
+
+        public void TestRegReg(Register reg1, Register reg2);
+
+        public void CmoveRegReg(Register reg1, Register reg2);
+
+        public void SeteReg(Register reg1);
+
+        public void SetneReg(Register reg1);
+
+        public void SetaReg(Register reg1);
+
+        public void SetbReg(Register reg1);
 
         public void CallReg(Register reg1);
 

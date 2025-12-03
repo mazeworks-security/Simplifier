@@ -439,6 +439,20 @@ namespace Mba.Simplifier.Pipeline
                     var truncated = AstRewriter.ChangeBitwidth(ctx, child, w, ModuloReducer.GetMask(w), new());
                     return ctx.Trunc(truncated, ctx.GetWidth(id));
 
+                case AstOp.ICmp:
+                    var cmp0 = SimplifyViaRecursiveSiMBA(ctx.GetOp0(id));
+                    var cmp1 = SimplifyViaRecursiveSiMBA(ctx.GetOp1(id));
+                    var icmp = ctx.ICmp(ctx.GetPredicate(id), cmp0, cmp1);
+                    return GetSubstitution(icmp, substitutionMapping);
+
+                case AstOp.Select:
+                    var ite0 = SimplifyViaRecursiveSiMBA(ctx.GetOp0(id));
+                    var ite1 = SimplifyViaRecursiveSiMBA(ctx.GetOp1(id));
+                    var ite2 = SimplifyViaRecursiveSiMBA(ctx.GetOp2(id));
+                    var select = ctx.Select(ite0, ite1, ite2);
+                    return GetSubstitution(select, substitutionMapping);
+
+
                 case AstOp.Constant:
                     // If a bitwise constant is present, we want to mark it as semi-linear
                     if(inBitwise)
@@ -836,6 +850,9 @@ namespace Mba.Simplifier.Pipeline
                     break;
             }
 
+            if (varToDemandedBits.Count == 0)
+                return null;
+
 
             // Bail if there are too many demanded bits!
             if(totalDemanded > 12)
@@ -845,8 +862,12 @@ namespace Mba.Simplifier.Pipeline
             var (semilinearIdx, unconstrainedIdx, constrainedIdx) = PartitionConstrainedParts(withSubstitutions, substitutionMapping);
 
             // If there are no constrained or unconstrained parts then this is a semi-linear MBA.
-            if(unconstrainedIdx == null && constrainedIdx == null)
+            if (unconstrainedIdx == null && constrainedIdx == null)
+            {
+                return null; 
                 throw new InvalidOperationException($"Expected nonlinear expression!");
+    
+            }
 
             // If we have no unconstrained parts, we can prove the equivalence of the entire expression.
             if(unconstrainedIdx == null)
@@ -1234,6 +1255,7 @@ namespace Mba.Simplifier.Pipeline
 
             var op0 = (ulong demanded, ref int totalDemanded) => ComputeSymbolDemandedBits(ctx.GetOp0(idx), demanded, symbolDemandedBits, seen, ref totalDemanded);
             var op1 = (ulong demanded, ref int totalDemanded) => ComputeSymbolDemandedBits(ctx.GetOp1(idx), demanded, symbolDemandedBits, seen, ref totalDemanded);
+            var op2 = (ulong demanded, ref int totalDemanded) => ComputeSymbolDemandedBits(ctx.GetOp2(idx), demanded, symbolDemandedBits, seen, ref totalDemanded);
 
             var opc = ctx.GetOpcode(idx);
             switch (opc)
@@ -1312,6 +1334,15 @@ namespace Mba.Simplifier.Pipeline
                     break;
                 case AstOp.Zext:
                     op0(currDemanded & ModuloReducer.GetMask(ctx.GetWidth(ctx.GetOp0(idx))), ref totalDemanded);
+                    break;
+                case AstOp.ICmp:
+                    op0(currDemanded, ref totalDemanded);
+                    op1(currDemanded, ref totalDemanded);
+                    break;
+                case AstOp.Select:
+                    op0(1, ref totalDemanded);
+                    op1(currDemanded, ref totalDemanded);
+                    op2(currDemanded, ref totalDemanded);
                     break;
                 default:
                     throw new InvalidOperationException($"Cannot compute demanded bits for {opc}");

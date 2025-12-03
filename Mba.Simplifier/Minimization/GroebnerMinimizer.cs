@@ -15,14 +15,14 @@ namespace Mba.Simplifier.Minimization
 
         private readonly IReadOnlyList<AstIdx> variables;
 
-        private readonly TruthTable truthTable;
+        private readonly BooleanTruthTable truthTable;
 
         private readonly Dictionary<AstIdx, uint> demandedVarsMap = new();
 
-        public static AstIdx Run(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
+        public static AstIdx Run(AstCtx ctx, IReadOnlyList<AstIdx> variables, BooleanTruthTable truthTable)
             => new GroebnerMinimizer(ctx, variables, truthTable).Run();
 
-        private GroebnerMinimizer(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
+        private GroebnerMinimizer(AstCtx ctx, IReadOnlyList<AstIdx> variables, BooleanTruthTable truthTable)
         {
             this.ctx = ctx;
             this.variables = variables;
@@ -46,7 +46,7 @@ namespace Mba.Simplifier.Minimization
             var terms = new List<AstIdx>();
             foreach(var conjs in gb)
             {
-                terms.Add(AnfMinimizer.Factor(ctx, variables, conjs, demandedVarsMap).Value);
+                terms.Add(AnfMinimizer.Factor(ctx, variables, null, demandedVarsMap).Value);
             }
 
             // Combine them into a single boolean

@@ -34,16 +34,17 @@ namespace Mba.Simplifier.Pipeline
 
         private unsafe delegate* unmanaged[SuppressGCTransition]<ulong*, ulong> func2;
 
-        public static bool ProbablyEquivalent(AstCtx ctx, AstIdx before, AstIdx after, bool slowHeuristics = true)
+
+        public static bool ProbablyEquivalent(AstCtx ctx, AstIdx before, AstIdx after, bool slowHeuristics = true, nint page1 = 0, nint page2 = 0)
         {
-            var pagePtr1 = JitUtils.AllocateExecutablePage(4096);
-            var pagePtr2 = JitUtils.AllocateExecutablePage(4096);
+            var pagePtr1 = page1 == 0 ? JitUtils.AllocateExecutablePage(4096) : page1;
+            var pagePtr2 = page2 == 0 ? JitUtils.AllocateExecutablePage(4096) : page2;
 
             var allVars = ctx.CollectVariables(before).Concat(ctx.CollectVariables(after)).Distinct().OrderBy(x => ctx.GetSymbolName(x)).ToList();
             bool probablyEquivalent = new ProbableEquivalenceChecker(ctx, allVars, before, after, pagePtr1, pagePtr2).ProbablyEquivalent(false);
 
-            JitUtils.FreeExecutablePage(pagePtr1);
-            JitUtils.FreeExecutablePage(pagePtr2);
+            //JitUtils.FreeExecutablePage(pagePtr1);
+            //JitUtils.FreeExecutablePage(pagePtr2);
             return probablyEquivalent;
         }
 

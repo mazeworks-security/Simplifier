@@ -1,4 +1,5 @@
 ﻿using Mba.Ast;
+using Mba.Common.Ast;
 using Mba.Parsing;
 using Mba.Simplifier.Bindings;
 using System;
@@ -43,7 +44,7 @@ namespace Mba.Simplifier.Utility
                 AstKind.Const => ctx.Constant((ulong)(node as ConstNode).Value, node.BitSize),
                 AstKind.Var => ctx.Symbol((node as VarNode).Name, (byte)node.BitSize),
                 AstKind.Add => binop(AstOp.Add),
-                AstKind.Power => binop(AstOp.Pow),
+                AstKind.Pow => binop(AstOp.Pow),
                 AstKind.Mul => binop(AstOp.Mul),
                 AstKind.And => binop(AstOp.And),
                 AstKind.Or => binop(AstOp.Or),
@@ -52,6 +53,8 @@ namespace Mba.Simplifier.Utility
                 AstKind.Lshr => binop(AstOp.Lshr),
                 AstKind.Zext => ctx.Zext(Convert(node.Children[0]), (byte)node.BitSize),
                 AstKind.Trunc => ctx.Trunc(Convert(node.Children[0]), (byte)node.BitSize),
+                AstKind.ICmp => ctx.ICmp((node as ICmpNode).Pred, Convert(node.Children[0]), Convert(node.Children[1])),
+                AstKind.Select => ctx.Select(Convert(node.Children[0]), Convert(node.Children[1]), Convert(node.Children[2])),
                 _ => throw new InvalidOperationException($"Ast kind {node.Kind} is not supported!")
             };
         }

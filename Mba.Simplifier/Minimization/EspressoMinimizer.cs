@@ -20,7 +20,7 @@ namespace Mba.Simplifier.Minimization
 {
     public static class EspressoMinimizer
     {
-        public static (AstIdx ast, List<OnOffSet> onOffs) SimplifyBoolean(AstCtx ctx, List<int> resultVector, IReadOnlyList<AstIdx> variables)
+        public static (AstIdx ast, List<OnOffSet> onOffs) SimplifyBoolean(AstCtx ctx, List<ulong> resultVector, IReadOnlyList<AstIdx> variables)
         {
             // Run espresso.
             var pla = GeneratePLA(resultVector, variables);
@@ -32,7 +32,7 @@ namespace Mba.Simplifier.Minimization
 
         // Generate an instance of Espresso's file format.
         // https://user.engineering.uiowa.edu/~switchin/OldSwitching/espresso.5.html
-        public static string GeneratePLA(List<int> resultVector, IReadOnlyList<AstIdx> variables)
+        public static string GeneratePLA(List<ulong> resultVector, IReadOnlyList<AstIdx> variables)
         {
             ulong varCount = (ulong)variables.Count;
             var numCombinations = (ulong)Math.Pow(2, varCount);
@@ -70,7 +70,7 @@ namespace Mba.Simplifier.Minimization
             return sb.ToString();
         }
 
-        private static (AstIdx ast, List<OnOffSet> onOffs) ParsePLA(AstCtx ctx, string output, List<int> resultVector, IReadOnlyList<AstIdx> variables)
+        private static (AstIdx ast, List<OnOffSet> onOffs) ParsePLA(AstCtx ctx, string output, List<ulong> resultVector, IReadOnlyList<AstIdx> variables)
         {
             var lines = output.Split(new string[] { "\r\n", "\r", "\n" },
                 StringSplitOptions.None).ToList();
