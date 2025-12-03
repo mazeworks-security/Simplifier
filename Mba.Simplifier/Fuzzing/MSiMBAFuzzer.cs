@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Transactions;
@@ -21,6 +22,7 @@ namespace Mba.Simplifier.Fuzzing
         private readonly SeededRandom rand = new();
 
         private readonly AstCtx ctx = new();
+
 
         public static void Run()
         {

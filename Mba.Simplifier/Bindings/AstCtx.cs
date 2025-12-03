@@ -169,7 +169,12 @@ namespace Mba.Simplifier.Bindings
         {
             return Api.ContextGetOp1(this, id);
         }
-        public unsafe ulong GetConstantValue(AstIdx id) => Api.ContextGetConstantValue(this, id);
+        public unsafe ulong GetConstantValue(AstIdx id)
+        {
+            if (!IsConstant(id))
+                Debugger.Break();
+            return Api.ContextGetConstantValue(this, id); 
+        }
 
         public unsafe bool IsSymbol(AstIdx id) => GetOpcode(id) == AstOp.Symbol;
         public unsafe bool IsConstant(AstIdx id) => GetOpcode(id) == AstOp.Constant;

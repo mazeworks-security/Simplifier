@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -25,9 +26,9 @@ namespace Mba.Simplifier.Pipeline
 
         private readonly uint width;
 
-        private readonly nint pagePtr1;
+        private nint pagePtr1;
 
-        private readonly nint pagePtr2;
+        private nint pagePtr2;
 
         private ulong seed = ulong.MaxValue;
 
@@ -59,17 +60,29 @@ namespace Mba.Simplifier.Pipeline
             this.pagePtr2 = pagePtr2;
         }
 
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        // Import the GetModuleHandle function from kernel32.dll
+        [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+        static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
         public unsafe bool ProbablyEquivalent(bool slowHeuristics = false)
         {
+            var module = GetModuleHandle("Mba.FFI.dll");
+            
             //var jit1 = new Amd64OptimizingJit(ctx);
             //jit1.Compile(before, variables, pagePtr1, false);
             var w = ctx.GetWidth(before);
             ctx.Compile(before, ModuloReducer.GetMask(w), variables.ToArray(), pagePtr1);
+
+            //pagePtr1 = (nint)GetProcAddress(module, "Mba1");
             func1 = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr1;
 
             //var jit2 = new Amd64OptimizingJit(ctx);
             //jit2.Compile(after, variables, pagePtr2, false);
             ctx.Compile(after, ModuloReducer.GetMask(w), variables.ToArray(), pagePtr2);
+            //pagePtr2 = (nint)GetProcAddress(module, "Mba2");
             func2 = (delegate* unmanaged[SuppressGCTransition]<ulong*, ulong>)pagePtr2;
 
             var vArray = stackalloc ulong[variables.Count];
@@ -104,7 +117,7 @@ namespace Mba.Simplifier.Pipeline
                     return false;
             }
 
-            if (!RandomlyEquivalent(vArray, 1000))
+            if (!RandomlyEquivalent(vArray, 10000))
                 return false;
             return true;
         }
