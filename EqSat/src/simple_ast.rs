@@ -674,7 +674,7 @@ impl Language for SimpleAst {
     /// Returns the children of thsi e-node.
     fn children(&self) -> &[Id] {
         match self {
-            SimpleAst::Add(children) => children,
+            SimpleAst::Add(children) => egg::LanguageChildren::as_slice(children),
             SimpleAst::Mul(children) => children,
             SimpleAst::Pow(children) => children,
             SimpleAst::And(children) => children,
@@ -691,7 +691,7 @@ impl Language for SimpleAst {
     /// Returns a mutable slice of the children of this e-node.
     fn children_mut(&mut self) -> &mut [Id] {
         match self {
-            SimpleAst::Add(children) => children,
+            SimpleAst::Add(children) => egg::LanguageChildren::as_mut_slice(children),
             SimpleAst::Mul(children) => children,
             SimpleAst::Pow(children) => children,
             SimpleAst::And(children) => children,
@@ -720,8 +720,8 @@ impl ::std::fmt::Display for SimpleAst {
             SimpleAst::Lshr(_) => f.write_str(">>"),
             SimpleAst::Constant { c, width } => f.write_str(format!("{}:{}", c, width).as_str()),
             SimpleAst::Symbol { id, width } => f.write_str(format!("v{}:{}", id, width).as_str()),
-            SimpleAst::Zext { a, to } => todo!("zx"),
-            SimpleAst::Trunc { a, to } => todo!("tr"),
+            SimpleAst::Zext { a, to } => f.write_str(format!("zx i{}", to).as_str()),
+            SimpleAst::Trunc { a, to } => f.write_str(format!("tr i{}", to).as_str()),
         }
     }
 }
@@ -753,6 +753,16 @@ fn parse_symbol(op: &str) -> Option<(u32, u8)> {
     Some((id, width))
 }
 
+fn parse_size_change(op: &str, is_zx: bool) -> Option<u8> {
+    if !op.starts_with(if is_zx { "zx i" } else { "tr i" }) {
+        return None;
+    }
+
+    let width_str = &op[4..];
+    let width = width_str.parse::<u8>().ok()?;
+    Some(width)
+}
+
 impl egg::FromOp for SimpleAst {
     type Error = egg::FromOpError;
 
@@ -768,11 +778,21 @@ impl egg::FromOp for SimpleAst {
             ">>" => Ok(SimpleAst::Lshr([children[0], children[1]])),
             _ => {
                 if let Some((c, width)) = parse_constant(op) {
+                    //panic!("hello2");
                     Ok(SimpleAst::Constant { c, width })
                 } else if let Some((id, width)) = parse_symbol(op) {
+                    //panic!("hello1");
                     Ok(SimpleAst::Symbol { id, width })
+                } else if let Some(to) = parse_size_change(op, true) {
+                    Ok(SimpleAst::Zext { a: children[0], to })
+                } else if let Some(to) = parse_size_change(op, false) {
+                    Ok(SimpleAst::Trunc { a: children[0], to })
                 } else {
-                    panic!("Cannot parse enode with op {}", op)
+                    panic!(
+                        "Cannot parse enode with op {} with {} children",
+                        op,
+                        children.len()
+                    )
                 }
             }
         }
@@ -875,6 +895,30 @@ impl Analysis<SimpleAst> for MbaAnalysis {
         // To not prune, comment this out
         egraph[id].nodes.retain(|n| n.is_leaf());
     }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+struct Const {
+    c: u64,
+    width: u8,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+struct Symb {
+    c: u64,
+    width: u8,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+struct Zext {
+    c: u64,
+    width: u8,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+struct Trunc {
+    c: u64,
+    width: u8,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
