@@ -546,8 +546,8 @@ pub enum Expr {
     Constant { c: u64, width: u8 },
     Symbol { id: u32, width: u8 },
     // Special operators
-    Zext([Id; 1], u8),
-    Trunc([Id; 1], u8),
+    Zext { id: Id, to: u8 },
+    Trunc { id: Id, to: u8 },
 }
 
 impl Language for Expr {
@@ -576,8 +576,8 @@ impl Language for Expr {
             Expr::Xor(children) => children,
             Expr::Neg(children) => children,
             Expr::Lshr(children) => children,
-            Expr::Zext(children, _) => children,
-            Expr::Trunc(children, _) => children,
+            Expr::Zext { id, .. } => std::slice::from_ref(id),
+            Expr::Trunc { id, .. } => std::slice::from_ref(id),
             Expr::Constant { .. } | Expr::Symbol { .. } => &[],
         };
     }
