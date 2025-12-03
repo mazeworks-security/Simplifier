@@ -7,7 +7,7 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
-path = "src/lib.rs"
+path = "src/main.rs"
 
 
 [dependencies]
@@ -18,7 +18,6 @@ cranelift-isle = "0.102.1"
 ahash = "0.8.11"
 mimalloc = { version = "*", default-features = false }
 # egraph = { path = "./egraph" }
-foldhash = "=0.1.0"
 
 [dependencies.iced-x86]
 version = "1.21.0"

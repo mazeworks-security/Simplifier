@@ -10,6 +10,7 @@ use std::{
 };
 
 use ahash::AHashMap;
+use egg::{define_language, Id, Language};
 use iced_x86::{
     code_asm::{st, CodeAssembler},
     Code, Instruction, Register,
@@ -526,6 +527,64 @@ pub struct AstData {
     // Specifically we use this field to avoid unnecessarily storing data in hashmaps.
     //  e.g "how many users does this node have?" can be stored here temporarily.
     imut_data: u64,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
+pub enum Expr {
+    // Arithmetic operators:
+    Add([Id; 2]),
+    Mul([Id; 2]),
+    Pow([Id; 2]),
+    // Bitwise operators:
+    And([Id; 2]),
+    Or([Id; 2]),
+    Xor([Id; 2]),
+    Neg([Id; 1]),
+    // Shift operators:
+    Lshr([Id; 2]),
+    // Literals:
+    Constant { c: u64, width: u8 },
+    Symbol { id: u32, width: u8 },
+    // Special operators
+    Zext([Id; 1], u8),
+    Trunc([Id; 1], u8),
+}
+
+impl Language for Expr {
+    type Discriminant = std::mem::Discriminant<Self>;
+
+    /// Return the `Discriminant` of this node.
+    fn discriminant(&self) -> Self::Discriminant {
+        std::mem::discriminant(self)
+    }
+
+    /// Returns true if this enode matches another enode.
+    /// This should only consider the operator and the arity,
+    /// not the children `Id`s.
+    fn matches(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == ::std::mem::discriminant(other)
+    }
+
+    /// Returns the children of this e-node.
+    fn children(&self) -> &[Id] {
+        return match self {
+            Expr::Add(children) => children,
+            Expr::Mul(children) => children,
+            Expr::Pow(children) => children,
+            Expr::And(children) => children,
+            Expr::Or(children) => children,
+            Expr::Xor(children) => children,
+            Expr::Neg(children) => children,
+            Expr::Lshr(children) => children,
+            Expr::Zext(children, _) => children,
+            Expr::Trunc(children, _) => children,
+            Expr::Constant { .. } | Expr::Symbol { .. } => &[],
+        };
+    }
+    /// Returns a mutable slice of the children of this e-node.
+    fn children_mut(&mut self) -> &mut [Id] {
+        todo!()
+    }
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
