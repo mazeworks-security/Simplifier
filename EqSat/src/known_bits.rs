@@ -4,11 +4,11 @@ use std::{ffi::CStr, ptr};
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Default)]
 #[repr(C)]
 pub struct KnownBits {
-    width: u32,
+    pub width: u32,
 
-    zeroes: u64,
+    pub zeroes: u64,
 
-    ones: u64,
+    pub ones: u64,
 }
 
 impl KnownBits {
@@ -123,6 +123,37 @@ impl KnownBits {
             GetTruncKnownBits(lhs, width, &mut out);
         }
         out
+    }
+
+    pub fn get_unknown_bits(&self) -> u64 {
+        let unknown_bits = (!(self.zeroes | self.ones)) & Self::get_modulo_mask(self.width as u8);
+        return unknown_bits;
+    }
+
+    pub fn is_constant(&self) -> bool {
+        return self.get_unknown_bits() == 0;
+    }
+
+    pub fn as_constant(&self) -> Option<u64> {
+        if self.is_constant() {
+            return Some(self.ones);
+        } else {
+            return None;
+        }
+    }
+
+    pub fn union(&self, other: &KnownBits) -> KnownBits {
+        let zeroes = self.zeroes | other.zeroes;
+        let ones = self.ones | other.ones;
+        KnownBits {
+            width: self.width,
+            zeroes,
+            ones,
+        }
+    }
+
+    fn get_modulo_mask(width: u8) -> u64 {
+        return u64::MAX >> (64 - width);
     }
 }
 

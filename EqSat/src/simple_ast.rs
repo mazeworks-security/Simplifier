@@ -10,7 +10,7 @@ use std::{
 };
 
 use ahash::AHashMap;
-use egg::{define_language, Analysis, Id, Language};
+use egg::{define_language, Analysis, DidMerge, Id, Language};
 use iced_x86::{
     code_asm::{st, CodeAssembler},
     Code, Instruction, Register,
@@ -689,19 +689,94 @@ pub type EEGraph = egg::EGraph<SimpleAst, MbaAnalysis>;
 #[derive(Default)]
 pub struct MbaAnalysis;
 
+pub struct EGraphUtil<'a> {
+    pub egraph: &'a egg::EGraph<SimpleAst, MbaAnalysis>,
+}
+
+impl<'a> INodeUtil for EGraphUtil<'a> {
+    fn get_data(&self, idx: Id) -> AstData {
+        self.egraph[idx].data.clone()
+    }
+
+    fn is_constant(&self, idx: Id) -> bool {
+        let data = self.egraph[idx].data;
+        return data.known_bits.is_constant();
+    }
+}
+
 impl Analysis<SimpleAst> for MbaAnalysis {
     type Data = AstData;
 
     fn make(egraph: &mut egg::EGraph<SimpleAst, Self>, enode: &SimpleAst, id: Id) -> Self::Data {
-        todo!()
+        let mut util = EGraphUtil { egraph: &egraph };
+        let data = match enode {
+            SimpleAst::Add([a, b]) => util.add_transfer(*a, *b),
+            SimpleAst::Mul([a, b]) => util.mul_transfer(*a, *b),
+            SimpleAst::Pow([a, b]) => util.pow_transfer(*a, *b),
+            SimpleAst::And([a, b]) => util.and_transfer(*a, *b),
+            SimpleAst::Or([a, b]) => util.or_transfer(*a, *b),
+            SimpleAst::Xor([a, b]) => util.xor_transfer(*a, *b),
+            SimpleAst::Neg([a]) => util.neg_transfer(*a),
+            SimpleAst::Lshr([a, b]) => util.lshr_transfer(*a, *b),
+            SimpleAst::Zext { a, to } => util.zext_transfer(*a, *to),
+            SimpleAst::Trunc { a, to } => util.trunc_transfer(*a, *to),
+            SimpleAst::Constant { c, width } => util.constant_transfer(*c, *width),
+            SimpleAst::Symbol { id: _, width } => util.symbol_transfer(*width),
+        };
+
+        return data;
     }
 
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> egg::DidMerge {
-        todo!()
+        let to = a;
+        let from = b;
+
+        let kb1 = to.known_bits;
+        let kb2 = from.known_bits;
+        if let Some(c) = to.known_bits.as_constant() {
+            return DidMerge(false, true /* maybe */);
+        }
+
+        if let Some(new_cst) = from.known_bits.as_constant() {
+            to.known_bits = from.known_bits.clone();
+            to.cost = 1;
+            return DidMerge(true, false);
+        }
+
+        // Union until a fixedpoint is reached
+        if kb1 != kb2 {
+            let new = kb1.union(&kb2);
+            to.known_bits = new;
+
+            if new.is_constant() {
+                to.cost = 1;
+                return DidMerge(true, true); // yep
+            }
+
+            let new_for_to = new != kb1;
+            let new_for_from = new != kb2;
+            return DidMerge(new_for_to, new_for_from);
+        }
+
+        return DidMerge(false, false);
     }
 
     fn modify(egraph: &mut egg::EGraph<SimpleAst, Self>, id: Id) {
-        todo!()
+        let kb = &egraph[id].data.known_bits;
+        if !kb.is_constant() {
+            return;
+        }
+
+        let c = SimpleAst::Constant {
+            c: kb.ones,
+            width: egraph[id].data.width,
+        };
+
+        let new_id = egraph.add(c);
+        egraph.union(id, new_id);
+
+        // To not prune, comment this out
+        egraph[id].nodes.retain(|n| n.is_leaf());
     }
 }
 
