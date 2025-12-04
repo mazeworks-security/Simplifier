@@ -963,7 +963,34 @@ impl Analysis<SimpleAst> for MbaAnalysis {
     }
 }
 
+pub fn add_to_egraph(
+    ctx: &Context,
+    egraph: &mut EEGraph,
+    idx: AstIdx,
+    idx_to_eclass: &mut AHashMap<AstIdx, Id>,
+) -> Id {
+    if let Some(&existing) = idx_to_eclass.get(&idx) {
+        return existing;
+    }
+
+    let mut v = |a| {
+        return add_to_egraph(ctx, egraph, a, idx_to_eclass);
+    };
+
+    // Update the children
+    let mut node = ctx.arena.get_node(idx).clone();
+    for child in node.children_mut() {
+        *child = v(*child);
+    }
+
+    let eclass = egraph.add(node.clone());
+    idx_to_eclass.insert(idx, eclass);
+
+    return eclass;
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]
+#[repr(C)]
 pub enum Predicate {
     Eq = 0,
     Ne = 1,
