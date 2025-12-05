@@ -59,7 +59,7 @@ namespace Mba.Simplifier.DSL
                 // Compile the precondition to a method.
                 var preconditionMethodName = $"{sanitizedName}_precondition";
                 var preconditionArgs = boundedNames.Where(x => x.Key is ConstNode || x.Key is WildCardConstantNode).OrderBy(x => x.Value).ToList();
-                var preconditionMethod = GetPreconditionMethod(preconditionMethodName, preconditionArgs);
+                var preconditionMethod = GetPreconditionMethod(preconditionMethodName, preconditionArgs, rewrite.ManualPrecondition);
 
                 // Generate an applier for the RHS
                 var outArgs = new OrderedSet<AstNode>();
@@ -278,7 +278,7 @@ namespace Mba.Simplifier.DSL
             return;
         }
 
-        private static string GetPreconditionMethod(string methodName, IReadOnlyList<KeyValuePair<AstNode, string>> constantNodes)
+        private static string GetPreconditionMethod(string methodName, IReadOnlyList<KeyValuePair<AstNode, string>> constantNodes, bool manualPrecondition)
         {
             if (!constantNodes.Any())
                 return null;
@@ -305,6 +305,12 @@ namespace Mba.Simplifier.DSL
             {
                 var eqmodCond = String.Join("|| ", modularConstants.Select(x => $"!eqmod({x.Value}_value.unwrap(), {(x.Key as ConstNode).UValue}, egraph[subst[{x.Value}]].data.width)"));
                 sb.AppendLine($"if {eqmodCond} {{ return false; }}");
+            }
+
+            if(manualPrecondition)
+            {
+                var manualCond = $"manual_{methodName}(egraph, subst, {String.Join(", ", constantNodes.Select(x => x.Value))})";
+                sb.AppendLine($"if !{manualCond} {{ return false; }}");
             }
 
             sb.AppendLine("return true;");
@@ -375,7 +381,7 @@ namespace Mba.Simplifier.DSL
                 AstKind.Lshr => ">>",
                 AstKind.Zext => $"\"zx i{node.BitSize}\"",
                 AstKind.Trunc => $"\"tr i{node.BitSize}\"",
-                AstKind.ICmp => $"\"icmp {AstFormatter.GetPredicateOperator((node as ICmpNode).Pred)}\"",
+                AstKind.ICmp => $"\\\"icmp {AstFormatter.GetPredicateOperator((node as ICmpNode).Pred)}\\\"",
                 AstKind.Select => "select",
                 _ => throw new InvalidOperationException($"Cannot get operator for {node.Kind}"),
             };

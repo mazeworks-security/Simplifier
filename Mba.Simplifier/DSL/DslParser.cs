@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.DSL
 {
-    public record DslRule(string Name, AstNode Before, AstNode After);
+    public record DslRule(string Name, AstNode Before, AstNode After, bool ManualPrecondition);
 
     public static class DslParser
     {
@@ -25,7 +25,8 @@ namespace Mba.Simplifier.DSL
                 if (line.Length == 0 || line == Environment.NewLine)
                     continue;
 
-                var split = line.Replace(" ", "").Split(new string[] { ":", "=>" }, StringSplitOptions.RemoveEmptyEntries);
+                bool precond = line.Contains("::");
+                var split = line.Replace(" ", "").Split(new string[] { ":", "=>", "::" }, StringSplitOptions.RemoveEmptyEntries);
                 var name = split[0];
 
                 Dictionary<string, VarNode> varNodes = new();
@@ -34,7 +35,7 @@ namespace Mba.Simplifier.DSL
                 var before = AstParser.Parse(split[1], 64, varNodes, constNodes, wildCardConstantNodes);
                 var after = AstParser.Parse(split[2], 64, varNodes, constNodes, wildCardConstantNodes);
 
-                var rule = new DslRule(name, before, after);
+                var rule = new DslRule(name, before, after, precond);
                 rules.Add(rule);
             }
 

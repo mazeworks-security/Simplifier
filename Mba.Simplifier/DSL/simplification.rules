@@ -12,6 +12,11 @@ mul-distributivity: (a*(b+c)) => ((a*b) + (a*c))
 and-or-distributivity: ((a&b)|(a&c)) => (a&(b|c))
 or-and-distributivity:  ((a|b)&(a|c)) => (a|(b&c)) 
 
+// New profitable rules
+cmp_i1_combine: ((a1&Const(c1)) == 0)^((a2&Const(c1)) != 0) => (((~a1&Const(c1))^((a2&Const(c1)))) != 0) ::
+factor_or_neg: ((a != c)|(b != c)) => ((a|b) != c)
+factor_zext: Zext(a)|Zext(b)
+
 // profitable rules
 mul-constant-to-left-1: (a*Const(c1)) => (Const(c1)*a)
 mul-constant-to-left-2: ((Const(c1)*a)*b) => (Const(c1)*(a*b))

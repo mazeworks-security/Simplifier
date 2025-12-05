@@ -2,7 +2,10 @@
 #![allow(warnings)]
 use egg::{rewrite, Applier, Id, PatternAst, Subst, Symbol, Var};
 
-use crate::simple_ast::{as_constant, eqmod, AstData, EEGraph, MbaAnalysis, Rewrite, SimpleAst};
+use crate::simple_ast::{
+    as_constant, eqmod, manual_rule_cmp_i1_combine_precondition, AstData, EEGraph, MbaAnalysis,
+    Predicate, Rewrite, SimpleAst,
+};
 
 pub fn get_generated_rules() -> Vec<Rewrite> {
     vec![
@@ -101,6 +104,15 @@ pub fn get_generated_rules() -> Vec<Rewrite> {
                 c : "?c".parse().unwrap(),
             }
         }),
+        // cmp_i1_combine:
+        // (((a1:i64&Const(c1))==0:i64)^((a2:i64&Const(c1))!=0:i64)) => ((((~a1:i64)&Const(c1))^(a2:i64&Const(c1)))!=0:i64)
+        rewrite!("cmp_i1_combine"; "(^ (\"icmp ==\" (& ?a1 ?c1) ?mconst0) (\"icmp !=\" (& ?a2 ?c1) ?mconst0))" => {
+            applier_rule_cmp_i1_combine {
+                a1 : "?a1".parse().unwrap(),
+                c1 : "?c1".parse().unwrap(),
+                a2 : "?a2".parse().unwrap(),
+            }
+        } if (rule_cmp_i1_combine_precondition("?c1", "?mconst0"))),
         // mul-constant-to-left-1:
         // (a:i64*Const(c1)) => (Const(c1)*a:i64)
         rewrite!("mul-constant-to-left-1"; "(* ?a ?c1)" => {
@@ -1548,6 +1560,71 @@ impl Applier<SimpleAst, MbaAnalysis> for applier_rule_or_and_distributivity {
 
         if egraph.union(eclass, t4) {
             vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub fn rule_cmp_i1_combine_precondition(
+    c1: &str,
+    mconst0: &str,
+) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool {
+    let c1 = c1.parse().unwrap();
+    let mconst0 = mconst0.parse().unwrap();
+    move |egraph, _, subst| {
+        println!("Checking precondition for cmp_i1_combine");
+        let c1_value = as_constant(&egraph[subst[c1]].data);
+        let mconst0_value = as_constant(&egraph[subst[mconst0]].data);
+        if c1_value.is_none() || mconst0_value.is_none() {
+            return false;
+        }
+        if !eqmod(mconst0_value.unwrap(), 0, egraph[subst[mconst0]].data.width) {
+            return false;
+        }
+        if !manual_rule_cmp_i1_combine_precondition(egraph, subst, c1, mconst0) {
+            return false;
+        }
+        return true;
+    }
+}
+
+pub struct applier_rule_cmp_i1_combine {
+    pub a1: Var,
+    pub c1: Var,
+    pub a2: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_cmp_i1_combine {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a1_id = subst[self.a1];
+        let bounded_width = egraph[a1_id].data.width;
+        let t1 = egraph.add(SimpleAst::Neg([a1_id]));
+        let c1_id = subst[self.c1];
+        let t3 = egraph.add(SimpleAst::And([t1, c1_id]));
+        let a2_id = subst[self.a2];
+        let t5 = egraph.add(SimpleAst::And([a2_id, c1_id]));
+        let t6 = egraph.add(SimpleAst::Xor([t3, t5]));
+        let literal_0_id = egraph.add(SimpleAst::Constant {
+            c: 0,
+            width: bounded_width,
+        });
+        let t8 = egraph.add(SimpleAst::ICmp {
+            predicate: Predicate::Ne,
+            children: [t6, literal_0_id],
+        });
+
+        println!("Applying!");
+
+        if egraph.union(eclass, t8) {
+            vec![t8]
         } else {
             vec![]
         }

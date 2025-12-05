@@ -70,6 +70,11 @@ namespace Mba.Simplifier.Bindings
 
         public AstIdx Binop(AstOp opcode, AstIdx a, AstIdx b)
         {
+            var w1 = GetWidth(a);
+            var w2 = GetWidth(b);
+            if (w1 != w2)
+                Debugger.Break();
+
             return opcode switch
             {
                 AstOp.Add => Add(a, b),
@@ -169,6 +174,16 @@ namespace Mba.Simplifier.Bindings
         public unsafe KnownBits GetKnownBits(AstIdx id) => Api.ContextGetKnownBits(this, id);
         public unsafe ulong GetImutData(AstIdx id) => Api.ContextGetImutData(this, id);
         public unsafe void SetImutData(AstIdx id, ulong imut) => Api.ContextSetImutData(this, id, imut);
+        public unsafe AstIdx GetOp(AstIdx id, uint operand)
+        {
+            return operand switch
+            {
+                0 => GetOp0(id),
+                1 => GetOp1(id),
+                2 => GetOp2(id),
+                _ => throw new InvalidOperationException()
+            };
+        }
         public unsafe AstIdx GetOp0(AstIdx id) => Api.ContextGetOp0(this, id);
         public unsafe AstIdx GetOp1(AstIdx id) => Api.ContextGetOp1(this, id);
         public unsafe AstIdx GetOp2(AstIdx id) => Api.ContextGetOp2(this, id);

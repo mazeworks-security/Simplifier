@@ -80,6 +80,13 @@ impl<'a> CostFunction<SimpleAst> for EGraphCostFn<'a> {
 }
 
 fn main() {
+    let parseeee = "(^ (\"icmp ==\" (& ?a1 ?c1) ?mconst0) (\"icmp !=\" (& ?a2 ?c1) ?mconst0))"
+        .parse::<egg::Pattern<SimpleAst>>()
+        .unwrap();
+    dbg!("Parsed {}", parseeee.to_string());
+
+    return;
+
     let mut arena = Arena::new();
 
     let mut ctx = Context { arena };

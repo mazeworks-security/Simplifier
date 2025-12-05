@@ -337,6 +337,7 @@ namespace Mba.Simplifier.Interpreter
                     case AstOp.Xor:
                     case AstOp.Pow:
                     case AstOp.Lshr:
+                    case AstOp.ICmp:
                     case AstOp.Select:
                         LowerBinop(idx, opc, width, nodeInfo);
                         break;
@@ -430,7 +431,8 @@ namespace Mba.Simplifier.Interpreter
                     assembler.PopReg(tempReg);
 
                 assembler.TestRegReg(tempReg, tempReg);
-                assembler.MovMem64Reg(localsRegister, 0, tempReg);
+                //assembler.MovMem64Reg(localsRegister, 0, tempReg);
+                assembler.MovRegMem64(tempReg, localsRegister, 0);
             }
 
 

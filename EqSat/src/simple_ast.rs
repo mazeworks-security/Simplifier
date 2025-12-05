@@ -741,6 +741,17 @@ impl Language for SimpleAst {
                 (SimpleAst::Trunc { a: _, to: to1 }, SimpleAst::Trunc { a: _, to: to2 }) => {
                     to1 == to2
                 }
+                (
+                    SimpleAst::ICmp {
+                        predicate: p1,
+                        children: c1,
+                    },
+                    SimpleAst::ICmp {
+                        predicate: p2,
+                        children: c2,
+                    },
+                ) => p1 == p2,
+                (SimpleAst::Select { children: c1 }, SimpleAst::Select { children: c2 }) => true,
                 _ => false,
             }
     }
@@ -1401,7 +1412,8 @@ impl AstPrinter {
         };
 
         // Don't put parens for constants or symbols
-        if operator != "" {
+        let parens = operator != "" || matches!(ast, SimpleAst::Select { .. });
+        if parens {
             self.output.push_str("(")
         }
 
@@ -1457,7 +1469,7 @@ impl AstPrinter {
             }
         }
 
-        if operator != "" {
+        if parens {
             self.output.push_str(")")
         }
     }
@@ -3981,6 +3993,16 @@ pub fn as_constant(data: &AstData) -> Option<u64> {
 pub fn eqmod(c1: u64, c2: u64, width: u8) -> bool {
     let mask = get_modulo_mask(width);
     return (c1 & mask) == (c2 & mask);
+}
+
+pub fn manual_rule_cmp_i1_combine_precondition(
+    egraph: &EEGraph,
+    subst: &Subst,
+    c1: Var,
+    mconst0: Var,
+) -> bool {
+    let constant = as_constant(&egraph[subst[c1]].data).unwrap();
+    return constant.count_ones() == 1;
 }
 
 // Below is an FFI interface for egraphs and Expr instances.
