@@ -1,6 +1,8 @@
 ﻿using Antlr4.Runtime.Misc;
 using Mba.Ast;
 using Mba.Common.Ast;
+using Mba.Simplifier.Bindings;
+using Mba.Testing;
 using Mba.Utility;
 using Microsoft.Z3;
 using System;
@@ -13,41 +15,90 @@ using static Antlr4.Runtime.Atn.SemanticContext;
 
 namespace Mba.Simplifier.DSL
 {
+    /// <summary>
+    /// Generated rust applier struct and function
+    /// </summary>
+    /// <param name="StructName">The name of the applier struct</param>
+    /// <param name="ArgNames">An ordered list of the function argument names</param>
+    /// <param name="Body">The code containing both the struct and Applier trait implementation.</param>
+    public record Applier(string StructName, IReadOnlyList<string> ArgNames, string Body);
+
     public static class EggBackend
     {
         public static string GenerateEggDsl(IReadOnlyList<DslRule> rules)
         {
-            var rewriteSb = new StringBuilder();
+            var ruleSb = new StringBuilder();
+            var codeBuilder = new CodeBuilder(ruleSb);
+
             var applierSb = new StringBuilder();
-            foreach(var rewrite in rules)
+
+            foreach(var rewrite in rules.Take(1))
             {
+                
                 // In the case of a rewrite rule like `x-x` => 0, we need to some way of telling ISLE what bit width to create `0` as.
                 // To solve this we keep track of variable and width occurrences during transpilation, then pick one of the occurrences to steal the width field from.
                 // Special care needs to be taken for zext/trunc instructions though.
                 Dictionary<AstNode, string> boundedNames = new();
                 Dictionary<ulong, string> modularConstants = new();
 
+                // Append the start of the rewrite rule.
                 var sanitizedName = "rule_" + rewrite.Name.Replace("-", "_");
+                codeBuilder.Append($"// {rewrite.Name}: {rewrite.Before.ToString()} => {rewrite.After.ToString()}\n");
+                codeBuilder.Append($@"rewrite!(""{rewrite.Name}""; ");
 
-                rewriteSb.Append($"// {rewrite.Name}: {rewrite.Before.ToString()} => {rewrite.After.ToString()}\n");
-                rewriteSb.Append($@"        rewrite!(""{rewrite.Name}""; ");
+                // Emit a string representation of the LHS ast
+                ruleSb.Append(@"""");
+                TranspileLhs(rewrite.Before, ruleSb, boundedNames, modularConstants);
+                ruleSb.AppendLine(@""" => {");
 
-                rewriteSb.Append(@"""");
-                TranspileLhs(rewrite.Before, rewriteSb, boundedNames, modularConstants);
-                rewriteSb.AppendLine(@""" => ");
-                rewriteSb.Append("\n\n\n");
+                // Compile the precondition to a method.
+                var preconditionMethodName = $"{sanitizedName}_precondition";
+                var preconditionArgs = boundedNames.Where(x => x.Key is ConstNode || x.Key is WildCardConstantNode).OrderBy(x => x.Value).ToList();
+                var preconditionMethod = GetPreconditionMethod(preconditionMethodName, preconditionArgs);
 
-                // First we need to do the precondition.
-                var precondition = GetPreconditionMethod(sanitizedName, boundedNames.Where(x => (x is ConstNode || x is WildCardConstantNode)).ToList());
-                Console.WriteLine(precondition + "\n\n\n");
-                continue;
-
+                // Generate an applier for the RHS
+                var outArgs = new OrderedSet<AstNode>();
                 var boundingNode = GetWidthBoundingNode(rewrite.After, boundedNames);
                 var boundingName = boundedNames[boundingNode];
-                applierSb.AppendLine($"let bounded_width = &egraph[subst[self.{boundingName}]].data.width;");
-                TranspileRhs(rewrite.After, applierSb, boundedNames, new(), boundingName);
-                applierSb.AppendLine("\n\n\n");
+                var cache = new Dictionary<AstNode, string>();
+                // Lower the AST to a series of egg AST constructor calls.
+                var rhsDagStr = TranspileRhs(rewrite.After, boundedNames, cache, boundingNode, outArgs);
+                var applier = GetRhsApplier(sanitizedName, outArgs, boundedNames, rhsDagStr, cache[rewrite.After]);
+
+
+                // Actually emit the rhs of the rule now
+                codeBuilder.Indent();
+                codeBuilder.AppendLine($"{applier.StructName} {{");
+                codeBuilder.Indent();
+                foreach (var argName in applier.ArgNames)
+                    codeBuilder.AppendLine(@$"{argName} : ""?{argName}"".parse().unwrap(),");
+                codeBuilder.Outdent();
+                codeBuilder.AppendLine("}");
+                codeBuilder.Outdent();
+
+                // Emit the precondition if one exists.
+                if (preconditionMethod == null)
+                {
+                    codeBuilder.AppendLine("}),");
+                }
+
+                else
+                {
+                    var precondArgStr = String.Join(", ", preconditionArgs.Select(x => $@"""?{x.Value}"""));
+                    codeBuilder.AppendLine($@"}} if ({preconditionMethodName}({precondArgStr}))),");
+                }
+
+                codeBuilder.AppendLine("\n");
+
+                // Append the precondition method
+                if(preconditionMethod != null)
+                    applierSb.AppendLine(preconditionMethod + "\n");
+
+                applierSb.AppendLine(applier.Body);
+
             }
+
+            Console.WriteLine(codeBuilder.ToString());
 
             Console.WriteLine(applierSb.ToString());
 
@@ -69,6 +120,7 @@ namespace Mba.Simplifier.DSL
                 var constName = (modularConstants.ContainsKey((ulong)constNode.Value) ? modularConstants[(ulong)constNode.Value] : $"mconst{modularConstants.Count}");
                 sb.Append($"?{constName}");
                 boundedNames[ast] = (constName);
+                modularConstants.TryAdd((ulong)constNode.Value, constName);
                 return;
             }
 
@@ -96,7 +148,14 @@ namespace Mba.Simplifier.DSL
             sb.Append(")");
         }
 
-        private static void TranspileRhs(AstNode ast, StringBuilder sb, Dictionary<AstNode, string> boundedNames, Dictionary<AstNode, string> cache, string widthFieldName)
+        private static string TranspileRhs(AstNode ast, Dictionary<AstNode, string> boundedNames, Dictionary<AstNode, string> cache, AstNode widthField, OrderedSet<AstNode> outArgs)
+        {
+            var sb = new StringBuilder();
+            TranspileRhsInternal(ast, sb, boundedNames, cache, widthField, outArgs);
+            return sb.ToString();
+        }
+
+        private static void TranspileRhsInternal(AstNode ast, StringBuilder sb, Dictionary<AstNode, string> boundedNames, Dictionary<AstNode, string> cache, AstNode widthField, OrderedSet<AstNode> outArgs)
         {
             // Assign the symbol id to a local variable
             if (ast is VarNode || ast is WildCardConstantNode)
@@ -104,6 +163,7 @@ namespace Mba.Simplifier.DSL
                 var name = boundedNames[ast];
                 var idName = $"{name}_id";
                 sb.AppendLine($"let {idName} = subst[self.{name}];");
+                outArgs.Add(ast);
                 cache[ast] = idName;
                 return;
             }
@@ -111,8 +171,11 @@ namespace Mba.Simplifier.DSL
             // Handle a literal constant, e.g. "-1)
             if (ast is ConstNode constNode)
             {
+                var widthFieldName = boundedNames[widthField];
                 var literalName = $"literal_{((ulong)constNode.Value)}_id";
                 sb.AppendLine($"let {literalName} = egraph.add(SimpleAst::Constant {{c: {constNode.Value}, width: {widthFieldName} }});");
+                //outArgs.Add(ast);
+                outArgs.Add(widthField);
                 cache[ast] = literalName;
                 return;
             }
@@ -122,7 +185,7 @@ namespace Mba.Simplifier.DSL
             {
                 if (cache.ContainsKey(child))
                     continue;
-                TranspileRhs(child, sb, boundedNames, cache, widthFieldName);
+                TranspileRhsInternal(child, sb, boundedNames, cache, widthField, outArgs);
             }
 
             var destName = $"t{cache.Count}";
@@ -189,13 +252,14 @@ namespace Mba.Simplifier.DSL
             return;
         }
 
-        private static string GetPreconditionMethod(string ruleName, List<KeyValuePair<AstNode, string>> names)
+        private static string GetPreconditionMethod(string methodName, IReadOnlyList<KeyValuePair<AstNode, string>> constantNodes)
         {
-            var constantNodes = names.OrderBy(x => x.Value).ToList();
+            if (!constantNodes.Any())
+                return null;
 
             var sb = new CodeBuilder();
             var args = String.Join(", ", constantNodes.Select(x => $"{x.Value}:  &str"));
-            sb.AppendLine($"pub fn {ruleName}_precondition({args}) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool {{");
+            sb.AppendLine($"pub fn {methodName}({args}) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool {{");
             sb.Indent();
 
             foreach(var arg in constantNodes)
@@ -213,7 +277,7 @@ namespace Mba.Simplifier.DSL
             var modularConstants = constantNodes.Where(x => x.Key is ConstNode).ToList();
             if(modularConstants.Any())
             {
-                var eqmodCond = String.Join("|| ", modularConstants.Select(x => $"!eqmod({x.Value}_value, {(x.Key as ConstNode).UValue}, egraph[subst[{x.Value}]].data.width)"));
+                var eqmodCond = String.Join("|| ", modularConstants.Select(x => $"!eqmod({x.Value}_value.unwrap(), {(x.Key as ConstNode).UValue}, egraph[subst[{x.Value}]].data.width)"));
                 sb.AppendLine($"if {eqmodCond} {{ return false; }}");
             }
 
@@ -225,6 +289,50 @@ namespace Mba.Simplifier.DSL
             }
 
             return sb.ToString();
+        }
+
+
+
+        private static Applier GetRhsApplier(string ruleName, OrderedSet<AstNode> args, Dictionary<AstNode, string> boundedNames, string rhsStr, string rhsRootVariableName)
+        {
+            var sb = new CodeBuilder();
+
+            var structName = $"applier_{ruleName}";
+            sb.AppendLine(@$"pub struct {structName} {{");
+            sb.Indent();
+
+            var argNames = args.Select(x => boundedNames[x]).ToList();
+            foreach (var argName in argNames)
+                sb.AppendLine($"pub {argName}: Var,");
+            sb.Outdent();
+            sb.AppendLine("}");
+
+
+            rhsStr = String.Join("\n", rhsStr.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(x => "        " + x));
+
+
+            string body = @$"impl Applier<SimpleAst, MbaAnalysis> for {structName} {{
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {{
+{rhsStr}
+
+        if egraph.union(eclass, {rhsRootVariableName}) {{
+            vec![{rhsRootVariableName}]
+        }} else {{
+            vec![]
+        }}
+    }}
+}}
+";
+            sb.Append(body);
+            return new Applier(structName, argNames, sb.ToString());
+            
         }
 
         private static string GetOperatorName(AstNode node)

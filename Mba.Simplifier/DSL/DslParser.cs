@@ -27,9 +27,10 @@ namespace Mba.Simplifier.DSL
                 var name = split[0];
 
                 Dictionary<string, VarNode> varNodes = new();
+                var constNodes = new Dictionary<(ulong, uint), ConstNode>();
                 Dictionary<string, WildCardConstantNode> wildCardConstantNodes = new();
-                var before = AstParser.Parse(split[1], 64, varNodes, wildCardConstantNodes);
-                var after = AstParser.Parse(split[2], 64, varNodes, wildCardConstantNodes);
+                var before = AstParser.Parse(split[1], 64, varNodes, constNodes, wildCardConstantNodes);
+                var after = AstParser.Parse(split[2], 64, varNodes, constNodes, wildCardConstantNodes);
 
                 var rule = new DslRule(name, before, after);
                 rules.Add(rule);

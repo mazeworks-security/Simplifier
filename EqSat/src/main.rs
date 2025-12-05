@@ -33,6 +33,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 mod assembler;
 mod known_bits;
 mod mba;
+mod rules;
 mod simple_ast;
 mod truth_table_database;
 

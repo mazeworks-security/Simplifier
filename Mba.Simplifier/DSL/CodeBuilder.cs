@@ -10,7 +10,17 @@ namespace Mba.Simplifier.DSL
     {
         private string indent = String.Empty;
 
-        private StringBuilder builder = new StringBuilder();
+        private StringBuilder builder;
+
+        public CodeBuilder()
+        {
+            builder = new StringBuilder();
+        }
+
+        public CodeBuilder(StringBuilder sb)
+        {
+            builder = sb;
+        }
 
         public void Indent(int count = 1)
         {

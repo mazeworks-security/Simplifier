@@ -10,7 +10,10 @@ use std::{
 };
 
 use ahash::AHashMap;
-use egg::{define_language, rewrite, Analysis, DidMerge, Id, Language, Subst};
+use egg::{
+    define_language, rewrite, Analysis, Applier, DidMerge, Id, Language, PatternAst, Subst, Symbol,
+    Var,
+};
 use iced_x86::{
     code_asm::{st, CodeAssembler},
     Code, Instruction, Register,
@@ -655,24 +658,24 @@ pub fn try_make_semilinear(max: AstClass, c1: AstClass, c2: AstClass) -> AstClas
 #[derive(Clone, Hash, PartialEq, Eq, Copy, Debug)]
 pub struct AstData {
     // Bit width
-    width: u8,
+    pub width: u8,
 
     // Size of the AST(note that this is the AST size rather than DAG size)
-    cost: u32,
+    pub cost: u32,
 
     // Indicates whether the node contains any nonlinear polynomial parts.
-    has_poly: bool,
+    pub has_poly: bool,
 
     // Classification of the ast
-    class: AstClass,
+    pub class: AstClass,
 
     // Known zero or one bits
-    known_bits: KnownBits,
+    pub known_bits: KnownBits,
 
     // Internal mutable data for use in different algorithms.
     // Specifically we use this field to avoid unnecessarily storing data in hashmaps.
     //  e.g "how many users does this node have?" can be stored here temporarily.
-    imut_data: u64,
+    pub imut_data: u64,
 }
 
 impl Language for SimpleAst {
@@ -3898,33 +3901,6 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
         unsafe {
             std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
         }
-    }
-}
-
-pub type Rewrite = egg::Rewrite<SimpleAst, MbaAnalysis>;
-
-pub fn make_simplification_rules() -> Vec<Rewrite> {
-    vec![
-        // Or rules
-        rewrite!("or-zero"; "(| ?a 0)" => "?a"),
-        rewrite!("or-maxint"; "(| ?a -1)" => "-1"),
-        rewrite!("disjoint-bitwise-add-into-or"; "(+ (& (& ?y ?c1) ?x) (& ?x ?c2))" => "(& (| (& ?y ?c1) ?c2) ?x)" if (are_disjoint_const("?c1", "?c2"))),
-    ]
-}
-
-pub fn are_disjoint_const(var1: &str, var2: &str) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool {
-    let var1 = var1.parse().unwrap();
-    let var2 = var2.parse().unwrap();
-    move |egraph, _, subst| {
-        let c1 = as_constant(&egraph[subst[var1]].data);
-        let c2 = as_constant(&egraph[subst[var2]].data);
-        if (c1.is_none() || c2.is_none()) {
-            return false;
-        }
-
-        let cond1 = eqmod(c1.unwrap(), 1111, egraph[subst[var1]].data.width);
-
-        return (c1.unwrap() & c2.unwrap()) == 0;
     }
 }
 
