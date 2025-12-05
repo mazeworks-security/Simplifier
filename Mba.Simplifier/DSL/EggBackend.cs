@@ -46,7 +46,9 @@ namespace Mba.Simplifier.DSL
 
                 // Append the start of the rewrite rule.
                 var sanitizedName = "rule_" + rewrite.Name.Replace("-", "_");
-                codeBuilder.Append($"// {rewrite.Name}: {rewrite.Before.ToString()} => {rewrite.After.ToString()}\n");
+                //codeBuilder.Append($"// {rewrite.Name}: {rewrite.Before.ToString()} => {rewrite.After.ToString()}\n");
+                codeBuilder.AppendLine($"// {rewrite.Name}:");
+                codeBuilder.AppendLine($"// {rewrite.Before.ToString()} => {rewrite.After.ToString()}");
                 codeBuilder.Append($@"rewrite!(""{rewrite.Name}""; ");
 
                 // Emit a string representation of the LHS ast
@@ -91,7 +93,7 @@ namespace Mba.Simplifier.DSL
                     codeBuilder.AppendLine($@"}} if ({preconditionMethodName}({precondArgStr}))),");
                 }
 
-                codeBuilder.AppendLine("\n");
+                codeBuilder.AppendLine("");
 
                 // Append the precondition method
                 if(preconditionMethod != null)
@@ -329,7 +331,7 @@ namespace Mba.Simplifier.DSL
             foreach (var argName in argNames)
                 sb.AppendLine($"pub {argName}: Var,");
             sb.Outdent();
-            sb.AppendLine("}");
+            sb.AppendLine("}\n");
 
 
             rhsStr = String.Join("\n", rhsStr.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(x => "        " + x));
@@ -364,8 +366,8 @@ namespace Mba.Simplifier.DSL
             return node.Kind switch
             {
                 AstKind.Pow => "**",
-                AstKind.Add => "**",
-                AstKind.Mul => "**",
+                AstKind.Add => "+",
+                AstKind.Mul => "*",
                 AstKind.And => "&",
                 AstKind.Or => "|",
                 AstKind.Xor => "^",

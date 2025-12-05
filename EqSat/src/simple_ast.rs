@@ -939,6 +939,13 @@ impl Analysis<SimpleAst> for MbaAnalysis {
             }
         };
 
+        dbg!(
+            "Making data for enode: {:?} {:?} {:?}",
+            enode,
+            data,
+            as_constant(&data)
+        );
+
         return data;
     }
 
@@ -3906,9 +3913,10 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
 }
 
 pub fn as_constant(data: &AstData) -> Option<u64> {
-    return Some(data.imut_data);
+    return data.known_bits.as_constant();
 }
 
 pub fn eqmod(c1: u64, c2: u64, width: u8) -> bool {
-    return false;
+    let mask = get_modulo_mask(width);
+    return (c1 & mask) == (c2 & mask);
 }

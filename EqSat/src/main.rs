@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use egg::{CostFunction, EGraph, Extractor, Id, Language, RecExpr};
+use egg::{BackoffScheduler, CostFunction, EGraph, Extractor, Id, Language, RecExpr, Runner};
 use rand::Rng;
 
 // use egraph::simplify_via_eqsat;
@@ -11,11 +11,12 @@ use std::{
     fs::{self, File},
     io::{BufRead, BufReader},
     path::Path,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use crate::{
     mba::Context as MbaContext,
+    rules::get_generated_rules,
     simple_ast::{
         recursive_simplify, Arena, AstPrinter, Context as Ctx, EEGraph, MbaAnalysis, Predicate,
     },
@@ -93,24 +94,67 @@ fn main() {
     let w = 32;
     let x = SimpleAst::Symbol { id: 0, width: w };
     let x_id = egraph.add(x);
-    let y = SimpleAst::Symbol { id: 1, width: w };
+    //let y = SimpleAst::Symbol { id: 1, width: w };
+    let y = SimpleAst::Constant { c: 1111, width: w };
     let y_id = egraph.add(y);
-    let constant_id = egraph.add(SimpleAst::Constant { c: 10000, width: w });
+    let constant_id = egraph.add(SimpleAst::Constant {
+        c: 234234432,
+        width: w,
+    });
+
+    let c2_id = egraph.add(SimpleAst::Constant {
+        c: 234243,
+        width: w,
+    });
 
     let sum = SimpleAst::Add([x_id, y_id]);
     let mut sum_id = egraph.add(sum.clone());
 
-    sum_id = egraph.add(SimpleAst::Add([sum_id, constant_id]));
+    sum_id = egraph.add(SimpleAst::Add([x_id, constant_id]));
 
+    sum_id = egraph.add(SimpleAst::Add([sum_id, c2_id]));
+
+    /*
     sum_id = egraph.add(SimpleAst::Zext { a: sum_id, to: 64 });
 
     sum_id = egraph.add(SimpleAst::ICmp {
         predicate: Predicate::Eq,
         children: [x_id, y_id],
     });
+    */
 
+    /*
     let cost_func = EGraphCostFn { egraph: &egraph };
     let extractor = Extractor::new(&egraph, cost_func);
+
+    let res = extractor.find_best(sum_id);
+
+    let sum_str = res.1.to_string();
+    dbg!("Extracted {}", sum_str.clone());
+
+    let parse: RecExpr<SimpleAst> = sum_str.clone().to_owned().parse().unwrap();
+    dbg!("Parsed {}", parse.to_string());
+    */
+
+    let ms = 5000;
+    let mut runner: Runner<SimpleAst, MbaAnalysis> = Runner::default()
+        .with_time_limit(Duration::from_millis(ms))
+        .with_scheduler(
+            BackoffScheduler::default()
+                .with_ban_length(5)
+                .with_initial_match_limit(1_000_00),
+        )
+        .with_node_limit(1000000 * 10)
+        .with_iter_limit(500 * 10)
+        .with_egraph(egraph);
+
+    let rules = get_generated_rules();
+    runner = runner.run(&rules);
+
+    let cost_func = EGraphCostFn {
+        egraph: &runner.egraph,
+    };
+    let extractor = Extractor::new(&runner.egraph, cost_func);
 
     let res = extractor.find_best(sum_id);
 
