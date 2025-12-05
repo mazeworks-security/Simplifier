@@ -66,7 +66,7 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 [[package]]
 name = "egg"
 version = "0.10.0"
-source = "git+https://github.com/Colton1skees/egg.git#4ab66742e221af78481e9cf1b741c4d2776d6a91"
+source = "git+https://github.com/Colton1skees/egg.git#9875e40e8de3238a5d81e751f19f43f0c4d7c0a2"
 dependencies = [
  "env_logger",
  "hashbrown 0.15.5",

@@ -6,13 +6,14 @@ use std::{
     f32::consts::PI,
     ffi::{CStr, CString},
     ops::Add,
+    time::Duration,
     u16, u64, vec,
 };
 
 use ahash::AHashMap;
 use egg::{
-    define_language, rewrite, Analysis, Applier, DidMerge, Id, Language, PatternAst, RecExpr,
-    Subst, Symbol, Var,
+    define_language, rewrite, Analysis, Applier, BackoffScheduler, DidMerge, Extractor, Id,
+    Language, PatternAst, RecExpr, Runner, Subst, Symbol, Var,
 };
 use iced_x86::{
     code_asm::{st, CodeAssembler},
@@ -27,7 +28,9 @@ use crate::{
     },
     known_bits::{self, *},
     mba::{self, Context as MbaContext},
+    rules::get_generated_rules,
     truth_table_database::{TruthTable, TruthTableDatabase},
+    EGraphCostFn,
 };
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -1046,6 +1049,22 @@ pub fn add_to_egraph(
     return eclass;
 }
 
+pub fn extract_from_egraph(ctx: &mut Context, egraph: &EEGraph, eclass: Id) -> AstIdx {
+    let cost_func = EGraphCostFn { egraph: &egraph };
+    let extractor = Extractor::new(&egraph, cost_func);
+    let rec_expr = extractor.find_best(eclass);
+    return from_rec_expr(ctx, egraph, &rec_expr.1);
+}
+/*
+pub fn extract_all_from_egraph(ctx: &mut Context, egraph: &EEGraph, eclass: Id) -> AstIdx {
+    let cost_func = EGraphCostFn { egraph: &egraph };
+    let extractor = Extractor::new(&egraph, cost_func);
+    let rec_expr = extractor.find_best(eclass);
+    return from_rec_expr(ctx, egraph, &rec_expr.1);
+}
+    */
+
+#[inline(never)]
 pub fn from_rec_expr(ctx: &mut Context, egraph: &EEGraph, rec_expr: &RecExpr<SimpleAst>) -> AstIdx {
     let mut ids = vec![AstIdx::from(usize::MAX); rec_expr.len()];
 
@@ -1973,19 +1992,7 @@ pub extern "C" fn ContextGetOp0(ctx: *const Context, id: AstIdx) -> AstIdx {
 
 pub fn get_op0(ctx: &Context, id: AstIdx) -> AstIdx {
     let ast = ctx.arena.get_node(id);
-    return match ast {
-        SimpleAst::Add([a, b]) => *a,
-        SimpleAst::Mul([a, b]) => *a,
-        SimpleAst::Pow([a, b]) => *a,
-        SimpleAst::And([a, b]) => *a,
-        SimpleAst::Or([a, b]) => *a,
-        SimpleAst::Xor([a, b]) => *a,
-        SimpleAst::Neg([a]) => *a,
-        SimpleAst::Lshr([a, b]) => *a,
-        SimpleAst::Zext { a, to } => *a,
-        SimpleAst::Trunc { a, to } => *a,
-        _ => unreachable!("Type has no first operand!"),
-    };
+    return ast.children()[0];
 }
 
 #[no_mangle]
@@ -1999,16 +2006,37 @@ pub extern "C" fn ContextGetOp1(ctx: *mut Context, id: AstIdx) -> AstIdx {
 
 pub fn get_op1(ctx: &Context, id: AstIdx) -> AstIdx {
     let ast = (*ctx).arena.get_node(id);
-    return match ast {
-        SimpleAst::Add([a, b]) => *b,
-        SimpleAst::Mul([a, b]) => *b,
-        SimpleAst::Pow([a, b]) => *b,
-        SimpleAst::And([a, b]) => *b,
-        SimpleAst::Or([a, b]) => *b,
-        SimpleAst::Xor([a, b]) => *b,
-        SimpleAst::Lshr([a, b]) => *b,
-        _ => unreachable!("Type has no second operand!"),
-    };
+    return ast.children()[1];
+}
+
+#[no_mangle]
+pub extern "C" fn ContextGetOp2(ctx: *mut Context, id: AstIdx) -> AstIdx {
+    unsafe {
+        unsafe {
+            return get_op2(&(*ctx), id);
+        }
+    }
+}
+
+pub fn get_op2(ctx: &Context, id: AstIdx) -> AstIdx {
+    let ast = (*ctx).arena.get_node(id);
+    return ast.children()[2];
+}
+
+#[no_mangle]
+pub extern "C" fn ContextGetPredicate(ctx: *mut Context, id: AstIdx) -> u8 {
+    unsafe {
+        let ast = (*ctx).arena.get_node(id);
+        if let SimpleAst::ICmp {
+            predicate,
+            children,
+        } = ast
+        {
+            return (*predicate) as u8;
+        }
+    }
+
+    panic!("ast is not a constant!");
 }
 
 #[no_mangle]
@@ -3953,4 +3981,121 @@ pub fn as_constant(data: &AstData) -> Option<u64> {
 pub fn eqmod(c1: u64, c2: u64, width: u8) -> bool {
     let mask = get_modulo_mask(width);
     return (c1 & mask) == (c2 & mask);
+}
+
+// Below is an FFI interface for egraphs and Expr instances.
+#[no_mangle]
+pub extern "C" fn CreateEGraph() -> *mut EEGraph {
+    let analysis = MbaAnalysis {};
+    let egraph = EEGraph::new(analysis);
+    let pgraph = Box::new(egraph);
+    return Box::into_raw(pgraph);
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphAddFromContext(
+    egraph_p: *mut EEGraph,
+    ctx_p: *mut Context,
+    idx: AstIdx,
+) -> AstIdx {
+    let mut ctx: &mut Context = unsafe { &mut (*ctx_p) };
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    let mut cache = AHashMap::new();
+    return add_to_egraph(ctx, egraph, idx, &mut cache);
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphRun(egraph_p: *mut EEGraph, ms_limit: u64, iter_limit: u64) {
+    let mut egraph = unsafe { std::mem::take(&mut *egraph_p) };
+
+    let mut runner: Runner<SimpleAst, MbaAnalysis> = Runner::default()
+        .with_time_limit(Duration::from_millis(ms_limit))
+        .with_scheduler(
+            BackoffScheduler::default()
+                .with_ban_length(5)
+                .with_initial_match_limit(1_000_00),
+        )
+        .with_node_limit(1000000 * 10)
+        .with_iter_limit(iter_limit as usize)
+        .with_egraph(egraph);
+
+    // Run equality saturation
+    let rules = get_generated_rules();
+    runner = runner.run(&rules);
+
+    dbg!("{}", runner.stop_reason);
+
+    unsafe {
+        std::mem::swap(&mut *egraph_p, &mut runner.egraph);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphGetClasses(egraph_p: *mut EEGraph, out_len: *mut u64) -> *mut Id {
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    let mut classes = Vec::new();
+    for c in egraph.classes() {
+        classes.push(c.id);
+    }
+
+    unsafe { *out_len = classes.len() as u64 };
+    let boxed = classes.into_boxed_slice();
+    let released = Box::into_raw(boxed);
+
+    // https://stackoverflow.com/a/57616981/6855629
+    return released as *mut _;
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphExtractAll(
+    egraph_p: *mut EEGraph,
+    ctx_p: *mut Context,
+    out_len: *mut u64,
+) -> *mut Id {
+    let mut ctx: &mut Context = unsafe { &mut (*ctx_p) };
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    let mut classes = Vec::new();
+    let cost_func = EGraphCostFn { egraph: &egraph };
+    let extractor = Extractor::new(&egraph, cost_func);
+    for c in egraph.classes() {
+        classes.push(c.id);
+        let rec_expr = extractor.find_best(c.id);
+        classes.push(from_rec_expr(ctx, egraph, &rec_expr.1));
+    }
+
+    unsafe { *out_len = classes.len() as u64 };
+    let boxed = classes.into_boxed_slice();
+    let released = Box::into_raw(boxed);
+
+    // https://stackoverflow.com/a/57616981/6855629
+    return released as *mut _;
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphExtract(
+    egraph_p: *mut EEGraph,
+    ctx_p: *mut Context,
+    eclass: AstIdx,
+) -> AstIdx {
+    let mut ctx: &mut Context = unsafe { &mut (*ctx_p) };
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    return extract_from_egraph(ctx, egraph, eclass);
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphUnion(egraph_p: *mut EEGraph, a: AstIdx, b: AstIdx) {
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    egraph.union(a, b);
+}
+
+#[no_mangle]
+pub extern "C" fn EGraphRebuild(egraph_p: *mut EEGraph) {
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    egraph.rebuild();
 }

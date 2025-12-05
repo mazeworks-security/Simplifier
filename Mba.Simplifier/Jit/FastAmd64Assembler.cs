@@ -352,6 +352,94 @@ namespace Mba.Simplifier.Jit
             EmitBytes(rex, opcode, modrm, imm8);
         }
 
+        public void CmpRegReg(Register reg1, Register reg2)
+        {
+            byte rex = 0x48;
+            if (IsExtended(reg1)) rex |= 0x01; // B bit for reg1
+            if (IsExtended(reg2)) rex |= 0x04; // R bit for reg2
+
+            byte opcode = 0x39; // CMP r/m64, r64
+            byte modrm = (byte)(0xC0 | ((GetRegisterCode(reg2) & 0x07) << 3) | (GetRegisterCode(reg1) & 0x07));
+            EmitBytes(rex, opcode, modrm);
+        }
+
+        public void TestRegReg(Register reg1, Register reg2)
+        {
+            byte rex = 0x48; // REX.W for 64-bit operands
+            if (IsExtended(reg1)) rex |= 0x01; // B bit for reg1 (r/m field)
+            if (IsExtended(reg2)) rex |= 0x04; // R bit for reg2 (reg field)
+
+            byte opcode = 0x85; // TEST r/m64, r64
+            byte modrm = (byte)(0xC0 | ((GetRegisterCode(reg2) & 0x07) << 3) | (GetRegisterCode(reg1) & 0x07));
+            EmitBytes(rex, opcode, modrm);
+        }
+
+        public void CmoveRegReg(Register reg1, Register reg2)
+        {
+            byte rex = 0x48; // REX.W for 64-bit operands
+            if (IsExtended(reg1)) rex |= 0x04; // R bit for reg1 (reg field - destination)
+            if (IsExtended(reg2)) rex |= 0x01; // B bit for reg2 (r/m field - source)
+
+            byte opcode1 = 0x0F;
+            byte opcode2 = 0x44; // CMOVE/CMOVZ opcode
+            byte modrm = (byte)(0xC0 | ((GetRegisterCode(reg1) & 0x07) << 3) | (GetRegisterCode(reg2) & 0x07));
+            EmitBytes(rex, opcode1, opcode2, modrm);
+        }
+
+        public void SeteReg(Register reg1)
+        {
+            byte rex = 0x00;
+
+            // REX prefix needed for:
+            // 1. Extended registers (R8-R15)
+            // 2. Accessing low byte of RSI, RDI, RBP, RSP (requires REX.W=0)
+            if (IsExtended(reg1))
+            {
+                rex = 0x41; // REX.B bit set for extended registers
+            }
+            else if (reg1 >= Register.RSP && reg1 <= Register.RDI)
+            {
+                // Need REX prefix to access SPL, BPL, SIL, DIL (low bytes of RSP, RBP, RSI, RDI)
+                rex = 0x40;
+            }
+
+            byte opcode1 = 0x0F;
+            byte opcode2 = 0x94; // SETE/SETZ opcode
+            byte modrm = (byte)(0xC0 | (GetRegisterCode(reg1) & 0x07));
+
+            if (rex != 0)
+                EmitBytes(rex, opcode1, opcode2, modrm);
+            else
+                EmitBytes(opcode1, opcode2, modrm);
+        }
+
+        public void SetneReg(Register reg1)
+        {
+            byte rex = 0x00;
+
+            // REX prefix needed for:
+            // 1. Extended registers (R8-R15)
+            // 2. Accessing low byte of RSI, RDI, RBP, RSP (requires REX.W=0)
+            if (IsExtended(reg1))
+            {
+                rex = 0x41; // REX.B bit set for extended registers
+            }
+            else if (reg1 >= Register.RSP && reg1 <= Register.RDI)
+            {
+                // Need REX prefix to access SPL, BPL, SIL, DIL (low bytes of RSP, RBP, RSI, RDI)
+                rex = 0x40;
+            }
+
+            byte opcode1 = 0x0F;
+            byte opcode2 = 0x95; // SETNE/SETNZ opcode
+            byte modrm = (byte)(0xC0 | (GetRegisterCode(reg1) & 0x07));
+
+            if (rex != 0)
+                EmitBytes(rex, opcode1, opcode2, modrm);
+            else
+                EmitBytes(opcode1, opcode2, modrm);
+        }
+
         public void CallReg(Register reg1)
         {
             byte rex = 0x00;
@@ -429,6 +517,30 @@ namespace Mba.Simplifier.Jit
                 Register.R15 => AssemblerRegisters.r15,
                 Register.RBP => AssemblerRegisters.rbp,
                 Register.RSP => AssemblerRegisters.rsp,
+                _ => throw new InvalidOperationException()
+            };
+        }
+
+        public static AssemblerRegister8 Conv8(Register reg)
+        {
+            return reg switch
+            {
+                Register.RCX => AssemblerRegisters.cl,
+                Register.RDX => AssemblerRegisters.dl,
+                Register.RBX => AssemblerRegisters.bl,
+                Register.RDI => AssemblerRegisters.dil,
+                Register.RAX => AssemblerRegisters.al,
+                Register.RSI => AssemblerRegisters.sil,
+                Register.R8 => AssemblerRegisters.r8b,
+                Register.R9 => AssemblerRegisters.r9b,
+                Register.R10 => AssemblerRegisters.r10b,
+                Register.R11 => AssemblerRegisters.r11b,
+                Register.R12 => AssemblerRegisters.r12b,
+                Register.R13 => AssemblerRegisters.r13b,
+                Register.R14 => AssemblerRegisters.r14b,
+                Register.R15 => AssemblerRegisters.r15b,
+                Register.RBP => AssemblerRegisters.bpl,
+                Register.RSP => AssemblerRegisters.spl,
                 _ => throw new InvalidOperationException()
             };
         }

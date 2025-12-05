@@ -189,7 +189,9 @@ namespace Mba.Simplifier.Pipeline
 
         public unsafe static ApInt[] JitResultVectorNew(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, bool multiBit, ApInt numCombinations)
         {
-            ctx.Compile(ast, ModuloReducer.GetMask(bitWidth), variables.ToArray(), MultibitSiMBA.JitPage.Value);
+            var compiler = new Amd64OptimizingJit(ctx);
+            compiler.Compile(ast, variables, MultibitSiMBA.JitPage.Value);
+            //ctx.Compile(ast, ModuloReducer.GetMask(bitWidth), variables.ToArray(), MultibitSiMBA.JitPage.Value);
             var vec = LinearSimplifier.Execute(ctx, bitWidth, mask, variables, multiBit, numCombinations, MultibitSiMBA.JitPage.Value, false);
             return vec;
         }

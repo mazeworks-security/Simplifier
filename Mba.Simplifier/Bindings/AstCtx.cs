@@ -30,6 +30,8 @@ namespace Mba.Simplifier.Bindings
         Symbol = 10,
         Zext = 11,
         Trunc = 12,
+        ICmp = 13,
+        Select = 14,
     }
 
     public class AstCtx
@@ -168,10 +170,9 @@ namespace Mba.Simplifier.Bindings
         public unsafe ulong GetImutData(AstIdx id) => Api.ContextGetImutData(this, id);
         public unsafe void SetImutData(AstIdx id, ulong imut) => Api.ContextSetImutData(this, id, imut);
         public unsafe AstIdx GetOp0(AstIdx id) => Api.ContextGetOp0(this, id);
-        public unsafe AstIdx GetOp1(AstIdx id)
-        {
-            return Api.ContextGetOp1(this, id);
-        }
+        public unsafe AstIdx GetOp1(AstIdx id) => Api.ContextGetOp1(this, id);
+        public unsafe AstIdx GetOp2(AstIdx id) => Api.ContextGetOp2(this, id);
+        public unsafe Predicate GetPredicate(AstIdx id) => Api.ContextGetPredicate(this, id);
         public unsafe ulong GetConstantValue(AstIdx id) => Api.ContextGetConstantValue(this, id);
 
         public unsafe bool IsSymbol(AstIdx id) => GetOpcode(id) == AstOp.Symbol;
@@ -399,6 +400,14 @@ namespace Mba.Simplifier.Bindings
             [DllImport("eq_sat")]
             [SuppressGCTransition]
             public unsafe static extern AstIdx ContextGetOp1(OpaqueAstCtx* ctx, AstIdx id);
+
+            [DllImport("eq_sat")]
+            [SuppressGCTransition]
+            public unsafe static extern AstIdx ContextGetOp2(OpaqueAstCtx* ctx, AstIdx id);
+
+            [DllImport("eq_sat")]
+            [SuppressGCTransition]
+            public unsafe static extern Predicate ContextGetPredicate(OpaqueAstCtx* ctx, AstIdx id);
 
             [DllImport("eq_sat")]
             [SuppressGCTransition]
