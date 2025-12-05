@@ -16,7 +16,9 @@ use std::{
 
 use crate::{
     mba::Context as MbaContext,
-    simple_ast::{recursive_simplify, Arena, AstPrinter, Context as Ctx, EEGraph, MbaAnalysis},
+    simple_ast::{
+        recursive_simplify, Arena, AstPrinter, Context as Ctx, EEGraph, MbaAnalysis, Predicate,
+    },
     truth_table_database::TruthTableDatabase,
 };
 
@@ -92,8 +94,7 @@ fn main() {
     let x_id = egraph.add(x);
     let y = SimpleAst::Symbol { id: 1, width: w };
     let y_id = egraph.add(y);
-    let constant = SimpleAst::Constant { c: 10000, width: w };
-    let constant_id = egraph.add(constant);
+    let constant_id = egraph.add(SimpleAst::Constant { c: 10000, width: w });
 
     let sum = SimpleAst::Add([x_id, y_id]);
     let mut sum_id = egraph.add(sum.clone());
@@ -101,6 +102,11 @@ fn main() {
     sum_id = egraph.add(SimpleAst::Add([sum_id, constant_id]));
 
     sum_id = egraph.add(SimpleAst::Zext { a: sum_id, to: 64 });
+
+    sum_id = egraph.add(SimpleAst::ICmp {
+        predicate: Predicate::Eq,
+        children: [x_id, y_id],
+    });
 
     let cost_func = EGraphCostFn { egraph: &egraph };
     let extractor = Extractor::new(&egraph, cost_func);

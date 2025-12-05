@@ -10,7 +10,7 @@ use std::{
 };
 
 use ahash::AHashMap;
-use egg::{define_language, Analysis, DidMerge, Id, Language};
+use egg::{define_language, rewrite, Analysis, DidMerge, Id, Language, Subst};
 use iced_x86::{
     code_asm::{st, CodeAssembler},
     Code, Instruction, Register,
@@ -822,6 +822,29 @@ fn parse_size_change(op: &str, is_zx: bool) -> Option<u8> {
     Some(width)
 }
 
+fn parse_icmp(op: &str) -> Option<Predicate> {
+    if !op.starts_with("icmp ") {
+        return None;
+    }
+
+    let pred_str = &op[5..];
+    let predicate = match pred_str {
+        "==" => Predicate::Eq,
+        "!=" => Predicate::Ne,
+        ">" => Predicate::Ugt,
+        ">=" => Predicate::Uge,
+        "<" => Predicate::Ult,
+        "<=" => Predicate::Ule,
+        ">s" => Predicate::Sgt,
+        ">=s" => Predicate::Sge,
+        "<s" => Predicate::Slt,
+        "<=s" => Predicate::Sle,
+        _ => return None,
+    };
+
+    Some(predicate)
+}
+
 impl egg::FromOp for SimpleAst {
     type Error = egg::FromOpError;
 
@@ -846,6 +869,11 @@ impl egg::FromOp for SimpleAst {
                     Ok(SimpleAst::Zext { a: children[0], to })
                 } else if let Some(to) = parse_size_change(op, false) {
                     Ok(SimpleAst::Trunc { a: children[0], to })
+                } else if let Some(predicate) = parse_icmp(op) {
+                    Ok(SimpleAst::ICmp {
+                        predicate,
+                        children: [children[0], children[1]],
+                    })
                 } else {
                     panic!(
                         "Cannot parse enode with op {} with {} children",
@@ -963,6 +991,7 @@ impl Analysis<SimpleAst> for MbaAnalysis {
     }
 }
 
+// NOTE: Remember to call `egraph.rebuild()` after invoking this function.
 pub fn add_to_egraph(
     ctx: &Context,
     egraph: &mut EEGraph,
@@ -3870,4 +3899,39 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
             std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
         }
     }
+}
+
+pub type Rewrite = egg::Rewrite<SimpleAst, MbaAnalysis>;
+
+pub fn make_simplification_rules() -> Vec<Rewrite> {
+    vec![
+        // Or rules
+        rewrite!("or-zero"; "(| ?a 0)" => "?a"),
+        rewrite!("or-maxint"; "(| ?a -1)" => "-1"),
+        rewrite!("disjoint-bitwise-add-into-or"; "(+ (& (& ?y ?c1) ?x) (& ?x ?c2))" => "(& (| (& ?y ?c1) ?c2) ?x)" if (are_disjoint_const("?c1", "?c2"))),
+    ]
+}
+
+pub fn are_disjoint_const(var1: &str, var2: &str) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool {
+    let var1 = var1.parse().unwrap();
+    let var2 = var2.parse().unwrap();
+    move |egraph, _, subst| {
+        let c1 = as_constant(&egraph[subst[var1]].data);
+        let c2 = as_constant(&egraph[subst[var2]].data);
+        if (c1.is_none() || c2.is_none()) {
+            return false;
+        }
+
+        let cond1 = eqmod(c1.unwrap(), 1111, egraph[subst[var1]].data.width);
+
+        return (c1.unwrap() & c2.unwrap()) == 0;
+    }
+}
+
+pub fn as_constant(data: &AstData) -> Option<u64> {
+    return Some(data.imut_data);
+}
+
+fn eqmod(c1: u64, c2: u64, width: u8) -> bool {
+    return false;
 }

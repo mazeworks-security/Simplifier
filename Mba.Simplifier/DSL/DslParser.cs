@@ -25,8 +25,11 @@ namespace Mba.Simplifier.DSL
 
                 var split = line.Replace(" ", "").Split(new string[] { ":", "=>" }, StringSplitOptions.RemoveEmptyEntries);
                 var name = split[0];
-                var before = AstParser.Parse(split[1], 64);
-                var after = AstParser.Parse(split[2], 64);
+
+                Dictionary<string, VarNode> varNodes = new();
+                Dictionary<string, WildCardConstantNode> wildCardConstantNodes = new();
+                var before = AstParser.Parse(split[1], 64, varNodes, wildCardConstantNodes);
+                var after = AstParser.Parse(split[2], 64, varNodes, wildCardConstantNodes);
 
                 var rule = new DslRule(name, before, after);
                 rules.Add(rule);

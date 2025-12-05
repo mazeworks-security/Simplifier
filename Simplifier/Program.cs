@@ -21,6 +21,12 @@ string inputText = "a ? b : c ";
 inputText = "a+b+c";
 inputText = "a>=c";
 
+var rules = DslParser.Parse(File.ReadAllText("DSL/simplification.rules"));
+EggBackend.GenerateEggDsl(rules);
+
+Console.WriteLine("Done");
+Debugger.Break();
+
 var printHelp = () =>
 {
     Console.WriteLine("Usage: Simplifier.exe");
