@@ -29,12 +29,15 @@ namespace Mba.Simplifier.DSL
         {
             var ruleSb = new StringBuilder();
             var codeBuilder = new CodeBuilder(ruleSb);
-
             var applierSb = new StringBuilder();
 
-            foreach(var rewrite in rules.Take(1))
+            codeBuilder.AppendLine("pub fn get_generated_rules() -> Vec<Rewrite> {");
+            codeBuilder.Indent();
+            codeBuilder.AppendLine("vec![");
+            codeBuilder.Indent();
+
+            foreach(var rewrite in rules)
             {
-                
                 // In the case of a rewrite rule like `x-x` => 0, we need to some way of telling ISLE what bit width to create `0` as.
                 // To solve this we keep track of variable and width occurrences during transpilation, then pick one of the occurrences to steal the width field from.
                 // Special care needs to be taken for zext/trunc instructions though.
@@ -98,6 +101,15 @@ namespace Mba.Simplifier.DSL
 
             }
 
+            codeBuilder.Outdent();
+            codeBuilder.AppendLine("]");
+            codeBuilder.Outdent();
+            codeBuilder.AppendLine("}");
+
+
+            var text = codeBuilder.ToString() + Environment.NewLine + applierSb.ToString();
+            //File.WriteAllText("rules.rs", text);
+
             Console.WriteLine(codeBuilder.ToString());
 
             Console.WriteLine(applierSb.ToString());
@@ -151,6 +163,7 @@ namespace Mba.Simplifier.DSL
         private static string TranspileRhs(AstNode ast, Dictionary<AstNode, string> boundedNames, Dictionary<AstNode, string> cache, AstNode widthField, OrderedSet<AstNode> outArgs)
         {
             var sb = new StringBuilder();
+
             TranspileRhsInternal(ast, sb, boundedNames, cache, widthField, outArgs);
             return sb.ToString();
         }
@@ -165,15 +178,26 @@ namespace Mba.Simplifier.DSL
                 sb.AppendLine($"let {idName} = subst[self.{name}];");
                 outArgs.Add(ast);
                 cache[ast] = idName;
+
+                // Compute the bounded width variable if we need it.
+                if (ast == widthField)
+                    sb.AppendLine($"let bounded_width = egraph[{idName}].data.width;");
                 return;
             }
 
             // Handle a literal constant, e.g. "-1)
             if (ast is ConstNode constNode)
             {
-                var widthFieldName = boundedNames[widthField];
-                var literalName = $"literal_{((ulong)constNode.Value)}_id";
-                sb.AppendLine($"let {literalName} = egraph.add(SimpleAst::Constant {{c: {constNode.Value}, width: {widthFieldName} }});");
+                // Fetch the id of the field.
+                if(!cache.ContainsKey(widthField))
+                    TranspileRhsInternal(widthField, sb, boundedNames, cache, widthField, outArgs);
+                
+
+
+
+                //var widthFieldName = boundedNames[widthField];
+                var literalName = $"literal_{constNode.UValue}_id";
+                sb.AppendLine($"let {literalName} = egraph.add(SimpleAst::Constant {{c: {constNode.UValue}, width: bounded_width }});");
                 //outArgs.Add(ast);
                 outArgs.Add(widthField);
                 cache[ast] = literalName;

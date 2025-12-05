@@ -890,6 +890,7 @@ impl egg::FromOp for SimpleAst {
 }
 
 pub type EEGraph = egg::EGraph<SimpleAst, MbaAnalysis>;
+pub type Rewrite = egg::Rewrite<SimpleAst, MbaAnalysis>;
 
 // Since Egg only supports a single analysis class per egraph,
 // we must perform multiple analyses at once. Namely constant folding, classification(e.g., "is this mba linear?"), and known bits analysis.
@@ -3908,6 +3909,6 @@ pub fn as_constant(data: &AstData) -> Option<u64> {
     return Some(data.imut_data);
 }
 
-fn eqmod(c1: u64, c2: u64, width: u8) -> bool {
+pub fn eqmod(c1: u64, c2: u64, width: u8) -> bool {
     return false;
 }
