@@ -231,7 +231,7 @@ namespace Mba.Simplifier.DSL
                     break;
                 case AstKind.Zext:
                 case AstKind.Trunc:
-                    sb.AppendLine($"let {destName} = egraph.add(SimpleAst::{ast.Kind.ToString()} {{a: {childNames.Single()}, to: {ast.BitSize} }});");
+                    sb.AppendLine($"let {destName} = egraph.add(SimpleAst::{ast.Kind.ToString()} {{a: {childNames}, to: {ast.BitSize} }});");
                     break;
                 case AstKind.ICmp:
                     var predicate = (ast as ICmpNode).Pred;
@@ -379,8 +379,8 @@ namespace Mba.Simplifier.DSL
                 AstKind.Xor => "^",
                 AstKind.Neg => "~",
                 AstKind.Lshr => ">>",
-                AstKind.Zext => $"\"zx i{node.BitSize}\"",
-                AstKind.Trunc => $"\"tr i{node.BitSize}\"",
+                AstKind.Zext => $"\\\"zx i{node.BitSize}\\\"",
+                AstKind.Trunc => $"\\\"tr i{node.BitSize}\\\"",
                 AstKind.ICmp => $"\\\"icmp {AstFormatter.GetPredicateOperator((node as ICmpNode).Pred)}\\\"",
                 AstKind.Select => "select",
                 _ => throw new InvalidOperationException($"Cannot get operator for {node.Kind}"),

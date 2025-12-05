@@ -26,7 +26,7 @@ namespace Mba.Simplifier.DSL
                     continue;
 
                 bool precond = line.Contains("::");
-                var split = line.Replace(" ", "").Split(new string[] { ":", "=>", "::" }, StringSplitOptions.RemoveEmptyEntries);
+                var split = line.Split(new string[] { ";", "=>", "::" }, StringSplitOptions.RemoveEmptyEntries);
                 var name = split[0];
 
                 Dictionary<string, VarNode> varNodes = new();

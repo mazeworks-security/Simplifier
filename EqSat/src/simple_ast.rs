@@ -3995,6 +3995,16 @@ pub fn eqmod(c1: u64, c2: u64, width: u8) -> bool {
     return (c1 & mask) == (c2 & mask);
 }
 
+pub fn manual_rule_cmp_xor_i1_combine_precondition(
+    egraph: &EEGraph,
+    subst: &Subst,
+    c1: Var,
+    mconst0: Var,
+) -> bool {
+    let constant = as_constant(&egraph[subst[c1]].data).unwrap();
+    return constant.count_ones() == 1;
+}
+
 pub fn manual_rule_cmp_i1_combine_precondition(
     egraph: &EEGraph,
     subst: &Subst,
