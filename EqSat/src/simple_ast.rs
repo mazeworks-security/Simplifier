@@ -11,8 +11,8 @@ use std::{
 
 use ahash::AHashMap;
 use egg::{
-    define_language, rewrite, Analysis, Applier, DidMerge, Id, Language, PatternAst, Subst, Symbol,
-    Var,
+    define_language, rewrite, Analysis, Applier, DidMerge, Id, Language, PatternAst, RecExpr,
+    Subst, Symbol, Var,
 };
 use iced_x86::{
     code_asm::{st, CodeAssembler},
@@ -599,6 +599,30 @@ impl Arena {
         idx
     }
 
+    pub fn insert_node(&mut self, node: SimpleAst) -> AstIdx {
+        match node {
+            SimpleAst::Add([a, b]) => self.add(a, b),
+            SimpleAst::Mul([a, b]) => self.mul(a, b),
+            SimpleAst::Pow([a, b]) => self.pow(a, b),
+            SimpleAst::And([a, b]) => self.and(a, b),
+            SimpleAst::Or([a, b]) => self.or(a, b),
+            SimpleAst::Xor([a, b]) => self.xor(a, b),
+            SimpleAst::Neg([a]) => self.neg(a),
+            SimpleAst::Lshr([a, b]) => self.lshr(a, b),
+            SimpleAst::Zext { a, to } => self.zext(a, to),
+            SimpleAst::Trunc { a, to } => self.trunc(a, to),
+            SimpleAst::Constant { c, width } => self.constant(c, width),
+            SimpleAst::Symbol { id, width } => self.symbol(id, width),
+            SimpleAst::ICmp {
+                predicate,
+                children: [a, b],
+            } => self.icmp(predicate, a, b),
+            SimpleAst::Select {
+                children: [a, b, c],
+            } => self.select(a, b, c),
+        }
+    }
+
     #[inline(always)]
     pub fn get_node(&self, idx: AstIdx) -> &SimpleAst {
         unsafe { &self.elements.get_unchecked(idx.0 as usize).0 }
@@ -939,13 +963,6 @@ impl Analysis<SimpleAst> for MbaAnalysis {
             }
         };
 
-        dbg!(
-            "Making data for enode: {:?} {:?} {:?}",
-            enode,
-            data,
-            as_constant(&data)
-        );
-
         return data;
     }
 
@@ -1027,6 +1044,23 @@ pub fn add_to_egraph(
     idx_to_eclass.insert(idx, eclass);
 
     return eclass;
+}
+
+pub fn from_rec_expr(ctx: &mut Context, egraph: &EEGraph, rec_expr: &RecExpr<SimpleAst>) -> AstIdx {
+    let mut ids = vec![AstIdx::from(usize::MAX); rec_expr.len()];
+
+    // Update the children.
+    let vec = rec_expr.as_ref();
+    for node_idx in 0..vec.len() {
+        // Update the children.
+        let mut node = vec[node_idx].clone();
+        for child in node.children_mut() {
+            *child = ids[child.0 as usize];
+        }
+        ids[node_idx] = ctx.arena.insert_node(node);
+    }
+
+    return *ids.last().unwrap();
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Copy, Clone)]

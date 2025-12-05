@@ -17,8 +17,10 @@ namespace Mba.Simplifier.DSL
             var lines = fileContents.Split(Environment.NewLine);
 
             var rules = new List<DslRule>();
-            foreach(var line in lines)
+            foreach(var curr in lines)
             {
+                var line = WithoutComments(curr);
+
                 // Skip empty lines
                 if (line.Length == 0 || line == Environment.NewLine)
                     continue;
@@ -37,6 +39,12 @@ namespace Mba.Simplifier.DSL
             }
 
             return rules;
+        }
+
+        private static string WithoutComments(string input)
+        {
+            var index = input.IndexOf("//");
+            return index == -1 ? input : input.Substring(0, index);
         }
     }
 }

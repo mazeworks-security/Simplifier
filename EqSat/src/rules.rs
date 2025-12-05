@@ -6,6 +6,101 @@ use crate::simple_ast::{as_constant, eqmod, AstData, EEGraph, MbaAnalysis, Rewri
 
 pub fn get_generated_rules() -> Vec<Rewrite> {
     vec![
+        // or-commutativity:
+        // (a:i64|b:i64) => (b:i64|a:i64)
+        rewrite!("or-commutativity"; "(| ?a ?b)" => {
+            applier_rule_or_commutativity {
+                b : "?b".parse().unwrap(),
+                a : "?a".parse().unwrap(),
+            }
+        }),
+        // or-associativity:
+        // (a:i64|(b:i64|c:i64)) => ((a:i64|b:i64)|c:i64)
+        rewrite!("or-associativity"; "(| ?a (| ?b ?c))" => {
+            applier_rule_or_associativity {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+                c : "?c".parse().unwrap(),
+            }
+        }),
+        // xor-commutativity:
+        // (a:i64^b:i64) => (b:i64^a:i64)
+        rewrite!("xor-commutativity"; "(^ ?a ?b)" => {
+            applier_rule_xor_commutativity {
+                b : "?b".parse().unwrap(),
+                a : "?a".parse().unwrap(),
+            }
+        }),
+        // xor-associativity:
+        // (a:i64^(b:i64^c:i64)) => ((a:i64^b:i64)^c:i64)
+        rewrite!("xor-associativity"; "(^ ?a (^ ?b ?c))" => {
+            applier_rule_xor_associativity {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+                c : "?c".parse().unwrap(),
+            }
+        }),
+        // and-commutativity:
+        // (a:i64&b:i64) => (b:i64&a:i64)
+        rewrite!("and-commutativity"; "(& ?a ?b)" => {
+            applier_rule_and_commutativity {
+                b : "?b".parse().unwrap(),
+                a : "?a".parse().unwrap(),
+            }
+        }),
+        // and-associativity:
+        // (a:i64&(b:i64&c:i64)) => ((a:i64&b:i64)&c:i64)
+        rewrite!("and-associativity"; "(& ?a (& ?b ?c))" => {
+            applier_rule_and_associativity {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+                c : "?c".parse().unwrap(),
+            }
+        }),
+        // mul-commutativity:
+        // (a:i64*b:i64) => (b:i64*a:i64)
+        rewrite!("mul-commutativity"; "(* ?a ?b)" => {
+            applier_rule_mul_commutativity {
+                b : "?b".parse().unwrap(),
+                a : "?a".parse().unwrap(),
+            }
+        }),
+        // mul-associativity:
+        // (a:i64*(b:i64*c:i64)) => ((a:i64*b:i64)*c:i64)
+        rewrite!("mul-associativity"; "(* ?a (* ?b ?c))" => {
+            applier_rule_mul_associativity {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+                c : "?c".parse().unwrap(),
+            }
+        }),
+        // mul-distributivity:
+        // (a:i64*(b:i64+c:i64)) => ((a:i64*b:i64)+(a:i64*c:i64))
+        rewrite!("mul-distributivity"; "(* ?a (+ ?b ?c))" => {
+            applier_rule_mul_distributivity {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+                c : "?c".parse().unwrap(),
+            }
+        }),
+        // and-or-distributivity:
+        // ((a:i64&b:i64)|(a:i64&c:i64)) => (a:i64&(b:i64|c:i64))
+        rewrite!("and-or-distributivity"; "(| (& ?a ?b) (& ?a ?c))" => {
+            applier_rule_and_or_distributivity {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+                c : "?c".parse().unwrap(),
+            }
+        }),
+        // or-and-distributivity:
+        // ((a:i64|b:i64)&(a:i64|c:i64)) => (a:i64|(b:i64&c:i64))
+        rewrite!("or-and-distributivity"; "(& (| ?a ?b) (| ?a ?c))" => {
+            applier_rule_or_and_distributivity {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+                c : "?c".parse().unwrap(),
+            }
+        }),
         // mul-constant-to-left-1:
         // (a:i64*Const(c1)) => (Const(c1)*a:i64)
         rewrite!("mul-constant-to-left-1"; "(* ?a ?c1)" => {
@@ -1138,6 +1233,325 @@ pub fn get_generated_rules() -> Vec<Rewrite> {
             }
         } if (rule_linear_mba_2_precondition("?mconst0"))),
     ]
+}
+
+pub struct applier_rule_or_commutativity {
+    pub b: Var,
+    pub a: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_or_commutativity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let b_id = subst[self.b];
+        let bounded_width = egraph[b_id].data.width;
+        let a_id = subst[self.a];
+        let t2 = egraph.add(SimpleAst::Or([b_id, a_id]));
+
+        if egraph.union(eclass, t2) {
+            vec![t2]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_or_associativity {
+    pub a: Var,
+    pub b: Var,
+    pub c: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_or_associativity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::Or([a_id, b_id]));
+        let c_id = subst[self.c];
+        let t4 = egraph.add(SimpleAst::Or([t2, c_id]));
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_xor_commutativity {
+    pub b: Var,
+    pub a: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_xor_commutativity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let b_id = subst[self.b];
+        let bounded_width = egraph[b_id].data.width;
+        let a_id = subst[self.a];
+        let t2 = egraph.add(SimpleAst::Xor([b_id, a_id]));
+
+        if egraph.union(eclass, t2) {
+            vec![t2]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_xor_associativity {
+    pub a: Var,
+    pub b: Var,
+    pub c: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_xor_associativity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::Xor([a_id, b_id]));
+        let c_id = subst[self.c];
+        let t4 = egraph.add(SimpleAst::Xor([t2, c_id]));
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_and_commutativity {
+    pub b: Var,
+    pub a: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_and_commutativity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let b_id = subst[self.b];
+        let bounded_width = egraph[b_id].data.width;
+        let a_id = subst[self.a];
+        let t2 = egraph.add(SimpleAst::And([b_id, a_id]));
+
+        if egraph.union(eclass, t2) {
+            vec![t2]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_and_associativity {
+    pub a: Var,
+    pub b: Var,
+    pub c: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_and_associativity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::And([a_id, b_id]));
+        let c_id = subst[self.c];
+        let t4 = egraph.add(SimpleAst::And([t2, c_id]));
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_mul_commutativity {
+    pub b: Var,
+    pub a: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_mul_commutativity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let b_id = subst[self.b];
+        let bounded_width = egraph[b_id].data.width;
+        let a_id = subst[self.a];
+        let t2 = egraph.add(SimpleAst::Mul([b_id, a_id]));
+
+        if egraph.union(eclass, t2) {
+            vec![t2]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_mul_associativity {
+    pub a: Var,
+    pub b: Var,
+    pub c: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_mul_associativity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::Mul([a_id, b_id]));
+        let c_id = subst[self.c];
+        let t4 = egraph.add(SimpleAst::Mul([t2, c_id]));
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_mul_distributivity {
+    pub a: Var,
+    pub b: Var,
+    pub c: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_mul_distributivity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::Mul([a_id, b_id]));
+        let c_id = subst[self.c];
+        let t4 = egraph.add(SimpleAst::Mul([a_id, c_id]));
+        let t5 = egraph.add(SimpleAst::Add([t2, t4]));
+
+        if egraph.union(eclass, t5) {
+            vec![t5]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_and_or_distributivity {
+    pub a: Var,
+    pub b: Var,
+    pub c: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_and_or_distributivity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let c_id = subst[self.c];
+        let t3 = egraph.add(SimpleAst::Or([b_id, c_id]));
+        let t4 = egraph.add(SimpleAst::And([a_id, t3]));
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_or_and_distributivity {
+    pub a: Var,
+    pub b: Var,
+    pub c: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_or_and_distributivity {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let c_id = subst[self.c];
+        let t3 = egraph.add(SimpleAst::And([b_id, c_id]));
+        let t4 = egraph.add(SimpleAst::Or([a_id, t3]));
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
 }
 
 pub fn rule_mul_constant_to_left_1_precondition(

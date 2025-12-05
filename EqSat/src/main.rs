@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use ahash::AHashMap;
 use egg::{BackoffScheduler, CostFunction, EGraph, Extractor, Id, Language, RecExpr, Runner};
 use rand::Rng;
 
@@ -18,7 +19,8 @@ use crate::{
     mba::Context as MbaContext,
     rules::get_generated_rules,
     simple_ast::{
-        recursive_simplify, Arena, AstPrinter, Context as Ctx, EEGraph, MbaAnalysis, Predicate,
+        add_to_egraph, from_rec_expr, recursive_simplify, Arena, AstPrinter, Context as Ctx,
+        EEGraph, MbaAnalysis, Predicate,
     },
     truth_table_database::TruthTableDatabase,
 };
@@ -87,32 +89,36 @@ fn main() {
     let y = ctx.arena.symbol_with_name("y".to_string(), 8);
     let add = ctx.arena.add(x, y);
     */
-
-    let analysis = MbaAnalysis {};
-    let mut egraph = EEGraph::new(analysis);
-
     let w = 32;
-    let x = SimpleAst::Symbol { id: 0, width: w };
-    let x_id = egraph.add(x);
+    //let x = SimpleAst::Symbol { id: 0, width: w };
+    //let x_id = ctx.arena.insert_node(x);
+    let x_id = ctx.arena.symbol_with_name("x".to_string(), w);
     //let y = SimpleAst::Symbol { id: 1, width: w };
     let y = SimpleAst::Constant { c: 1111, width: w };
-    let y_id = egraph.add(y);
-    let constant_id = egraph.add(SimpleAst::Constant {
+    let y_id = ctx.arena.insert_node(y);
+    let constant_id = ctx.arena.insert_node(SimpleAst::Constant {
         c: 234234432,
         width: w,
     });
 
-    let c2_id = egraph.add(SimpleAst::Constant {
+    let c2_id = ctx.arena.insert_node(SimpleAst::Constant {
         c: 234243,
         width: w,
     });
 
     let sum = SimpleAst::Add([x_id, y_id]);
-    let mut sum_id = egraph.add(sum.clone());
+    let mut sum_id = ctx.arena.insert_node(sum.clone());
 
-    sum_id = egraph.add(SimpleAst::Add([x_id, constant_id]));
+    //sum_id = ctx.arena.insert_node(SimpleAst::Add([x_id, constant_id]));
 
-    sum_id = egraph.add(SimpleAst::Add([sum_id, c2_id]));
+    sum_id = ctx.arena.insert_node(SimpleAst::Mul([x_id, constant_id]));
+
+    sum_id = ctx.arena.insert_node(SimpleAst::Mul([sum_id, c2_id]));
+
+    let analysis = MbaAnalysis {};
+    let mut egraph = EEGraph::new(analysis);
+    let mut idx_to_eclass = AHashMap::new();
+    let input_id = add_to_egraph(&ctx, &mut egraph, sum_id, &mut idx_to_eclass);
 
     /*
     sum_id = egraph.add(SimpleAst::Zext { a: sum_id, to: 64 });
@@ -156,7 +162,7 @@ fn main() {
     };
     let extractor = Extractor::new(&runner.egraph, cost_func);
 
-    let res = extractor.find_best(sum_id);
+    let res = extractor.find_best(input_id);
 
     let sum_str = res.1.to_string();
     dbg!("Extracted {}", sum_str.clone());
@@ -164,6 +170,11 @@ fn main() {
     let parse: RecExpr<SimpleAst> = sum_str.clone().to_owned().parse().unwrap();
     dbg!("Parsed {}", parse.to_string());
 
+    let from_egraph = from_rec_expr(&mut ctx, &runner.egraph, &mut parse.clone());
+
+    //let printer = AstPrinter { ctx: &ctx };
+    let bar = AstPrinter::print(&ctx, ctx.arena.get_node(from_egraph));
+    println!("In ctx: {}", bar);
     /*
     dbg!("{}, {}, {}", x_id, y_id, constant_id, sum_id);
     let sum_str = sum.clone().to_string();

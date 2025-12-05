@@ -1,3 +1,18 @@
+// associativity, commutativity, and distributivity rules
+or-commutativity: (a|b) => (b|a)
+or-associativity: (a|(b|c)) => ((a|b)|c)
+xor-commutativity: (a^b) => (b^a)
+xor-associativity: (a^(b^c)) => ((a^b)^c)
+and-commutativity: (a&b) => (b&a)
+and-associativity: (a&(b&c)) => ((a&b)&c)
+mul-commutativity: (a*b) => (b*a)
+mul-associativity: (a*(b*c)) => ((a*b)*c)
+mul-distributivity: (a*(b+c)) => ((a*b) + (a*c))
+
+and-or-distributivity: ((a&b)|(a&c)) => (a&(b|c))
+or-and-distributivity:  ((a|b)&(a|c)) => (a|(b&c)) 
+
+// profitable rules
 mul-constant-to-left-1: (a*Const(c1)) => (Const(c1)*a)
 mul-constant-to-left-2: ((Const(c1)*a)*b) => (Const(c1)*(a*b))
 mul-constant-to-left-3: (Const(c1)*(Const(c2)*a)) => ((Const(c1)*Const(c2))*a)
