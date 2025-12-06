@@ -3,6 +3,8 @@ FUNCTIONS REQUIRED [
         builtin fn is_const(node: Node) -> i1;
         // Gets the value of the constant
         builtin fn get_const(node: Node) -> i64;
+		// Gets whether the constant contained by `node` is equivalent to `c1` modulo 2**w, where w is the width of the input node.
+		builtin fn const_eq(node: Node, c1: i64) -> i1;
         // Gets the width of the nodes
         builtin fn get_width(node: Node) -> i64;
         // Get a mask for the bits that are known to be zero

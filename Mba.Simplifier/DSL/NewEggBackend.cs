@@ -13,6 +13,13 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.DSL
 {
+    public static class DslRuntime
+    {
+        // Gets a function that checks whether some node is a equivalent to a constant c1, where c1 is reduced modulo 2**get_width(node).
+        public static DslFunction GetConstantEqFunction(IReadOnlyList<DslFunction> functions)
+            => functions.Single(x => x.Name == "const_eq");
+    }
+
     public class NewEggBackend
     {
         IReadOnlyList<DslFunction> dslFunctions;
@@ -33,8 +40,13 @@ namespace Mba.Simplifier.DSL
             // Inline all function calls.
             InlineDslFunctionCalls();
 
-            // Make the rhs, lhs, and precondition of a rule use the same nodes 
+            // Make the rhs, lhs, and precondition of a rule use the same leaf nodes 
+            // This is required so that we can do hashmap lookups on the variable and constant nodes.
             HashConseRuleLeafs();
+
+            // Replace all constants in the lhs with temporary variables (mconst0, mconst1, mconst..),
+            // and update the precondition to assert that the constant value matches modulo 2**w.
+            AddConstantModularMatchingPreconditions(DslRuntime.GetConstantEqFunction(dslFunctions), dslRules);
 
             Debugger.Break();
         }
@@ -94,15 +106,6 @@ namespace Mba.Simplifier.DSL
             return inlined;
         }
 
-        public static void AddModularConstantPreconditions(DslRule rule)
-        {
-            var nodes = new List<AstNode>();
-            foreach (var node in new AstNode[] { rule.Before, rule.After, rule.Precondition })
-                GetNodes(node, nodes);
-            if (!nodes.Any(x => x is ConstNode))
-                return;
-        }
-
         private void HashConseRuleLeafs()
         {
             foreach(var rule in dslRules)
@@ -118,7 +121,6 @@ namespace Mba.Simplifier.DSL
                 rule.Precondition = precondition;
             }
         }
-
 
         private static AstNode HashConsLeaf(AstNode node, Dictionary<string, VarNode> varMap, Dictionary<ulong, ConstNode> constMap)
         {
@@ -151,6 +153,53 @@ namespace Mba.Simplifier.DSL
 
             return null;
         }
+
+        // Update the rule to match constants modulo 2**w
+        public static void AddConstantModularMatchingPreconditions(DslFunction eqIntrinsic, IReadOnlyList<DslRule> rules)
+        {
+            foreach (var rule in rules)
+            {
+                // Get all unique constant nodes in the lhs of the rule
+                var nodes = new List<AstNode>();
+                GetNodes(rule.Before, nodes);
+                var uniqueConstants = nodes
+                    .Where(x => x is ConstNode)
+                    .Select(x => (ConstNode)x).Distinct().ToList();
+
+                // Skip if there are no constants to match.
+                if (!uniqueConstants.Any())
+                    continue;
+
+                // Get all variables used in the rule.
+                Dictionary<string, VarNode> uniqueVariables = GetUniqueVariables(new List<AstNode> { rule.Before, rule.After, rule.Precondition}).ToDictionary(x => x.Name, x => x);
+
+                Dictionary<ulong, AstNode> replacements = new();
+                foreach(var constant in uniqueConstants)
+                {
+                    var name = $"mconst{replacements.Count}";
+                    if (uniqueVariables.ContainsKey(name))
+                        throw new InvalidOperationException($"Rule {rule.Name} is using reserved name {name}");
+
+                    var mconstVar = new VarNode(name, constant.BitSize);
+                    uniqueVariables.Add(name, mconstVar);
+                    replacements.Add(constant.UValue, mconstVar);
+
+                    // Update the rule precondition to assert that mconst == constant % (2**width(mconst))
+                    // TODO: Use shortcircuiting AND!
+                    var precondition = new IntrinsicCallNode(eqIntrinsic.Name, eqIntrinsic.ReturnType.Width, new List<AstNode>() { mconstVar, constant, });
+                    rule.Precondition = rule.Precondition == null ? precondition : new AndNode(rule.Precondition, precondition);
+                }
+
+                rule.Before = AstCloner.ReplaceConstants(rule.Before, replacements);
+
+            }
+        }
+
+        private static List<VarNode> GetUniqueVariables(IReadOnlyList<AstNode> nodes)
+            => nodes.SelectMany(x => GetUniqueVariables(x)).Distinct().ToList();
+
+        private static List<VarNode> GetUniqueVariables(AstNode node)
+            => GetNodes(node).Where(x => x is VarNode).Select(x => (VarNode)x).Distinct().ToList();
 
         public static string GenerateEggDsl(IReadOnlyList<DslRuleOld> rules)
         {
@@ -321,10 +370,6 @@ namespace Mba.Simplifier.DSL
                 if (!cache.ContainsKey(widthField))
                     TranspileRhsInternal(widthField, sb, boundedNames, cache, widthField, outArgs);
 
-
-
-
-                //var widthFieldName = boundedNames[widthField];
                 var literalName = $"literal_{constNode.UValue}_id";
                 sb.AppendLine($"let {literalName} = egraph.add(SimpleAst::Constant {{c: {constNode.UValue}, width: bounded_width }});");
                 //outArgs.Add(ast);
@@ -396,6 +441,12 @@ namespace Mba.Simplifier.DSL
             return boundedNames.Keys.Where(x => x is VarNode).OrderBy(x => x.ToString()).First();
         }
 
+        private static List<AstNode> GetNodes(AstNode root)
+        {
+            var nodes = new List<AstNode>();
+            GetNodes(root, nodes);
+            return nodes;
+        }
 
         private static void GetNodes(AstNode root, List<AstNode> children)
         {
