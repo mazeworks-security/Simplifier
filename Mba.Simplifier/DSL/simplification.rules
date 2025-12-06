@@ -32,7 +32,7 @@ FUNCTIONS REQUIRED [
 ]
 
 RULES EGRAPH [
-        // associativity, commutativity, and distributivity rules
+        // Associativity, commutativity, and distributivity rules
         or_commutativity: (a|b) => (b|a)
         or_associativity: (a|(b|c)) => ((a|b)|c)
         xor_commutativity: (a^b) => (b^a)
@@ -42,26 +42,27 @@ RULES EGRAPH [
         mul_commutativity: (a*b) => (b*a)
         mul_associativity: (a*(b*c)) => ((a*b)*c)
         mul_distributivity: (a*(b+c)) => ((a*b) + (a*c))
-
         and_or_distributivity: ((a&b)|(a&c)) => (a&(b|c))
         or_and_distributivity:  ((a|b)&(a|c)) => (a|(b&c))
 
         // New profitable rules
-        cmp_i1_combine: (((a1&c1) == 0)^((a2&c1) != 0)) => (((~a1&c1)^((a2&c1))) != 0) :: is_const(c1) & is_const(c2)
-        cmp_xor_i1_combine: (((x&c1) != 0) ^ ((c1&y) != 0)) => (((x^y)&c1) != 0) :: is_const(c1)
+        cmp_i1_combine: (((a1&c1) == 0)^((a2&c1) != 0)) => (((~a1&c1)^((a2&c1))) != 0) 
+			:: is_const(c1) & is_const(c2)
+        cmp_xor_i1_combine: (((x&c1) != 0) ^ ((c1&y) != 0)) => (((x^y)&c1) != 0) 
+			:: is_const(c1)
 
         factor_or_neg: ((a != 0)|(b != 0)) => ((a|b) != 0)
         factor_zext_and: ((a zx i8)&(b zx i8)) => ((a&b) zx i8)
         factor_zext_or: ((a zx i8)|(b zx i8)) => ((a|b) zx i8)
         factor_zext_xor: ((a zx i8)^(b zx i8)) => ((a^b) zx i8)
 
-        distribute_zext_xor: (1:i8 ^ (a zx i8)) => ((1 ^ a) zx i8)
+		// commented out because I was illegally abusing fixed width literals
+        // distribute_zext_xor: (1:i8 ^ (a zx i8)) => ((1 ^ a) zx i8)
+        // xor_ne: (1:i1^(a!=b)) => (a == b)
+        // xor_eq: (1:i1^(a==b)) => (a != b)
 
-        xor_ne: (1:i1^(a!=b)) => (a == b)
-        xor_eq: (1:i1^(a==b)) => (a != b)
 
-
-        // profitable rules
+        // Original rules (guaranteed to either be profitable or canonicalizing)
         mul_constant_to_left_1: (a*c1) => (c1*a) 
 			:: is_const(c1)
         mul_constant_to_left_2: ((c1*a)*b) => (c1*(a*b)) 
