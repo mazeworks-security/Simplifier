@@ -2,12 +2,25 @@
 using Mba.Parsing;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Mba.Simplifier.DSL
 {
+    public enum DslType
+    {
+        Bool,
+        U8,
+        U64,
+        Node,
+    }
+
+    public record DslFunctionArgument(string Name, DslType Type);
+
+    public record DslFunction(bool IsBuiltin, string Name, IReadOnlyList<DslFunctionArgument> Arguments, DslType ReturnType, AstNode Body);
+
     public record DslRule(string Name, AstNode Before, AstNode After, bool ManualPrecondition);
 
     public static class DslParser
@@ -15,6 +28,19 @@ namespace Mba.Simplifier.DSL
         public static IReadOnlyList<DslRule> Parse(string fileContents)
         {
             var lines = fileContents.Split(Environment.NewLine);
+            foreach(var line in lines)
+            {
+                var idx = line.IndexOf(":");
+                if (idx == -1)
+                {
+                    Console.WriteLine(line);
+                    continue;
+                }
+
+                var name = line.Substring(0, idx).Replace("-", "_");
+                var other = line.Substring(idx);
+                Console.WriteLine(name + other);
+            }
 
             var rules = new List<DslRule>();
             foreach(var curr in lines)
