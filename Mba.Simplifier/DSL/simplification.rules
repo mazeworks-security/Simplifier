@@ -4,7 +4,7 @@ FUNCTIONS REQUIRED [
         // Gets the value of the constant
         builtin fn get_const(node: Node) -> i64;
         // Gets the width of the nodes
-        builtin fn get_width(node: Node) -> i8;
+        builtin fn get_width(node: Node) -> i64;
         // Get a mask for the bits that are known to be zero
         builtin fn get_known_zeroes(node: Node) -> i64;
         // Get a mask for the bits that are known to be one
@@ -15,7 +15,7 @@ FUNCTIONS REQUIRED [
 			return reduce_modulo(c1, get_width(node));
 		}
 		
-		fn reduce_modulo(c1: i64, w: i8) -> i64 
+		fn reduce_modulo(c1: i64, w: i64) -> i64 
 		{
 			return c1 & (-1 >> (64 - w));
 		}
