@@ -1,23 +1,33 @@
 FUNCTIONS REQUIRED [
         // Gets whether the node is a constant
-        builtin fn is_const(node: Node) -> bool:
+        builtin fn is_const(node: Node) -> i1;
         // Gets the value of the constant
-        builtin fn get_const(node: Node) -> u64:
+        builtin fn get_const(node: Node) -> i64;
         // Gets the width of the nodes
-        builtin fn get_width(node: Node) -> u8:
+        builtin fn get_width(node: Node) -> i8;
         // Get a mask for the bits that are known to be zero
-        builtin fn get_known_zeroes(node: Node) -> u64:
+        builtin fn get_known_zeroes(node: Node) -> i64;
         // Get a mask for the bits that are known to be one
-        builtin fn get_known_ones(node: Node) -> u64:
+        builtin fn get_known_ones(node: Node) -> i64;
+		// Reduce the constant `c1` modulo 2**w , where w is the width of the input node.
+		fn reduce_modulo_node_size(c1: i64, node: Node) -> i64 
+		{
+			return reduce_modulo(c1, get_width(node));
+		}
+		
+		fn reduce_modulo(c1: i64, w: i8) -> i64 
+		{
+			return c1 & (-1 >> (64 - w));
+		}
 
-        fn disjoint_constants(c1: Node, c2: Node) -> bool
+        fn disjoint_constants(c1: Node, c2: Node) -> i1
         {
-                return disjoint_kb(c1, c2):
+			return disjoint_kb(c1, c2);
         }
 
-        fn disjoint_kb(c1: Node, c2: Node) -> bool
+        fn disjoint_kb(c1: Node, c2: Node) -> i1
         {
-                return (get_known_zeroes(c1) | get_known_zeroes(c2)) == _1:
+			return (get_known_zeroes(c1) | get_known_zeroes(c2)) == -1;
         }
 ]
 

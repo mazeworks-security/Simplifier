@@ -1,4 +1,5 @@
 ﻿using Mba.Ast;
+using Mba.Common.Parsing;
 using Mba.Parsing;
 using System;
 using System.Collections.Generic;
@@ -17,15 +18,15 @@ namespace Mba.Simplifier.DSL
         Node,
     }
 
-    public record DslFunctionArgument(string Name, DslType Type);
-
-    public record DslFunction(bool IsBuiltin, string Name, IReadOnlyList<DslFunctionArgument> Arguments, DslType ReturnType, AstNode Body);
-
-    public record DslRule(string Name, AstNode Before, AstNode After, bool ManualPrecondition);
+    public record DslRuleOld(string Name, AstNode Before, AstNode After, bool ManualPrecondition);
 
     public static class DslParser
     {
-        public static IReadOnlyList<DslRule> Parse(string fileContents)
+        public static Dsl ParseDsl(string fileContents)
+            => (Dsl)AstParser.ParseDsl(fileContents, 64, new (), new (), new ());
+
+
+        public static IReadOnlyList<DslRuleOld> Parse(string fileContents)
         {
             var lines = fileContents.Split(Environment.NewLine);
             foreach(var line in lines)
@@ -42,7 +43,7 @@ namespace Mba.Simplifier.DSL
                 Console.WriteLine(name + other);
             }
 
-            var rules = new List<DslRule>();
+            var rules = new List<DslRuleOld>();
             foreach(var curr in lines)
             {
                 var line = WithoutComments(curr);
@@ -58,10 +59,10 @@ namespace Mba.Simplifier.DSL
                 Dictionary<string, VarNode> varNodes = new();
                 var constNodes = new Dictionary<(ulong, uint), ConstNode>();
                 Dictionary<string, WildCardConstantNode> wildCardConstantNodes = new();
-                var before = AstParser.Parse(split[1], 64, varNodes, constNodes, wildCardConstantNodes);
-                var after = AstParser.Parse(split[2], 64, varNodes, constNodes, wildCardConstantNodes);
+                var before = AstParser.ParseDsl(split[1], 64, varNodes, constNodes, wildCardConstantNodes);
+                var after = AstParser.ParseDsl(split[2], 64, varNodes, constNodes, wildCardConstantNodes);
 
-                var rule = new DslRule(name, before, after, precond);
+                var rule = new DslRuleOld(name, before, after, precond);
                 rules.Add(rule);
             }
 

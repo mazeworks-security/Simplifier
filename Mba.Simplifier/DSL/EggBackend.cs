@@ -25,7 +25,7 @@ namespace Mba.Simplifier.DSL
 
     public static class EggBackend
     {
-        public static string GenerateEggDsl(IReadOnlyList<DslRule> rules)
+        public static string GenerateEggDsl(IReadOnlyList<DslRuleOld> rules)
         {
             var ruleSb = new StringBuilder();
             var codeBuilder = new CodeBuilder(ruleSb);
