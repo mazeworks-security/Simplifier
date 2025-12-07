@@ -301,6 +301,8 @@ namespace Mba.Simplifier.DSL
                 case AstKind.Xor:
                 case AstKind.Lshr:
                 case AstKind.ICmp:
+                case AstKind.ConditionalAnd:
+                case AstKind.ConditionalOr:
                     Debug.Assert(precondition.Children.Count == 2);
                     var binop = AstFormatter.GetOperatorName(precondition);
                     sb.Append("(");
@@ -309,7 +311,7 @@ namespace Mba.Simplifier.DSL
                     LowerPreconditionNode(sb, precondition.Children[1]);
                     sb.Append(")");
                     break;
-                case AstKind.Neg:
+                case AstKind.Neg:   
                     sb.Append("(!");
                     LowerPreconditionNode(sb, precondition.Children[0]);
                     sb.Append(")");
