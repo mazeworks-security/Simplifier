@@ -52,7 +52,17 @@ namespace Mba.Simplifier.DSL
                 if (dslFunction.IsBuiltin)
                     continue;
 
-                dslFunction.Body = InlineCalls(dslFunction.Body, nameToFunc);
+                // Recursively inline until a fixed point is reached.
+                var inlined = InlineCalls(dslFunction.Body, nameToFunc);
+                bool changed = inlined.ToString() != dslFunction.Body.ToString();
+                while(changed)
+                {
+                    dslFunction.Body = inlined;
+                    inlined = InlineCalls(dslFunction.Body, nameToFunc);
+                    changed = dslFunction.Body.ToString() != inlined.ToString();
+                }
+
+                dslFunction.Body = inlined;
             }
 
             // Recursively inline all function calls in the rule preconditions.

@@ -98,18 +98,19 @@ namespace Mba.Simplifier.DSL
                 }
 
 
-                var preconditionMethodName = $"{sanitizedName}_precondition";
-                GetPreconditionMethod2(preconditionMethodName, rewrite.Precondition);
+                //var preconditionMethodName = $"{sanitizedName}_precondition";
+                //GetPreconditionMethod2(preconditionMethodName, rewrite.Precondition);
 
-                var preconditionArgs = boundedNames.Where(x => x.Key is ConstNode || x.Key is WildCardConstantNode).OrderBy(x => x.Value).ToList();
-                var preconditionMethod = GetPreconditionMethod(preconditionMethodName, preconditionArgs, rewrite.Precondition != null);
+                //var preconditionArgs = boundedNames.Where(x => x.Key is ConstNode || x.Key is WildCardConstantNode).OrderBy(x => x.Value).ToList();
+                //var preconditionMethod = GetPreconditionMethod(preconditionMethodName, preconditionArgs, rewrite.Precondition != null);
+                var preconditionMethod = GetPreconditionMethod2(sanitizedName, rewrite.Precondition);
 
-                var precondArgStr = String.Join(", ", preconditionArgs.Select(x => $@"""?{x.Value}"""));
-                codeBuilder.AppendLine($@"}} if ({preconditionMethodName}({precondArgStr}))),");
+                var precondArgStr = String.Join(", ", preconditionMethod.ArgNames.Select(x => $@"""?{x}"""));
+                codeBuilder.AppendLine($@"}} if ({preconditionMethod.MethodName}({precondArgStr}))),");
                 
 
                 codeBuilder.AppendLine("");
-                applierSb.AppendLine(preconditionMethod + "\n");
+                applierSb.AppendLine(preconditionMethod.Body + "\n");
                 applierSb.AppendLine(applier.Body);
 
             }
@@ -231,21 +232,26 @@ namespace Mba.Simplifier.DSL
             cache[ast] = destName;
         }
 
-        private static void GetPreconditionMethod2(string methodName, AstNode precondition)
+        private static PreconditionMethod GetPreconditionMethod2(string ruleName, AstNode precondition)
         {
+
             var constantNodes = DslPreprocessor.GetUniqueVariables(precondition);
 
             var stringBuilder = new StringBuilder();
             var codeBuilder = new CodeBuilder(stringBuilder);
-            var args = String.Join(", ", constantNodes.Select(x => $"{x.Name}:  &str"));
-            codeBuilder.AppendLine($"pub fn {methodName}({args}) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool {{");
+            var args = String.Join(", ", constantNodes.Select(x => $"{x.Name}:  &'a str"));
+            var methodName = $"{ruleName}_precondition";
+            codeBuilder.AppendLine($"pub fn {methodName}<'a>({args}) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool + 'a {{");
             codeBuilder.Indent();
-
-            foreach (var arg in constantNodes)
-                codeBuilder.AppendLine($"let {arg.Name} = subst[{arg.Name}.parse().unwrap()];");
 
             codeBuilder.AppendLine($"move |egraph, _, subst| {{");
             codeBuilder.Indent();
+
+            foreach (var arg in constantNodes)
+            {
+                codeBuilder.AppendLine($"let {arg.Name}_id = subst[{arg.Name}.parse().unwrap()];");
+                codeBuilder.AppendLine($"let {arg.Name} = &egraph[{arg.Name}_id];");
+            }
 
             codeBuilder.Append($"let precondition = ");
             LowerPreconditionNode(stringBuilder, precondition);
@@ -260,9 +266,7 @@ namespace Mba.Simplifier.DSL
                 codeBuilder.AppendLine("}");
             }
 
-            Debugger.Break();
-
-
+            return new PreconditionMethod(methodName, constantNodes.Select(x => x.Name).ToList(), codeBuilder.ToString());
         }
 
         private static void LowerPreconditionNode(StringBuilder sb, AstNode precondition)

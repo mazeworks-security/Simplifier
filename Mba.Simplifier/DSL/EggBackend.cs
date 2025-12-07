@@ -23,6 +23,8 @@ namespace Mba.Simplifier.DSL
     /// <param name="Body">The code containing both the struct and Applier trait implementation.</param>
     public record Applier(string StructName, IReadOnlyList<string> ArgNames, string Body);
 
+    public record PreconditionMethod(string MethodName, IReadOnlyList<string> ArgNames, string Body);
+
     public static class EggBackend
     {
         public static string GenerateEggDsl(IReadOnlyList<DslRuleOld> rules)

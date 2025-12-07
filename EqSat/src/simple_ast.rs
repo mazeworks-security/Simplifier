@@ -12,7 +12,7 @@ use std::{
 
 use ahash::AHashMap;
 use egg::{
-    define_language, rewrite, Analysis, Applier, BackoffScheduler, DidMerge, Extractor, Id,
+    define_language, rewrite, Analysis, Applier, BackoffScheduler, DidMerge, EClass, Extractor, Id,
     Language, PatternAst, RecExpr, Runner, Subst, Symbol, Var,
 };
 use iced_x86::{
@@ -3995,26 +3995,6 @@ pub fn eqmod(c1: u64, c2: u64, width: u8) -> bool {
     return (c1 & mask) == (c2 & mask);
 }
 
-pub fn manual_rule_cmp_xor_i1_combine_precondition(
-    egraph: &EEGraph,
-    subst: &Subst,
-    c1: Var,
-    mconst0: Var,
-) -> bool {
-    let constant = as_constant(&egraph[subst[c1]].data).unwrap();
-    return constant.count_ones() == 1;
-}
-
-pub fn manual_rule_cmp_i1_combine_precondition(
-    egraph: &EEGraph,
-    subst: &Subst,
-    c1: Var,
-    mconst0: Var,
-) -> bool {
-    let constant = as_constant(&egraph[subst[c1]].data).unwrap();
-    return constant.count_ones() == 1;
-}
-
 // Below is an FFI interface for egraphs and Expr instances.
 #[no_mangle]
 pub extern "C" fn CreateEGraph() -> *mut EEGraph {
@@ -4132,6 +4112,26 @@ pub extern "C" fn EGraphRebuild(egraph_p: *mut EEGraph) {
     egraph.rebuild();
 }
 
-pub fn is_const(egraph: &mut EEGraph, id: Id) -> bool {
-    return false;
+pub fn is_const(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> bool {
+    return node.data.known_bits.is_constant();
+}
+
+pub fn get_const(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
+    return node.data.known_bits.as_constant().unwrap();
+}
+
+pub fn const_eq(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>, c1: u64) -> bool {
+    return node.data.known_bits.as_constant().unwrap() == c1;
+}
+
+pub fn get_width(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
+    return node.data.width as u64;
+}
+
+pub fn get_known_zeroes(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
+    return node.data.known_bits.zeroes;
+}
+
+pub fn get_known_ones(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
+    return node.data.known_bits.ones;
 }
