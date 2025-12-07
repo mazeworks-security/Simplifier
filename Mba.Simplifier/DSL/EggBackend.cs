@@ -56,11 +56,6 @@ namespace Mba.Simplifier.DSL
                 TranspileLhs(rewrite.Before, ruleSb, boundedNames, modularConstants);
                 ruleSb.AppendLine(@""" => {");
 
-                // Compile the precondition to a method.
-                var preconditionMethodName = $"{sanitizedName}_precondition";
-                var preconditionArgs = boundedNames.Where(x => x.Key is ConstNode || x.Key is WildCardConstantNode).OrderBy(x => x.Value).ToList();
-                var preconditionMethod = GetPreconditionMethod(preconditionMethodName, preconditionArgs, rewrite.ManualPrecondition);
-
                 // Generate an applier for the RHS
                 var outArgs = new OrderedSet<AstNode>();
                 var boundingNode = GetWidthBoundingNode(rewrite.After, boundedNames);
@@ -80,6 +75,14 @@ namespace Mba.Simplifier.DSL
                 codeBuilder.Outdent();
                 codeBuilder.AppendLine("}");
                 codeBuilder.Outdent();
+
+    
+
+                // Compile the precondition to a method.
+                var preconditionMethodName = $"{sanitizedName}_precondition";
+                var preconditionArgs = boundedNames.Where(x => x.Key is ConstNode || x.Key is WildCardConstantNode).OrderBy(x => x.Value).ToList();
+                var preconditionMethod = GetPreconditionMethod(preconditionMethodName, preconditionArgs, rewrite.ManualPrecondition);
+
 
                 // Emit the precondition if one exists.
                 if (preconditionMethod == null)

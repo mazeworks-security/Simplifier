@@ -3,7 +3,7 @@
 use egg::{rewrite, Applier, Id, PatternAst, Subst, Symbol, Var};
 
 use crate::simple_ast::{
-    as_constant, eqmod, manual_rule_cmp_i1_combine_precondition,
+    as_constant, eqmod, is_const, manual_rule_cmp_i1_combine_precondition,
     manual_rule_cmp_xor_i1_combine_precondition, AstData, EEGraph, MbaAnalysis, Predicate, Rewrite,
     SimpleAst,
 };
@@ -1643,12 +1643,18 @@ pub fn rule_cmp_i1_combine_precondition(
         if c1_value.is_none() || mconst0_value.is_none() {
             return false;
         }
+
+        let id = subst[c1];
+        let bar = is_const(egraph, id);
+
         if !eqmod(mconst0_value.unwrap(), 0, egraph[subst[mconst0]].data.width) {
             return false;
         }
         if !manual_rule_cmp_i1_combine_precondition(egraph, subst, c1, mconst0) {
             return false;
         }
+
+        let cond: bool = false;
         return true;
     }
 }

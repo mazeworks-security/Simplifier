@@ -56,7 +56,7 @@ namespace Mba.Simplifier.DSL
 
             foreach (var rewrite in rules)
             {
-                if (rewrite.Name != "mul_constant_to_left_1")
+                if (rewrite.Name != "test_rule")
                     continue;
                 // In the case of a rewrite rule like `x-x` => 0, we need to some way of telling ISLE what bit width to create `0` as.
                 // To solve this we keep track of variable and width occurrences during transpilation, then pick one of the occurrences to steal the width field from.
@@ -97,7 +97,10 @@ namespace Mba.Simplifier.DSL
                     continue;
                 }
 
+
                 var preconditionMethodName = $"{sanitizedName}_precondition";
+                GetPreconditionMethod2(preconditionMethodName, rewrite.Precondition);
+
                 var preconditionArgs = boundedNames.Where(x => x.Key is ConstNode || x.Key is WildCardConstantNode).OrderBy(x => x.Value).ToList();
                 var preconditionMethod = GetPreconditionMethod(preconditionMethodName, preconditionArgs, rewrite.Precondition != null);
 
@@ -226,6 +229,96 @@ namespace Mba.Simplifier.DSL
             }
 
             cache[ast] = destName;
+        }
+
+        private static void GetPreconditionMethod2(string methodName, AstNode precondition)
+        {
+            var constantNodes = DslPreprocessor.GetUniqueVariables(precondition);
+
+            var stringBuilder = new StringBuilder();
+            var codeBuilder = new CodeBuilder(stringBuilder);
+            var args = String.Join(", ", constantNodes.Select(x => $"{x.Name}:  &str"));
+            codeBuilder.AppendLine($"pub fn {methodName}({args}) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool {{");
+            codeBuilder.Indent();
+
+            foreach (var arg in constantNodes)
+                codeBuilder.AppendLine($"let {arg.Name} = subst[{arg.Name}.parse().unwrap()];");
+
+            codeBuilder.AppendLine($"move |egraph, _, subst| {{");
+            codeBuilder.Indent();
+
+            codeBuilder.Append($"let precondition = ");
+            LowerPreconditionNode(stringBuilder, precondition);
+            stringBuilder.Append(";\n");
+
+            codeBuilder.AppendLine($"if !precondition {{ return false; }}");
+
+            codeBuilder.AppendLine("return true;");
+            for (int i = 0; i < 2; i++)
+            {
+                codeBuilder.Outdent();
+                codeBuilder.AppendLine("}");
+            }
+
+            Debugger.Break();
+
+
+        }
+
+        private static void LowerPreconditionNode(StringBuilder sb, AstNode precondition)
+        {
+            if (precondition is VarNode varNode)
+            {
+                sb.Append(varNode.Name);
+                return;
+            }
+
+            if (precondition is ConstNode constNode)
+            {
+                sb.Append(constNode.UValue);
+                return;
+            }
+
+            if(precondition is IntrinsicCallNode intrinsicCall)
+            {
+                sb.Append($"{intrinsicCall.Name}(egraph, ");
+                for (int i = 0; i < intrinsicCall.Children.Count; i++)
+                {
+                    LowerPreconditionNode(sb, intrinsicCall.Children[i]);
+                    if (i != intrinsicCall.Children.Count - 1)
+                        sb.Append(", ");
+                }
+                sb.Append(")");
+                return;
+            }
+
+            switch(precondition.Kind)
+            {
+                case AstKind.Add:
+                case AstKind.Mul:
+                case AstKind.And:
+                case AstKind.Or:
+                case AstKind.Xor:
+                case AstKind.Lshr:
+                case AstKind.ICmp:
+                    Debug.Assert(precondition.Children.Count == 2);
+                    var binop = AstFormatter.GetOperatorName(precondition);
+                    sb.Append("(");
+                    LowerPreconditionNode(sb, precondition.Children[0]);
+                    sb.Append($" {binop} ");
+                    LowerPreconditionNode(sb, precondition.Children[1]);
+                    sb.Append(")");
+                    break;
+                case AstKind.Neg:
+                    sb.Append("(!");
+                    LowerPreconditionNode(sb, precondition.Children[0]);
+                    sb.Append(")");
+                    break;
+
+                default:
+                    throw new InvalidOperationException();
+            }
+
         }
 
         private static string GetPreconditionMethod(string methodName, IReadOnlyList<KeyValuePair<AstNode, string>> constantNodes, bool manualPrecondition)

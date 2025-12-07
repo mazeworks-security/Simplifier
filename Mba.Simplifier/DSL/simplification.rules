@@ -12,7 +12,8 @@ FUNCTIONS REQUIRED [
         // Get a mask for the bits that are known to be one
         builtin fn get_known_ones(node: Node) -> i64;
 		// Reduce the constant `c1` modulo 2**w , where w is the width of the input node.
-		fn reduce_modulo_node_size(c1: i64, node: Node) -> i64 
+		// fn reduce_modulo_node_size(c1: i64, node: Node) -> i64 
+		fn rmodn(c1: i64, node: Node) -> i64 
 		{
 			return reduce_modulo(c1, get_width(node));
 		}
@@ -27,14 +28,16 @@ FUNCTIONS REQUIRED [
 			return disjoint_kb(c1, c2);
         }
 	
-		// This is not right!
         fn disjoint_kb(c1: Node, c2: Node) -> i1
         {
-			return (get_known_zeroes(c1) | get_known_zeroes(c2)) == -1;
+			return (get_known_zeroes(c1) | get_known_zeroes(c2)) == rmodn(-1, c1);
         }
 ]
 
 RULES EGRAPH [
+		test_rule: (a|b) => (b|a) :: is_const(a) & is_const(b) & disjoint_constants(a, b)
+		//test_rule: (a|b) => (b|a) :: is_const(a) & is_const(b)
+
         // Associativity, commutativity, and distributivity rules
         or_commutativity: (a|b) => (b|a)
         or_associativity: (a|(b|c)) => ((a|b)|c)

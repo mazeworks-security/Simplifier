@@ -191,7 +191,7 @@ namespace Mba.Simplifier.DSL
             => nodes.SelectMany(x => GetUniqueVariables(x)).Distinct().ToList();
 
         public static List<VarNode> GetUniqueVariables(AstNode node)
-            => GetNodes(node).Where(x => x is VarNode).Select(x => (VarNode)x).Distinct().ToList();
+            => GetNodes(node).Where(x => x is VarNode).Select(x => (VarNode)x).Distinct().OrderBy(x => x.Name).ToList();
 
         public static List<AstNode> GetNodes(AstNode root)
         {

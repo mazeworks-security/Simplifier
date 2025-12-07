@@ -4131,3 +4131,7 @@ pub extern "C" fn EGraphRebuild(egraph_p: *mut EEGraph) {
 
     egraph.rebuild();
 }
+
+pub fn is_const(egraph: &mut EEGraph, id: Id) -> bool {
+    return false;
+}
