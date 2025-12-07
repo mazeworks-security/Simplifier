@@ -35,7 +35,7 @@ FUNCTIONS REQUIRED [
 ]
 
 RULES EGRAPH [
-		test_rule: (a|b) => (b|a) :: is_const(a) && is_const(b) && disjoint_constants(a, b)
+		// test_rule: (a|b) => (b|a) :: is_const(a) && is_const(b) && disjoint_constants(a, b)
 		//test_rule: (a|b) => (b|a) :: is_const(a) & is_const(b)
 
         // Associativity, commutativity, and distributivity rules

@@ -189,7 +189,7 @@ namespace Mba.Simplifier.DSL
                     // Update the rule precondition to assert that mconst == constant % (2**width(mconst))
                     // TODO: Use shortcircuiting AND!
                     var precondition = new IntrinsicCallNode(eqIntrinsic.Name, eqIntrinsic.ReturnType.Width, new List<AstNode>() { mconstVar, constant, });
-                    rule.Precondition = rule.Precondition == null ? precondition : new AndNode(rule.Precondition, precondition);
+                    rule.Precondition = rule.Precondition == null ? precondition : new ConditionalAndNode(rule.Precondition, precondition);
                 }
 
                 rule.Before = AstCloner.ReplaceConstants(rule.Before, replacements);

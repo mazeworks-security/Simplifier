@@ -109,7 +109,7 @@ if(useNewDsl)
     var dsl = DslParser.ParseDsl(File.ReadAllText("DSL/simplification.rules"));
     var backend = new NewEggBackend(dsl);
     backend.Generate();
-    Console.WriteLine("Done ");
+    //Console.WriteLine("Done ");
     Debugger.Break();
 }
 

@@ -56,8 +56,6 @@ namespace Mba.Simplifier.DSL
 
             foreach (var rewrite in rules)
             {
-                if (rewrite.Name != "test_rule")
-                    continue;
                 // In the case of a rewrite rule like `x-x` => 0, we need to some way of telling ISLE what bit width to create `0` as.
                 // To solve this we keep track of variable and width occurrences during transpilation, then pick one of the occurrences to steal the width field from.
                 // Special care needs to be taken for zext/trunc instructions though.
