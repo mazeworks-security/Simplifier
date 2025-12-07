@@ -37,171 +37,13 @@ namespace Mba.Simplifier.DSL
 
         public void Generate()
         {
-            // Inline all function calls.
-            InlineDslFunctionCalls();
+            // Preprocess the DSL.
+            DslPreprocessor.Run(dslFunctions, dslRules);
 
-            // Make the rhs, lhs, and precondition of a rule use the same leaf nodes 
-            // This is required so that we can do hashmap lookups on the variable and constant nodes.
-            HashConseRuleLeafs();
-
-            // Replace all constants in the lhs with temporary variables (mconst0, mconst1, mconst..),
-            // and update the precondition to assert that the constant value matches modulo 2**w.
-            AddConstantModularMatchingPreconditions(DslRuntime.GetConstantEqFunction(dslFunctions), dslRules);
-
-            Debugger.Break();
+            GenerateEggDsl(dslRules);
         }
 
-        private void InlineDslFunctionCalls()
-        {
-            // Recursively inline all functions called by other DSL functions
-            foreach(var dslFunction in dslFunctions)
-            {
-                // Skip bodyless functions.
-                if (dslFunction.IsBuiltin)
-                    continue;
-
-                dslFunction.Body = InlineCalls(dslFunction.Body, nameToFunc);
-            }
-
-            // Recursively inline all function calls in the rule preconditions.
-            // Calls should not appear in the lhs or rhs of a rule.
-            foreach(var rule in dslRules)
-            {
-                if (rule.Precondition == null)
-                    continue;
-
-                rule.Precondition = InlineCalls(rule.Precondition, nameToFunc);
-            }
-        }
-        
-        private static AstNode InlineCalls(AstNode body, IReadOnlyDictionary<string, DslFunction> nameToFunc)
-        {
-            return AstCloner.Clone(body, (AstNode src) => { return CloneIntrinsic(src, nameToFunc); });
-        }
-
-        private static AstNode CloneIntrinsic(AstNode node, IReadOnlyDictionary<string, DslFunction> nameToFunc)
-        {
-            // Skip if this is not an intrinsic call.
-            if (node is not IntrinsicCallNode intrinsicCall)
-                return null;
-
-            // Skip if the call cannot be inlined
-            var clonedChildren = intrinsicCall.Children.Select(x => AstCloner.Clone(x, (AstNode src) => { return CloneIntrinsic(src, nameToFunc); })).ToList();
-            var callTarget = nameToFunc[intrinsicCall.Name];
-            if (callTarget.IsBuiltin)
-            {
-                return new IntrinsicCallNode(intrinsicCall.Name, callTarget.ReturnType.Width, clonedChildren.ToList());
-            }
-
-            // Otherwise the call can be inlined.
-            Dictionary<string, AstNode> varToReplacement = new();
-            for (int i = 0; i < callTarget.Arguments.Count; i++)
-            {
-                var arg = callTarget.Arguments[i];
-                varToReplacement[arg.Name] = clonedChildren[i];
-            }
-
-            var inlined = AstCloner.ReplaceVars(callTarget.Body, varToReplacement);
-
-            return inlined;
-        }
-
-        private void HashConseRuleLeafs()
-        {
-            foreach(var rule in dslRules)
-            {
-                Dictionary<string, VarNode> varMap = new();
-                Dictionary<ulong, ConstNode> constMap = new();
-                var before = HashConsLeaf(rule.Before, varMap, constMap);
-                var after = HashConsLeaf(rule.After, varMap, constMap);
-                var precondition = HashConsLeaf(rule.Precondition, varMap, constMap);
-
-                rule.Before = before;
-                rule.After = after;
-                rule.Precondition = precondition;
-            }
-        }
-
-        private static AstNode HashConsLeaf(AstNode node, Dictionary<string, VarNode> varMap, Dictionary<ulong, ConstNode> constMap)
-        {
-            if (node == null)
-                return null;
-            return AstCloner.Clone(node, (AstNode src) => { return HashConseCallback(src, varMap, constMap); });
-        }
-
-        private static AstNode HashConseCallback(AstNode node, Dictionary<string, VarNode> varMap, Dictionary<ulong, ConstNode> constMap)
-        {
-            if (node is VarNode varNode)
-            {
-                if (varMap.TryGetValue(varNode.Name, out var existing))
-                    return existing;
-
-                var newVar = new VarNode(varNode.Name, varNode.BitSize);
-                varMap[varNode.Name] = newVar;
-                return varNode;
-            }
-
-            if (node is ConstNode constNode)
-            {
-                if (constMap.TryGetValue(constNode.UValue, out var existing))
-                    return existing;
-
-                var newConst = new ConstNode(constNode.UValue, constNode.BitSize);
-                constMap[constNode.UValue] = newConst;
-                return newConst;
-            }
-
-            return null;
-        }
-
-        // Update the rule to match constants modulo 2**w
-        public static void AddConstantModularMatchingPreconditions(DslFunction eqIntrinsic, IReadOnlyList<DslRule> rules)
-        {
-            foreach (var rule in rules)
-            {
-                // Get all unique constant nodes in the lhs of the rule
-                var nodes = new List<AstNode>();
-                GetNodes(rule.Before, nodes);
-                var uniqueConstants = nodes
-                    .Where(x => x is ConstNode)
-                    .Select(x => (ConstNode)x).Distinct().ToList();
-
-                // Skip if there are no constants to match.
-                if (!uniqueConstants.Any())
-                    continue;
-
-                // Get all variables used in the rule.
-                Dictionary<string, VarNode> uniqueVariables = GetUniqueVariables(new List<AstNode> { rule.Before, rule.After, rule.Precondition}).ToDictionary(x => x.Name, x => x);
-
-                Dictionary<ulong, AstNode> replacements = new();
-                foreach(var constant in uniqueConstants)
-                {
-                    var name = $"mconst{replacements.Count}";
-                    if (uniqueVariables.ContainsKey(name))
-                        throw new InvalidOperationException($"Rule {rule.Name} is using reserved name {name}");
-
-                    var mconstVar = new VarNode(name, constant.BitSize);
-                    uniqueVariables.Add(name, mconstVar);
-                    replacements.Add(constant.UValue, mconstVar);
-
-                    // Update the rule precondition to assert that mconst == constant % (2**width(mconst))
-                    // TODO: Use shortcircuiting AND!
-                    var precondition = new IntrinsicCallNode(eqIntrinsic.Name, eqIntrinsic.ReturnType.Width, new List<AstNode>() { mconstVar, constant, });
-                    rule.Precondition = rule.Precondition == null ? precondition : new AndNode(rule.Precondition, precondition);
-                }
-
-                rule.Before = AstCloner.ReplaceConstants(rule.Before, replacements);
-
-            }
-        }
-
-        private static List<VarNode> GetUniqueVariables(IReadOnlyList<AstNode> nodes)
-            => nodes.SelectMany(x => GetUniqueVariables(x)).Distinct().ToList();
-
-        private static List<VarNode> GetUniqueVariables(AstNode node)
-            => GetNodes(node).Where(x => x is VarNode).Select(x => (VarNode)x).Distinct().ToList();
-
-        public static string GenerateEggDsl(IReadOnlyList<DslRuleOld> rules)
+        public static string GenerateEggDsl(IReadOnlyList<DslRule> rules)
         {
             var ruleSb = new StringBuilder();
             var codeBuilder = new CodeBuilder(ruleSb);
@@ -214,37 +56,26 @@ namespace Mba.Simplifier.DSL
 
             foreach (var rewrite in rules)
             {
+                if (rewrite.Name != "mul_constant_to_left_1")
+                    continue;
                 // In the case of a rewrite rule like `x-x` => 0, we need to some way of telling ISLE what bit width to create `0` as.
                 // To solve this we keep track of variable and width occurrences during transpilation, then pick one of the occurrences to steal the width field from.
                 // Special care needs to be taken for zext/trunc instructions though.
                 Dictionary<AstNode, string> boundedNames = new();
-                Dictionary<ulong, string> modularConstants = new();
 
-                // Append the start of the rewrite rule.
-                var sanitizedName = "rule_" + rewrite.Name.Replace("-", "_");
-                //codeBuilder.Append($"// {rewrite.Name}: {rewrite.Before.ToString()} => {rewrite.After.ToString()}\n");
-                codeBuilder.AppendLine($"// {rewrite.Name}:");
+                // Emit the rule header
                 codeBuilder.AppendLine($"// {rewrite.Before.ToString()} => {rewrite.After.ToString()}");
                 codeBuilder.Append($@"rewrite!(""{rewrite.Name}""; ");
 
-                // Emit a string representation of the LHS ast
+                // Emit the LHS of the rule as an egg s-expr.
                 ruleSb.Append(@"""");
-                TranspileLhs(rewrite.Before, ruleSb, boundedNames, modularConstants);
+                TranspileLhs(rewrite.Before, ruleSb);
                 ruleSb.AppendLine(@""" => {");
 
-                // Compile the precondition to a method.
-                var preconditionMethodName = $"{sanitizedName}_precondition";
-                var preconditionArgs = boundedNames.Where(x => x.Key is ConstNode || x.Key is WildCardConstantNode).OrderBy(x => x.Value).ToList();
-                var preconditionMethod = GetPreconditionMethod(preconditionMethodName, preconditionArgs, rewrite.ManualPrecondition);
 
                 // Generate an applier for the RHS
-                var outArgs = new OrderedSet<AstNode>();
-                var boundingNode = GetWidthBoundingNode(rewrite.After, boundedNames);
-                var boundingName = boundedNames[boundingNode];
-                var cache = new Dictionary<AstNode, string>();
-                // Lower the AST to a series of egg AST constructor calls.
-                var rhsDagStr = TranspileRhs(rewrite.After, boundedNames, cache, boundingNode, outArgs);
-                var applier = GetRhsApplier(sanitizedName, outArgs, boundedNames, rhsDagStr, cache[rewrite.After]);
+                var sanitizedName = "rule_" + rewrite.Name.Replace("-", "_");
+                var applier = GetRhsApplier(sanitizedName, rewrite);
 
 
                 // Actually emit the rhs of the rule now
@@ -257,24 +88,25 @@ namespace Mba.Simplifier.DSL
                 codeBuilder.AppendLine("}");
                 codeBuilder.Outdent();
 
-                // Emit the precondition if one exists.
-                if (preconditionMethod == null)
+                // Finish the rule if there is no preconditoin
+                if(rewrite.Precondition == null)
                 {
                     codeBuilder.AppendLine("}),");
+                    codeBuilder.AppendLine("");
+                    applierSb.AppendLine(applier.Body);
+                    continue;
                 }
 
-                else
-                {
-                    var precondArgStr = String.Join(", ", preconditionArgs.Select(x => $@"""?{x.Value}"""));
-                    codeBuilder.AppendLine($@"}} if ({preconditionMethodName}({precondArgStr}))),");
-                }
+                var preconditionMethodName = $"{sanitizedName}_precondition";
+                var preconditionArgs = boundedNames.Where(x => x.Key is ConstNode || x.Key is WildCardConstantNode).OrderBy(x => x.Value).ToList();
+                var preconditionMethod = GetPreconditionMethod(preconditionMethodName, preconditionArgs, rewrite.Precondition != null);
+
+                var precondArgStr = String.Join(", ", preconditionArgs.Select(x => $@"""?{x.Value}"""));
+                codeBuilder.AppendLine($@"}} if ({preconditionMethodName}({precondArgStr}))),");
+                
 
                 codeBuilder.AppendLine("");
-
-                // Append the precondition method
-                if (preconditionMethod != null)
-                    applierSb.AppendLine(preconditionMethod + "\n");
-
+                applierSb.AppendLine(preconditionMethod + "\n");
                 applierSb.AppendLine(applier.Body);
 
             }
@@ -286,8 +118,6 @@ namespace Mba.Simplifier.DSL
 
 
             var text = codeBuilder.ToString() + Environment.NewLine + applierSb.ToString();
-            //File.WriteAllText("rules.rs", text);
-
             Console.WriteLine(codeBuilder.ToString());
 
             Console.WriteLine(applierSb.ToString());
@@ -295,32 +125,21 @@ namespace Mba.Simplifier.DSL
             return null;
         }
 
-        private static void TranspileLhs(AstNode ast, StringBuilder sb, Dictionary<AstNode, string> boundedNames, Dictionary<ulong, string> modularConstants)
+        private static void TranspileLhs(AstNode ast, StringBuilder sb)
         {
             if (ast is VarNode varNode)
             {
                 sb.Append($"?{varNode.Name}");
-                boundedNames[ast] = (varNode.Name);
                 return;
             }
 
-            // Handle a literal constant, e.g. "-1)
+            // Literal constants (e.g. -1) should not appear in the LHS of a rule.
+            // They must be substituted for temporary variables, with a precondition checking the constant modulo 2**w.
             if (ast is ConstNode constNode)
-            {
-                var constName = (modularConstants.ContainsKey((ulong)constNode.Value) ? modularConstants[(ulong)constNode.Value] : $"mconst{modularConstants.Count}");
-                sb.Append($"?{constName}");
-                boundedNames[ast] = (constName);
-                modularConstants.TryAdd((ulong)constNode.Value, constName);
-                return;
-            }
-
-            // Handle a wildcard constant(i.e. a variable that must be a constant)
+                throw new InvalidOperationException();
+            // TODO: Delete WildCardConstantNode
             if (ast is WildCardConstantNode wc)
-            {
-                sb.Append($"?{wc.Name}");
-                boundedNames[ast] = (wc.Name);
-                return;
-            }
+                throw new InvalidOperationException();
 
             // Otherwise this is some kind of operation with one or more children.
             Debug.Assert(ast.Children.Any());
@@ -329,7 +148,7 @@ namespace Mba.Simplifier.DSL
             for (int i = 0; i < ast.Children.Count; i++)
             {
                 var child = ast.Children[i];
-                TranspileLhs(child, sb, boundedNames, modularConstants);
+                TranspileLhs(child, sb);
                 if (i != ast.Children.Count - 1)
                     sb.Append(" ");
 
@@ -338,23 +157,16 @@ namespace Mba.Simplifier.DSL
             sb.Append(")");
         }
 
-        private static string TranspileRhs(AstNode ast, Dictionary<AstNode, string> boundedNames, Dictionary<AstNode, string> cache, AstNode widthField, OrderedSet<AstNode> outArgs)
-        {
-            var sb = new StringBuilder();
 
-            TranspileRhsInternal(ast, sb, boundedNames, cache, widthField, outArgs);
-            return sb.ToString();
-        }
-
-        private static void TranspileRhsInternal(AstNode ast, StringBuilder sb, Dictionary<AstNode, string> boundedNames, Dictionary<AstNode, string> cache, AstNode widthField, OrderedSet<AstNode> outArgs)
+        private static void TranspileRhs(AstNode ast, StringBuilder sb, Dictionary<AstNode, string> cache, VarNode widthField, OrderedSet<VarNode> outArgs)
         {
             // Assign the symbol id to a local variable
-            if (ast is VarNode || ast is WildCardConstantNode)
+            if (ast is VarNode varNode)
             {
-                var name = boundedNames[ast];
+                var name = varNode.Name;
                 var idName = $"{name}_id";
                 sb.AppendLine($"let {idName} = subst[self.{name}];");
-                outArgs.Add(ast);
+                outArgs.Add(varNode);
                 cache[ast] = idName;
 
                 // Compute the bounded width variable if we need it.
@@ -368,11 +180,10 @@ namespace Mba.Simplifier.DSL
             {
                 // Fetch the id of the field.
                 if (!cache.ContainsKey(widthField))
-                    TranspileRhsInternal(widthField, sb, boundedNames, cache, widthField, outArgs);
+                    TranspileRhs(widthField, sb, cache, widthField, outArgs);
 
                 var literalName = $"literal_{constNode.UValue}_id";
                 sb.AppendLine($"let {literalName} = egraph.add(SimpleAst::Constant {{c: {constNode.UValue}, width: bounded_width }});");
-                //outArgs.Add(ast);
                 outArgs.Add(widthField);
                 cache[ast] = literalName;
                 return;
@@ -383,7 +194,7 @@ namespace Mba.Simplifier.DSL
             {
                 if (cache.ContainsKey(child))
                     continue;
-                TranspileRhsInternal(child, sb, boundedNames, cache, widthField, outArgs);
+                TranspileRhs(child, sb, cache, widthField, outArgs);
             }
 
             var destName = $"t{cache.Count}";
@@ -415,47 +226,6 @@ namespace Mba.Simplifier.DSL
             }
 
             cache[ast] = destName;
-        }
-
-        private static AstNode GetWidthBoundingNode(AstNode rhs, Dictionary<AstNode, string> boundedNames)
-        {
-            // Get all nodes in the rhs of the pattern
-            var children = new List<AstNode>();
-            GetNodes(rhs, children);
-
-            // Ideally we want to find a variable that is used in both the lhs and rhs.
-            // This way our egg applier function does not depend on a spurious variable to fetch the width.
-            foreach (var node in children)
-            {
-                // Skip if this node was not bounded to a named variable.
-                if (!boundedNames.ContainsKey(node))
-                    continue;
-
-                if (node is VarNode || node is WildCardConstantNode)
-                {
-                    return node;
-                }
-            }
-
-            // Otherwise return the first variable.
-            return boundedNames.Keys.Where(x => x is VarNode).OrderBy(x => x.ToString()).First();
-        }
-
-        private static List<AstNode> GetNodes(AstNode root)
-        {
-            var nodes = new List<AstNode>();
-            GetNodes(root, nodes);
-            return nodes;
-        }
-
-        private static void GetNodes(AstNode root, List<AstNode> children)
-        {
-            if (root == null)
-                return;
-            foreach (var child in root.Children)
-                GetNodes(child, children);
-            children.Add(root);
-            return;
         }
 
         private static string GetPreconditionMethod(string methodName, IReadOnlyList<KeyValuePair<AstNode, string>> constantNodes, bool manualPrecondition)
@@ -503,9 +273,48 @@ namespace Mba.Simplifier.DSL
             return sb.ToString();
         }
 
+        private static Applier GetRhsApplier(string sanitizedName, DslRule rewrite)
+        {
+            // If the RHS contains constants, we need to pull the width from somewhere.
+            // The node we pull the width from is referred to as the bounding node.
+            var boundingNode = GetWidthBoundingNode(rewrite.After, DslPreprocessor.GetUniqueVariables(rewrite.Before).ToHashSet());
 
+            // Lower the RHS to a series of egg constructor calls.
+            var outArgs = new OrderedSet<VarNode>();
+            var cache = new Dictionary<AstNode, string>();
+            var sb = new StringBuilder();
+            TranspileRhs(rewrite.After, sb, cache, boundingNode, outArgs);
+            var rhsDagStr = sb.ToString();
 
-        private static Applier GetRhsApplier(string ruleName, OrderedSet<AstNode> args, Dictionary<AstNode, string> boundedNames, string rhsStr, string rhsRootVariableName)
+            // Create an egg applier struct and method body.
+            var applier = BuildRhsApplier(sanitizedName, outArgs, rhsDagStr, cache[rewrite.After]);
+            return applier;
+        }
+
+        private static VarNode GetWidthBoundingNode(AstNode rhs, HashSet<VarNode> boundedNames)
+        {
+            // Get all nodes in the rhs of the pattern
+            var children = DslPreprocessor.GetNodes(rhs);
+
+            // Ideally we want to find a variable that is used in both the lhs and rhs.
+            // This way our egg applier function does not depend on a spurious variable to fetch the width.
+            foreach (var node in children)
+            {
+                // Skip if this node was not bounded to a named variable.
+                if (!boundedNames.Contains(node))
+                    continue;
+
+                if (node is VarNode vn)
+                {
+                    return vn;
+                }
+            }
+
+            // Otherwise return the first variable.
+            return boundedNames.OrderBy(x => x.ToString()).First();
+        }
+
+        private static Applier BuildRhsApplier(string ruleName, OrderedSet<VarNode> args, string rhsStr, string rhsRootVariableName)
         {
             var sb = new CodeBuilder();
 
@@ -513,7 +322,7 @@ namespace Mba.Simplifier.DSL
             sb.AppendLine(@$"pub struct {structName} {{");
             sb.Indent();
 
-            var argNames = args.Select(x => boundedNames[x]).ToList();
+            var argNames = args.Select(x => x.Name).ToList();
             foreach (var argName in argNames)
                 sb.AppendLine($"pub {argName}: Var,");
             sb.Outdent();

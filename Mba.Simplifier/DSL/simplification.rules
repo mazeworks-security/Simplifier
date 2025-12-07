@@ -26,7 +26,8 @@ FUNCTIONS REQUIRED [
         {
 			return disjoint_kb(c1, c2);
         }
-
+	
+		// This is not right!
         fn disjoint_kb(c1: Node, c2: Node) -> i1
         {
 			return (get_known_zeroes(c1) | get_known_zeroes(c2)) == -1;
