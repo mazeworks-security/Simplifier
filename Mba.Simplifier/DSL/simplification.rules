@@ -61,6 +61,20 @@ RULES EGRAPH [
         factor_zext_and: ((a zx i8)&(b zx i8)) => ((a&b) zx i8)
         factor_zext_or: ((a zx i8)|(b zx i8)) => ((a|b) zx i8)
         factor_zext_xor: ((a zx i8)^(b zx i8)) => ((a^b) zx i8)
+		
+		factor_mul: ((a*b) + (a*c)) => (a*(b+c))
+		group_like_terms: (c1*a + c2*a) => ((c1+c2)*a) 
+			:: is_const(c1) && is_const(c2)
+		mul_identify: (a) => (1*a)
+		
+		//or_expand1: (a|b) => a + (~a&b)
+		//or_expand2: (a|b) => (a&~b) + (~a&b) + (a&b)
+		//xor_expand: (a^b) => (a&~b) + (~a&b)
+		neg_expand: (x&~y) => (x - (x&y))
+		or_expand: (a|b) => (a+b-(a&b))
+		xor_expand: (a^b) => (a+b-(2*(a&b)))
+
+		
 
 		// commented out because I was illegally abusing fixed width literals
         // distribute_zext_xor: (1:i8 ^ (a zx i8)) => ((1 ^ a) zx i8)
