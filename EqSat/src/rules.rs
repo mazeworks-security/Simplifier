@@ -1456,8 +1456,8 @@ pub fn rule_cmp_i1_combine_precondition<'a>(
         let c2 = &egraph[c2_id];
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition =
-            ((is_const(egraph, c1) && is_const(egraph, c2)) && const_eq(egraph, mconst0, 0));
+        let precondition = ((is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0))
+            && (is_const(egraph, c1) && is_const(egraph, c2)));
         if !precondition {
             return false;
         }
@@ -1514,7 +1514,8 @@ pub fn rule_cmp_xor_i1_combine_precondition<'a>(
         let c1 = &egraph[c1_id];
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = (is_const(egraph, c1) && const_eq(egraph, mconst0, 0));
+        let precondition =
+            ((is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0)) && is_const(egraph, c1));
         if !precondition {
             return false;
         }
@@ -1566,7 +1567,7 @@ pub fn rule_factor_or_neg_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 0);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0));
         if !precondition {
             return false;
         }
@@ -2618,7 +2619,8 @@ pub fn rule_arith_to_negation_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -2657,7 +2659,7 @@ pub fn rule_add_negate_to_invert_sign_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 1);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 1));
         if !precondition {
             return false;
         }
@@ -2757,8 +2759,9 @@ pub fn rule_qsynth_1_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 2) && const_eq(egraph, mconst1, 18446744073709551615));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551615))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2)));
         if !precondition {
             return false;
         }
@@ -2804,7 +2807,7 @@ pub fn rule_qsynth_2_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 2);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2));
         if !precondition {
             return false;
         }
@@ -2845,7 +2848,7 @@ pub fn rule_qsynth_2_commutative_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 2);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2));
         if !precondition {
             return false;
         }
@@ -2886,7 +2889,7 @@ pub fn rule_or_zero_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 0);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0));
         if !precondition {
             return false;
         }
@@ -2924,7 +2927,8 @@ pub fn rule_or_maxint_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -3018,7 +3022,7 @@ pub fn rule_xor_zero_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 0);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0));
         if !precondition {
             return false;
         }
@@ -3056,7 +3060,8 @@ pub fn rule_xor_maxint_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -3150,7 +3155,7 @@ pub fn rule_and_zero_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 0);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0));
         if !precondition {
             return false;
         }
@@ -3192,7 +3197,8 @@ pub fn rule_and_maxint_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -3311,7 +3317,7 @@ pub fn rule_add_zero_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 0);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0));
         if !precondition {
             return false;
         }
@@ -3349,7 +3355,8 @@ pub fn rule_add_cancellation_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -3391,7 +3398,7 @@ pub fn rule_mul_zero_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 0);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0));
         if !precondition {
             return false;
         }
@@ -3433,7 +3440,7 @@ pub fn rule_mul_one_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 1);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 1));
         if !precondition {
             return false;
         }
@@ -3471,7 +3478,7 @@ pub fn rule_power_zero_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 0);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0));
         if !precondition {
             return false;
         }
@@ -3513,7 +3520,7 @@ pub fn rule_power_one_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 1);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 1));
         if !precondition {
             return false;
         }
@@ -3551,7 +3558,8 @@ pub fn rule_minus_twice_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -3613,7 +3621,8 @@ pub fn rule_and_bitwise_negation_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -3655,7 +3664,8 @@ pub fn rule_or_bitwise_negation_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -3697,7 +3707,8 @@ pub fn rule_xor_bitwise_negation_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -3820,7 +3831,8 @@ pub fn rule___merge_inverse_bitwise_terms_22_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -3861,8 +3873,8 @@ pub fn rule___merge_inverse_bitwise_terms_23_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -3908,7 +3920,7 @@ pub fn rule___merge_inverse_bitwise_terms_24_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 2);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2));
         if !precondition {
             return false;
         }
@@ -4160,8 +4172,9 @@ pub fn rule_xor_same_mult_by_minus_one_1_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 2) && const_eq(egraph, mconst1, 18446744073709551615));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551615))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2)));
         if !precondition {
             return false;
         }
@@ -4208,8 +4221,9 @@ pub fn rule_xor_same_mult_by_minus_one_2_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition = (const_eq(egraph, mconst0, 18446744073709551614)
-            && const_eq(egraph, mconst1, 18446744073709551615));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551615))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551614)));
         if !precondition {
             return false;
         }
@@ -4256,8 +4270,8 @@ pub fn rule_conj_zero_rule_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -4302,8 +4316,9 @@ pub fn rule_conj_neg_xor_zero_rule_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 2) && const_eq(egraph, mconst1, 18446744073709551615));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551615))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2)));
         if !precondition {
             return false;
         }
@@ -4348,8 +4363,9 @@ pub fn rule_conj_neg_xor_minus_one_rule_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 2) && const_eq(egraph, mconst1, 18446744073709551615));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551615))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2)));
         if !precondition {
             return false;
         }
@@ -4394,8 +4410,9 @@ pub fn rule_conj_negated_xor_zero_rule_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 2) && const_eq(egraph, mconst1, 18446744073709551615));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551615))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2)));
         if !precondition {
             return false;
         }
@@ -4440,8 +4457,9 @@ pub fn rule_conj_xor_identity_rule_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 2) && const_eq(egraph, mconst1, 18446744073709551615));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551615))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2)));
         if !precondition {
             return false;
         }
@@ -4487,8 +4505,9 @@ pub fn rule_disj_xor_identity_rule_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 2) && const_eq(egraph, mconst1, 18446744073709551615));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551615))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2)));
         if !precondition {
             return false;
         }
@@ -4534,8 +4553,8 @@ pub fn rule_conj_neg_conj_identity_rule_1_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -4581,8 +4600,9 @@ pub fn rule_conj_neg_conj_identity_rule_2_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition = (const_eq(egraph, mconst0, 18446744073709551615)
-            && const_eq(egraph, mconst1, 18446744073709551614));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551614))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -4628,8 +4648,8 @@ pub fn rule_conj_neg_conj_identity_rule_3_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -4675,8 +4695,9 @@ pub fn rule_conj_neg_conj_identity_rule_4_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition = (const_eq(egraph, mconst0, 18446744073709551615)
-            && const_eq(egraph, mconst1, 18446744073709551614));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551614))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -4719,7 +4740,8 @@ pub fn rule_disj_disj_identity_rule_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -4757,7 +4779,8 @@ pub fn rule_conj_conj_identity_rule_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -4798,8 +4821,8 @@ pub fn rule_disj_conj_identity_rule_1_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -4845,8 +4868,9 @@ pub fn rule_disj_conj_identity_rule_2_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition = (const_eq(egraph, mconst0, 18446744073709551615)
-            && const_eq(egraph, mconst1, 18446744073709551614));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551614))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -4892,8 +4916,8 @@ pub fn rule_disj_conj_identity_rule_3_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -4939,8 +4963,9 @@ pub fn rule_disj_conj_identity_rule_4_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition = (const_eq(egraph, mconst0, 18446744073709551615)
-            && const_eq(egraph, mconst1, 18446744073709551614));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551614))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -4986,8 +5011,8 @@ pub fn rule_disj_conj_identity_rule_2_1_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -5028,8 +5053,8 @@ pub fn rule_disj_conj_identity_rule_2_2_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -5070,8 +5095,8 @@ pub fn rule_conj_disj_identity_rule_1_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -5112,8 +5137,9 @@ pub fn rule_conj_disj_identity_rule_2_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 2) && const_eq(egraph, mconst1, 18446744073709551615));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551615))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2)));
         if !precondition {
             return false;
         }
@@ -5151,7 +5177,8 @@ pub fn rule_conj_disj_identity_rule_3_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -5189,7 +5216,8 @@ pub fn rule_disj_neg_disj_identity_rule_1_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -5227,7 +5255,8 @@ pub fn rule_disj_neg_disj_identity_rule_2_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -5265,7 +5294,8 @@ pub fn rule_disj_sub_disj_identity_rule_1_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -5303,7 +5333,8 @@ pub fn rule_disj_sub_disj_identity_rule_2_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -5365,7 +5396,8 @@ pub fn rule_disj_disj_conj_rule_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -5406,7 +5438,8 @@ pub fn rule_conj_conj_disj_rule_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -5447,7 +5480,8 @@ pub fn rule_disj_disj_conj_rule_2_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -5488,8 +5522,9 @@ pub fn rule___check_bitwise_in_sums_cancel_terms_4_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 2) && const_eq(egraph, mconst1, 18446744073709551615));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551615))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2)));
         if !precondition {
             return false;
         }
@@ -5649,7 +5684,8 @@ pub fn rule_or_mul_shrink_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -5804,8 +5840,8 @@ pub fn rule_xor_mul_shrink_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -5849,7 +5885,8 @@ pub fn rule_xor_shrink_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551614);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551614));
         if !precondition {
             return false;
         }
@@ -5890,7 +5927,8 @@ pub fn rule_xor_shrink2_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -5986,7 +6024,8 @@ pub fn rule_and_mul_shrink_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6030,7 +6069,8 @@ pub fn rule_and_shrink_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6098,7 +6138,8 @@ pub fn rule_cancel_and_reduce_bitwise_subtraction_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6143,7 +6184,8 @@ pub fn rule_merge_and_multipliers_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6195,7 +6237,8 @@ pub fn rule_mba_1_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6237,7 +6280,8 @@ pub fn rule_mba_2_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6279,7 +6323,8 @@ pub fn rule_mba_4_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6317,7 +6362,8 @@ pub fn rule_mba_5_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6358,8 +6404,8 @@ pub fn rule_mba_9_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551614) && const_eq(egraph, mconst1, 2));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 2))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551614)));
         if !precondition {
             return false;
         }
@@ -6405,7 +6451,8 @@ pub fn rule_new_2_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6451,7 +6498,8 @@ pub fn rule_new_3_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6521,7 +6569,8 @@ pub fn rule_new_23_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }
@@ -6570,8 +6619,8 @@ pub fn rule_new_24_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition =
-            (const_eq(egraph, mconst0, 18446744073709551615) && const_eq(egraph, mconst1, 1));
+        let precondition = ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 1))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -6623,9 +6672,9 @@ pub fn rule_opaque_constant_1_precondition<'a>(
         let mconst1 = &egraph[mconst1_id];
         let mconst2_id = subst[mconst2.parse().unwrap()];
         let mconst2 = &egraph[mconst2_id];
-        let precondition = ((const_eq(egraph, mconst0, 1)
-            && const_eq(egraph, mconst1, 18446744073709551615))
-            && const_eq(egraph, mconst2, 2));
+        let precondition = ((is_const(egraph, mconst2) && const_eq(egraph, mconst2, 2))
+            && ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 18446744073709551615))
+                && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 1))));
         if !precondition {
             return false;
         }
@@ -6701,9 +6750,9 @@ pub fn rule_opaque_constant_two_precondition<'a>(
         let mconst1 = &egraph[mconst1_id];
         let mconst2_id = subst[mconst2.parse().unwrap()];
         let mconst2 = &egraph[mconst2_id];
-        let precondition = ((const_eq(egraph, mconst0, 1)
-            && const_eq(egraph, mconst1, 18446744073709551615))
-            && const_eq(egraph, mconst2, 2));
+        let precondition = ((is_const(egraph, mconst2) && const_eq(egraph, mconst2, 2))
+            && ((is_const(egraph, mconst1) && const_eq(egraph, mconst1, 18446744073709551615))
+                && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 1))));
         if !precondition {
             return false;
         }
@@ -6887,7 +6936,7 @@ pub fn rule_combine_and_add_xor_or_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 2);
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 2));
         if !precondition {
             return false;
         }
@@ -6939,8 +6988,9 @@ pub fn rule_combine_and_add_xor_or_2_precondition<'a>(
         let mconst0 = &egraph[mconst0_id];
         let mconst1_id = subst[mconst1.parse().unwrap()];
         let mconst1 = &egraph[mconst1_id];
-        let precondition = (const_eq(egraph, mconst0, 18446744073709551615)
-            && const_eq(egraph, mconst1, 18446744073709551614));
+        let precondition = ((is_const(egraph, mconst1)
+            && const_eq(egraph, mconst1, 18446744073709551614))
+            && (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615)));
         if !precondition {
             return false;
         }
@@ -7266,7 +7316,8 @@ pub fn rule_linear_mba_2_precondition<'a>(
     move |egraph, _, subst| {
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = const_eq(egraph, mconst0, 18446744073709551615);
+        let precondition =
+            (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 18446744073709551615));
         if !precondition {
             return false;
         }

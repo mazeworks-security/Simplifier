@@ -40,7 +40,7 @@ namespace Mba.Simplifier.DSL
 
             // Replace all constants in the lhs with temporary variables (mconst0, mconst1, mconst..),
             // and update the precondition to assert that the constant value matches modulo 2**w.
-            AddConstantModularMatchingPreconditions(DslRuntime.GetConstantEqFunction(dslFunctions), dslRules);
+            AddConstantModularMatchingPreconditions(DslRuntime.GetIsConstantFunction(dslFunctions), DslRuntime.GetConstantEqFunction(dslFunctions), dslRules);
         }
 
         private void InlineDslFunctionCalls()
@@ -157,7 +157,7 @@ namespace Mba.Simplifier.DSL
         }
 
         // Update the rule to match constants modulo 2**w
-        public static void AddConstantModularMatchingPreconditions(DslFunction eqIntrinsic, IReadOnlyList<DslRule> rules)
+        public static void AddConstantModularMatchingPreconditions(DslFunction isConstIntrinsic, DslFunction eqIntrinsic, IReadOnlyList<DslRule> rules)
         {
             foreach (var rule in rules)
             {
@@ -186,10 +186,13 @@ namespace Mba.Simplifier.DSL
                     uniqueVariables.Add(name, mconstVar);
                     replacements.Add(constant.UValue, mconstVar);
 
-                    // Update the rule precondition to assert that mconst == constant % (2**width(mconst))
-                    // TODO: Use shortcircuiting AND!
-                    var precondition = new IntrinsicCallNode(eqIntrinsic.Name, eqIntrinsic.ReturnType.Width, new List<AstNode>() { mconstVar, constant, });
-                    rule.Precondition = rule.Precondition == null ? precondition : new ConditionalAndNode(rule.Precondition, precondition);
+                    // Create a precondition requiring that (a) `mconst` is a constant
+                    AstNode precondition = new IntrinsicCallNode(isConstIntrinsic.Name, isConstIntrinsic.ReturnType.Width, new List<AstNode>() { mconstVar });
+                    // , and (b) mconst == constant % (2**width(mconst))
+                    var eqCond = new IntrinsicCallNode(eqIntrinsic.Name, eqIntrinsic.ReturnType.Width, new List<AstNode>() { mconstVar, constant, });
+                    precondition = new ConditionalAndNode(precondition, eqCond);
+
+                    rule.Precondition = rule.Precondition == null ? precondition : new ConditionalAndNode(precondition, rule.Precondition);
                 }
 
                 rule.Before = AstCloner.ReplaceConstants(rule.Before, replacements);

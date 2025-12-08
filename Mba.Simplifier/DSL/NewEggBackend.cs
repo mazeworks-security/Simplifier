@@ -15,6 +15,9 @@ namespace Mba.Simplifier.DSL
 {
     public static class DslRuntime
     {
+        public static DslFunction GetIsConstantFunction(IReadOnlyList<DslFunction> functions)
+            => functions.Single(x => x.Name == "is_const");
+
         // Gets a function that checks whether some node is a equivalent to a constant c1, where c1 is reduced modulo 2**get_width(node).
         public static DslFunction GetConstantEqFunction(IReadOnlyList<DslFunction> functions)
             => functions.Single(x => x.Name == "const_eq");
