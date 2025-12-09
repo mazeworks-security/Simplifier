@@ -100,7 +100,7 @@ pub fn get_generated_rules() -> Vec<Rewrite> {
                 c1 : "?c1".parse().unwrap(),
                 a2 : "?a2".parse().unwrap(),
             }
-        } if (rule_cmp_i1_combine_precondition("?c1", "?c2", "?mconst0"))),
+        } if (rule_cmp_i1_combine_precondition("?c1", "?mconst0"))),
         // (((x:i64&c1:i64)!=mconst0:i64)^((c1:i64&y:i64)!=mconst0:i64)) => (((x:i64^y:i64)&c1:i64)!=0:i64)
         rewrite!("cmp_xor_i1_combine"; "(^ (\"icmp !=\" (& ?x ?c1) ?mconst0) (\"icmp !=\" (& ?c1 ?y) ?mconst0))" => {
             applier_rule_cmp_xor_i1_combine {
@@ -116,25 +116,52 @@ pub fn get_generated_rules() -> Vec<Rewrite> {
                 b : "?b".parse().unwrap(),
             }
         } if (rule_factor_or_neg_precondition("?mconst0"))),
-        // ((a:i64 zx i8)&(b:i64 zx i8)) => ((a:i64&b:i64) zx i8)
-        rewrite!("factor_zext_and"; "(& (\"zx i8\" ?a) (\"zx i8\" ?b))" => {
-            applier_rule_factor_zext_and {
+        // ((a:i64 zx i64)&(b:i64 zx i64)) => ((a:i64&b:i64) zx i64)
+        rewrite!("factor_zx_and"; "(& (zx ?a ?width) (zx ?b ?width))" => {
+            applier_rule_factor_zx_and {
                 a : "?a".parse().unwrap(),
                 b : "?b".parse().unwrap(),
+                width : "?width".parse().unwrap(),
             }
         }),
-        // ((a:i64 zx i8)|(b:i64 zx i8)) => ((a:i64|b:i64) zx i8)
-        rewrite!("factor_zext_or"; "(| (\"zx i8\" ?a) (\"zx i8\" ?b))" => {
-            applier_rule_factor_zext_or {
+        // ((a:i64 tr i64)&(b:i64 tr i64)) => ((a:i64&b:i64) tr i64)
+        rewrite!("factor_tr_and"; "(& (tr ?a ?width) (tr ?b ?width))" => {
+            applier_rule_factor_tr_and {
                 a : "?a".parse().unwrap(),
                 b : "?b".parse().unwrap(),
+                width : "?width".parse().unwrap(),
             }
         }),
-        // ((a:i64 zx i8)^(b:i64 zx i8)) => ((a:i64^b:i64) zx i8)
-        rewrite!("factor_zext_xor"; "(^ (\"zx i8\" ?a) (\"zx i8\" ?b))" => {
-            applier_rule_factor_zext_xor {
+        // ((a:i64 zx i64)|(b:i64 zx i64)) => ((a:i64|b:i64) zx i64)
+        rewrite!("factor_zx_or"; "(| (zx ?a ?width) (zx ?b ?width))" => {
+            applier_rule_factor_zx_or {
                 a : "?a".parse().unwrap(),
                 b : "?b".parse().unwrap(),
+                width : "?width".parse().unwrap(),
+            }
+        }),
+        // ((a:i64 tr i64)|(b:i64 tr i64)) => ((a:i64|b:i64) tr i64)
+        rewrite!("factor_tr_or"; "(| (tr ?a ?width) (tr ?b ?width))" => {
+            applier_rule_factor_tr_or {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+                width : "?width".parse().unwrap(),
+            }
+        }),
+        // ((a:i64 zx i64)^(b:i64 zx i64)) => ((a:i64^b:i64) zx i64)
+        rewrite!("factor_zx_xor"; "(^ (zx ?a ?width) (zx ?b ?width))" => {
+            applier_rule_factor_zx_xor {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+                width : "?width".parse().unwrap(),
+            }
+        }),
+        // ((a:i64 tr i64)^(b:i64 tr i64)) => ((a:i64^b:i64) tr i64)
+        rewrite!("factor_tr_xor"; "(^ (tr ?a ?width) (tr ?b ?width))" => {
+            applier_rule_factor_tr_xor {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+                width : "?width".parse().unwrap(),
             }
         }),
         // ((a:i64*b:i64)+(a:i64*c:i64)) => (a:i64*(b:i64+c:i64))
@@ -180,6 +207,21 @@ pub fn get_generated_rules() -> Vec<Rewrite> {
                 b : "?b".parse().unwrap(),
             }
         }),
+        // (x:i64 tr i64) => ((x:i64&1:i64)==1:i64)
+        rewrite!("tr_to_cmp"; "(tr ?x ?i)" => {
+            applier_rule_tr_to_cmp {
+                x : "?x".parse().unwrap(),
+            }
+        }),
+        // ((x:i64==c1:i64)&(y:i64==c2:i64)) => ((x:i64|y:i64)==(c1:i64|c2:i64))
+        rewrite!("merge_cmp"; "(& (\"icmp ==\" ?x ?c1) (\"icmp ==\" ?y ?c2))" => {
+            applier_rule_merge_cmp {
+                x : "?x".parse().unwrap(),
+                y : "?y".parse().unwrap(),
+                c1 : "?c1".parse().unwrap(),
+                c2 : "?c2".parse().unwrap(),
+            }
+        } if (rule_merge_cmp_precondition("?c1", "?c2", "?x", "?y"))),
         // (a:i64*c1:i64) => (c1:i64*a:i64)
         rewrite!("mul_constant_to_left_1"; "(* ?a ?c1)" => {
             applier_rule_mul_constant_to_left_1 {
@@ -1489,18 +1531,15 @@ impl Applier<SimpleAst, MbaAnalysis> for applier_rule_or_and_distributivity {
 
 pub fn rule_cmp_i1_combine_precondition<'a>(
     c1: &'a str,
-    c2: &'a str,
     mconst0: &'a str,
 ) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool + 'a {
     move |egraph, _, subst| {
         let c1_id = subst[c1.parse().unwrap()];
         let c1 = &egraph[c1_id];
-        let c2_id = subst[c2.parse().unwrap()];
-        let c2 = &egraph[c2_id];
         let mconst0_id = subst[mconst0.parse().unwrap()];
         let mconst0 = &egraph[mconst0_id];
-        let precondition = ((is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0))
-            && (is_const(egraph, c1) && is_const(egraph, c2)));
+        let precondition =
+            ((is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0)) && is_const(egraph, c1));
         if !precondition {
             return false;
         }
@@ -1653,12 +1692,13 @@ impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_or_neg {
     }
 }
 
-pub struct applier_rule_factor_zext_and {
+pub struct applier_rule_factor_zx_and {
     pub a: Var,
     pub b: Var,
+    pub width: Var,
 }
 
-impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_zext_and {
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_zx_and {
     fn apply_one(
         &self,
         egraph: &mut EEGraph,
@@ -1671,22 +1711,54 @@ impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_zext_and {
         let bounded_width = egraph[a_id].data.width;
         let b_id = subst[self.b];
         let t2 = egraph.add(SimpleAst::And([a_id, b_id]));
-        let t3 = egraph.add(SimpleAst::Zext { a: t2, to: 8 });
+        let width_id = subst[self.width];
+        let t4 = egraph.add(SimpleAst::Zext([t2, width_id]));
 
-        if egraph.union(eclass, t3) {
-            vec![t3]
+        if egraph.union(eclass, t4) {
+            vec![t4]
         } else {
             vec![]
         }
     }
 }
 
-pub struct applier_rule_factor_zext_or {
+pub struct applier_rule_factor_tr_and {
     pub a: Var,
     pub b: Var,
+    pub width: Var,
 }
 
-impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_zext_or {
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_tr_and {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::And([a_id, b_id]));
+        let width_id = subst[self.width];
+        let t4 = egraph.add(SimpleAst::Trunc([t2, width_id]));
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_factor_zx_or {
+    pub a: Var,
+    pub b: Var,
+    pub width: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_zx_or {
     fn apply_one(
         &self,
         egraph: &mut EEGraph,
@@ -1699,22 +1771,54 @@ impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_zext_or {
         let bounded_width = egraph[a_id].data.width;
         let b_id = subst[self.b];
         let t2 = egraph.add(SimpleAst::Or([a_id, b_id]));
-        let t3 = egraph.add(SimpleAst::Zext { a: t2, to: 8 });
+        let width_id = subst[self.width];
+        let t4 = egraph.add(SimpleAst::Zext([t2, width_id]));
 
-        if egraph.union(eclass, t3) {
-            vec![t3]
+        if egraph.union(eclass, t4) {
+            vec![t4]
         } else {
             vec![]
         }
     }
 }
 
-pub struct applier_rule_factor_zext_xor {
+pub struct applier_rule_factor_tr_or {
     pub a: Var,
     pub b: Var,
+    pub width: Var,
 }
 
-impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_zext_xor {
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_tr_or {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::Or([a_id, b_id]));
+        let width_id = subst[self.width];
+        let t4 = egraph.add(SimpleAst::Trunc([t2, width_id]));
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_factor_zx_xor {
+    pub a: Var,
+    pub b: Var,
+    pub width: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_zx_xor {
     fn apply_one(
         &self,
         egraph: &mut EEGraph,
@@ -1727,10 +1831,41 @@ impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_zext_xor {
         let bounded_width = egraph[a_id].data.width;
         let b_id = subst[self.b];
         let t2 = egraph.add(SimpleAst::Xor([a_id, b_id]));
-        let t3 = egraph.add(SimpleAst::Zext { a: t2, to: 8 });
+        let width_id = subst[self.width];
+        let t4 = egraph.add(SimpleAst::Zext([t2, width_id]));
 
-        if egraph.union(eclass, t3) {
-            vec![t3]
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_factor_tr_xor {
+    pub a: Var,
+    pub b: Var,
+    pub width: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_factor_tr_xor {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::Xor([a_id, b_id]));
+        let width_id = subst[self.width];
+        let t4 = egraph.add(SimpleAst::Trunc([t2, width_id]));
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
         } else {
             vec![]
         }
@@ -1943,6 +2078,110 @@ impl Applier<SimpleAst, MbaAnalysis> for applier_rule_xor_expand {
 
         if egraph.union(eclass, t8) {
             vec![t8]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_tr_to_cmp {
+    pub x: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_tr_to_cmp {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let x_id = subst[self.x];
+        let bounded_width = egraph[x_id].data.width;
+        let literal_1_id = egraph.add(SimpleAst::Constant {
+            c: 1,
+            width: bounded_width,
+        });
+        let t2 = egraph.add(SimpleAst::And([x_id, literal_1_id]));
+        let t3 = egraph.add(SimpleAst::ICmp {
+            predicate: Predicate::Eq,
+            children: [t2, literal_1_id],
+        });
+
+        if egraph.union(eclass, t3) {
+            vec![t3]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub fn rule_merge_cmp_precondition<'a>(
+    c1: &'a str,
+    c2: &'a str,
+    x: &'a str,
+    y: &'a str,
+) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool + 'a {
+    move |egraph, _, subst| {
+        let c1_id = subst[c1.parse().unwrap()];
+        let c1 = &egraph[c1_id];
+        let c2_id = subst[c2.parse().unwrap()];
+        let c2 = &egraph[c2_id];
+        let x_id = subst[x.parse().unwrap()];
+        let x = &egraph[x_id];
+        let y_id = subst[y.parse().unwrap()];
+        let y = &egraph[y_id];
+
+        let precondition = (((is_const(egraph, c1) && is_const(egraph, c2))
+            && ((get_known_zeroes(egraph, c1) | get_known_zeroes(egraph, c2))
+                == (18446744073709551615
+                    & (18446744073709551615
+                        >> (64 + (get_width(egraph, c1) * 18446744073709551615))))))
+            && ((get_known_zeroes(egraph, x) | get_known_zeroes(egraph, y))
+                == (18446744073709551615
+                    & (18446744073709551615
+                        >> (64 + (get_width(egraph, x) * 18446744073709551615))))));
+
+        println!("checked precondition: {}", precondition);
+        if !precondition {
+            return false;
+        }
+        return true;
+    }
+}
+
+pub struct applier_rule_merge_cmp {
+    pub x: Var,
+    pub y: Var,
+    pub c1: Var,
+    pub c2: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_merge_cmp {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let x_id = subst[self.x];
+        let bounded_width = egraph[x_id].data.width;
+        let y_id = subst[self.y];
+        let t2 = egraph.add(SimpleAst::Or([x_id, y_id]));
+        let c1_id = subst[self.c1];
+        let c2_id = subst[self.c2];
+        let t5 = egraph.add(SimpleAst::Or([c1_id, c2_id]));
+        let t6 = egraph.add(SimpleAst::ICmp {
+            predicate: Predicate::Eq,
+            children: [t2, t5],
+        });
+
+        println!("firing!");
+        if egraph.union(eclass, t6) {
+            vec![t6]
         } else {
             vec![]
         }

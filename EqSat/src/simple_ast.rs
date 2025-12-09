@@ -512,7 +512,8 @@ impl Arena {
         }
 
         let data = self.zext_transfer(a, width);
-        return self.insert_ast_node(SimpleAst::Zext { a: a, to: width }, data);
+        let c = self.constant(width as u64, 8);
+        return self.insert_ast_node(SimpleAst::Zext([a, c]), data);
     }
 
     pub fn trunc(&mut self, a: AstIdx, width: u8) -> AstIdx {
@@ -522,7 +523,8 @@ impl Arena {
         }
 
         let data = self.trunc_transfer(a, width);
-        return self.insert_ast_node(SimpleAst::Trunc { a: a, to: width }, data);
+        let c = self.constant(width as u64, 8);
+        return self.insert_ast_node(SimpleAst::Trunc([a, c]), data);
     }
 
     pub fn icmp(&mut self, pred: Predicate, a: AstIdx, b: AstIdx) -> AstIdx {
@@ -612,8 +614,8 @@ impl Arena {
             SimpleAst::Xor([a, b]) => self.xor(a, b),
             SimpleAst::Neg([a]) => self.neg(a),
             SimpleAst::Lshr([a, b]) => self.lshr(a, b),
-            SimpleAst::Zext { a, to } => self.zext(a, to),
-            SimpleAst::Trunc { a, to } => self.trunc(a, to),
+            SimpleAst::Zext([a, to]) => self.zext(a, self.get_constant(to) as u8),
+            SimpleAst::Trunc([a, to]) => self.trunc(a, self.get_constant(to) as u8),
             SimpleAst::Constant { c, width } => self.constant(c, width),
             SimpleAst::Symbol { id, width } => self.symbol(id, width),
             SimpleAst::ICmp {
@@ -636,6 +638,14 @@ impl Arena {
         match ast {
             SimpleAst::Constant { .. } => true,
             _ => false,
+        }
+    }
+
+    pub fn get_constant(&self, idx: AstIdx) -> u64 {
+        let ast = self.get_node(idx);
+        match ast {
+            SimpleAst::Constant { c, width } => *c,
+            _ => panic!("Node is not a constant!"),
         }
     }
 
@@ -726,7 +736,9 @@ impl Language for SimpleAst {
                 | (SimpleAst::Or(_), SimpleAst::Or(_))
                 | (SimpleAst::Xor(_), SimpleAst::Xor(_))
                 | (SimpleAst::Neg(_), SimpleAst::Neg(_))
-                | (SimpleAst::Lshr(_), SimpleAst::Lshr(_)) => true,
+                | (SimpleAst::Lshr(_), SimpleAst::Lshr(_))
+                | (SimpleAst::Zext(_), SimpleAst::Zext(_))
+                | (SimpleAst::Trunc(_), SimpleAst::Trunc(_)) => true,
                 (
                     SimpleAst::Constant { c: c1, width: w1 },
                     SimpleAst::Constant { c: c2, width: w2 },
@@ -735,12 +747,6 @@ impl Language for SimpleAst {
                     SimpleAst::Symbol { id: id1, width: w1 },
                     SimpleAst::Symbol { id: id2, width: w2 },
                 ) => id1 == id2 && w1 == w2,
-                (SimpleAst::Zext { a: _, to: to1 }, SimpleAst::Zext { a: _, to: to2 }) => {
-                    to1 == to2
-                }
-                (SimpleAst::Trunc { a: _, to: to1 }, SimpleAst::Trunc { a: _, to: to2 }) => {
-                    to1 == to2
-                }
                 (
                     SimpleAst::ICmp {
                         predicate: p1,
@@ -769,8 +775,8 @@ impl Language for SimpleAst {
             SimpleAst::Lshr(children) => children,
             SimpleAst::Constant { .. } => &[],
             SimpleAst::Symbol { .. } => &[],
-            SimpleAst::Zext { a, .. } => std::slice::from_ref(a),
-            SimpleAst::Trunc { a, .. } => std::slice::from_ref(a),
+            SimpleAst::Zext(children) => children,
+            SimpleAst::Trunc(children) => children,
             SimpleAst::ICmp {
                 predicate,
                 children,
@@ -791,8 +797,8 @@ impl Language for SimpleAst {
             SimpleAst::Lshr(children) => children,
             SimpleAst::Constant { .. } => &mut [],
             SimpleAst::Symbol { .. } => &mut [],
-            SimpleAst::Zext { a, .. } => std::slice::from_mut(a),
-            SimpleAst::Trunc { a, .. } => std::slice::from_mut(a),
+            SimpleAst::Zext(children) => children,
+            SimpleAst::Trunc(children) => children,
             SimpleAst::ICmp {
                 predicate,
                 children,
@@ -815,8 +821,10 @@ impl ::std::fmt::Display for SimpleAst {
             SimpleAst::Lshr(_) => f.write_str(">>"),
             SimpleAst::Constant { c, width } => f.write_str(format!("{}:{}", c, width).as_str()),
             SimpleAst::Symbol { id, width } => f.write_str(format!("v{}:{}", id, width).as_str()),
-            SimpleAst::Zext { a, to } => f.write_str(format!("zx i{}", to).as_str()),
-            SimpleAst::Trunc { a, to } => f.write_str(format!("tr i{}", to).as_str()),
+            SimpleAst::Zext(_) => f.write_str("zx"),
+            SimpleAst::Trunc(_) => f.write_str("tr"),
+            //SimpleAst::Zext { a, to } => f.write_str(format!("zx i{}", to).as_str()),
+            //SimpleAst::Trunc { a, to } => f.write_str(format!("tr i{}", to).as_str()),
             SimpleAst::ICmp {
                 predicate,
                 children,
@@ -899,6 +907,8 @@ impl egg::FromOp for SimpleAst {
             "^" => Ok(SimpleAst::Xor([children[0], children[1]])),
             "~" => Ok(SimpleAst::Neg([children[0]])),
             ">>" => Ok(SimpleAst::Lshr([children[0], children[1]])),
+            "zx" => Ok(SimpleAst::Zext([children[0], children[1]])),
+            "tr" => Ok(SimpleAst::Trunc([children[0], children[1]])),
             _ => {
                 if let Some((c, width)) = parse_constant(op) {
                     //panic!("hello2");
@@ -906,10 +916,10 @@ impl egg::FromOp for SimpleAst {
                 } else if let Some((id, width)) = parse_symbol(op) {
                     //panic!("hello1");
                     Ok(SimpleAst::Symbol { id, width })
-                } else if let Some(to) = parse_size_change(op, true) {
-                    Ok(SimpleAst::Zext { a: children[0], to })
-                } else if let Some(to) = parse_size_change(op, false) {
-                    Ok(SimpleAst::Trunc { a: children[0], to })
+                // } else if let Some(to) = parse_size_change(op, true) {
+                //     Ok(SimpleAst::Zext { a: children[0], to })
+                // } else if let Some(to) = parse_size_change(op, false) {
+                //     Ok(SimpleAst::Trunc { a: children[0], to })
                 } else if let Some(predicate) = parse_icmp(op) {
                     Ok(SimpleAst::ICmp {
                         predicate,
@@ -955,6 +965,7 @@ impl Analysis<SimpleAst> for MbaAnalysis {
 
     fn make(egraph: &mut egg::EGraph<SimpleAst, Self>, enode: &SimpleAst, id: Id) -> Self::Data {
         let mut util = EGraphUtil { egraph: &egraph };
+
         let data = match enode {
             SimpleAst::Add([a, b]) => util.add_transfer(*a, *b),
             SimpleAst::Mul([a, b]) => util.mul_transfer(*a, *b),
@@ -964,8 +975,16 @@ impl Analysis<SimpleAst> for MbaAnalysis {
             SimpleAst::Xor([a, b]) => util.xor_transfer(*a, *b),
             SimpleAst::Neg([a]) => util.neg_transfer(*a),
             SimpleAst::Lshr([a, b]) => util.lshr_transfer(*a, *b),
-            SimpleAst::Zext { a, to } => util.zext_transfer(*a, *to),
-            SimpleAst::Trunc { a, to } => util.trunc_transfer(*a, *to),
+            // SimpleAst::Zext([a, to]) => util.zext_transfer(*a, *to),
+            // SimpleAst::Trunc([a, to]) => util.trunc_transfer(*a, *to),
+            SimpleAst::Zext([a, to]) => util.zext_transfer(
+                *a,
+                util.get_data(*to).known_bits.as_constant().unwrap() as u8,
+            ),
+            SimpleAst::Trunc([a, to]) => util.trunc_transfer(
+                *a,
+                util.get_data(*to).known_bits.as_constant().unwrap() as u8,
+            ),
             SimpleAst::Constant { c, width } => util.constant_transfer(*c, *width),
             SimpleAst::Symbol { id: _, width } => util.symbol_transfer(*width),
             SimpleAst::ICmp {
@@ -1148,14 +1167,8 @@ pub enum SimpleAst {
         width: u8,
     },
     // Special operators
-    Zext {
-        a: AstIdx,
-        to: u8,
-    },
-    Trunc {
-        a: AstIdx,
-        to: u8,
-    },
+    Zext([AstIdx; 2]),
+    Trunc([AstIdx; 2]),
     ICmp {
         predicate: Predicate,
         children: [AstIdx; 2],
@@ -1429,12 +1442,14 @@ impl AstPrinter {
                 self.output.push_str(&format!("{}", operator));
                 self.print_node(ctx, ctx.arena.get_node(*b));
             }
-            SimpleAst::Zext { a, to } => {
+            SimpleAst::Zext([a, to_id]) => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
+                let to = ctx.arena.get_constant(*to_id);
                 self.output.push_str(&format!(" {} i{}", operator, to));
             }
-            SimpleAst::Trunc { a, to } => {
+            SimpleAst::Trunc([a, to_id]) => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
+                let to = ctx.arena.get_constant(*to_id);
                 self.output.push_str(&format!(" {} i{}", operator, to));
             }
             SimpleAst::Neg([a]) => {
@@ -1510,8 +1525,8 @@ pub fn eval_ast(ctx: &Context, idx: AstIdx, value_mapping: &HashMap<AstIdx, u64>
         SimpleAst::Neg([a]) => !e(a),
         SimpleAst::Constant { c, width } => *c,
         SimpleAst::Symbol { id, width } => *value_mapping.get(&idx).unwrap(),
-        SimpleAst::Zext { a, to } => get_modulo_mask(ctx.arena.get_width(*a)) & e(a),
-        SimpleAst::Trunc { a, to } => get_modulo_mask(*to) & e(a),
+        SimpleAst::Zext([a, to]) => get_modulo_mask(ctx.arena.get_width(*a)) & e(a),
+        SimpleAst::Trunc([a, to]) => get_modulo_mask(ctx.arena.get_constant(*to) as u8) & e(a),
         SimpleAst::ICmp {
             predicate,
             children,
@@ -1560,13 +1575,15 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
             let op1 = recursive_simplify(ctx, a);
             ast = ctx.neg(op1)
         }
-        SimpleAst::Zext { a, to } => {
+        SimpleAst::Zext([a, to_id]) => {
             let op1 = recursive_simplify(ctx, a);
-            ast = ctx.zext(op1, to);
+            let to = ctx.arena.get_constant(to_id);
+            ast = ctx.zext(op1, to as u8);
         }
-        SimpleAst::Trunc { a, to } => {
+        SimpleAst::Trunc([a, to_id]) => {
             let op1 = recursive_simplify(ctx, a);
-            ast = ctx.trunc(op1, to)
+            let to = ctx.arena.get_constant(to_id);
+            ast = ctx.trunc(op1, to as u8);
         }
         SimpleAst::Constant { c, width } => return idx,
         SimpleAst::Symbol { id, width } => return idx,
@@ -1676,7 +1693,7 @@ fn collect_var_indices_internal(
         | SimpleAst::Or([a, b])
         | SimpleAst::Xor([a, b])
         | SimpleAst::Lshr([a, b]) => vbin(*a, *b),
-        SimpleAst::Neg([a]) | SimpleAst::Zext { a: a, .. } | SimpleAst::Trunc { a: a, .. } => {
+        SimpleAst::Neg([a]) | SimpleAst::Zext([a, _]) | SimpleAst::Trunc([a, _]) => {
             collect_var_indices_internal(ctx, *a, visited, out_vars)
         }
         SimpleAst::Constant { c, width } => return,
@@ -2360,18 +2377,19 @@ unsafe fn jit_rec(
             // Push the result.
             emit_u8(page, offset, PUSH_RDI);
         }
-        SimpleAst::Zext { a, to } => {
+        SimpleAst::Zext([a, to_id]) => {
             // Zero extend is a no-op in our JIT, since we always AND with a mask after every operation.
             jit_rec(ctx, *a, node_to_var, page, offset);
         }
-        SimpleAst::Trunc { a, to } => {
+        SimpleAst::Trunc([a, to_id]) => {
             jit_rec(ctx, *a, node_to_var, page, offset);
 
             // mov rax, constant
             emit_u8(page, offset, 0x48);
             emit_u8(page, offset, 0xB8);
             // Fill in the constant
-            let trunc_mask = get_modulo_mask(*to);
+            let to = ctx.arena.get_constant(*to_id);
+            let trunc_mask = get_modulo_mask(to as u8);
             emit_u64(page, offset, trunc_mask);
             // and [rsp+8], rax
             emit(page, offset, &[0x48, 0x21, 0x04, 0x24]);
@@ -3558,7 +3576,7 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
                 Self::inc_users(ctx, a);
                 Self::inc_users(ctx, b);
             }
-            SimpleAst::Neg([a]) | SimpleAst::Zext { a, .. } | SimpleAst::Trunc { a, .. } => {
+            SimpleAst::Neg([a]) | SimpleAst::Zext([a, _]) | SimpleAst::Trunc([a, _]) => {
                 Self::collect_info(ctx, a, dfs);
                 Self::inc_users(ctx, a);
             }
@@ -3626,7 +3644,7 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
                     node_info,
                     matches!(node, SimpleAst::Neg { .. }),
                 ),
-                SimpleAst::Trunc { a, to } => {
+                SimpleAst::Trunc([a, to_id]) => {
                     let w = ctx.get_width(a);
                     self.lower_zext(ctx, assembler, idx, w.into(), node_info)
                 }

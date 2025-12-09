@@ -194,5 +194,17 @@ namespace Mba.Simplifier.Minimization
             var backSubst = GeneralSimplifier.BackSubstitute(ctx, r, invSubstMapping);
             return backSubst;
         }
+
+        public static void MinimizeMultibit(AstCtx ctx, AstIdx boolean)
+        {
+            var variables = ctx.CollectVariables(boolean);
+            bool multiBit = true;
+            var numCombinations = (ulong)Math.Pow(2, variables.Count);
+
+            var w = ctx.GetWidth(boolean);
+
+            var vec1 = LinearSimplifier.JitResultVector(ctx, w, (ulong)ModuloReducer.GetMask(w), variables, boolean, multiBit, numCombinations);
+            Debugger.Break();
+        }
     }
 }

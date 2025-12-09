@@ -1536,6 +1536,8 @@ namespace Mba.Simplifier.Pipeline
 
             var combinedBitwise = ctx.Or(union);
             var solution = TryPartition(combinedBitwise, targetCoeff, constant, freeMask);
+
+            BooleanMinimizer.MinimizeMultibit(ctx, solution);
             return solution;
         }
 
