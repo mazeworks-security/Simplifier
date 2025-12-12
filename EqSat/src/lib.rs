@@ -74,7 +74,25 @@ impl<'a> CostFunction<SimpleAst> for EGraphCostFn<'a> {
     where
         C: FnMut(Id) -> Self::Cost,
     {
-        let op_cost = 1;
+        let op_cost = match enode {
+            SimpleAst::Add(_) => 1,
+            SimpleAst::Mul(_) => 1,
+            SimpleAst::Pow(_) => 5,
+            SimpleAst::And(_) => 1,
+            SimpleAst::Or(_) => 1,
+            SimpleAst::Xor(_) => 1,
+            SimpleAst::Neg(_) => 1,
+            SimpleAst::Lshr(_) => 6,
+            SimpleAst::Constant { c, width } => 1,
+            SimpleAst::Symbol { id, width } => 1,
+            SimpleAst::Zext(_) => 1,
+            SimpleAst::Trunc(_) => 5,
+            SimpleAst::ICmp {
+                predicate,
+                children,
+            } => 6,
+            SimpleAst::Select { children } => 6,
+        };
         enode.fold(op_cost, |sum, i| sum + _costs(i))
     }
 }

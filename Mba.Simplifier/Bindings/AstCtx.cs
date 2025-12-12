@@ -253,12 +253,12 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
-        public unsafe AstIdx MinimizeAnf(TruthTableDb db, TruthTable table, List<AstIdx> variables, nint rwxPagePtr)
+        public unsafe AstIdx MinimizeAnf(TruthTableDb db, BooleanTruthTable table, List<AstIdx> variables, nint rwxPagePtr)
         {
             var span = CollectionsMarshal.AsSpan(variables);
             fixed (AstIdx* arrPtr = &span[0])
             {
-                fixed (ulong* tablePtr = &table.arr[0])
+                fixed (ulong* tablePtr = &table.Arr[0])
                 {
                     return Api.ContextMinimizeAnf(this, db, tablePtr, arrPtr, (uint)variables.Count, (ulong*)rwxPagePtr);
                 }

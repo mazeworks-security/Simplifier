@@ -59,6 +59,9 @@ RULES EGRAPH [
 			:: is_const(c1)
         cmp_xor_i1_combine: (((x&c1) != 0) ^ ((c1&y) != 0)) => (((x^y)&c1) != 0) 
 			:: is_const(c1)
+
+        neg_neq_to_eq: ((~x&c1) != 0) => ((x&c1) == 0)
+            :: is_const(c1) && popcount() == 1
 			
 			
 
@@ -82,10 +85,14 @@ RULES EGRAPH [
 		or_expand: (a|b) => (a+b-(a&b))
 		xor_expand: (a^b) => (a+b-(2*(a&b)))
 		
-		tr_to_cmp: (x tr i) => ((x&1) == 1)
+		xor_fold: (c1^(x&c1)) => (~x&c1)
+		
+		tr_to_cmp: (x tr i1) => ((x&1) == 1)
 		
 		merge_cmp: ((x == c1) & (y == c2)) => ((x|y)) == (c1|c2)
 			:: is_const(c1) && is_const(c2) && (disjoint_constants(c1, c2)) && (disjoint_kb(x, y)) 
+		merge_cmp_2: (((x&c1) == 0)&((y&c2) != 0)) => (((x&c1)|((y&c2))) == c2)
+			:: is_const(c1) && is_const(c2) && (disjoint_constants(c1, c2))
 
 		
 
