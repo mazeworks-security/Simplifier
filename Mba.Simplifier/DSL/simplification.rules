@@ -12,7 +12,7 @@ FUNCTIONS REQUIRED [
         // Get a mask for the bits that are known to be one
         builtin fn get_known_ones(node: Node) -> i64;
 		// Gets the number of set bits in the integer
-		builtin fn popcnt(c1: i64) -> i64;
+		builtin fn popcount(c1: i64) -> i64;
 		
 		// Reduce the constant `c1` modulo 2**w , where w is the width of the input node.
 		// fn reduce_modulo_node_size(c1: i64, node: Node) -> i64 
@@ -61,7 +61,7 @@ RULES EGRAPH [
 			:: is_const(c1)
 
         neg_neq_to_eq: ((~x&c1) != 0) => ((x&c1) == 0)
-            :: is_const(c1) && popcount() == 1
+            :: (is_const(c1) && (popcount(c1) == 1))
 			
 			
 
@@ -94,12 +94,15 @@ RULES EGRAPH [
 		merge_cmp_2: (((x&c1) == 0)&((y&c2) != 0)) => (((x&c1)|((y&c2))) == c2)
 			:: is_const(c1) && is_const(c2) && (disjoint_constants(c1, c2))
 
+        eq_to_sub: (a == b) => ((a-b) == 0)
+        eq_to_xor: (a == b) => ((a^b) == 0)
+        neq_to_sub: (a != b) => ((a-b) != 0)
+        neq_to_xor: (a != b) => ((a^b) != 0)
 		
 
 		// commented out because I was illegally abusing fixed width literals
-        // distribute_zext_xor: (1:i8 ^ (a zx i8)) => ((1 ^ a) zx i8)
-        // xor_ne: (1:i1^(a!=b)) => (a == b)
-        // xor_eq: (1:i1^(a==b)) => (a != b)
+        //distribute_zext_xor: (1:i8 ^ (a zx i8)) => ((1 ^ a) zx i8)
+        xor_ne: (1:i1^(a!=b)) => (a == b)
 
 
         // Original rules (guaranteed to either be profitable or canonicalizing)

@@ -3,8 +3,8 @@
 use egg::{rewrite, Applier, Id, PatternAst, Subst, Symbol, Var};
 
 use crate::simple_ast::{
-    as_constant, const_eq, eqmod, get_known_zeroes, get_width, is_const, AstData, EEGraph,
-    MbaAnalysis, Predicate, Rewrite, SimpleAst,
+    as_constant, const_eq, eqmod, get_known_zeroes, get_width, is_const, popcount, AstData,
+    EEGraph, MbaAnalysis, Predicate, Rewrite, SimpleAst,
 };
 
 pub fn get_generated_rules() -> Vec<Rewrite> {
@@ -109,6 +109,13 @@ pub fn get_generated_rules() -> Vec<Rewrite> {
                 c1 : "?c1".parse().unwrap(),
             }
         } if (rule_cmp_xor_i1_combine_precondition("?c1", "?mconst0"))),
+        // (((~x:i64)&c1:i64)!=mconst0:i64) => ((x:i64&c1:i64)==0:i64)
+        rewrite!("neg_neq_to_eq"; "(\"icmp !=\" (& (~ ?x) ?c1) ?mconst0)" => {
+            applier_rule_neg_neq_to_eq {
+                x : "?x".parse().unwrap(),
+                c1 : "?c1".parse().unwrap(),
+            }
+        } if (rule_neg_neq_to_eq_precondition("?c1", "?mconst0"))),
         // ((a:i64!=mconst0:i64)|(b:i64!=mconst0:i64)) => ((a:i64|b:i64)!=0:i64)
         rewrite!("factor_or_neg"; "(| (\"icmp !=\" ?a ?mconst0) (\"icmp !=\" ?b ?mconst0))" => {
             applier_rule_factor_or_neg {
@@ -207,6 +214,13 @@ pub fn get_generated_rules() -> Vec<Rewrite> {
                 b : "?b".parse().unwrap(),
             }
         }),
+        // (c1:i64^(x:i64&c1:i64)) => ((~x:i64)&c1:i64)
+        rewrite!("xor_fold"; "(^ ?c1 (& ?x ?c1))" => {
+            applier_rule_xor_fold {
+                x : "?x".parse().unwrap(),
+                c1 : "?c1".parse().unwrap(),
+            }
+        }),
         // (x:i64 tr i64) => ((x:i64&1:i64)==1:i64)
         rewrite!("tr_to_cmp"; "(tr ?x ?mconst0)" => {
             applier_rule_tr_to_cmp {
@@ -231,6 +245,41 @@ pub fn get_generated_rules() -> Vec<Rewrite> {
                 c2 : "?c2".parse().unwrap(),
             }
         } if (rule_merge_cmp_2_precondition("?c1", "?c2", "?mconst0"))),
+        // (a:i64==b:i64) => ((a:i64+(b:i64*-1:i64))==0:i64)
+        rewrite!("eq_to_sub"; "(\"icmp ==\" ?a ?b)" => {
+            applier_rule_eq_to_sub {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+            }
+        }),
+        // (a:i64==b:i64) => ((a:i64^b:i64)==0:i64)
+        rewrite!("eq_to_xor"; "(\"icmp ==\" ?a ?b)" => {
+            applier_rule_eq_to_xor {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+            }
+        }),
+        // (a:i64!=b:i64) => ((a:i64+(b:i64*-1:i64))!=0:i64)
+        rewrite!("neq_to_sub"; "(\"icmp !=\" ?a ?b)" => {
+            applier_rule_neq_to_sub {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+            }
+        }),
+        // (a:i64!=b:i64) => ((a:i64^b:i64)!=0:i64)
+        rewrite!("neq_to_xor"; "(\"icmp !=\" ?a ?b)" => {
+            applier_rule_neq_to_xor {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+            }
+        }),
+        // (mconst0:i1^(a:i64!=b:i64)) => (a:i64==b:i64)
+        rewrite!("xor_ne"; "(^ ?mconst0 (\"icmp !=\" ?a ?b))" => {
+            applier_rule_xor_ne {
+                a : "?a".parse().unwrap(),
+                b : "?b".parse().unwrap(),
+            }
+        } if (rule_xor_ne_precondition("?mconst0"))),
         // (a:i64*c1:i64) => (c1:i64*a:i64)
         rewrite!("mul_constant_to_left_1"; "(* ?a ?c1)" => {
             applier_rule_mul_constant_to_left_1 {
@@ -1652,6 +1701,59 @@ impl Applier<SimpleAst, MbaAnalysis> for applier_rule_cmp_xor_i1_combine {
     }
 }
 
+pub fn rule_neg_neq_to_eq_precondition<'a>(
+    c1: &'a str,
+    mconst0: &'a str,
+) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool + 'a {
+    move |egraph, _, subst| {
+        let c1_id = subst[c1.parse().unwrap()];
+        let c1 = &egraph[c1_id];
+        let mconst0_id = subst[mconst0.parse().unwrap()];
+        let mconst0 = &egraph[mconst0_id];
+        let precondition = ((is_const(egraph, mconst0) && const_eq(egraph, mconst0, 0))
+            && (is_const(egraph, c1) && (popcount(egraph, c1) == 1)));
+        if !precondition {
+            return false;
+        }
+        return true;
+    }
+}
+
+pub struct applier_rule_neg_neq_to_eq {
+    pub x: Var,
+    pub c1: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_neg_neq_to_eq {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let x_id = subst[self.x];
+        let bounded_width = egraph[x_id].data.width;
+        let c1_id = subst[self.c1];
+        let t2 = egraph.add(SimpleAst::And([x_id, c1_id]));
+        let literal_0_id = egraph.add(SimpleAst::Constant {
+            c: 0,
+            width: bounded_width,
+        });
+        let t4 = egraph.add(SimpleAst::ICmp {
+            predicate: Predicate::Eq,
+            children: [t2, literal_0_id],
+        });
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
 pub fn rule_factor_or_neg_precondition<'a>(
     mconst0: &'a str,
 ) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool + 'a {
@@ -2093,6 +2195,34 @@ impl Applier<SimpleAst, MbaAnalysis> for applier_rule_xor_expand {
     }
 }
 
+pub struct applier_rule_xor_fold {
+    pub x: Var,
+    pub c1: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_xor_fold {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let x_id = subst[self.x];
+        let bounded_width = egraph[x_id].data.width;
+        let t1 = egraph.add(SimpleAst::Neg([x_id]));
+        let c1_id = subst[self.c1];
+        let t3 = egraph.add(SimpleAst::And([t1, c1_id]));
+
+        if egraph.union(eclass, t3) {
+            vec![t3]
+        } else {
+            vec![]
+        }
+    }
+}
+
 pub fn rule_tr_to_cmp_precondition<'a>(
     mconst0: &'a str,
 ) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool + 'a {
@@ -2263,6 +2393,200 @@ impl Applier<SimpleAst, MbaAnalysis> for applier_rule_merge_cmp_2 {
 
         if egraph.union(eclass, t7) {
             vec![t7]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_eq_to_sub {
+    pub a: Var,
+    pub b: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_eq_to_sub {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let literal_18446744073709551615_id = egraph.add(SimpleAst::Constant {
+            c: 18446744073709551615,
+            width: bounded_width,
+        });
+        let t3 = egraph.add(SimpleAst::Mul([b_id, literal_18446744073709551615_id]));
+        let t4 = egraph.add(SimpleAst::Add([a_id, t3]));
+        let literal_0_id = egraph.add(SimpleAst::Constant {
+            c: 0,
+            width: bounded_width,
+        });
+        let t6 = egraph.add(SimpleAst::ICmp {
+            predicate: Predicate::Eq,
+            children: [t4, literal_0_id],
+        });
+
+        if egraph.union(eclass, t6) {
+            vec![t6]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_eq_to_xor {
+    pub a: Var,
+    pub b: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_eq_to_xor {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::Xor([a_id, b_id]));
+        let literal_0_id = egraph.add(SimpleAst::Constant {
+            c: 0,
+            width: bounded_width,
+        });
+        let t4 = egraph.add(SimpleAst::ICmp {
+            predicate: Predicate::Eq,
+            children: [t2, literal_0_id],
+        });
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_neq_to_sub {
+    pub a: Var,
+    pub b: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_neq_to_sub {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let literal_18446744073709551615_id = egraph.add(SimpleAst::Constant {
+            c: 18446744073709551615,
+            width: bounded_width,
+        });
+        let t3 = egraph.add(SimpleAst::Mul([b_id, literal_18446744073709551615_id]));
+        let t4 = egraph.add(SimpleAst::Add([a_id, t3]));
+        let literal_0_id = egraph.add(SimpleAst::Constant {
+            c: 0,
+            width: bounded_width,
+        });
+        let t6 = egraph.add(SimpleAst::ICmp {
+            predicate: Predicate::Ne,
+            children: [t4, literal_0_id],
+        });
+
+        if egraph.union(eclass, t6) {
+            vec![t6]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub struct applier_rule_neq_to_xor {
+    pub a: Var,
+    pub b: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_neq_to_xor {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::Xor([a_id, b_id]));
+        let literal_0_id = egraph.add(SimpleAst::Constant {
+            c: 0,
+            width: bounded_width,
+        });
+        let t4 = egraph.add(SimpleAst::ICmp {
+            predicate: Predicate::Ne,
+            children: [t2, literal_0_id],
+        });
+
+        if egraph.union(eclass, t4) {
+            vec![t4]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub fn rule_xor_ne_precondition<'a>(
+    mconst0: &'a str,
+) -> impl Fn(&mut EEGraph, Id, &Subst) -> bool + 'a {
+    move |egraph, _, subst| {
+        let mconst0_id = subst[mconst0.parse().unwrap()];
+        let mconst0 = &egraph[mconst0_id];
+        let precondition = (is_const(egraph, mconst0) && const_eq(egraph, mconst0, 1));
+        if !precondition {
+            return false;
+        }
+        return true;
+    }
+}
+
+pub struct applier_rule_xor_ne {
+    pub a: Var,
+    pub b: Var,
+}
+
+impl Applier<SimpleAst, MbaAnalysis> for applier_rule_xor_ne {
+    fn apply_one(
+        &self,
+        egraph: &mut EEGraph,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<SimpleAst>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let a_id = subst[self.a];
+        let bounded_width = egraph[a_id].data.width;
+        let b_id = subst[self.b];
+        let t2 = egraph.add(SimpleAst::ICmp {
+            predicate: Predicate::Eq,
+            children: [a_id, b_id],
+        });
+
+        if egraph.union(eclass, t2) {
+            vec![t2]
         } else {
             vec![]
         }

@@ -4153,3 +4153,7 @@ pub fn get_known_zeroes(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> 
 pub fn get_known_ones(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
     return node.data.known_bits.ones;
 }
+
+pub fn popcount(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
+    return node.data.known_bits.as_constant().unwrap().count_ones() as u64;
+}
