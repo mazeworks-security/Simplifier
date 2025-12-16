@@ -20,7 +20,7 @@ bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
 
-NewtonInterpolation.Test();
+NewtonInterpolation.Test3();
 
 var printHelp = () =>
 {

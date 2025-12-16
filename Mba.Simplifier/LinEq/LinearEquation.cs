@@ -25,7 +25,8 @@ namespace Mba.Simplifier.LinEq
             var terms = new List<string>();
             for (int i = 0; i < coeffs.Length; i++)
             {
-                var str = $"{coeffs[i]}*m{coeffs.Length - 1 - i}";
+                // var str = $"{coeffs[i]}*c{coeffs.Length - 1 - i}";
+                var str = $"{coeffs[i]}*c{i}";
                 terms.Add(str);
             }
 
