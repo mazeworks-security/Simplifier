@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.LinEq
 {
-    using static System.Runtime.InteropServices.JavaScript.JSType;
     using Num = ulong;
 
     public struct Point
@@ -71,6 +70,7 @@ namespace Mba.Simplifier.LinEq
             //poly.SetCoeff(new Monomial(2), 3);
             */
 
+
             /*
             var poly = new SparsePolynomial(1, (byte)64);
             poly.SetCoeff(new Monomial(0), 0x8000000000000000);
@@ -79,10 +79,18 @@ namespace Mba.Simplifier.LinEq
             poly.SetCoeff(new Monomial(3), 0x8000000000000000);
             */
 
+            var poly = new SparsePolynomial(1, (byte)64);
+            poly.SetCoeff(new Monomial(0), 9193501499183852111);
+            poly.SetCoeff(new Monomial(1), 5260339532280414813);
+            poly.SetCoeff(new Monomial(2), 14929154534604275712);
+            poly.SetCoeff(new Monomial(3), 3178634119571570688);
+
+            /*
             var poly = new SparsePolynomial(1, (byte)8);
             poly.SetCoeff(new Monomial(0), 132);
             poly.SetCoeff(new Monomial(1), 185);
             poly.SetCoeff(new Monomial(2), 42);
+            */
 
             Console.WriteLine(poly);
 
@@ -99,16 +107,16 @@ namespace Mba.Simplifier.LinEq
             //var (coeffs, divTable) = DividedDiff(data.Select(x => x.X).ToArray(), data.Select(y => y.Y).ToArray());
 
             Console.WriteLine("\n\n");
-            //var padding = String.Join(" ", Enumerable.Repeat<string>(" ", 16));
-            var padding = "                                ";
+            var padding = String.Join(" ", Enumerable.Repeat<string>(" ", 32));
+           // var padding = "                                ";
             for (int r = 0; r < divTable.GetLength(0); r++)
             {
                 for(int c = 0; c < divTable.GetLength(1); c++)
                 {
                     var coeff = coeffs[r, c];
                     var (a, b) = divTable[r, c];
-                    //var str = coeff.ToString();
-                    var str = $"({a}*{b})";
+                    var str = coeff.ToString();
+                    //var str = $"({a}*{b})";
                     Console.Write($"{str}" + padding.Substring(0, padding.Length - str.Length));
                 }
 
@@ -156,7 +164,14 @@ namespace Mba.Simplifier.LinEq
                     var undo = mmask & (div * b);
                     if (undo != a)
                     {
-                        var inverse = GetModularInverse(solver, mmask, b);
+                        var lc = solver.LinearCongruence(div, a, (UInt128)mmask + 1);
+                        if (lc == null || lc.d == 0)
+                            throw new InvalidOperationException("Non invertible multiplication!");
+
+                        b = (ulong)solver.GetSolution(0, lc);
+                        undo = mmask & (div * b);
+                        Debug.Assert(undo == a);
+
                     }
 
                     bool isEven = (b % 2) == 0;
