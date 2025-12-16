@@ -4160,3 +4160,8 @@ pub fn get_known_ones(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u6
 pub fn popcount(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
     return node.data.known_bits.as_constant().unwrap().count_ones() as u64;
 }
+
+#[no_mangle]
+pub extern "C" fn ContextCmp(a: SimpleAst, b: SimpleAst) -> bool {
+    return a == b;
+}
