@@ -140,7 +140,7 @@ namespace Mba.Simplifier.DSL
         {
             return kind switch
             {
-                AstKind.Power => "Pow",
+                AstKind.Pow => "Pow",
                 AstKind.Add => "Add",
                 AstKind.Mul => "Mul",
                 AstKind.And => "And",

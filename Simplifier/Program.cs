@@ -4,6 +4,7 @@ using Mba.Simplifier.Bindings;
 using Mba.Simplifier.DSL;
 using Mba.Simplifier.Fuzzing;
 using Mba.Simplifier.Interpreter;
+using Mba.Simplifier.LinEq;
 using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
@@ -18,6 +19,8 @@ uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = false;
 string inputText = null;
+
+NewtonInterpolation.Test();
 
 var printHelp = () =>
 {
