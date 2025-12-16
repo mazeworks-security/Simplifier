@@ -22,7 +22,7 @@ namespace Mba.Simplifier.Minimization
 
         private static int substCount = 0;
 
-        public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable, bool negate = false)
+        public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, BooleanTruthTable truthTable, bool negate = false)
         {
             // If requested, negate the result vector to find a negated expression.
             if (negate)
@@ -44,7 +44,7 @@ namespace Mba.Simplifier.Minimization
             // Note that this step is currently disabled because I don't like the ordering of operations yielded by optimal5.
             // We need to implement some canonicalizations (variables sorted lexicographically, etc.) 
             if (variables.Count <= 5 && useOptimal5) 
-                return GetOptimalNpnCircuit(ctx, variables, AppendVariables((uint)truthTable.arr[0], (uint)variables.Count, 5 - (uint)variables.Count));
+                return GetOptimalNpnCircuit(ctx, variables, AppendVariables((uint)truthTable.Arr[0], (uint)variables.Count, 5 - (uint)variables.Count));
 
             // If there are four or less variables, we can pull the optimal representation from the truth table.
             // TODO: One could possibly construct a 5 variable truth table for all 5 variable NPN classes.
@@ -70,10 +70,10 @@ namespace Mba.Simplifier.Minimization
             return MinimizeAnf(ctx, variables, truthTable);
         }
 
-        private static AstIdx? AsConstant(AstCtx ctx, TruthTable table, uint width)
+        private static AstIdx? AsConstant(AstCtx ctx, BooleanTruthTable table, uint width)
         {
             var first = table.GetBit(0);
-            for (int i = 1; i < table.NumBits; i++)
+            for (int i = 1; i < table.NumCombinations; i++)
             {
                 if (table.GetBit(i) != first)
                     return null;
@@ -157,14 +157,14 @@ namespace Mba.Simplifier.Minimization
             return n;
         }
 
-        public static AstIdx FromTruthTable(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
+        public static AstIdx FromTruthTable(AstCtx ctx, IReadOnlyList<AstIdx> variables, BooleanTruthTable truthTable)
         {
             // Fetch the truth table entry corresponding to this node.
-            var ast = TableDatabase.Instance.GetTableEntry(ctx, (List<AstIdx>)variables, (int)(uint)truthTable.arr[0]);
+            var ast = TableDatabase.Instance.GetTableEntry(ctx, (List<AstIdx>)variables, (int)(uint)truthTable.Arr[0]);
             return ast;
         }
 
-        private static AstIdx MinimizeAnf(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
+        private static AstIdx MinimizeAnf(AstCtx ctx, IReadOnlyList<AstIdx> variables, BooleanTruthTable truthTable)
         {
             // Minimize normally if zext/trunc nodes aren't present
             bool containsExt = variables.Any(x => ctx.GetOpcode(x) == AstOp.Zext || ctx.GetOpcode(x) == AstOp.Trunc);
@@ -193,6 +193,43 @@ namespace Mba.Simplifier.Minimization
             var r = ctx.MinimizeAnf(TableDatabase.Instance.db, truthTable, tempVars, MultibitSiMBA.JitPage.Value);
             var backSubst = GeneralSimplifier.BackSubstitute(ctx, r, invSubstMapping);
             return backSubst;
+        }
+
+        public static void MinimizeMultibit(AstCtx ctx, AstIdx boolean)
+        {
+            var variables = ctx.CollectVariables(boolean);
+            bool multiBit = true;
+            var numCombinations = (ulong)Math.Pow(2, variables.Count);
+
+            var w = ctx.GetWidth(boolean);
+
+            var mmask = (ulong)ModuloReducer.GetMask(w);
+            var vec1 = LinearSimplifier.JitResultVector(ctx, w, mmask, variables, boolean, multiBit, numCombinations);
+
+            var constantOffset = LinearSimplifier.SubtractConstantOffset2(mmask, vec1, (int)numCombinations);
+            //var constantOffset = vec1[0];
+
+            var table = new SlBooleanTruthTable(variables.Count, w);
+            int currIdx = 0;
+            for (int bitIndex = 0; bitIndex < w; bitIndex++)
+            {
+                for(int i = 0; i < (int)numCombinations; i++)
+                {
+                    var coeff = vec1[currIdx];
+                    //coeff ^= constantOffset;
+                    coeff <<= (ushort)bitIndex;
+
+                    table.SetBit(i, table.GetBit(i) | coeff);
+                    currIdx += 1;
+                }
+            }
+
+            // Expr = constantOffset ^ dnf(table)
+
+            //AnfMinimizer.SimplifyBoolean(ctx, variables, table);
+
+            Debugger.Break();
+
         }
     }
 }

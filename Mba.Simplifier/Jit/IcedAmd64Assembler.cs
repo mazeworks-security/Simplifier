@@ -123,6 +123,41 @@ namespace Mba.Simplifier.Jit
             assembler.shr(Reg.Conv(reg), imm8);
         }
 
+        public void CmpRegReg(Register reg1, Register reg2)
+        {
+            assembler.cmp(Reg.Conv(reg1), Reg.Conv(reg2));
+        }
+
+        public void TestRegReg(Register reg1, Register reg2)
+        {
+            assembler.test(Reg.Conv(reg1), Reg.Conv(reg2));
+        }
+
+        public void CmoveRegReg(Register reg1, Register reg2)
+        {
+            assembler.cmove(Reg.Conv(reg1), Reg.Conv(reg2));
+        }
+
+        public void SeteReg(Register reg1)
+        {
+            assembler.sete(Reg.Conv8(reg1));
+        }
+
+        public void SetneReg(Register reg1)
+        {
+            assembler.setne(Reg.Conv8(reg1));
+        }
+
+        public void SetaReg(Register reg1)
+        {
+            assembler.seta(Reg.Conv8(reg1));
+        }
+
+        public void SetbReg(Register reg1)
+        {
+            assembler.setb(Reg.Conv8(reg1));
+        }
+
         public void CallReg(Register reg1)
         {
             assembler.call(Reg.Conv(reg1));

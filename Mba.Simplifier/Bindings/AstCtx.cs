@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Mba.Utility;
 using Mba.Simplifier.Minimization;
 using System.Diagnostics;
+using Mba.Common.Ast;
 
 namespace Mba.Simplifier.Bindings
 {
@@ -29,6 +30,8 @@ namespace Mba.Simplifier.Bindings
         Symbol = 10,
         Zext = 11,
         Trunc = 12,
+        ICmp = 13,
+        Select = 14,
     }
 
     public class AstCtx
@@ -59,12 +62,19 @@ namespace Mba.Simplifier.Bindings
         public unsafe AstIdx Lshr(AstIdx a, AstIdx b) => Api.ContextLshr(this, a, b);
         public unsafe AstIdx Zext(AstIdx a, byte width) => Api.ContextZext(this, a, width);
         public unsafe AstIdx Trunc(AstIdx a, byte width) => Api.ContextTrunc(this, a, width);
+        public unsafe AstIdx ICmp(Predicate pred, AstIdx a, AstIdx b) => Api.ContextICmp(this, pred, a, b);
+        public unsafe AstIdx Select(AstIdx a, AstIdx b, AstIdx c) => Api.ContextSelect(this, a, b, c);
         public unsafe AstIdx Constant(ulong c, byte width) => Api.ContextConstant(this, c, width);
         public unsafe AstIdx Constant(ulong c, uint width) => Api.ContextConstant(this, c, (byte)width);
         public unsafe AstIdx Symbol(string s, byte width) => Api.ContextSymbol(this, new MarshaledString(s), width);
 
         public AstIdx Binop(AstOp opcode, AstIdx a, AstIdx b)
         {
+            var w1 = GetWidth(a);
+            var w2 = GetWidth(b);
+            if (w1 != w2)
+                Debugger.Break();
+
             return opcode switch
             {
                 AstOp.Add => Add(a, b),
@@ -164,11 +174,20 @@ namespace Mba.Simplifier.Bindings
         public unsafe KnownBits GetKnownBits(AstIdx id) => Api.ContextGetKnownBits(this, id);
         public unsafe ulong GetImutData(AstIdx id) => Api.ContextGetImutData(this, id);
         public unsafe void SetImutData(AstIdx id, ulong imut) => Api.ContextSetImutData(this, id, imut);
-        public unsafe AstIdx GetOp0(AstIdx id) => Api.ContextGetOp0(this, id);
-        public unsafe AstIdx GetOp1(AstIdx id)
+        public unsafe AstIdx GetOp(AstIdx id, uint operand)
         {
-            return Api.ContextGetOp1(this, id);
+            return operand switch
+            {
+                0 => GetOp0(id),
+                1 => GetOp1(id),
+                2 => GetOp2(id),
+                _ => throw new InvalidOperationException()
+            };
         }
+        public unsafe AstIdx GetOp0(AstIdx id) => Api.ContextGetOp0(this, id);
+        public unsafe AstIdx GetOp1(AstIdx id) => Api.ContextGetOp1(this, id);
+        public unsafe AstIdx GetOp2(AstIdx id) => Api.ContextGetOp2(this, id);
+        public unsafe Predicate GetPredicate(AstIdx id) => Api.ContextGetPredicate(this, id);
         public unsafe ulong GetConstantValue(AstIdx id) => Api.ContextGetConstantValue(this, id);
 
         public unsafe bool IsSymbol(AstIdx id) => GetOpcode(id) == AstOp.Symbol;
@@ -234,12 +253,12 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
-        public unsafe AstIdx MinimizeAnf(TruthTableDb db, TruthTable table, List<AstIdx> variables, nint rwxPagePtr)
+        public unsafe AstIdx MinimizeAnf(TruthTableDb db, BooleanTruthTable table, List<AstIdx> variables, nint rwxPagePtr)
         {
             var span = CollectionsMarshal.AsSpan(variables);
             fixed (AstIdx* arrPtr = &span[0])
             {
-                fixed (ulong* tablePtr = &table.arr[0])
+                fixed (ulong* tablePtr = &table.Arr[0])
                 {
                     return Api.ContextMinimizeAnf(this, db, tablePtr, arrPtr, (uint)variables.Count, (ulong*)rwxPagePtr);
                 }
@@ -345,6 +364,12 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern AstIdx ContextTrunc(OpaqueAstCtx* ctx, AstIdx a, byte width);
 
             [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextICmp(OpaqueAstCtx* ctx, Predicate pred, AstIdx a, AstIdx b);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextSelect(OpaqueAstCtx* ctx, AstIdx a, AstIdx b, AstIdx c);
+
+            [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextConstant(OpaqueAstCtx* ctx, ulong c, byte width);
 
             [DllImport("eq_sat")]
@@ -390,6 +415,14 @@ namespace Mba.Simplifier.Bindings
             [DllImport("eq_sat")]
             [SuppressGCTransition]
             public unsafe static extern AstIdx ContextGetOp1(OpaqueAstCtx* ctx, AstIdx id);
+
+            [DllImport("eq_sat")]
+            [SuppressGCTransition]
+            public unsafe static extern AstIdx ContextGetOp2(OpaqueAstCtx* ctx, AstIdx id);
+
+            [DllImport("eq_sat")]
+            [SuppressGCTransition]
+            public unsafe static extern Predicate ContextGetPredicate(OpaqueAstCtx* ctx, AstIdx id);
 
             [DllImport("eq_sat")]
             [SuppressGCTransition]

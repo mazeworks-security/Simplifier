@@ -352,6 +352,131 @@ namespace Mba.Simplifier.Jit
             EmitBytes(rex, opcode, modrm, imm8);
         }
 
+        public void CmpRegReg(Register reg1, Register reg2)
+        {
+            byte rex = 0x48;
+            if (IsExtended(reg1)) rex |= 0x01;
+            if (IsExtended(reg2)) rex |= 0x04;
+
+            byte opcode = 0x39;
+            byte modrm = (byte)(0xC0 | ((GetRegisterCode(reg2) & 0x07) << 3) | (GetRegisterCode(reg1) & 0x07));
+            EmitBytes(rex, opcode, modrm);
+        }
+
+        public void TestRegReg(Register reg1, Register reg2)
+        {
+            byte rex = 0x48;
+            if (IsExtended(reg1)) rex |= 0x01;
+            if (IsExtended(reg2)) rex |= 0x04;
+
+            byte opcode = 0x85;
+            byte modrm = (byte)(0xC0 | ((GetRegisterCode(reg2) & 0x07) << 3) | (GetRegisterCode(reg1) & 0x07));
+            EmitBytes(rex, opcode, modrm);
+        }
+
+        public void CmoveRegReg(Register reg1, Register reg2)
+        {
+            byte rex = 0x48; 
+            if (IsExtended(reg1)) rex |= 0x04;
+            if (IsExtended(reg2)) rex |= 0x01;
+
+            byte opcode1 = 0x0F;
+            byte opcode2 = 0x44;
+            byte modrm = (byte)(0xC0 | ((GetRegisterCode(reg1) & 0x07) << 3) | (GetRegisterCode(reg2) & 0x07));
+            EmitBytes(rex, opcode1, opcode2, modrm);
+        }
+
+        public void SeteReg(Register reg1)
+        {
+            byte rex = 0x00;
+            if (IsExtended(reg1))
+            {
+                rex = 0x41; 
+            }
+            else if (reg1 >= Register.RSP && reg1 <= Register.RDI)
+            {
+                rex = 0x40;
+            }
+
+            byte opcode1 = 0x0F;
+            byte opcode2 = 0x94; 
+            byte modrm = (byte)(0xC0 | (GetRegisterCode(reg1) & 0x07));
+
+            if (rex != 0)
+                EmitBytes(rex, opcode1, opcode2, modrm);
+            else
+                EmitBytes(opcode1, opcode2, modrm);
+        }
+
+        public void SetneReg(Register reg1)
+        {
+            byte rex = 0x00;
+
+            if (IsExtended(reg1))
+            {
+                rex = 0x41; 
+            }
+            else if (reg1 >= Register.RSP && reg1 <= Register.RDI)
+            {
+                rex = 0x40;
+            }
+
+            byte opcode1 = 0x0F;
+            byte opcode2 = 0x95; 
+            byte modrm = (byte)(0xC0 | (GetRegisterCode(reg1) & 0x07));
+
+            if (rex != 0)
+                EmitBytes(rex, opcode1, opcode2, modrm);
+            else
+                EmitBytes(opcode1, opcode2, modrm);
+        }
+
+        public void SetaReg(Register reg1)
+        {
+            byte rex = 0x00;
+            if (IsExtended(reg1))
+            {
+                rex = 0x41;
+            }
+            else if (reg1 >= Register.RSP && reg1 <= Register.RDI)
+            {
+                rex = 0x40;
+            }
+
+            const byte opcode1 = 0x0F;
+            const byte opcode2 = 0x97;
+
+            byte modrm = (byte)(0xC0 | (GetRegisterCode(reg1) & 0x07));
+
+            if (rex != 0)
+                EmitBytes(rex, opcode1, opcode2, modrm);
+            else
+                EmitBytes(opcode1, opcode2, modrm);
+        }
+
+        public void SetbReg(Register reg1)
+        {
+            byte rex = 0x00;
+            if (IsExtended(reg1))
+            {
+                rex = 0x41; 
+            }
+            else if (reg1 >= Register.RSP && reg1 <= Register.RDI)
+            {
+                rex = 0x40;
+            }
+
+            const byte opcode1 = 0x0F;
+            const byte opcode2 = 0x92;
+
+            byte modrm = (byte)(0xC0 | (GetRegisterCode(reg1) & 0x07));
+
+            if (rex != 0)
+                EmitBytes(rex, opcode1, opcode2, modrm);
+            else
+                EmitBytes(opcode1, opcode2, modrm);
+        }
+
         public void CallReg(Register reg1)
         {
             byte rex = 0x00;
@@ -429,6 +554,30 @@ namespace Mba.Simplifier.Jit
                 Register.R15 => AssemblerRegisters.r15,
                 Register.RBP => AssemblerRegisters.rbp,
                 Register.RSP => AssemblerRegisters.rsp,
+                _ => throw new InvalidOperationException()
+            };
+        }
+
+        public static AssemblerRegister8 Conv8(Register reg)
+        {
+            return reg switch
+            {
+                Register.RCX => AssemblerRegisters.cl,
+                Register.RDX => AssemblerRegisters.dl,
+                Register.RBX => AssemblerRegisters.bl,
+                Register.RDI => AssemblerRegisters.dil,
+                Register.RAX => AssemblerRegisters.al,
+                Register.RSI => AssemblerRegisters.sil,
+                Register.R8 => AssemblerRegisters.r8b,
+                Register.R9 => AssemblerRegisters.r9b,
+                Register.R10 => AssemblerRegisters.r10b,
+                Register.R11 => AssemblerRegisters.r11b,
+                Register.R12 => AssemblerRegisters.r12b,
+                Register.R13 => AssemblerRegisters.r13b,
+                Register.R14 => AssemblerRegisters.r14b,
+                Register.R15 => AssemblerRegisters.r15b,
+                Register.RBP => AssemblerRegisters.bpl,
+                Register.RSP => AssemblerRegisters.spl,
                 _ => throw new InvalidOperationException()
             };
         }

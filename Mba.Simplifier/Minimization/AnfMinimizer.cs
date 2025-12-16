@@ -20,17 +20,17 @@ namespace Mba.Simplifier.Minimization
 
         private readonly IReadOnlyList<AstIdx> variables;
 
-        private readonly TruthTable truthTable;
+        private readonly BooleanTruthTable truthTable;
 
         private readonly Dictionary<AstIdx, uint> demandedVarsMap = new();
 
         // Simplify the boolean expression as a 1-bit polynomial.
         // When the ground truth contains many XORs, this yields exponentially more compact results than DNF.
         // TODO: The result can be refined through factoring and other means.
-        public static unsafe AstIdx SimplifyBoolean(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
+        public static unsafe AstIdx SimplifyBoolean(AstCtx ctx, IReadOnlyList<AstIdx> variables, BooleanTruthTable truthTable)
             => new AnfMinimizer(ctx, variables, truthTable).SimplifyBoolean();
 
-        private AnfMinimizer(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable)
+        private AnfMinimizer(AstCtx ctx, IReadOnlyList<AstIdx> variables, BooleanTruthTable truthTable)
         {
             this.ctx = ctx;
             this.variables = variables;
@@ -41,7 +41,7 @@ namespace Mba.Simplifier.Minimization
         {
             // If the truth table has a positive constant offset, negate the result vector.
             bool negated = truthTable.GetBit(0);
-            var resultVec = truthTable.AsList().Select(x => negated ? Negate(x) : (uint)x).ToArray();
+            var resultVec = truthTable.AsList().Select(x => negated ? Negate((int)x) : (uint)x).ToArray();
             var variableCombinations = MultibitSiMBA.GetVariableCombinations(variables.Count);
 
             // Keep track of which variables are demanded by which combination,
@@ -90,9 +90,9 @@ namespace Mba.Simplifier.Minimization
             // Leave the new minimization algorithm disabled by default. 
             // It should return substantially better results for high variable counts, but it's not well tested (yet).
             bool newMinimizationAlgo = true;
-            if(!newMinimizationAlgo)
+            if (!newMinimizationAlgo)
                 return negated ? ctx.Neg(result.Value) : result.Value;
-            
+
             // Set the initial demanded variable masks.
             for (int i = 0; i < variables.Count; i++)
             {
@@ -235,13 +235,13 @@ namespace Mba.Simplifier.Minimization
                 return id;
             if (kind == AstOp.Neg)
                 return ctx.Neg(SimplifyRec(ctx.GetOp0(id)));
-            
+
             // If we have 4 or less variables, pull the optimal representation from the truth table.
             var currMask = GetDemandedVarsMask(id);
             var count = BitOperations.PopCount(currMask);
             if (count == 1)
                 return id;
-            if(count <= 4)
+            if (count <= 4)
                 return SimplifyViaLookupTable(id, currMask);
 
             // Otherwise we cannot use a lookup table. 
@@ -252,10 +252,10 @@ namespace Mba.Simplifier.Minimization
             // First recursively hoist all associative terms.
             // TODO: Rewrite negations as XORs, then normalize after the fact.
             var terms = new List<AstIdx>();
-            while(worklist.Any())
+            while (worklist.Any())
             {
                 var current = worklist.Pop();
-                if(ctx.GetOpcode(current) != kind)
+                if (ctx.GetOpcode(current) != kind)
                 {
                     terms.Add(current);
                     continue;
@@ -287,7 +287,7 @@ namespace Mba.Simplifier.Minimization
 
             // Do a disjoint variable decomposition. We can start from the least common variables and work our way up.
             var decompositions = new List<(uint, AstIdx)>();
-            foreach(var term in terms)
+            foreach (var term in terms)
             {
                 var demandedMask = GetDemandedVarsMask(term);
 
@@ -359,7 +359,7 @@ namespace Mba.Simplifier.Minimization
             var w = ctx.GetWidth(id);
             var rv = LinearSimplifier.JitResultVector(ctx, 1, 1, varSet, id, false, (ulong)Math.Pow(2, varSet.Count));
 
-            var table = new TruthTable(varSet.Count);
+            var table = new BooleanTruthTable(varSet.Count);
             for (int i = 0; i < rv.Length; i++)
                 table.SetBit(i, rv[i] != 0);
 

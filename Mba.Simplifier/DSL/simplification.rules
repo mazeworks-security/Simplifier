@@ -1,146 +1,296 @@
-mul-constant-to-left-1: (a*Const(c1)) => (Const(c1)*a)
-mul-constant-to-left-2: ((Const(c1)*a)*b) => (Const(c1)*(a*b))
-mul-constant-to-left-3: (Const(c1)*(Const(c2)*a)) => ((Const(c1)*Const(c2))*a)
-mul-constant-to-left-4: (Const(c1)*Const(c2)) => (Const(c1)*Const(c2))
-add-constant-to-left-1: (a+Const(c1)) => (Const(c1)+a)
-add-constant-to-left-2: ((Const(c1)+a)+b) => (Const(c1)+(a+b))
-add-constant-to-left-3: (Const(c1)+(Const(c2)+a)) => ((Const(c1)+Const(c2))+a)
-add-constant-to-left-4: (Const(c1)+Const(c2)) => (Const(c1)+Const(c2))
-and-constant-to-left-1: (a&Const(c1)) => (Const(c1)&a)
-and-constant-to-left-2: ((Const(c1)&a)&b) => (Const(c1)&(a&b))
-and-constant-to-left-3: (Const(c1)&(Const(c2)&a)) => ((Const(c1)&Const(c2))&a)
-and-constant-to-left-4: (Const(c1)&Const(c2)) => (Const(c1)&Const(c2))
-or-constant-to-left-1: (a|Const(c1)) => (Const(c1)|a)
-or-constant-to-left-2: ((Const(c1)|a)|b) => (Const(c1)|(a|b))
-or-constant-to-left-3: (Const(c1)|(Const(c2)|a)) => ((Const(c1)|Const(c2))|a)
-or-constant-to-left-4: (Const(c1)|Const(c2)) => (Const(c1)|Const(c2))
-xor-constant-to-left-1: (a^Const(c1)) => (Const(c1)^a)
-xor-constant-to-left-2: ((Const(c1)^a)^b) => (Const(c1)^(a^b))
-xor-constant-to-left-3: (Const(c1)^(Const(c2)^a)) => ((Const(c1)^Const(c2))^a)
-xor-constant-to-left-4: (Const(c1)^Const(c2)) => (Const(c1)^Const(c2))
-neg-constant-to-left-1: (~Const(c1)) => (~Const(c1))
-arith-to-negation: (-1+(-1*a)) => (~a)
-add-negate-to-invert-sign: (1+(~a)) => (-1*a)
-head-scratcher: (((a&d)*(a|d))+((a&(~d))*((~a)&d))) => (a*d)
-or-and-to-add: ((x|y)+(x&y)) => (x+y)
-qsynth-1: ((2*(a&(~d)))+(-1*(a^d))) => (a+(-1*d))
-qsynth-2: ((2*(d&v1))+(d^v1)) => (d+v1)
-qsynth-2-commutative: ((d^v1)+(2*(d&v1))) => (d+v1)
-or-zero: (0|a) => a
-or-maxint: (-1|a) => -1
-or-itself: (a|a) => a
-or-negated-itself: (a|(~a)) => -1
-xor-zero: (0^a) => a
-xor-maxint: (-1^a) => (~a)
-xor-itself: (a^a) => 0
-xor-reduce: (((~a)&b)|(a&(~b))) => (a^b)
-and-zero: (0&a) => 0
-and-maxint: (-1&a) => a
-and-itself: (a&a) => a
-and-negated-itself: (a&(~a)) => 0
-add-itself: (a+a) => (2*a)
-add-zero: (0+a) => a
-add-cancellation: (a+(-1*a)) => 0
-mul-zero: (0*a) => 0
-mul-one: (1*a) => a
-power-zero: (a**0) => 1
-power-one: (a**1) => a
-minus-twice: (-1*(-1*a)) => a
-negate-twice: (~(~a)) => a
-and-bitwise-negation: ((-1+(-1*a))&b) => ((~a)&b)
-or-bitwise-negation: ((-1+(-1*a))|b) => ((~a)|b)
-xor-bitwise-negation: ((-1+(-1*a))^b) => ((~a)^b)
-__merge_inverse_bitwise_terms-19: ((x&y)+((~x)&y)) => y
-__merge_inverse_bitwise_terms-20: ((x|y)+((~x)|y)) => (-1+y)
-__merge_inverse_bitwise_terms-21: ((x^y)+((~x)^y)) => -1
-__merge_inverse_bitwise_terms-22: ((x|y)+(-1*((~x)&y))) => x
-__merge_inverse_bitwise_terms-23: ((x^y)+(-1*(2*((~x)&y)))) => (x+(-1*y))
-__merge_inverse_bitwise_terms-24: ((x^y)+(2*((~x)|y))) => ((-2+(-1*x))+y)
-and-move-bitwise-negation-in: (~((~a)&b)) => (a|(~b))
-or-move-bitwise-negation-in: (~((~a)|b)) => (a&(~b))
-xor-move-bitwise-negation-in: (~((~a)^b)) => (a^b)
-merge-power-same-base: ((a**b)*(a**c)) => (a**(b+c))
-invert-add-bitwise-not-self: (a+(~a)) => -1
-invert-mul-bitwise-not-self: ((a*(~b))+(a*b)) => (-1*a)
-__insert_fixed_in_conj-1: (y&(~(y|x))) => 0
-xor_same_mult_by_minus_one_1: (2*(a|(-1*a))) => (a^(-1*a))
-xor_same_mult_by_minus_one_2: (-2*(a&(-1*a))) => (a^(-1*a))
-conj_zero_rule: (a&((-1*a)&(2*a))) => 0
-conj_neg_xor_zero_rule: ((~(2*a))&(-1*(a^(-1*a)))) => 0
-conj_neg_xor_minus_one_rule: ((2*a)|(~(-1*(a^(-1*a))))) => -1
-conj_negated_xor_zero_rule: ((2*a)&(~(a^(-1*a)))) => 0
-conj_xor_identity_rule: ((2*a)&(a^(-1*a))) => (2*a)
-disj_xor_identity_rule: ((2*a)|(-1*(a^(-1*a)))) => (2*a)
-conj_neg_conj_identity_rule_1: ((-1*a)&(~(a&(2*a)))) => (-1*a)
-conj_neg_conj_identity_rule_2: ((-1*a)&(~(a&(-2*a)))) => (-1*a)
-conj_neg_conj_identity_rule_3: ((-1*a)&((~a)|(~(2*a)))) => (-1*a)
-conj_neg_conj_identity_rule_4: ((-1*a)&((~a)|(~(-2*a)))) => (-1*a)
-disj_disj_identity_rule: (a|(-1*(a|(-1*a)))) => a
-conj_conj_identity_rule: (a&(-1*(a&(-1*a)))) => a
-disj_conj_identity_rule_1: ((-1*a)|((~a)&(2*a))) => (-1*a)
-disj_conj_identity_rule_2: ((-1*a)|((~a)&(-2*a))) => (-1*a)
-disj_conj_identity_rule_3: ((-1*a)|(~(a|(~(2*a))))) => (-1*a)
-disj_conj_identity_rule_4: ((-1*a)|(~(a|(~(-2*a))))) => (-1*a)
-disj_conj_identity_rule_2_1: (x|((-1*(~x))&(2*(~x)))) => x
-disj_conj_identity_rule_2_2: (x|((-1*(~x))&((-1*2)*(~x)))) => x
-conj_disj_identity_rule_1: (x&((-1*(~(2*x)))|(-1*(~x)))) => x
-conj_disj_identity_rule_2: (x&((~(2*(~x)))|(-1*(~x)))) => x
-conj_disj_identity_rule_3: (x&((~((-1*y)*(~x)))|(-1*(~x)))) => x
-disj_neg_disj_identity_rule_1: (x|(-1*((-1*x)|(y*x)))) => x
-disj_neg_disj_identity_rule_2: (x|(-1*((-1*x)|((-1*y)*x)))) => x
-disj_sub_disj_identity_rule_1: (x|((x|y)+(-1*y))) => x
-disj_sub_disj_identity_rule_2: (x|(x+(-1*(x&y)))) => x
-conj_add_conj_identity_rule: (x&(x+((~x)&y))) => x
-disj_disj_conj_rule: (x|(-1*((-1*y)|(x&y)))) => (x|y)
-conj_conj_disj_rule: (x&(-1*((-1*y)&(x|y)))) => (x&y)
-disj_disj_conj_rule_2: ((-1*((-1*x)|((x&y)&z)))|(x&y)) => x
-__check_bitwise_in_sums_cancel_terms-4: ((2*(x|y))+(-1*x)) => (y+(x^y))
-__check_disj_involving_xor_in_sums_rule_1: ((x&y)|(x^y)) => ((x&y)+(x^y))
-__check_disj_involving_xor_in_sums_rule_2: (((z&x)&y)|(x^y)) => (((z&x)&y)+(x^y))
-__check_xor_involving_disj_rule: (x^(x|y)) => ((~x)&y)
-add-negated-itself-by-two: ((a*a)+(a*(~a))) => (-1*a)
-or-mul-shrink: (((c*x)+(c*y))+(-1*(c*(x&y)))) => (c*(x|y))
-or-shrink: ((a&b)+(a^b)) => (a|b)
-or-shrink-2: (~((~a)&(~b))) => (b|a)
-or-shrink-3: (x+(y&(~x))) => (x|y)
-or-shrink-4: ((a^b)|a) => (a|b)
-xor-mul-shrink: (((c*x)+(c*y))+(-1*((2*c)*(x&y)))) => (c*(x^y))
-xor-shrink: ((x+y)+(-2*(x&y))) => (x^y)
-xor-shrink2: ((a|b)+(-1*(a&b))) => (a^b)
-xor-shrink-3: ((~((~a)&(~b)))&(~(a&b))) => (b^a)
-negated-xor-shrink-4: ((x&y)+(~(x|y))) => (~(x^y))
-and-mul-shrink: (((a*b)+(a*c))+(-1*(a*(b|c)))) => (a*(b&c))
-and-shrink: ((a|b)+(-1*(a^b))) => (a&b)
-add-shrink: ((a&b)+(a|b)) => (a+b)
-cancel-and-reduce-bitwise-subtraction: ((b*a)+(-1*(b*(a&d)))) => (b*(a&(~d)))
-merge-and-multipliers: ((x*(a&c))+(-1*(y*(a&c)))) => ((x+(-1*y))*(a&c))
-mba-1: (d+(-1*(d&a))) => ((~a)&d)
-mba-2: ((-1*(d&a))+d) => ((~a)&d)
-mba-4: ((d|a)+(-1*(a&(~d)))) => d
-mba-5: ((-1*(a&(~d)))+(d|a)) => d
-mba-9: ((a+(-2*d))+(2*((~a)&(2*d)))) => (a^(2*d))
-new-2: ((x^y)+(-1*(x|y))) => (-1*(x&y))
-new-3: ((a|b)+(-1*a)) => ((~a)&b)
-new-16: ((a^b)&a) => (a&(~b))
-new-23: (((~x)&y)+(-1*y)) => (-1*(x&y))
-new-24: (((~x)&y)+(y*(-1*1))) => (-1*(x&y))
-opaque-constant-1: (1&(y^((-1*2)+y))) => 0
-opaque-constant-1-again: ((x&y)+(~(x&y))) => -1
-opaque-constant-two: ((1&y)^(1&(y+(-1*2)))) => 0
-opaque-variable-or: ((a&b)|a) => a
-opaque-variable-add: ((a&(~d))+(d&a)) => a
-reduce-and-xor-negated: ((a^b)&(c^(a^(~b)))) => (c&(a^b))
-reduce-and-xor: ((y&(a1^c1))^(y&x)) => (y&(x^(a1^c1)))
-reduced-or-or-xor: (((y^z)|(y&x))^y) => (z&(~(x&y)))
-combine-and-add-xor-or: (((x&y)+(z^(x|y)))+(2*(z|(~(x&y))))) => (-2+((z^x)^y))
-combine-and-add-xor-or-2: ((-1*((x&y)+(z^(x|y))))+(-2*(z|(~(x&y))))) => (2+(-1*((z^x)^y)))
-pack-add-xor-or: ((y^(x^z))+(z^(y&x))) => (z+(z^(x|y)))
-pack-negated-xor: (z&(y|(z^x))) => (z&((~x)|y))
-negated-and-add: (((~x)&y)+(y&x)) => y
-pack-negated-and-neg-into-xor: (((a&(~b))&(~c))+((a&b)&c)) => (a&(~(b^c)))
-pack-neg-or-and-into-negated-xor: ((~(b|c))|(b&c)) => (~(b^c))
-combine-xor-or: (z^(x|(~(y&z)))) => (~(z&(x|(~y))))
-pack-and-xor: ((y&x)&(x^z)) => ((x&y)&(~z))
-pack-into-negated-and-or-xor: ((~(y&x))&(x^(z^(~y)))) => (~((x&y)|((x^y)^z)))
-linear-mba-1: ((y^(x|(y&(~z))))+((z^(x^y))|(x&y))) => (x+(x^(y|z)))
-linear-mba-2: ((c1*(z^(~(x|(z&y)))))+((-1*c1)*((z&x)+(y|(x|(~z)))))) => ((-1*c1)*x)
+FUNCTIONS REQUIRED [
+        // Gets whether the node is a constant
+        builtin fn is_const(node: Node) -> i1;
+        // Gets the value of the constant
+        builtin fn get_const(node: Node) -> i64;
+		// Gets whether the constant contained by `node` is equivalent to `c1` modulo 2**w, where w is the width of the input node.
+		builtin fn const_eq(node: Node, c1: i64) -> i1;
+        // Gets the width of the nodes
+        builtin fn get_width(node: Node) -> i64;
+        // Get a mask for the bits that are known to be zero
+        builtin fn get_known_zeroes(node: Node) -> i64;
+        // Get a mask for the bits that are known to be one
+        builtin fn get_known_ones(node: Node) -> i64;
+		// Gets the number of set bits in the integer
+		builtin fn popcount(c1: Node) -> i64;
+		
+		// Reduce the constant `c1` modulo 2**w , where w is the width of the input node.
+		// fn reduce_modulo_node_size(c1: i64, node: Node) -> i64 
+		fn rmodn(c1: i64, node: Node) -> i64 
+		{
+			return reduce_modulo(c1, get_width(node));
+		}
+		
+		fn reduce_modulo(c1: i64, w: i64) -> i64 
+		{
+			return c1 & (-1 >> (64 - w));
+		}
+
+        fn disjoint_constants(c1: Node, c2: Node) -> i1
+        {
+			return disjoint_kb(c1, c2);
+        }
+	
+        fn disjoint_kb(c1: Node, c2: Node) -> i1
+        {
+			return (get_known_zeroes(c1) | get_known_zeroes(c2)) == rmodn(-1, c1);
+        }
+]
+
+RULES EGRAPH [
+		// test_rule: (a|b) => (b|a) :: is_const(a) && is_const(b) && disjoint_constants(a, b)
+		//test_rule: (a|b) => (b|a) :: is_const(a) & is_const(b)
+
+        // Associativity, commutativity, and distributivity rules
+        or_commutativity: (a|b) => (b|a)
+        or_associativity: (a|(b|c)) => ((a|b)|c)
+        xor_commutativity: (a^b) => (b^a)
+        xor_associativity: (a^(b^c)) => ((a^b)^c)
+        and_commutativity: (a&b) => (b&a)
+        and_associativity: (a&(b&c)) => ((a&b)&c)
+        mul_commutativity: (a*b) => (b*a)
+        mul_associativity: (a*(b*c)) => ((a*b)*c)
+        mul_distributivity: (a*(b+c)) => ((a*b) + (a*c))
+        and_or_factor: ((a&b)|(a&c)) => (a&(b|c))
+        and_or_distributivity: (a&(b|c)) => ((a&b)|(a&c))
+        or_and_factor:  ((a|b)&(a|c)) => (a|(b&c))
+        or_and_distributivity: (a|(b&c)) => ((a|b)&(a|c))
+
+        // New profitable rules
+        cmp_i1_combine: (((a1&c1) == 0)^((a2&c1) != 0)) => (((~a1&c1)^((a2&c1))) != 0) 
+			:: is_const(c1) && (popcount(c1) == 1)
+        cmp_xor_i1_combine: (((x&c1) != 0) ^ ((c1&y) != 0)) => (((x^y)&c1) != 0) 
+			:: is_const(c1) && (popcount(c1) == 1)
+
+        neg_neq_to_eq: ((~x&c1) != 0) => ((x&c1) == 0)
+            :: (is_const(c1) && (popcount(c1) == 1))
+
+        lshr_const_fold: ((a >> c1)>>c2) => (a >> (c1+c2))
+        lshr_and_combine: ((a >> c) & (b >> c)) => ((a&b) >> c)
+        lshr_or_combine: ((a >> c) | (b >> c)) => ((a|b) >> c)
+        lshr_xor_combine: ((a >> c) ^ (b >> c)) => ((a^b) >> c)
+
+        add_to_or: (a+b) => (a|b)
+            :: disjoint_kb(a, b)
+
+        sink_select_add: ((t0 ? c1 : c2) + v0) => (t0 ? (v0 + c1) : (v0 + c2))
+        sink_select_mul: ((t0 ? c1 : c2) * v0) => (t0 ? (v0 * c1) : (v0 * c2))
+        sink_select_and: ((t0 ? c1 : c2) & v0) => (t0 ? (v0 & c1) : (v0 & c2))
+        sink_select_or: ((t0 ? c1 : c2) | v0) => (t0 ? (v0 | c1) : (v0 | c2))
+        sink_select_xor: ((t0 ? c1 : c2) ^ v0) => (t0 ? (v0 ^ c1) : (v0 ^ c2))
+
+        eq_to_ugt: (((a&c1) == 0) | (((b&c2)) == 0)) => (((a&c1)|(b&c2)) < (c1+c2))
+            :: is_const(c1) && is_const(c2) && (popcount(c1) == 1) && (popcount(c2) == 1) && (get_const(c1) != get_const(c2))
+
+			
+			
+
+        factor_or_neg: ((a != 0)|(b != 0)) => ((a|b) != 0)
+        factor_zx_and: ((a zx width)&(b zx width)) => ((a&b) zx width)
+		factor_tr_and: ((a tr width)&(b tr width)) => ((a&b) tr width)
+        factor_zx_or: ((a zx width)|(b zx width)) => ((a|b) zx width)
+		factor_tr_or: ((a tr width)|(b tr width)) => ((a|b) tr width)
+        factor_zx_xor: ((a zx width)^(b zx width)) => ((a^b) zx width)
+		factor_tr_xor: ((a tr width)^(b tr width)) => ((a^b) tr width)
+		
+		factor_mul: ((a*b) + (a*c)) => (a*(b+c))
+		group_like_terms: (c1*a + c2*a) => ((c1+c2)*a) 
+			:: is_const(c1) && is_const(c2)
+		mul_identify: (a) => (1*a)
+		
+		//or_expand1: (a|b) => a + (~a&b)
+		//or_expand2: (a|b) => (a&~b) + (~a&b) + (a&b)
+		//xor_expand: (a^b) => (a&~b) + (~a&b)
+		neg_expand: (x&~y) => (x - (x&y))
+		or_expand: (a|b) => (a+b-(a&b))
+		xor_expand: (a^b) => (a+b-(2*(a&b)))
+		
+		xor_fold: (c1^(x&c1)) => (~x&c1)
+		
+		tr_to_cmp: (x tr i1) => ((x&1) == 1)
+		
+		merge_cmp: ((x == c1) & (y == c2)) => ((x|y)) == (c1|c2)
+			:: is_const(c1) && is_const(c2) && (disjoint_constants(c1, c2)) && (disjoint_kb(x, y)) 
+		merge_cmp_2: (((x&c1) == 0)&((y&c2) != 0)) => (((x&c1)|((y&c2))) == c2)
+			:: is_const(c1) && is_const(c2) && (disjoint_constants(c1, c2))
+
+        eq_to_sub: (a == b) => ((a-b) == 0)
+        eq_to_xor: (a == b) => ((a^b) == 0)
+        neq_to_sub: (a != b) => ((a-b) != 0)
+        neq_to_xor: (a != b) => ((a^b) != 0)
+		
+
+		// commented out because I was illegally abusing fixed width literals
+        //distribute_zext_xor: (1:i8 ^ (a zx i8)) => ((1 ^ a) zx i8)
+        xor_ne: (1:i1^(a!=b)) => (a == b)
+
+
+        // Original rules (guaranteed to either be profitable or canonicalizing)
+        mul_constant_to_left_1: (a*c1) => (c1*a) 
+			:: is_const(c1)
+        mul_constant_to_left_2: ((c1*a)*b) => (c1*(a*b)) 
+			:: is_const(c1)
+        mul_constant_to_left_3: (c1*(c2*a)) => ((c1*c2)*a) 
+			:: is_const(c1) && is_const(c2)
+        mul_constant_to_left_4: (c1*c2) => (c1*c2) 
+			:: is_const(c1) && is_const(c2)
+        add_constant_to_left_1: (a+c1) => (c1+a) 
+			:: is_const(c1)
+        add_constant_to_left_2: ((c1+a)+b) => (c1+(a+b)) 
+			:: is_const(c1)
+        add_constant_to_left_3: (c1+(c2+a)) => ((c1+c2)+a) 
+			:: is_const(c1) && is_const(c2)
+        add_constant_to_left_4: (c1+c2) => (c1+c2) 
+			:: is_const(c1) && is_const(c2)
+        and_constant_to_left_1: (a&c1) => (c1&a) 
+			:: is_const(c1)
+        and_constant_to_left_2: ((c1&a)&b) => (c1&(a&b)) 
+			:: is_const(c1)
+        and_constant_to_left_3: (c1&(c2&a)) => ((c1&c2)&a) 
+			:: is_const(c1) && is_const(c2)
+        and_constant_to_left_4: (c1&c2) => (c1&c2) 
+			:: is_const(c1) && is_const(c2)
+        or_constant_to_left_1: (a|c1) => (c1|a) 
+			:: is_const(c1)
+        or_constant_to_left_2: ((c1|a)|b) => (c1|(a|b)) 
+			:: is_const(c1)
+        or_constant_to_left_3: (c1|(c2|a)) => ((c1|c2)|a) 
+			:: is_const(c1) && is_const(c2)
+        or_constant_to_left_4: (c1|c2) => (c1|c2) 
+			:: is_const(c1) && is_const(c2)
+        xor_constant_to_left_1: (a^c1) => (c1^a) 
+			:: is_const(c1)
+        xor_constant_to_left_2: ((c1^a)^b) => (c1^(a^b)) 
+			:: is_const(c1)
+        xor_constant_to_left_3: (c1^(c2^a)) => ((c1^c2)^a) 
+			:: is_const(c1) && is_const(c2)
+        xor_constant_to_left_4: (c1^c2) => (c1^c2) 
+			:: is_const(c1) && is_const(c2)
+        neg_constant_to_left_1: (~c1) => (~c1) 
+			:: is_const(c1)
+        arith_to_negation: (-1+(-1*a)) => (~a)
+        add_negate_to_invert_sign: (1+(~a)) => (-1*a)
+        head_scratcher: (((a&d)*(a|d))+((a&(~d))*((~a)&d))) => (a*d)
+        or_and_to_add: ((x|y)+(x&y)) => (x+y)
+        qsynth_1: ((2*(a&(~d)))+(-1*(a^d))) => (a+(-1*d))
+        qsynth_2: ((2*(d&v1))+(d^v1)) => (d+v1)
+        qsynth_2_commutative: ((d^v1)+(2*(d&v1))) => (d+v1)
+        or_zero: (0|a) => a
+        or_maxint: (-1|a) => -1
+        or_itself: (a|a) => a
+        or_negated_itself: (a|(~a)) => -1
+        xor_zero: (0^a) => a
+        xor_maxint: (-1^a) => (~a)
+        xor_itself: (a^a) => 0
+        xor_reduce: (((~a)&b)|(a&(~b))) => (a^b)
+        and_zero: (0&a) => 0
+        and_maxint: (-1&a) => a
+        and_itself: (a&a) => a
+        and_negated_itself: (a&(~a)) => 0
+        add_itself: (a+a) => (2*a)
+        add_zero: (0+a) => a
+        add_cancellation: (a+(-1*a)) => 0
+        mul_zero: (0*a) => 0
+        mul_one: (1*a) => a
+        power_zero: (a**0) => 1
+        power_one: (a**1) => a
+        minus_twice: (-1*(-1*a)) => a
+        negate_twice: (~(~a)) => a
+        and_bitwise_negation: ((-1+(-1*a))&b) => ((~a)&b)
+        or_bitwise_negation: ((-1+(-1*a))|b) => ((~a)|b)
+        xor_bitwise_negation: ((-1+(-1*a))^b) => ((~a)^b)
+        __merge_inverse_bitwise_terms_19: ((x&y)+((~x)&y)) => y
+        __merge_inverse_bitwise_terms_20: ((x|y)+((~x)|y)) => (-1+y)
+        __merge_inverse_bitwise_terms_21: ((x^y)+((~x)^y)) => -1
+        __merge_inverse_bitwise_terms_22: ((x|y)+(-1*((~x)&y))) => x
+        __merge_inverse_bitwise_terms_23: ((x^y)+(-1*(2*((~x)&y)))) => (x+(-1*y))
+        __merge_inverse_bitwise_terms_24: ((x^y)+(2*((~x)|y))) => ((-2+(-1*x))+y)
+        and_move_bitwise_negation_in: (~((~a)&b)) => (a|(~b))
+        or_move_bitwise_negation_in: (~((~a)|b)) => (a&(~b))
+        xor_move_bitwise_negation_in: (~((~a)^b)) => (a^b)
+        merge_power_same_base: ((a**b)*(a**c)) => (a**(b+c))
+        invert_add_bitwise_not_self: (a+(~a)) => -1
+        invert_mul_bitwise_not_self: ((a*(~b))+(a*b)) => (-1*a)
+        asddsasad: (y&(~(y|x))) => 0
+        xor_same_mult_by_minus_one_1: (2*(a|(-1*a))) => (a^(-1*a))
+        xor_same_mult_by_minus_one_2: (-2*(a&(-1*a))) => (a^(-1*a))
+        conj_zero_rule: (a&((-1*a)&(2*a))) => 0
+        conj_neg_xor_zero_rule: ((~(2*a))&(-1*(a^(-1*a)))) => 0
+        conj_neg_xor_minus_one_rule: ((2*a)|(~(-1*(a^(-1*a))))) => -1
+        conj_negated_xor_zero_rule: ((2*a)&(~(a^(-1*a)))) => 0
+        conj_xor_identity_rule: ((2*a)&(a^(-1*a))) => (2*a)
+        disj_xor_identity_rule: ((2*a)|(-1*(a^(-1*a)))) => (2*a)
+        conj_neg_conj_identity_rule_1: ((-1*a)&(~(a&(2*a)))) => (-1*a)
+        conj_neg_conj_identity_rule_2: ((-1*a)&(~(a&(-2*a)))) => (-1*a)
+        conj_neg_conj_identity_rule_3: ((-1*a)&((~a)|(~(2*a)))) => (-1*a)
+        conj_neg_conj_identity_rule_4: ((-1*a)&((~a)|(~(-2*a)))) => (-1*a)
+        disj_disj_identity_rule: (a|(-1*(a|(-1*a)))) => a
+        conj_conj_identity_rule: (a&(-1*(a&(-1*a)))) => a
+        disj_conj_identity_rule_1: ((-1*a)|((~a)&(2*a))) => (-1*a)
+        disj_conj_identity_rule_2: ((-1*a)|((~a)&(-2*a))) => (-1*a)
+        disj_conj_identity_rule_3: ((-1*a)|(~(a|(~(2*a))))) => (-1*a)
+        disj_conj_identity_rule_4: ((-1*a)|(~(a|(~(-2*a))))) => (-1*a)
+        disj_conj_identity_rule_2_1: (x|((-1*(~x))&(2*(~x)))) => x
+        disj_conj_identity_rule_2_2: (x|((-1*(~x))&((-1*2)*(~x)))) => x
+        conj_disj_identity_rule_1: (x&((-1*(~(2*x)))|(-1*(~x)))) => x
+        conj_disj_identity_rule_2: (x&((~(2*(~x)))|(-1*(~x)))) => x
+        conj_disj_identity_rule_3: (x&((~((-1*y)*(~x)))|(-1*(~x)))) => x
+        disj_neg_disj_identity_rule_1: (x|(-1*((-1*x)|(y*x)))) => x
+        disj_neg_disj_identity_rule_2: (x|(-1*((-1*x)|((-1*y)*x)))) => x
+        disj_sub_disj_identity_rule_1: (x|((x|y)+(-1*y))) => x
+        disj_sub_disj_identity_rule_2: (x|(x+(-1*(x&y)))) => x
+        conj_add_conj_identity_rule: (x&(x+((~x)&y))) => x
+        disj_disj_conj_rule: (x|(-1*((-1*y)|(x&y)))) => (x|y)
+        conj_conj_disj_rule: (x&(-1*((-1*y)&(x|y)))) => (x&y)
+        disj_disj_conj_rule_2: ((-1*((-1*x)|((x&y)&z)))|(x&y)) => x
+        __check_bitwise_in_sums_cancel_terms_4: ((2*(x|y))+(-1*x)) => (y+(x^y))
+        __check_disj_involving_xor_in_sums_rule_1: ((x&y)|(x^y)) => ((x&y)+(x^y))
+        __check_disj_involving_xor_in_sums_rule_2: (((z&x)&y)|(x^y)) => (((z&x)&y)+(x^y))
+        __check_xor_involving_disj_rule: (x^(x|y)) => ((~x)&y)
+        add_negated_itself_by_two: ((a*a)+(a*(~a))) => (-1*a)
+        or_mul_shrink: (((c*x)+(c*y))+(-1*(c*(x&y)))) => (c*(x|y))
+        or_shrink: ((a&b)+(a^b)) => (a|b)
+        or_shrink_2: (~((~a)&(~b))) => (b|a)
+        or_shrink_3: (x+(y&(~x))) => (x|y)
+        or_shrink_4: ((a^b)|a) => (a|b)
+        xor_mul_shrink: (((c*x)+(c*y))+(-1*((2*c)*(x&y)))) => (c*(x^y))
+        xor_shrink: ((x+y)+(-2*(x&y))) => (x^y)
+        xor_shrink2: ((a|b)+(-1*(a&b))) => (a^b)
+        xor_shrink_3: ((~((~a)&(~b)))&(~(a&b))) => (b^a)
+        negated_xor_shrink_4: ((x&y)+(~(x|y))) => (~(x^y))
+        and_mul_shrink: (((a*b)+(a*c))+(-1*(a*(b|c)))) => (a*(b&c))
+        and_shrink: ((a|b)+(-1*(a^b))) => (a&b)
+        add_shrink: ((a&b)+(a|b)) => (a+b)
+        cancel_and_reduce_bitwise_subtraction: ((b*a)+(-1*(b*(a&d)))) => (b*(a&(~d)))
+        merge_and_multipliers: ((x*(a&c))+(-1*(y*(a&c)))) => ((x+(-1*y))*(a&c))
+        mba_1: (d+(-1*(d&a))) => ((~a)&d)
+        mba_2: ((-1*(d&a))+d) => ((~a)&d)
+        mba_4: ((d|a)+(-1*(a&(~d)))) => d
+        mba_5: ((-1*(a&(~d)))+(d|a)) => d
+        mba_9: ((a+(-2*d))+(2*((~a)&(2*d)))) => (a^(2*d))
+        new_2: ((x^y)+(-1*(x|y))) => (-1*(x&y))
+        new_3: ((a|b)+(-1*a)) => ((~a)&b)
+        new_16: ((a^b)&a) => (a&(~b))
+        new_23: (((~x)&y)+(-1*y)) => (-1*(x&y))
+        new_24: (((~x)&y)+(y*(-1*1))) => (-1*(x&y))
+        opaque_constant_1: (1&(y^((-1*2)+y))) => 0
+        opaque_constant_1_again: ((x&y)+(~(x&y))) => -1
+        opaque_constant_two: ((1&y)^(1&(y+(-1*2)))) => 0
+        opaque_variable_or: ((a&b)|a) => a
+        opaque_variable_add: ((a&(~d))+(d&a)) => a
+        reduce_and_xor_negated: ((a^b)&(c^(a^(~b)))) => (c&(a^b))
+        reduce_and_xor: ((y&(a1^c1))^(y&x)) => (y&(x^(a1^c1)))
+        reduced_or_or_xor: (((y^z)|(y&x))^y) => (z&(~(x&y)))
+        combine_and_add_xor_or: (((x&y)+(z^(x|y)))+(2*(z|(~(x&y))))) => (-2+((z^x)^y))
+        combine_and_add_xor_or_2: ((-1*((x&y)+(z^(x|y))))+(-2*(z|(~(x&y))))) => (2+(-1*((z^x)^y)))
+        pack_add_xor_or: ((y^(x^z))+(z^(y&x))) => (z+(z^(x|y)))
+        pack_negated_xor: (z&(y|(z^x))) => (z&((~x)|y))
+        negated_and_add: (((~x)&y)+(y&x)) => y
+        pack_negated_and_neg_into_xor: (((a&(~b))&(~c))+((a&b)&c)) => (a&(~(b^c)))
+        pack_neg_or_and_into_negated_xor: ((~(b|c))|(b&c)) => (~(b^c))
+        combine_xor_or: (z^(x|(~(y&z)))) => (~(z&(x|(~y))))
+        pack_and_xor: ((y&x)&(x^z)) => ((x&y)&(~z))
+        pack_into_negated_and_or_xor: ((~(y&x))&(x^(z^(~y)))) => (~((x&y)|((x^y)^z)))
+        linear_mba_1: ((y^(x|(y&(~z))))+((z^(x^y))|(x&y))) => (x+(x^(y|z)))
+        linear_mba_2: ((c1*(z^(~(x|(z&y)))))+((-1*c1)*((z&x)+(y|(x|(~z)))))) => ((-1*c1)*x)
+]
