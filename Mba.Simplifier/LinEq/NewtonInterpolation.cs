@@ -62,10 +62,15 @@ namespace Mba.Simplifier.LinEq
         public static void MvNewtonNew()
         {
             var poly = new SparsePolynomial(2, (byte)8);
+            /*
             poly.SetCoeff(new Monomial(0, 0), unchecked(0ul - 2));
             poly.SetCoeff(new Monomial(1, 0), unchecked(0ul - 2));
             poly.SetCoeff(new Monomial(1, 1), unchecked(0ul - 3));
             poly.SetCoeff(new Monomial(2, 1), 15);
+            */
+
+            poly.SetCoeff(new Monomial(1, 1), 17);
+
             var mmask = ModuloReducer.GetMask(poly.width);
             var solver = new LinearCongruenceSolver(mmask);
             Console.WriteLine(poly);
@@ -126,7 +131,9 @@ namespace Mba.Simplifier.LinEq
                         d = Math.Min(d, tableI);
 
                         //Console.WriteLine($"p{d}: {i},{j}");
-                        P(d, i, j, table, zeroOrderTable);
+                        if (d == 2 && i == 2 && j == 1)
+                            Debugger.Break();
+                        P(mmask, d, i, j, table, zeroOrderTable);
                     }
                 }
 
@@ -168,8 +175,10 @@ namespace Mba.Simplifier.LinEq
             Debugger.Break();
         }
 
-        private static ulong P(int k, int i, int j, Dictionary<(int, int, int), ulong> table, Num[,] zeroOrderTable)
+        private static ulong P(ulong mmask, int k, int i, int j, Dictionary<(int, int, int), ulong> table, Num[,] zeroOrderTable)
         {
+            var reduce = (ulong x) => mmask & x;
+
             var tup = (k, i, j);
             if (table.ContainsKey(tup))
                 return table[tup];
@@ -187,26 +196,26 @@ namespace Mba.Simplifier.LinEq
 
             if (j <= k - 1 && i > k-1)
             {
-                var p0 = P(k - 1, i, j, table, zeroOrderTable);
-                var p1 = P(k - 1, i - 1, j, table, zeroOrderTable);
+                var p0 = P(mmask, k - 1, i, j, table, zeroOrderTable);
+                var p1 = P(mmask, k - 1, i - 1, j, table, zeroOrderTable);
 
                 var xi = (ulong)i;
                 var xik = (ulong)xi - (ulong)k;
 
-                var diff = (p0 - p1) / (xi - xik);
+                var diff = (reduce(p0 - p1)) / (reduce(xi - xik));
                 table[tup] = diff;
                 return diff;
             }
 
             if (i <= k - 1 && j > k - 1)
             {
-                var p0 = P(k - 1, i, j, table, zeroOrderTable);
-                var p1 = P(k - 1, i, j - 1, table, zeroOrderTable);
+                var p0 = P(mmask, k - 1, i, j, table, zeroOrderTable);
+                var p1 = P(mmask, k - 1, i, j - 1, table, zeroOrderTable);
 
                 var yi = (ulong)j;
                 var yik = (ulong)yi - (ulong)k;
 
-                var diff = (p0 - p1) / (yi - yik);
+                var diff = reduce(p0 - p1) / reduce(yi - yik);
                 table[tup] = diff;
                 return diff;
             }
@@ -219,10 +228,10 @@ namespace Mba.Simplifier.LinEq
             {
                 //if (k - 1 == 0 || k == 0)
                 //    Debugger.Break();
-                var p0 = P(k - 1, i, j, table, zeroOrderTable);
-                var p1 = P(k - 1, i - 1, j - 1, table, zeroOrderTable);
-                var p2 = P(k - 1, i, j - 1, table, zeroOrderTable);
-                var p3 = P(k - 1, i - 1, j, table, zeroOrderTable);
+                var p0 = P(mmask, k - 1, i, j, table, zeroOrderTable);
+                var p1 = P(mmask, k - 1, i - 1, j - 1, table, zeroOrderTable);
+                var p2 = P(mmask, k - 1, i, j - 1, table, zeroOrderTable);
+                var p3 = P(mmask, k - 1, i - 1, j, table, zeroOrderTable);
 
 
                 var xi = (ulong)i;
@@ -231,7 +240,7 @@ namespace Mba.Simplifier.LinEq
                 var yjk = (ulong)yj - (ulong)k;
 
                 // Paper seems to add p0 instead of subtracting.. typo?
-                var diff = (p0 + p1 - p2 - p3) / (((xi - xik))*(yj - yjk));
+                var diff = reduce(p0 + p1 - p2 - p3) / reduce(((xi - xik))*(yj - yjk));
                 table[tup] = diff;
                 return diff;
             }
