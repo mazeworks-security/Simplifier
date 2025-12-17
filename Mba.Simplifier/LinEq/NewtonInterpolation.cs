@@ -58,21 +58,25 @@ namespace Mba.Simplifier.LinEq
 
         }
 
-        public static uint MAXDEG = 3;
+        public static uint MAXDEG = 6;
 
         // https://www.researchgate.net/publication/261421283_On_the_Newton_multivariate_polynomial_interpolation_with_applications
         public static void MvNewtonNew()
         {
+            // 4 WORKS, 5 DOES NOT
             var poly = new SparsePolynomial(2, (byte)8);
+            poly.SetCoeff(new Monomial(5, 0), 1);
 
-            
+
+            /*
             poly.SetCoeff(new Monomial(0, 0), unchecked(0ul - 2));
             poly.SetCoeff(new Monomial(1, 0), unchecked(0ul - 2));
             poly.SetCoeff(new Monomial(1, 1), unchecked(0ul - 3));
             poly.SetCoeff(new Monomial(2, 1), 15);
-            
+            */
 
-            //poly.SetCoeff(new Monomial(2, 0), 1);
+            // 4 works
+            // 5 does not work
 
 
 
@@ -140,11 +144,17 @@ namespace Mba.Simplifier.LinEq
                         //Console.WriteLine($"p{d}: {i},{j}");
                        // if (d == 2 && i == 2 && j == 1)
                        //     Debugger.Break();
-                        P(mmask, d, i, j, table, zeroOrderTable);
+                        P(mmask, solver, d, i, j, table, zeroOrderTable);
                     }
                 }
 
-                bool log = true;
+                foreach(var elem in table)
+                {
+                    //if (elem.Value > 255)
+                    //    Debugger.Break();
+                }
+
+                bool log = false;
                 if(log)
                     Console.WriteLine($"\n\n\nDeg {tableI} table:");
                 var coeffs = new ulong[n, n];
@@ -229,9 +239,84 @@ namespace Mba.Simplifier.LinEq
             }
         }
 
-        private static ulong P(ulong mmask, int k, int i, int j, Dictionary<(int, int, int), ulong> table, Num[,] zeroOrderTable)
+        // If we have (a/b), we want to find a coefficient
+        private static (ulong, bool) Mdiv(ulong mmask, LinearCongruenceSolver solver, ulong a, ulong b)
+        {
+           // if (a > 255 || b > 255)
+            //    Debugger.Break();
+            var div = mmask & (a / b);
+            var undo = mmask & (div * b);
+
+            bool valid = undo == a;
+            var s = valid ? "GOOD" : "BAD";
+            Console.WriteLine($"{s}: {a} / {b}");
+
+
+
+            /*
+             *  var lc = solver.LinearCongruence(a, div, (UInt128)mmask + 1);
+            if (lc == null || lc.d == 0)
+            {
+                Debugger.Break();
+            }
+  
+
+            // If the
+            if(lc != null)
+            {
+                //return div;
+                var solution = (ulong)solver.GetSolution(0, lc);
+                Debug.Assert((mmask & (solution * a)) == div);
+                return solution;
+                //Debugger.Break();
+            }
+
+            else
+            {
+                //Debugger.Break();
+            }
+                      */
+
+
+           if (undo != a)
+            //if (false)
+            {
+                return (div, true);
+                // Debugger.Break();
+                // var lc = solver.LinearCongruence(a, div, (UInt128)mmask + 1);
+                var lc = solver.LinearCongruence(div, a, (UInt128)mmask + 1); // not correct. ensure that that after doing (a/b), there is some coeff you can multiply (a/b) by to undo the division.
+                //var lc = solver.LinearCongruence(a, div, (UInt128)mmask + 1); // ensure that 
+                if (lc == null || lc.d == 0)
+                {
+                   // Console.WriteLine("mismatch");
+                    //throw new InvalidOperationException("Non invertible multiplication!");
+                }
+
+                else
+                {
+
+
+
+                    var solution = (ulong)solver.GetSolution(0, lc);
+                    undo = mmask & (a * solution);
+                    //Debug.Assert(undo == div);
+
+                    // Rewrite the division as multiplication
+                    //return solution;
+
+                    // We probably should not do this
+                    //return b;
+                }
+            }
+
+        done:
+            return (div, false);
+        }
+
+        private static (ulong, bool) P(ulong mmask, LinearCongruenceSolver solver, int k, int i, int j, Dictionary<(int, int, int), ulong> table, Num[,] zeroOrderTable)
         {
             var reduce = (ulong x) => mmask & x;
+            var div = (ulong a, ulong b) => Mdiv(mmask, solver, a, b);
 
             var tup = (k, i, j);
             if (table.ContainsKey(tup))
@@ -250,26 +335,26 @@ namespace Mba.Simplifier.LinEq
 
             if (j <= k - 1 && i > k-1)
             {
-                var p0 = P(mmask, k - 1, i, j, table, zeroOrderTable);
-                var p1 = P(mmask, k - 1, i - 1, j, table, zeroOrderTable);
+                var p0 = P(mmask, solver, k - 1, i, j, table, zeroOrderTable);
+                var p1 = P(mmask, solver, k - 1, i - 1, j, table, zeroOrderTable);
 
                 var xi = (ulong)i;
                 var xik = (ulong)xi - (ulong)k;
 
-                var diff = (reduce(p0 - p1)) / (reduce(xi - xik));
+                var diff = div((reduce(p0 - p1)), (reduce(xi - xik)));
                 table[tup] = diff;
                 return diff;
             }
 
             if (i <= k - 1 && j > k - 1)
             {
-                var p0 = P(mmask, k - 1, i, j, table, zeroOrderTable);
-                var p1 = P(mmask, k - 1, i, j - 1, table, zeroOrderTable);
+                var p0 = P(mmask, solver, k - 1, i, j, table, zeroOrderTable);
+                var p1 = P(mmask, solver, k - 1, i, j - 1, table, zeroOrderTable);
 
                 var yi = (ulong)j;
                 var yik = (ulong)yi - (ulong)k;
 
-                var diff = reduce(p0 - p1) / reduce(yi - yik);
+                var diff = div(reduce(p0 - p1), reduce(yi - yik));
                 table[tup] = diff;
                 return diff;
             }
@@ -282,10 +367,10 @@ namespace Mba.Simplifier.LinEq
             {
                 //if (k - 1 == 0 || k == 0)
                 //    Debugger.Break();
-                var p0 = P(mmask, k - 1, i, j, table, zeroOrderTable);
-                var p1 = P(mmask, k - 1, i - 1, j - 1, table, zeroOrderTable);
-                var p2 = P(mmask, k - 1, i, j - 1, table, zeroOrderTable);
-                var p3 = P(mmask, k - 1, i - 1, j, table, zeroOrderTable);
+                var p0 = P(mmask, solver, k - 1, i, j, table, zeroOrderTable);
+                var p1 = P(mmask, solver, k - 1, i - 1, j - 1, table, zeroOrderTable);
+                var p2 = P(mmask, solver, k - 1, i, j - 1, table, zeroOrderTable);
+                var p3 = P(mmask, solver, k - 1, i - 1, j, table, zeroOrderTable);
 
 
                 var xi = (ulong)i;
@@ -294,7 +379,7 @@ namespace Mba.Simplifier.LinEq
                 var yjk = (ulong)yj - (ulong)k;
 
                 // Paper seems to add p0 instead of subtracting.. typo?
-                var diff = reduce(p0 + p1 - p2 - p3) / reduce(((xi - xik))*(yj - yjk));
+                var diff = div(reduce(p0 + p1 - p2 - p3), reduce(((xi - xik))*(yj - yjk)));
                 table[tup] = diff;
                 return diff;
             }

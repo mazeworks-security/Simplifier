@@ -1610,7 +1610,7 @@ namespace Mba.Simplifier.Pipeline
                 if ((bitMask & freeMask) == 0)
                     continue;
 
-                var lc = solver.LinearCongruence(bitMask, constant, moduloMask);
+                var lc = solver.LinearCongruence(bitMask, constant, modulus);
                 var limit = lc.d;
                 if (limit > 255)
                     limit = 255;
