@@ -69,7 +69,7 @@ namespace Mba.Simplifier.LinEq
             Console.WriteLine(poly);
 
             // (1) Construct zero order table of initial values
-            var max = 4;
+            var max = 3;
             var zeroOrderTable = new Num[max, max];
             for(int i = 0; i < max; i++)
             {
@@ -96,7 +96,7 @@ namespace Mba.Simplifier.LinEq
 
             // (2) Compute the kth ordewr table of divided differences
             Dictionary<(int, int, int), ulong> table = new();
-            var n = max;
+            var n = 3;
             for(int i = 0; i < n; i++)
             {
                 for(int j = 0; j < n - i; j++)
