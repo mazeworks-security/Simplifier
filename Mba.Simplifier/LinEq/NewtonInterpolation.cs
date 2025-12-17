@@ -131,8 +131,8 @@ namespace Mba.Simplifier.LinEq
                         d = Math.Min(d, tableI);
 
                         //Console.WriteLine($"p{d}: {i},{j}");
-                        if (d == 2 && i == 2 && j == 1)
-                            Debugger.Break();
+                       // if (d == 2 && i == 2 && j == 1)
+                       //     Debugger.Break();
                         P(mmask, d, i, j, table, zeroOrderTable);
                     }
                 }
@@ -159,10 +159,15 @@ namespace Mba.Simplifier.LinEq
                             Console.Write($"{str}" + padding.Substring(0, padding.Length - str.Length));
                         }
 
-                        Console.WriteLine();
+                        Console.WriteLine("\n\n");
                     }
 
 
+                if (tableI == n - 1)
+                {
+                    DivDiffToPoly(tableI, coeffs);
+                    Debugger.Break();
+                }
 
                 
 
@@ -173,6 +178,39 @@ namespace Mba.Simplifier.LinEq
 
 
             Debugger.Break();
+        }
+
+        private static void DivDiffToPoly(int degree, Num[,] coeffs)
+        {
+            // monomial order: 0, x, y, x*y
+            //
+
+            for(int j = 0; j < coeffs.GetLength(1); j++)
+            {
+                for(int i = 0;  i < coeffs.GetLength(0); i++)
+                {
+                    var coeff = coeffs[i, j];
+                    if (coeff == 0)
+                        continue;
+
+                    var s = GetMonomialStr(new Monomial((byte)i, (byte)j));
+                    Console.Write($"{coeff}*{s} + ");
+                }
+            }
+        }
+
+        private static string GetMonomialStr(Monomial m)
+        {
+            return m.ToString(false);
+
+            var sb = new StringBuilder();
+            if (m.GetTotalDeg() == 0)
+                return "1";
+
+            for(int i = 0; i < m.GetNumVars(); i++)
+            {
+
+            }
         }
 
         private static ulong P(ulong mmask, int k, int i, int j, Dictionary<(int, int, int), ulong> table, Num[,] zeroOrderTable)
