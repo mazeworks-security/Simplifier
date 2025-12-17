@@ -62,25 +62,37 @@ namespace Mba.Simplifier.LinEq
         public static void MvNewtonNew()
         {
             var poly = new SparsePolynomial(2, (byte)8);
-            poly.SetCoeff(new Monomial(1, 0), 3);
-            poly.SetCoeff(new Monomial(1, 1), 17);
+            poly.SetCoeff(new Monomial(0, 0), unchecked(0ul - 2));
+            poly.SetCoeff(new Monomial(1, 0), unchecked(0ul - 2));
+            poly.SetCoeff(new Monomial(1, 1), unchecked(0ul - 3));
+            poly.SetCoeff(new Monomial(2, 1), 15);
             var mmask = ModuloReducer.GetMask(poly.width);
             var solver = new LinearCongruenceSolver(mmask);
             Console.WriteLine(poly);
 
             // (1) Construct zero order table of initial values
-            var max = 3;
+            var max = 4;
             var zeroOrderTable = new Num[max, max];
             for(int i = 0; i < max; i++)
             {
                 for(int j = 0;  j < max; j++)
                 {
                     var inputs = new ulong[] { (ulong)i, (ulong)j};
-                    var y = PolynomialEvaluator.Eval(poly, new Num[] { (ulong)i, (ulong)j });
+                    var y = mmask & PolynomialEvaluator.Eval(poly, new Num[] { (ulong)i, (ulong)j });
                     zeroOrderTable[i, j] = y;
                 }
             }
 
+            var byteZeroOrderTable = new sbyte[max, max];
+            for(int r = 0; r < max; r++)
+            {
+                for(int c = 0; c < max; c++)
+                {
+                    byteZeroOrderTable[r, c] = (sbyte)(byte)zeroOrderTable[r, c];
+                }
+            }
+
+            
 
             //P(0, 0, 0, null);
             /*
@@ -95,52 +107,63 @@ namespace Mba.Simplifier.LinEq
             */
 
             // (2) Compute the kth ordewr table of divided differences
-            Dictionary<(int, int, int), ulong> table = new();
-            var n = 3;
-            for(int i = 0; i < n; i++)
+
+
+            //P(0, 1, 1, table, zeroOrderTable);
+
+            var n = 4;
+            for(int tableI = 0; tableI < n; tableI++)
             {
-                for(int j = 0; j < n - i; j++)
+                Dictionary<(int, int, int), ulong> table = new();
+
+                // Compute the nth order divided difference table
+                for (int i = 0; i < n; i++)
                 {
-                    var d = Math.Max(i, j);
-                    Console.WriteLine($"p{d}: {i},{j}");
-                    P(d, i, j, table, zeroOrderTable);
+                    for (int j = 0; j < n - i; j++)
+                    {
+                        var d = Math.Max(i, j);
+                        //d = Math.Min(d, i);
+                        d = Math.Min(d, tableI);
+
+                        //Console.WriteLine($"p{d}: {i},{j}");
+                        P(d, i, j, table, zeroOrderTable);
+                    }
                 }
+
+
+                    Console.WriteLine($"\n\n\nDeg {tableI} table:");
+                    var coeffs = new ulong[n, n];
+                    foreach (var ((k, i, j), coeff) in table)
+                    {
+                        coeffs[i, j] = coeff;
+                    }
+
+
+                    var padding = String.Join(" ", Enumerable.Repeat<string>(" ", 32));
+                    // var padding = "                                ";
+                    for (int r = 0; r < coeffs.GetLength(0); r++)
+                    {
+                        for (int c = 0; c < coeffs.GetLength(1); c++)
+                        {
+                            var coeff = coeffs[r, c];
+                            //var (a, b) = divTable[r, c];
+                            var str = ((sbyte)(byte)coeff).ToString();
+                            //var str = $"({a}*{b})";
+                            Console.Write($"{str}" + padding.Substring(0, padding.Length - str.Length));
+                        }
+
+                        Console.WriteLine();
+                    }
+
+
+
+                
+
             }
+
 
             //var hello = P(2, 1, 1, table, zeroOrderTable);
 
-            for (int curr = 0; curr < max; curr++)
-            {
-                Console.WriteLine($"\n\n\nDeg {curr} table:");
-                var coeffs = new ulong[n, n];
-                foreach (var ((k, i, j), coeff) in table)
-                {
-                    if (k != curr)
-                        continue;
-
-                    coeffs[i, j] = coeff;
-                }
-
- 
-                var padding = String.Join(" ", Enumerable.Repeat<string>(" ", 32));
-                // var padding = "                                ";
-                for (int r = 0; r < coeffs.GetLength(0); r++)
-                {
-                    for (int c = 0; c < coeffs.GetLength(1); c++)
-                    {
-                        var coeff = coeffs[r, c];
-                        //var (a, b) = divTable[r, c];
-                        var str = coeff.ToString();
-                        //var str = $"({a}*{b})";
-                        Console.Write($"{str}" + padding.Substring(0, padding.Length - str.Length));
-                    }
-
-                    Console.WriteLine();
-                }
-
-
-
-            }
 
             Debugger.Break();
         }
