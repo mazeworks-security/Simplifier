@@ -58,17 +58,293 @@ namespace Mba.Simplifier.LinEq
 
         }
 
-        public static void Test3()
+        // https://www.researchgate.net/publication/261421283_On_the_Newton_multivariate_polynomial_interpolation_with_applications
+        public static void MvNewtonNew()
         {
+            var poly = new SparsePolynomial(2, (byte)8);
+            poly.SetCoeff(new Monomial(1, 0), 3);
+            poly.SetCoeff(new Monomial(1, 1), 17);
+            var mmask = ModuloReducer.GetMask(poly.width);
+            var solver = new LinearCongruenceSolver(mmask);
+            Console.WriteLine(poly);
+
+            // (1) Construct zero order table of initial values
+            var max = 4;
+            var zeroOrderTable = new Num[max, max];
+            for(int i = 0; i < max; i++)
+            {
+                for(int j = 0;  j < max; j++)
+                {
+                    var inputs = new ulong[] { (ulong)i, (ulong)j};
+                    var y = PolynomialEvaluator.Eval(poly, new Num[] { (ulong)i, (ulong)j });
+                    zeroOrderTable[i, j] = y;
+                }
+            }
+
+
+            //P(0, 0, 0, null);
             /*
-            // 1 + 17*x + 33*x*x
-            var poly = new SparsePolynomial(1, (byte)8);
-            poly.SetCoeff(new Monomial(0), 1);
-            poly.SetCoeff(new Monomial(1), 17);
-            poly.SetCoeff(new Monomial(2), 33);
-            poly.SetCoeff(new Monomial(3), 72);
-            //poly.SetCoeff(new Monomial(2), 3);
+            Dictionary<(int, int, int), ulong> table = new();
+            for (int i = 0; i < max; i++)
+            {
+                for (int j = 0; j < max; j++)
+                {
+                    P(3, i, j, table, zeroOrderTable);
+                }
+            }
             */
+
+            // (2) Compute the kth ordewr table of divided differences
+            Dictionary<(int, int, int), ulong> table = new();
+            var n = max;
+            for(int i = 0; i < n; i++)
+            {
+                for(int j = 0; j < n - i; j++)
+                {
+                    var d = Math.Max(i, j);
+                    Console.WriteLine($"p{d}: {i},{j}");
+                    P(d, i, j, table, zeroOrderTable);
+                }
+            }
+
+            //var hello = P(2, 1, 1, table, zeroOrderTable);
+
+            for (int curr = 0; curr < max; curr++)
+            {
+                Console.WriteLine($"\n\n\nDeg {curr} table:");
+                var coeffs = new ulong[n, n];
+                foreach (var ((k, i, j), coeff) in table)
+                {
+                    if (k != curr)
+                        continue;
+
+                    coeffs[i, j] = coeff;
+                }
+
+ 
+                var padding = String.Join(" ", Enumerable.Repeat<string>(" ", 32));
+                // var padding = "                                ";
+                for (int r = 0; r < coeffs.GetLength(0); r++)
+                {
+                    for (int c = 0; c < coeffs.GetLength(1); c++)
+                    {
+                        var coeff = coeffs[r, c];
+                        //var (a, b) = divTable[r, c];
+                        var str = coeff.ToString();
+                        //var str = $"({a}*{b})";
+                        Console.Write($"{str}" + padding.Substring(0, padding.Length - str.Length));
+                    }
+
+                    Console.WriteLine();
+                }
+
+
+
+            }
+
+            Debugger.Break();
+        }
+
+        private static ulong P(int k, int i, int j, Dictionary<(int, int, int), ulong> table, Num[,] zeroOrderTable)
+        {
+            var tup = (k, i, j);
+            if (table.ContainsKey(tup))
+                return table[tup];
+
+            //if (i == 1 && j == 1)
+            //    Debugger.Break();
+
+           // if (k == 0 && (i == 0 || j == 0))
+           if(k == 0)
+            {
+                var v = zeroOrderTable[i, j];
+                table[tup] = v;
+                return table[tup];
+            }
+
+            if (j <= k - 1 && i > k-1)
+            {
+                var p0 = P(k - 1, i, j, table, zeroOrderTable);
+                var p1 = P(k - 1, i - 1, j, table, zeroOrderTable);
+
+                var xi = (ulong)i;
+                var xik = (ulong)xi - (ulong)k;
+
+                var diff = (p0 - p1) / (xi - xik);
+                table[tup] = diff;
+                return diff;
+            }
+
+            if (i <= k - 1 && j > k - 1)
+            {
+                var p0 = P(k - 1, i, j, table, zeroOrderTable);
+                var p1 = P(k - 1, i, j - 1, table, zeroOrderTable);
+
+                var yi = (ulong)j;
+                var yik = (ulong)yi - (ulong)k;
+
+                var diff = (p0 - p1) / (yi - yik);
+                table[tup] = diff;
+                return diff;
+            }
+
+
+     
+
+            var n = 4;
+            if (i > k - 1 && j > k-1 && i+j <= n)
+            {
+                //if (k - 1 == 0 || k == 0)
+                //    Debugger.Break();
+                var p0 = P(k - 1, i, j, table, zeroOrderTable);
+                var p1 = P(k - 1, i - 1, j - 1, table, zeroOrderTable);
+                var p2 = P(k - 1, i, j - 1, table, zeroOrderTable);
+                var p3 = P(k - 1, i - 1, j, table, zeroOrderTable);
+
+
+                var xi = (ulong)i;
+                var xik = (ulong)xi - (ulong)k;
+                var yj = (ulong)j;
+                var yjk = (ulong)yj - (ulong)k;
+
+                // Paper seems to add p0 instead of subtracting.. typo?
+                var diff = (p0 + p1 - p2 - p3) / (((xi - xik))*(yj - yjk));
+                table[tup] = diff;
+                return diff;
+            }
+
+
+
+
+            Debugger.Break();
+            return 0;
+        }
+
+        public static void MvNewtonOld()
+        {
+            var poly = new SparsePolynomial(2, (byte)8);
+            //poly.SetCoeff(new Monomial(0, 0), 0);
+            //poly.SetCoeff(new Monomial(1, 0), 17);
+            //poly.SetCoeff(new Monomial(0, 1), 33);
+            poly.SetCoeff(new Monomial(1, 1), 1);
+            //poly.SetCoeff(new Monomial(2), 42);
+            Console.WriteLine(poly);
+            var mmask = ModuloReducer.GetMask(poly.width);
+            var solver = new LinearCongruenceSolver(mmask);
+
+            var monomials = new List<Monomial> { new(0, 0), new(1,0), new(0, 1), new(1, 1)};
+            monomials.Sort();
+
+            // Compute list of inputs
+            //var xs = new List<Point> { new(0, 0), new(1, 0), new(0, 1), new(1, 1) };
+
+            //var xs = new List<Point> { new(0, 0), new(1, 2), new(3, 4), new(5, 6) };
+
+            var xs = new List<Point> { new(0, 0), new(1, 3), new(5, 7), new(9, 11) };
+
+            // Compute list of outputs
+            var y = xs.Select(x => PolynomialEvaluator.Eval(poly, new Num[] { x.X, x.Y })).ToList();
+
+            // Fill the first column with y
+            var n = xs.Count;
+            var coeffs = new Num[n, n];
+            for (int i = 0; i < n; i++)
+                coeffs[i, 0] = y[i];
+
+            //for(int i = 0;  i < n; i++)
+            for (int j = 1; j < n; j++)
+            {
+                //for(int j = 1; i < n - j; i++)
+                for (int i = 0; i < n - j; i++)
+                {
+                    var y1 = coeffs[i, j - 1];
+                    var y2 = coeffs[i + 1, j - 1];
+                    var a = mmask & (y2 - y1);
+
+                    var ONE = xs[i];
+                    var TWO = xs[i + j];
+
+                    var x1 = xs[i].X;
+                    var x2 = xs[i + j].X;
+
+                    // Experimental
+                    x1 += xs[i].Y;
+                    x2 += xs[i + j].Y;
+                    //x1 -= xs[i].Y;
+                    //x2 -= xs[i + j].Y;
+
+                    var b = mmask & (x2 - x1);
+
+                    if (b == 0)
+                        Debugger.Break();
+
+                    var div = b == 0 ? 0 : mmask & (a / b);
+
+                    // Undo the division.
+                    var undo = mmask & (div * b);
+                    if (undo != a)
+                    {
+                        var lc = solver.LinearCongruence(div, a, (UInt128)mmask + 1);
+                        if (lc == null || lc.d == 0)
+                        {
+                            Console.WriteLine();
+                            //Debugger.Break();
+                        }
+
+                        else
+                        {
+
+                            b = (ulong)solver.GetSolution(0, lc);
+                            undo = mmask & (div * b);
+                            Debug.Assert(undo == a);
+                        }
+
+                    }
+
+                    coeffs[i, j] = div;
+                }
+            }
+
+            // 0,x0,x1,x0*x1
+
+            // We now have f (x0,x1,x2,x3) = y
+            // There are many Xs but only one y obviouslyu
+            // I think newton should
+
+            Console.WriteLine("\n\n");
+            var padding = String.Join(" ", Enumerable.Repeat<string>(" ", 32));
+            // var padding = "                                ";
+            for (int r = 0; r < coeffs.GetLength(0); r++)
+            {
+                for (int c = 0; c < coeffs.GetLength(1); c++)
+                {
+                    var coeff = coeffs[r, c];
+                    //var (a, b) = divTable[r, c];
+                    var str = coeff.ToString();
+                    //var str = $"({a}*{b})";
+                    Console.Write($"{str}" + padding.Substring(0, padding.Length - str.Length));
+                }
+
+                Console.WriteLine();
+            }
+
+
+            Debugger.Break();
+        }
+
+
+        public static void ActualWorkingNewton()
+        {
+
+            // 1 + 17*x + 33*x*x
+            //// Solution(2nd row): op2 = 51 + 116*(x-1) + 33*(x-1)*(x-2)
+            //var poly = new SparsePolynomial(1, (byte)8);
+            //poly.SetCoeff(new Monomial(0), 1);
+            //poly.SetCoeff(new Monomial(1), 17);
+            //poly.SetCoeff(new Monomial(2), 33);
+            //poly.SetCoeff(new Monomial(3), 72);
+            //poly.SetCoeff(new Monomial(2), 3);
+
 
 
             /*
@@ -79,33 +355,53 @@ namespace Mba.Simplifier.LinEq
             poly.SetCoeff(new Monomial(3), 0x8000000000000000);
             */
 
-            var poly = new SparsePolynomial(1, (byte)64);
-            poly.SetCoeff(new Monomial(0), 9193501499183852111);
-            poly.SetCoeff(new Monomial(1), 5260339532280414813);
-            poly.SetCoeff(new Monomial(2), 14929154534604275712);
-            poly.SetCoeff(new Monomial(3), 3178634119571570688);
+            //var poly = new SparsePolynomial(1, (byte)64);
+            //poly.SetCoeff(new Monomial(0), 9193501499183852111);
+            //poly.SetCoeff(new Monomial(1), 5260339532280414813);
+            //poly.SetCoeff(new Monomial(2), 14929154534604275712);
+            //poly.SetCoeff(new Monomial(3), 3178634119571570688);
 
-            /*
+            // Solution(2nd row):  103 + 55*(x-1) + 42*(x-1)*(x-2)
             var poly = new SparsePolynomial(1, (byte)8);
             poly.SetCoeff(new Monomial(0), 132);
             poly.SetCoeff(new Monomial(1), 185);
             poly.SetCoeff(new Monomial(2), 42);
-            */
+
+            poly = new SparsePolynomial(1, (byte)8);
+            poly.SetCoeff(new Monomial(0), 0);
+            poly.SetCoeff(new Monomial(1), 1);
+
 
             Console.WriteLine(poly);
 
+      
             var mmask = ModuloReducer.GetMask(poly.width);
             var solver = new LinearCongruenceSolver(mmask);
 
             var inputs = new List<ulong>() { 0, 1, 2, 3 };
-            var outputs = inputs.Select(x => PolynomialEvaluator.Eval(poly, new ulong[] { x })).ToList();
+            var outputs = inputs.Select(x => mmask & PolynomialEvaluator.Eval(poly, new ulong[] { x })).ToList();
 
 
-
+            var me = DivDiff2(solver, mmask, inputs.Select(x => (Num)x).ToArray(), outputs.Select(x => (Num)x).ToArray());
+            //Debugger.Break();
             var (coeffs, divTable) = DividedDiff(solver, mmask, inputs.Select(x => (Num)x).ToArray(), outputs.Select(x => (Num)x).ToArray());
-            //var data = new List<Point>() { new(1, 1), new(2, 5), new(3, 2), new(3.2, 7), new(3.9, 4) };
-            //var (coeffs, divTable) = DividedDiff(data.Select(x => x.X).ToArray(), data.Select(y => y.Y).ToArray());
 
+            int rows = me.GetLength(0);
+            int cols = me.GetLength(1);
+            for(int i = 0; i < rows; i++)
+            {
+                for(int j = 0;  j < cols; j++)
+                {
+                    var a = me[i, j];
+                    var b = coeffs[i, j];
+                    if (a != b)
+                        throw new InvalidOperationException();
+                }
+            }
+            //var data = new List<Point>() { new(1, 1), new(2, 5), new(3, 2), new(3.2, 7), new(3.9, 4) };
+            //(coeffs, divTable) = DividedDiff(solver, mmask, data.Select(x => x.X).ToArray(), data.Select(y => y.Y).ToArray());
+
+            Debugger.Break();
             Console.WriteLine("\n\n");
             var padding = String.Join(" ", Enumerable.Repeat<string>(" ", 32));
            // var padding = "                                ";
@@ -126,6 +422,35 @@ namespace Mba.Simplifier.LinEq
 
             Debugger.Break();
 
+        }
+
+        public static Num[,] DivDiff2(LinearCongruenceSolver solver, ulong mmask, Num[] x, Num[] y)
+        {
+            var n = x.Length;            
+
+            // Fill the first column with y
+            var coeff = new Num[n, n];
+            for (int i = 0; i < n; i++)
+                coeff[i, 0] = y[i];
+
+            //for(int i = 0;  i < n; i++)
+            for (int j = 1; j < n; j++)
+            {
+                //for(int j = 1; i < n - j; i++)
+                for (int i = 0; i < n - j; i++)
+                {
+                    var y1 = coeff[i, j - 1];
+                    var y2 = coeff[i + 1, j - 1];
+                    var a = mmask & (y2 - y1);
+
+                    var x1 = x[i];
+                    var x2 = x[i + j];
+                    var b = mmask & (x2 - x1);
+                    coeff[i, j] = mmask & (a / b);
+                }
+            }
+
+            return coeff;
         }
 
         private static ulong? GetModularInverse(LinearCongruenceSolver congruenceSolver, ulong moduloMask, ulong coeff)
