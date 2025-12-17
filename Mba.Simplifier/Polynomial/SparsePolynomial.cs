@@ -125,7 +125,10 @@ namespace Mba.Simplifier.Polynomial
                 var coeff = GetCoeff(key);
                 if (coeff == 0)
                     continue;
-                terms.Add($"{coeff}*{key.ToString(canonicalBasis)}");
+                if (key.GetTotalDeg() == 0)
+                    terms.Add(coeff.ToString());
+                else
+                    terms.Add($"{coeff}*{key.ToString(canonicalBasis)}");
             }
 
             var txt = String.Join(" + ", terms.ToArray());
@@ -149,6 +152,70 @@ namespace Mba.Simplifier.Polynomial
                 var key = new Monomial((byte)i);
                 poly[key] = coeffs[i];
             }
+            return poly;
+        }
+
+        public static SparsePolynomial ParsePoly(string astStr, byte width)
+        {
+            astStr = astStr.Replace("(", "");
+            astStr = astStr.Replace(")", "");
+
+            var strTerms = astStr.Split("+", StringSplitOptions.RemoveEmptyEntries);
+
+            strTerms = strTerms.Select(x => x.Replace(" ", "")).ToArray();
+
+            var terms = new List<(Int128 coeff, IReadOnlyList<(string, int)> varDegs)>();
+            foreach (var term in strTerms)
+            {
+                var muls = term.Split("*", StringSplitOptions.RemoveEmptyEntries);
+
+                Int128 coeff = 1;
+                Dictionary<string, int> varCounts = new();
+                foreach (var m in muls)
+                {
+                    if (Int128.TryParse(m, out var val))
+                    {
+                        coeff *= val;
+                    }
+
+                    else
+                    {
+                        varCounts.TryAdd(m, 0);
+                        varCounts[m] += 1;
+                    }
+                }
+
+                var bar = (coeff, varCounts.OrderBy(x => x.Key).Select(x => (x.Key, x.Value)).ToList().AsReadOnly());
+                terms.Add(bar);
+            }
+
+
+            var poly = new SparsePolynomial(2, width);
+            var allVars = terms.SelectMany(x => x.varDegs.Select(x => x.Item1)).ToHashSet().OrderBy(x => x).ToList();
+            foreach (var term in terms)
+            {
+                var coeff = (ulong)(UInt128)term.coeff;
+                var varDegs = term.varDegs.Select(x => (allVars.IndexOf(x.Item1), x.Item2));
+
+                List<byte> degs = new();
+                foreach (var (varIdx, degree) in varDegs.OrderBy(x => x.Item1))
+                {
+                    while (degs.Count != varIdx)
+                        degs.Add(0);
+
+                    degs.Add((byte)(uint)degree);
+                }
+
+                while (degs.Count != allVars.Count)
+                    degs.Add(0);
+
+                var monom = new Monomial(degs.ToArray());
+                ulong existing = 0;
+                poly.TryGetCoeff(monom, out existing);
+                existing += coeff;
+                poly.SetCoeff(monom, existing);
+            }
+
             return poly;
         }
     }

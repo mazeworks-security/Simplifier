@@ -58,25 +58,32 @@ namespace Mba.Simplifier.LinEq
 
         }
 
+        public static uint MAXDEG = 3;
+
         // https://www.researchgate.net/publication/261421283_On_the_Newton_multivariate_polynomial_interpolation_with_applications
         public static void MvNewtonNew()
         {
             var poly = new SparsePolynomial(2, (byte)8);
-            /*
+
+            
             poly.SetCoeff(new Monomial(0, 0), unchecked(0ul - 2));
             poly.SetCoeff(new Monomial(1, 0), unchecked(0ul - 2));
             poly.SetCoeff(new Monomial(1, 1), unchecked(0ul - 3));
             poly.SetCoeff(new Monomial(2, 1), 15);
-            */
+            
 
-            poly.SetCoeff(new Monomial(1, 1), 17);
+            //poly.SetCoeff(new Monomial(2, 0), 1);
+
+
+
+            //poly.SetCoeff(new Monomial(1, 1), 17);
 
             var mmask = ModuloReducer.GetMask(poly.width);
             var solver = new LinearCongruenceSolver(mmask);
             Console.WriteLine(poly);
 
             // (1) Construct zero order table of initial values
-            var max = 4;
+            var max = MAXDEG;
             var zeroOrderTable = new Num[max, max];
             for(int i = 0; i < max; i++)
             {
@@ -116,7 +123,7 @@ namespace Mba.Simplifier.LinEq
 
             //P(0, 1, 1, table, zeroOrderTable);
 
-            var n = 4;
+            var n = MAXDEG;
             for(int tableI = 0; tableI < n; tableI++)
             {
                 Dictionary<(int, int, int), ulong> table = new();
@@ -137,15 +144,17 @@ namespace Mba.Simplifier.LinEq
                     }
                 }
 
-
+                bool log = true;
+                if(log)
                     Console.WriteLine($"\n\n\nDeg {tableI} table:");
-                    var coeffs = new ulong[n, n];
-                    foreach (var ((k, i, j), coeff) in table)
-                    {
-                        coeffs[i, j] = coeff;
-                    }
+                var coeffs = new ulong[n, n];
+                foreach (var ((k, i, j), coeff) in table)
+                {
+                    coeffs[i, j] = coeff;
+                }
 
-
+                if (log)
+                {
                     var padding = String.Join(" ", Enumerable.Repeat<string>(" ", 32));
                     // var padding = "                                ";
                     for (int r = 0; r < coeffs.GetLength(0); r++)
@@ -161,11 +170,15 @@ namespace Mba.Simplifier.LinEq
 
                         Console.WriteLine("\n\n");
                     }
+                }
 
 
                 if (tableI == n - 1)
                 {
-                    DivDiffToPoly(tableI, coeffs);
+                    var before = DivDiffToPoly(tableI, coeffs);
+
+                    Console.WriteLine($"Interpolation found polynomial:\n    {before}\n\n for input:\n    {poly}");
+
                     Debugger.Break();
                 }
 
@@ -180,8 +193,9 @@ namespace Mba.Simplifier.LinEq
             Debugger.Break();
         }
 
-        private static void DivDiffToPoly(int degree, Num[,] coeffs)
+        private static string DivDiffToPoly(int degree, Num[,] coeffs)
         {
+            var sb = new StringBuilder();
             // monomial order: 0, x, y, x*y
             //
 
@@ -194,9 +208,11 @@ namespace Mba.Simplifier.LinEq
                         continue;
 
                     var s = GetMonomialStr(new Monomial((byte)i, (byte)j));
-                    Console.Write($"{coeff}*{s} + ");
+                    sb.Append($"{coeff}*{s} + ");
                 }
             }
+
+            return sb.ToString();
         }
 
         private static string GetMonomialStr(Monomial m)
@@ -261,7 +277,7 @@ namespace Mba.Simplifier.LinEq
 
      
 
-            var n = 4;
+            var n = MAXDEG;
             if (i > k - 1 && j > k-1 && i+j <= n)
             {
                 //if (k - 1 == 0 || k == 0)
