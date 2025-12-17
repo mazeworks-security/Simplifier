@@ -58,14 +58,16 @@ namespace Mba.Simplifier.LinEq
 
         }
 
-        public static uint MAXDEG = 6;
+        public static uint MAXDEG = 7;
 
         // https://www.researchgate.net/publication/261421283_On_the_Newton_multivariate_polynomial_interpolation_with_applications
         public static void MvNewtonNew()
         {
             // 4 WORKS, 5 DOES NOT
             var poly = new SparsePolynomial(2, (byte)8);
-            poly.SetCoeff(new Monomial(3, 0), 127); // works with recent change
+            // poly.SetCoeff(new Monomial(3, 0), 127); // works with recent change
+            //poly.SetCoeff(new Monomial(5, 0), 1); // works with recent change
+            poly.SetCoeff(new Monomial(6, 0), 127);
 
 
             /*
@@ -251,6 +253,8 @@ namespace Mba.Simplifier.LinEq
             var s = valid ? "GOOD" : "BAD";
             Console.WriteLine($"{s}: {a} / {b}");
 
+            if (!valid && (b % 2) == 0)
+                Debugger.Break();
 
 
             /*
@@ -281,11 +285,29 @@ namespace Mba.Simplifier.LinEq
            if (undo != a)
             //if (false)
             {
-                var inverse = GetModularInverse(solver, mmask, b).Value;
+                // If the divisor has a modular inverse, rewrite as division.
+                var inverse = GetModularInverse(solver, mmask, b);
+                if (inverse != null)
+                {
+                    div = mmask & (inverse.Value * a);
+                    return (div, false);
+                }
 
-                div = mmask & (inverse * a);
+                // If the divisor is even, can we rewrite this as a linear congruence?
+                // e.g. if coeff == (58/6),
+                // reformulate it as 6*coeff == 58
 
-                return (div, true);
+
+                var lc = solver.LinearCongruence(a, b, (UInt128)mmask + 1);
+                if(lc == null || lc.d == 0)
+                {
+                    Debugger.Break();
+                    return (div, true);
+                }
+
+                var solution = (ulong)solver.GetSolution(0, lc);
+                return (solution, false);
+                /*
                 // Debugger.Break();
                 // var lc = solver.LinearCongruence(a, div, (UInt128)mmask + 1);
                 var lc = solver.LinearCongruence(div, a, (UInt128)mmask + 1); // not correct. ensure that that after doing (a/b), there is some coeff you can multiply (a/b) by to undo the division.
@@ -311,6 +333,7 @@ namespace Mba.Simplifier.LinEq
                     // We probably should not do this
                     //return b;
                 }
+                */
             }
 
         done:
@@ -321,14 +344,19 @@ namespace Mba.Simplifier.LinEq
 
         private static (ulong, bool) P(ulong mmask, LinearCongruenceSolver solver, int k, int i, int j, Dictionary<(int, int, int), (ulong, bool)> table, Num[,] zeroOrderTable)
         {
+
             var reduce = (ulong x) => mmask & x;
             var div = (ulong a, ulong b) => Mdiv(mmask, solver, a, b);
 
+
+            bool dbg = false;
             var tup = (k, i, j);
+            if (tup == (6, 6, 0))
+                Debugger.Break();
             if (table.ContainsKey(tup))
             {
                 var r = table[tup];
-                if (r.Item2)
+                if (dbg && r.Item2)
                     Debugger.Break();
                 return r;
             }
@@ -352,6 +380,8 @@ namespace Mba.Simplifier.LinEq
                 var xi = (ulong)i;
                 var xik = (ulong)xi - (ulong)k;
 
+                // coeff = (y1-y0)/(x0-x1)
+                // 6*coeff
                 var (diff, isBad) = div((reduce(p0 - p1)), (reduce(xi - xik)));
                 table[tup] = (diff, isBad | p0Bad | p1Bad);
                 goto done;
@@ -404,7 +434,7 @@ namespace Mba.Simplifier.LinEq
 
         done:
             var rr = table[tup];
-            if (rr.Item2)
+            if (dbg && rr.Item2)
                 Debugger.Break();
             return rr;
         }
