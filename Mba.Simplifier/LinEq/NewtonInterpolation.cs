@@ -65,7 +65,7 @@ namespace Mba.Simplifier.LinEq
         {
             // 4 WORKS, 5 DOES NOT
             var poly = new SparsePolynomial(2, (byte)8);
-            poly.SetCoeff(new Monomial(5, 0), 1);
+            poly.SetCoeff(new Monomial(3, 0), 127); // works with recent change
 
 
             /*
@@ -128,9 +128,9 @@ namespace Mba.Simplifier.LinEq
             //P(0, 1, 1, table, zeroOrderTable);
 
             var n = MAXDEG;
-            for(int tableI = 0; tableI < n; tableI++)
+            for(int tableI = (int)n - 1; tableI < n; tableI++)
             {
-                Dictionary<(int, int, int), ulong> table = new();
+                Dictionary<(int, int, int), (ulong, bool)> table = new();
 
                 // Compute the nth order divided difference table
                 for (int i = 0; i < n; i++)
@@ -160,7 +160,7 @@ namespace Mba.Simplifier.LinEq
                 var coeffs = new ulong[n, n];
                 foreach (var ((k, i, j), coeff) in table)
                 {
-                    coeffs[i, j] = coeff;
+                    coeffs[i, j] = coeff.Item1;
                 }
 
                 if (log)
@@ -281,6 +281,10 @@ namespace Mba.Simplifier.LinEq
            if (undo != a)
             //if (false)
             {
+                var inverse = GetModularInverse(solver, mmask, b).Value;
+
+                div = mmask & (inverse * a);
+
                 return (div, true);
                 // Debugger.Break();
                 // var lc = solver.LinearCongruence(a, div, (UInt128)mmask + 1);
@@ -313,14 +317,21 @@ namespace Mba.Simplifier.LinEq
             return (div, false);
         }
 
-        private static (ulong, bool) P(ulong mmask, LinearCongruenceSolver solver, int k, int i, int j, Dictionary<(int, int, int), ulong> table, Num[,] zeroOrderTable)
+
+
+        private static (ulong, bool) P(ulong mmask, LinearCongruenceSolver solver, int k, int i, int j, Dictionary<(int, int, int), (ulong, bool)> table, Num[,] zeroOrderTable)
         {
             var reduce = (ulong x) => mmask & x;
             var div = (ulong a, ulong b) => Mdiv(mmask, solver, a, b);
 
             var tup = (k, i, j);
             if (table.ContainsKey(tup))
-                return table[tup];
+            {
+                var r = table[tup];
+                if (r.Item2)
+                    Debugger.Break();
+                return r;
+            }
 
             //if (i == 1 && j == 1)
             //    Debugger.Break();
@@ -329,34 +340,34 @@ namespace Mba.Simplifier.LinEq
            if(k == 0)
             {
                 var v = zeroOrderTable[i, j];
-                table[tup] = v;
-                return table[tup];
+                table[tup] = (v, false);
+                goto done;
             }
 
             if (j <= k - 1 && i > k-1)
             {
-                var p0 = P(mmask, solver, k - 1, i, j, table, zeroOrderTable);
-                var p1 = P(mmask, solver, k - 1, i - 1, j, table, zeroOrderTable);
+                var (p0, p0Bad) = P(mmask, solver, k - 1, i, j, table, zeroOrderTable);
+                var (p1, p1Bad) = P(mmask, solver, k - 1, i - 1, j, table, zeroOrderTable);
 
                 var xi = (ulong)i;
                 var xik = (ulong)xi - (ulong)k;
 
-                var diff = div((reduce(p0 - p1)), (reduce(xi - xik)));
-                table[tup] = diff;
-                return diff;
+                var (diff, isBad) = div((reduce(p0 - p1)), (reduce(xi - xik)));
+                table[tup] = (diff, isBad | p0Bad | p1Bad);
+                goto done;
             }
 
             if (i <= k - 1 && j > k - 1)
             {
-                var p0 = P(mmask, solver, k - 1, i, j, table, zeroOrderTable);
-                var p1 = P(mmask, solver, k - 1, i, j - 1, table, zeroOrderTable);
+                var (p0, p0Bad) = P(mmask, solver, k - 1, i, j, table, zeroOrderTable);
+                var (p1, p1Bad) = P(mmask, solver, k - 1, i, j - 1, table, zeroOrderTable);
 
                 var yi = (ulong)j;
                 var yik = (ulong)yi - (ulong)k;
 
-                var diff = div(reduce(p0 - p1), reduce(yi - yik));
-                table[tup] = diff;
-                return diff;
+                var (diff, isBad) = div(reduce(p0 - p1), reduce(yi - yik));
+                table[tup] = (diff, isBad | p0Bad | p1Bad);
+                goto done;
             }
 
 
@@ -367,10 +378,10 @@ namespace Mba.Simplifier.LinEq
             {
                 //if (k - 1 == 0 || k == 0)
                 //    Debugger.Break();
-                var p0 = P(mmask, solver, k - 1, i, j, table, zeroOrderTable);
-                var p1 = P(mmask, solver, k - 1, i - 1, j - 1, table, zeroOrderTable);
-                var p2 = P(mmask, solver, k - 1, i, j - 1, table, zeroOrderTable);
-                var p3 = P(mmask, solver, k - 1, i - 1, j, table, zeroOrderTable);
+                var (p0, p0Bad) = P(mmask, solver, k - 1, i, j, table, zeroOrderTable);
+                var (p1, p1Bad) = P(mmask, solver, k - 1, i - 1, j - 1, table, zeroOrderTable);
+                var (p2, p2Bad) = P(mmask, solver, k - 1, i, j - 1, table, zeroOrderTable);
+                var (p3, p3Bad) = P(mmask, solver, k - 1, i - 1, j, table, zeroOrderTable);
 
 
                 var xi = (ulong)i;
@@ -379,16 +390,23 @@ namespace Mba.Simplifier.LinEq
                 var yjk = (ulong)yj - (ulong)k;
 
                 // Paper seems to add p0 instead of subtracting.. typo?
-                var diff = div(reduce(p0 + p1 - p2 - p3), reduce(((xi - xik))*(yj - yjk)));
-                table[tup] = diff;
-                return diff;
+                var (dif, isBad) = div(reduce(p0 + p1 - p2 - p3), reduce(((xi - xik))*(yj - yjk)));
+                table[tup] = (dif, isBad | p0Bad | p1Bad | p2Bad | p3Bad);
+                goto done;
             }
 
 
 
 
             Debugger.Break();
-            return 0;
+            return (0, false);
+
+
+        done:
+            var rr = table[tup];
+            if (rr.Item2)
+                Debugger.Break();
+            return rr;
         }
 
         public static void MvNewtonOld()
