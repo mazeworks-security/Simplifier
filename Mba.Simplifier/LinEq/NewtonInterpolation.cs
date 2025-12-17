@@ -58,7 +58,7 @@ namespace Mba.Simplifier.LinEq
 
         }
 
-        public static uint MAXDEG = 7;
+        public static uint MAXDEG = 30;
 
         // https://www.researchgate.net/publication/261421283_On_the_Newton_multivariate_polynomial_interpolation_with_applications
         public static void MvNewtonNew()
@@ -67,7 +67,8 @@ namespace Mba.Simplifier.LinEq
             var poly = new SparsePolynomial(2, (byte)8);
             // poly.SetCoeff(new Monomial(3, 0), 127); // works with recent change
             //poly.SetCoeff(new Monomial(5, 0), 1); // works with recent change
-            poly.SetCoeff(new Monomial(6, 0), 127);
+            //poly.SetCoeff(new Monomial(6, 0), 127);
+            poly.SetCoeff(new Monomial(29, 0), 1);
 
 
             /*
@@ -253,8 +254,8 @@ namespace Mba.Simplifier.LinEq
             var s = valid ? "GOOD" : "BAD";
             Console.WriteLine($"{s}: {a} / {b}");
 
-            if (!valid && (b % 2) == 0)
-                Debugger.Break();
+           // if (!valid && (b % 2) == 0)
+           //     Debugger.Break();
 
 
             /*
@@ -298,11 +299,30 @@ namespace Mba.Simplifier.LinEq
                 // reformulate it as 6*coeff == 58
 
 
-                var lc = solver.LinearCongruence(a, b, (UInt128)mmask + 1);
-                if(lc == null || lc.d == 0)
+                //var lc = solver.LinearCongruence(a, b, (UInt128)mmask + 1); // originally worked
+                var lc = solver.LinearCongruence(b, a, (UInt128)mmask + 1);
+                if (lc == null || lc.d == 0)
                 {
-                    Debugger.Break();
-                    return (div, true);
+                    //var other = solver.LinearCongruence(b, a, (UInt128)mmask + 1);
+
+                    // Still if we have e.g. c = 81/12, there may be no solution
+                    // Shifting terms around yields c*12 = 81, which is unsatisfiable.
+                    // But because 81 is odd, we can arbitrarily change the coeff...
+
+
+                    // Solve for c1*a == b
+                    var target = b;
+                    lc = solver.LinearCongruence(a, target, (UInt128)mmask + 1);
+
+                    // All of this is extremely dubious at best..
+                    if (lc == null || lc.d == 0)
+                    {
+                        Debugger.Break();
+                        throw new InvalidOperationException();
+                    }
+
+                    var sol = (ulong)solver.GetSolution(0, lc);
+                    return (sol, false);
                 }
 
                 var solution = (ulong)solver.GetSolution(0, lc);
@@ -351,8 +371,8 @@ namespace Mba.Simplifier.LinEq
 
             bool dbg = false;
             var tup = (k, i, j);
-            if (tup == (6, 6, 0))
-                Debugger.Break();
+            //if (tup == (6, 6, 0))
+            //    Debugger.Break();
             if (table.ContainsKey(tup))
             {
                 var r = table[tup];
