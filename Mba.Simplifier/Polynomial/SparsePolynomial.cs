@@ -155,7 +155,7 @@ namespace Mba.Simplifier.Polynomial
             return poly;
         }
 
-        public static SparsePolynomial ParsePoly(string astStr, byte width)
+        public static SparsePolynomial ParsePoly(string astStr, int numVars, byte width)
         {
             astStr = astStr.Replace("(", "");
             astStr = astStr.Replace(")", "");
@@ -190,7 +190,7 @@ namespace Mba.Simplifier.Polynomial
             }
 
 
-            var poly = new SparsePolynomial(2, width);
+            var poly = new SparsePolynomial(numVars, width);
             var allVars = terms.SelectMany(x => x.varDegs.Select(x => x.Item1)).ToHashSet().OrderBy(x => x).ToList();
             foreach (var term in terms)
             {

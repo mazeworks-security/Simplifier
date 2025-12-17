@@ -58,18 +58,30 @@ namespace Mba.Simplifier.LinEq
 
         }
 
-        public static uint MAXDEG = 30;
+        public static uint MAXDEG = 65;
 
         // https://www.researchgate.net/publication/261421283_On_the_Newton_multivariate_polynomial_interpolation_with_applications
         public static void MvNewtonNew()
         {
             // 4 WORKS, 5 DOES NOT
-            var poly = new SparsePolynomial(2, (byte)8);
+            var poly = new SparsePolynomial(2, (byte)64);
             // poly.SetCoeff(new Monomial(3, 0), 127); // works with recent change
             //poly.SetCoeff(new Monomial(5, 0), 1); // works with recent change
             //poly.SetCoeff(new Monomial(6, 0), 127);
-            poly.SetCoeff(new Monomial(29, 0), 1);
+            //poly.SetCoeff(new Monomial(16, 0), 1231233);
+            //poly.SetCoeff(new Monomial(14, 0), 65756);
+            //poly.SetCoeff(new Monomial(13, 0), 2312132);
+            //poly.SetCoeff(new Monomial(12, 0), 776546756767);
+            poly.SetCoeff(new Monomial(32, 0), 1);
 
+
+            //poly = SparsePolynomial.ParsePoly("12018333260144101810*y + 12670490878911611211*x + 80108105768519824*y*y + 13695898159358288600*x*y + 13363685499442732160*y*y*y + 12748260730795629248*x*y*y + 12465110187454997504*y*y*y*y + 10090656974170945024*x*y*y*y + 1378452286374879232*y*y*y*y*y + 10542703918158753792*x*y*y*y*y + 2889395752399339520*y*y*y*y*y*y + 9149001014639951872*x*y*y*y*y*y + 14816716637566664704*y*y*y*y*y*y*y + 7875404780207341568*x*y*y*y*y*y*y + 16411499749129060352*y*y*y*y*y*y*y*y + 18405398350772830208*x*y*y*y*y*y*y*y + 5006628381907746816*y*y*y*y*y*y*y*y*y + 7617777668603248640*x*y*y*y*y*y*y*y*y + 5811724210040471552*y*y*y*y*y*y*y*y*y*y + 8450204560567304192*x*y*y*y*y*y*y*y*y*y + 15940534159315828736*y*y*y*y*y*y*y*y*y*y*y + 12266303154647203840*x*y*y*y*y*y*y*y*y*y*y + 6796250300937142272*y*y*y*y*y*y*y*y*y*y*y*y + 9785671036442771456*x*y*y*y*y*y*y*y*y*y*y*y + 2197865607246905344*y*y*y*y*y*y*y*y*y*y*y*y*y + 17658263051113070592*x*y*y*y*y*y*y*y*y*y*y*y*y + 11578412693853306880*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 14171013283393306624*x*y*y*y*y*y*y*y*y*y*y*y*y*y + 12372452503642439680*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 7979441755793653760*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 9994120891832729600*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 2960940833135656960*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 1039487088992452608*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 64);
+
+            //poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x", 1, 8);
+
+            // poly = SparsePolynomial.ParsePoly(" 12018333260144101810*y + 12670490878911611211*x + 80108105768519824*y*y + 13695898159358288600*x*y + 13363685499442732160*y*y*y + 12748260730795629248*x*y*y + 12465110187454997504*y*y*y*y + 10090656974170945024*x*y*y*y + 1378452286374879232*y*y*y*y*y + 10542703918158753792*x*y*y*y*y + 2889395752399339520*y*y*y*y*y*y + 9149001014639951872*x*y*y*y*y*y + 14816716637566664704*y*y*y*y*y*y*y + 7875404780207341568*x*y*y*y*y*y*y + 16411499749129060352*y*y*y*y*y*y*y*y + 18405398350772830208*x*y*y*y*y*y*y*y + 5006628381907746816*y*y*y*y*y*y*y*y*y + 7617777668603248640*x*y*y*y*y*y*y*y*y + 5811724210040471552*y*y*y*y*y*y*y*y*y*y + 8450204560567304192*x*y*y*y*y*y*y*y*y*y + 15940534159315828736*y*y*y*y*y*y*y*y*y*y*y + 12266303154647203840*x*y*y*y*y*y*y*y*y*y*y + 6796250300937142272*y*y*y*y*y*y*y*y*y*y*y*y + 9785671036442771456*x*y*y*y*y*y*y*y*y*y*y*y + 2197865607246905344*y*y*y*y*y*y*y*y*y*y*y*y*y + 17658263051113070592*x*y*y*y*y*y*y*y*y*y*y*y*y + 11578412693853306880*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 14171013283393306624*x*y*y*y*y*y*y*y*y*y*y*y*y*y + 12372452503642439680*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 7979441755793653760*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 9994120891832729600*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 2960940833135656960*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 1039487088992452608*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
+
+            //poly = SparsePolynomial.ParsePoly("4243234*x + 42313443*y + 3432234*x*x + 23432432324*y*y + 234324*x*y + 23423443*x*y + 2453234342*x*x*y*y", 2, 64);
 
             /*
             poly.SetCoeff(new Monomial(0, 0), unchecked(0ul - 2));
@@ -77,6 +89,8 @@ namespace Mba.Simplifier.LinEq
             poly.SetCoeff(new Monomial(1, 1), unchecked(0ul - 3));
             poly.SetCoeff(new Monomial(2, 1), 15);
             */
+
+            //poly.SetCoeff(new Monomial(30,30), 15);
 
             // 4 works
             // 5 does not work
@@ -252,7 +266,7 @@ namespace Mba.Simplifier.LinEq
 
             bool valid = undo == a;
             var s = valid ? "GOOD" : "BAD";
-            Console.WriteLine($"{s}: {a} / {b}");
+            //Console.WriteLine($"{s}: {a} / {b}");
 
            // if (!valid && (b % 2) == 0)
            //     Debugger.Break();
@@ -297,12 +311,12 @@ namespace Mba.Simplifier.LinEq
                 // If the divisor is even, can we rewrite this as a linear congruence?
                 // e.g. if coeff == (58/6),
                 // reformulate it as 6*coeff == 58
-
-
                 //var lc = solver.LinearCongruence(a, b, (UInt128)mmask + 1); // originally worked
                 var lc = solver.LinearCongruence(b, a, (UInt128)mmask + 1);
                 if (lc == null || lc.d == 0)
                 {
+
+
                     //var other = solver.LinearCongruence(b, a, (UInt128)mmask + 1);
 
                     // Still if we have e.g. c = 81/12, there may be no solution
@@ -312,7 +326,7 @@ namespace Mba.Simplifier.LinEq
 
                     // Solve for c1*a == b
                     var target = b;
-                    lc = solver.LinearCongruence(a, target, (UInt128)mmask + 1);
+                    lc = solver.LinearCongruence(a, b, (UInt128)mmask + 1);
 
                     // All of this is extremely dubious at best..
                     if (lc == null || lc.d == 0)
@@ -322,6 +336,18 @@ namespace Mba.Simplifier.LinEq
                     }
 
                     var sol = (ulong)solver.GetSolution(0, lc);
+
+
+                    // now we have c1*x == 1
+                    var lhs = mmask & (sol * b);
+                    var rhs = mmask & (sol * a);
+
+                    // Absolutely completely incorrect for some cases
+                    inverse = GetModularInverse(solver, mmask, rhs);
+                    div = mmask & (inverse.Value * lhs);
+                    return (div, false);
+
+
                     return (sol, false);
                 }
 
