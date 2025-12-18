@@ -136,7 +136,7 @@ namespace Mba.Simplifier.Polynomial
                     continue;
                 }
 
-                bool unroll = true;
+                bool unroll = false;
                 string pow = null;
                 if (canonicalBasis)
                     pow = GetCanonicalBasisStr(varName, degree, unroll);

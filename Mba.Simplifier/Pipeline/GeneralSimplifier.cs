@@ -1648,6 +1648,8 @@ namespace Mba.Simplifier.Pipeline
         // Try to reduce the polynomial parts of an expression using the polynomial reduction algorithm.
         private AstIdx? ReducePolynomials(IReadOnlyList<AstIdx> terms, IReadOnlyDictionary<AstIdx, AstIdx> substMapping, IReadOnlyDictionary<AstIdx, AstIdx> inverseSubstMapping)
         {
+            //if (terms.Count >= 64)
+            //    Debugger.Break();
             // Try to decompose into high degree polynomials parts.
             List<PolynomialParts> polyTerms = new();
             List<AstIdx> other = new();
@@ -1656,6 +1658,12 @@ namespace Mba.Simplifier.Pipeline
                 // Typically this is going to be a multiplication(coefficient over substituted variable), or whole substituted variable.
                 // TODO: Handle negation.
                 var opcode = ctx.GetOpcode(term);
+                if(opcode == AstOp.Constant)
+                {
+                    polyTerms.Add(new PolynomialParts(ctx.GetWidth(term), ctx.GetConstantValue(term), new(), new()));
+                    continue;
+                }
+
                 if(opcode != AstOp.Mul && opcode != AstOp.Symbol)
                     goto skip;
 
@@ -1667,14 +1675,22 @@ namespace Mba.Simplifier.Pipeline
                     if(!ctx.IsConstant(coeff))
                         goto skip;
 
-                    // Look for a variable on the rhs of the multiplication.
+                    // Look for a substituted variable on the rhs of the multiplication.
                     var rhs = ctx.GetOp1(term);
-                    if(!IsSubstitutedPolynomialSymbol(rhs, inverseSubstMapping))
-                        goto skip;
 
-                    // We found a polynomial part, add it to the list.
-                    var invSubst = inverseSubstMapping[rhs];
-                    polyTerms.Add(GetPolynomialParts(ctx, ctx.Mul(coeff, invSubst)));
+                    if (IsSubstitutedPolynomialSymbol(rhs, inverseSubstMapping))
+                    {
+
+                        // We found a polynomial part, add it to the list.
+                        var invSubst = inverseSubstMapping[rhs];
+                        polyTerms.Add(GetPolynomialParts(ctx, ctx.Mul(coeff, invSubst)));
+                        continue;
+                    }
+
+                    // Otherwise its a symbol
+                    if (!ctx.IsSymbol(rhs))
+                        goto skip;
+                    polyTerms.Add(GetPolynomialParts(ctx, term));
                     continue;
                 }
 
@@ -1765,6 +1781,9 @@ namespace Mba.Simplifier.Pipeline
                 var monom = new Monomial(degrees);
                 sparsePoly.Sum(monom, coeff);
             }
+
+            if (terms.Count >= 63)
+                Debugger.Break();
 
             // Reduce.
             var simplified = PolynomialReducer.Reduce(sparsePoly);

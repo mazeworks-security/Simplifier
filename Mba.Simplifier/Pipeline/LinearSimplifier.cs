@@ -1611,6 +1611,8 @@ namespace Mba.Simplifier.Pipeline
                     continue;
 
                 var lc = solver.LinearCongruence(bitMask, constant, modulus);
+                if (lc == null)
+                    continue;
                 var limit = lc.d;
                 if (limit > 255)
                     limit = 255;
