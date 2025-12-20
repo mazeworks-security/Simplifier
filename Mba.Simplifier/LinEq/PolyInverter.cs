@@ -83,7 +83,7 @@ namespace Mba.Simplifier.LinEq
 
         // If we are looking to interpolate a polynomial ("99*x + 42*y + 104*x*y"), or to invert one, we should already know the IO pairs we are looking for.
         // Here we just setup the system of equations and solve it
-        public static string Interpolate(ulong moduloMask, IReadOnlyList<(ulong[] inputs, ulong output)> ioPairs, IReadOnlyList<Monomial> skeleton)
+        public static string Interpolate(ulong moduloMask, uint w, IReadOnlyList<(ulong[] inputs, ulong output)> ioPairs, IReadOnlyList<Monomial> skeleton)
         {
             var equations = new List<LinearEquation>();
             foreach (var (input, output) in ioPairs)
@@ -106,7 +106,7 @@ namespace Mba.Simplifier.LinEq
                 equations.Add(equation);
             }
 
-            var system = new LinearSystem(64, equations[0].NumVars, equations);
+            var system = new LinearSystem(w, equations[0].NumVars, equations);
 
             var rv = LinearEquationSolver.Solve(system);
 
@@ -123,6 +123,28 @@ namespace Mba.Simplifier.LinEq
 
             Debugger.Break();
 
+        }
+
+        public static void Hello()
+        {
+            // InterpolateMvExample();
+            var text = "64 + 224*x + 64*x*x + 212*x*x*x*x*x + 205*x*x*x*x*x*x*x";
+
+            /*
+            text = "33*x*x*x*x*x*x";
+
+            //text = "x**7";
+            var poly = SparsePolynomial.ParsePoly(text, 1, 64);
+            */
+
+
+            var poly = new SparsePolynomial(1, 64);
+            poly.SetCoeff(new Monomial(64), 1);
+            poly.SetCoeff(new Monomial(31), 3123);
+
+            InterpolateExample(poly);
+
+            Debugger.Break();
         }
 
         public static void InterpolateMvExample()
@@ -145,7 +167,32 @@ namespace Mba.Simplifier.LinEq
 
 
 
-            var inv = Interpolate(p.moduloMask, ioPairs, skeleton);
+            var inv = Interpolate(p.moduloMask, 8, ioPairs, skeleton);
+            Debugger.Break();
+
+        }
+
+        public static void InterpolateExample(SparsePolynomial p)
+        {
+            // 99*x + 42*y + 104*x*y
+            //var p = Get8BitMultivariate();
+
+            var skeleton = Enumerate(new byte[] { 64 });
+
+            var ioPairs = new List<(ulong[] inputs, ulong output)>();
+            foreach (var m in skeleton)
+            {
+                var inputs = new ulong[m.GetNumVars()];
+                for (int i = 0; i < m.GetNumVars(); i++)
+                    inputs[i] = m.GetVarDeg(i);
+
+                var output = p.moduloMask & PolynomialEvaluator.Eval(p, inputs);
+                ioPairs.Add((inputs, output));
+            }
+
+
+
+            var inv = Interpolate(p.moduloMask, p.width, ioPairs, skeleton);
             Debugger.Break();
 
         }

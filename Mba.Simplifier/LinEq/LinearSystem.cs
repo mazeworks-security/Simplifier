@@ -38,8 +38,35 @@ namespace Mba.Simplifier.LinEq
             return sb.ToString();
         }
 
+        public string ToPyString()
+        {
+
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"system = [");
+            foreach(var linEq in Equations)
+            {
+               
+                var inputs = String.Join($", ", linEq.coeffs);
+                sb.AppendLine($"    ([{inputs}], {linEq.result}),");
+            }
+
+            sb.AppendLine("]");
+            return sb.ToString();
+        }
+
         private static int Compare(LinearEquation a, LinearEquation b)
         {
+            var r = CompareInternal(a, b);
+
+            return r;
+        }
+
+        private static int CompareInternal(LinearEquation a, LinearEquation b)
+        {
+            if (a.ToString() == b.ToString())
+                return 0;
+
             var firstA = a.FirstNonZeroIdx();
             var firstB = b.FirstNonZeroIdx();
             if (firstA == firstB)
@@ -47,10 +74,16 @@ namespace Mba.Simplifier.LinEq
                 if (a.ToString() == b.ToString())
                     return 0;
 
-                return a.coeffs[firstA].CompareTo(b.coeffs[firstB]);
+                return 0;
+
+                //return a.coeffs[firstA].CompareTo(b.coeffs[firstB]);
             }
+
+            /*
             if (firstA < firstB)
                 return -1;
+            */
+            return firstA.CompareTo(firstB);
 
 
             return 1;

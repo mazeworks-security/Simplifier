@@ -106,12 +106,31 @@ namespace Mba.Simplifier.Polynomial
 
         public int[] GetDegrees(int index)
         {
+            return GetDegrees(index, dimensions);
+        }
+
+        public static int[] GetDegrees(int index, int[] dimensions)
+        {
             int[] indices = new int[dimensions.Length];
 
             for (int i = dimensions.Length - 1; i >= 0; i--)
             {
                 indices[i] = (int)((uint)index % (uint)dimensions[i]);
                 index = (int)((uint)index / (uint)dimensions[i]);
+            }
+
+            return indices;
+        }
+
+        // Get degrees but extended to increment the degree by 1..
+        public static int[] GetDegreesWithZeroes(int index, int[] dimensions)
+        {
+            int[] indices = new int[dimensions.Length];
+
+            for (int i = dimensions.Length - 1; i >= 0; i--)
+            {
+                indices[i] = (int)((uint)index % (uint)(dimensions[i] + 1));
+                index = (int)((uint)index / (uint)(dimensions[i]) + 1);
             }
 
             return indices;

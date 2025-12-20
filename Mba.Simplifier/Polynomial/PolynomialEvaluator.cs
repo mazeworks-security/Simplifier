@@ -30,7 +30,25 @@ namespace Mba.Simplifier.Polynomial
                 sum += result;
             }
 
+
+
             return sum;
+        }
+
+
+        public static ulong EvalMonomial(Monomial m, ulong[] inputs, bool canonicalBasis = true)
+        {
+            ulong result = 1;
+            for (int i = 0; i < m.GetNumVars(); i++)
+            {
+                var deg = m.GetVarDeg(i);
+                if (canonicalBasis)
+                    result *= Pow(inputs[i], deg);
+                else
+                    result *= FactorialPow(inputs[i], deg);
+            }
+
+            return result;
         }
 
         // TODO: Use repeated squaring algorithm for high degrees.

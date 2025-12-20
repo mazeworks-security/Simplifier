@@ -1,6 +1,8 @@
 ﻿using Mba.Simplifier.Pipeline;
+using Mba.Utility;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -32,6 +34,9 @@ namespace Mba.Simplifier.LinEq
             linearSystem.Equations.RemoveAll(x => x.GetLeadingZeroCount() == x.NumVars);
             linearSystem.Sort();
 
+            Console.WriteLine(linearSystem.ToZ3String() + "\n\n");
+            Console.WriteLine(linearSystem.ToPyString());
+
             // TODO: We still may be able to find a solution in both of these cases.
             if (linearSystem.Equations.Count != linearSystem.NumVars)
                 return null;
@@ -44,7 +49,7 @@ namespace Mba.Simplifier.LinEq
 
             // Enumerate the possible solutions until we find a fit.
             var solutionMap = new ulong[linearSystem.NumVars];
-            bool success = EnumerateSolutions(solutionMap, linearSystem.NumVars - 1);
+            bool success = EnumerateSolutions(linearSystem, congruenceSolver, solutionMap, linearSystem.NumVars - 1, upperTriangular: true);
             if (!success)
                 return null;
 
@@ -66,7 +71,10 @@ namespace Mba.Simplifier.LinEq
                 if (pivotIdx == -1)
                 {
                     EliminateViaSubtraction(varIdx);
+
                     linearSystem.Sort();
+
+
                     continue;
                 }
 
@@ -98,6 +106,7 @@ namespace Mba.Simplifier.LinEq
             {
                 var lineq = linearSystem.Equations[i];
                 var coeff = lineq.coeffs[varIdx];
+
                 if (coeff == 0)
                     continue;
                 var trailingZeroes = lineq.GetLeadingZeroCount();
@@ -164,9 +173,14 @@ namespace Mba.Simplifier.LinEq
 
         private bool EliminateViaSubtraction(int varIdx)
         {
+            /*
             var firstIdx = linearSystem.Equations.FindIndex(x => x.GetLeadingZeroCount() == varIdx);
             if (firstIdx == -1)
                 return false;
+            */
+
+            var firstIdx = 0;
+
 
             bool changed = false;
             for (int a = firstIdx; a < linearSystem.Equations.Count; a++)
@@ -184,12 +198,21 @@ namespace Mba.Simplifier.LinEq
             return changed;
         }
 
-        private bool TryEliminateBy(int a, int b, int varIdx)
+        private bool TryEliminateBy(int from, int to, int varIdx)
         {
-            var aCoeff = linearSystem.Equations[a].coeffs[varIdx];
+            //if(varIdx == 2 && from == 2 && to == 1)
+            //    Debugger.Break();
+
+            if (linearSystem.Equations[from].GetLeadingZeroCount() < linearSystem.Equations[to].GetLeadingZeroCount())
+            {
+                //Debugger.Break();
+                return false;
+            }    
+
+            var aCoeff = linearSystem.Equations[from].coeffs[varIdx];
             if (aCoeff == 0)
                 return false;
-            var bCoeff = linearSystem.Equations[b].coeffs[varIdx];
+            var bCoeff = linearSystem.Equations[to].coeffs[varIdx];
             if (bCoeff == 0)
                 return false;
 
@@ -201,12 +224,17 @@ namespace Mba.Simplifier.LinEq
 
             var reducer = (ulong)congruenceSolver.GetSolution(0, lc);
 
-            AddMultipleTo(varIdx, a, b, reducer);
+            AddMultipleTo(varIdx, from, to, reducer);
             return true;
         }
 
         private void AddMultipleTo(int varIdx, int fromIdx, int toIdx, ulong multiple)
         {
+            if (linearSystem.Equations[fromIdx].GetLeadingZeroCount() < linearSystem.Equations[toIdx].GetLeadingZeroCount())
+            {
+                //Debugger.Break();
+                Debugger.Break();
+            }
             var ourEq = linearSystem.Equations[fromIdx];
             var ourCoeff = ourEq.coeffs[varIdx];
             var ourResult = ourEq.result;
@@ -243,41 +271,75 @@ namespace Mba.Simplifier.LinEq
             return clone;
         }
 
-        private bool EnumerateSolutions(ulong[] solutionMap, int varIdx)
+        public static HashSet<int> Solutions = new();
+
+        public static bool EnumerateSolutions(LinearSystem linearSystem, LinearCongruenceSolver congruenceSolver,  ulong[] solutionMap, int varIdx, bool upperTriangular)
         {
+            var moduloMask = linearSystem.ModuloMask;
+
             // Adjust the rhs of the equation to account for the solutions of the other variables.
             var lineq = linearSystem.Equations[varIdx];
             var result = lineq.result;
-            for (int i = varIdx + 1; i < linearSystem.NumVars; i++)
+
+            var sum = (int i) =>
             {
                 var coeff = lineq.coeffs[i];
                 var mul = coeff * solutionMap[i];
                 result -= mul;
                 result &= moduloMask;
+            };
+
+            if (upperTriangular)
+            {
+                for (int i = varIdx + 1; i < linearSystem.NumVars; i++)
+                    sum(i);
             }
 
-            var ourCoeff = lineq.coeffs[varIdx];
+            else
+            {
+                for (int i = 0; i < varIdx; i++)
+                    sum(i);
+            }
+
+
+                var ourCoeff = lineq.coeffs[varIdx];
             var lc = congruenceSolver.LinearCongruence(ourCoeff, result, (UInt128)moduloMask + 1);
             if (lc == null)
                 return false;
             int limit = lc.d > 255 ? 255 : (int)lc.d;
+
+            bool anySuccess = false;
             for (int solutionIdx = 0; solutionIdx < limit; solutionIdx++)
             {
                 var solution = (ulong)congruenceSolver.GetSolution((UInt128)solutionIdx, lc);
                 solutionMap[varIdx] = solution;
 
-                if (varIdx == 0)
+                var end = upperTriangular ? 0 : solutionMap.Length - 1;
+                if (varIdx == end)
+                {
+                    var c = solutionMap.Count(x => x == 0);
+                    if (Solutions.Add(c))
+                    {
+
+                        Console.WriteLine(c);
+                    }
+                    //Solutions.Add(solutionMap.ToArray());
                     return true;
+                }
 
                 else
                 {
-                    bool success = EnumerateSolutions(solutionMap, varIdx - 1);
+                    var nextIdx = upperTriangular ? varIdx - 1 : varIdx + 1;
+                    bool success = EnumerateSolutions(linearSystem, congruenceSolver, solutionMap, nextIdx, upperTriangular);
                     if (success)
-                        return success;
+                    {
+                        anySuccess |= true;
+                        //return true;
+                    }
                 }
             }
 
-            return false;
+            return anySuccess;
         }
     }
 }

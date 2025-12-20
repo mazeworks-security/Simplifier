@@ -21,12 +21,13 @@ namespace Mba.Simplifier.LinEq
 
         public override string ToString()
         {
+            bool array = true;
             // Note that the highest degree terms come first.
             var terms = new List<string>();
             for (int i = 0; i < coeffs.Length; i++)
             {
                 // var str = $"{coeffs[i]}*c{coeffs.Length - 1 - i}";
-                var str = $"{coeffs[i]}*c{i}";
+                var str = array ? $"{coeffs[i]}*c[{i}]" : $"{coeffs[i]}*c{i}";
                 terms.Add(str);
             }
 

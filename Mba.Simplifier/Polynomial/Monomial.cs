@@ -16,6 +16,8 @@ namespace Mba.Simplifier.Polynomial
 
         public IReadOnlyList<byte> Degrees => BitConverter.GetBytes(value).TakeWhile(x => x != 255).ToList();
 
+        public byte[] DegArray => Degrees.ToArray();
+
         public Monomial(params byte[] varDegrees)
         {
             Debug.Assert(varDegrees.Length <= 8);

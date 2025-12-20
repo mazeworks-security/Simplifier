@@ -3,6 +3,7 @@ using Mba.Ast;
 using Mba.Common.MSiMBA;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Interpreter;
+using Mba.Simplifier.LinEq;
 using Mba.Simplifier.Polynomial;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
@@ -1782,11 +1783,21 @@ namespace Mba.Simplifier.Pipeline
                 sparsePoly.Sum(monom, coeff);
             }
 
-            if (terms.Count >= 63)
+            if (terms.Count >= 63 || sparsePoly.ToString() == "64 + 224*x + 64*x*x + 212*x*x*x*x*x + 205*x*x*x*x*x*x*x")
+            {
+                PolyInverter.InterpolateExample(sparsePoly);
                 Debugger.Break();
+            }
 
-            // Reduce.
-            var simplified = PolynomialReducer.Reduce(sparsePoly);
+            else
+            {
+                return null;
+            }
+
+                // Reduce.
+
+
+                var simplified = PolynomialReducer.Reduce(sparsePoly);
 
             // The polynomial reduction algorithm guarantees a minimal degree result, but it's often not the most simple result.
             // E.g. "x**10" becomes "96*x0 + 40*x0**2 + 84*x0**3 + 210*x0**4 + 161*x0**5 + 171*x0**6 + 42*x0**7 + 220*x0**8 + 1*x0**9" on 8 bits.

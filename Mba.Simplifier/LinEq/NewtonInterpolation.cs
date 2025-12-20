@@ -60,6 +60,108 @@ namespace Mba.Simplifier.LinEq
 
         public static uint MAXDEG = 65;
 
+        public static void NewClassic()
+        {
+            //var poly = new SparsePolynomial(2, (byte)8);
+            //poly.SetCoeff(new Monomial(2, 3), 1);
+
+            var poly = new SparsePolynomial(1, (byte)8);
+            // poly.SetCoeff(new Monomial(2), 1); // works
+            poly.SetCoeff(new Monomial(10), 1);
+
+            var reduced = PolynomialReducer.Reduce(poly);
+
+            var mmask = poly.moduloMask;
+
+            // Compute the max degree of each variable
+            var varDegrees = GetVarDegrees(poly);
+            // Compute the number of points uniquely defining the polynomial
+            var numPoints = GetNumPoints(varDegrees);
+
+            // Enumerate through each point.
+            ulong count = 0;
+
+            /*
+            var coeffMatrix = new ulong[numPoints, numPoints];
+            var resultVector = new ulong[numPoints];
+            */
+            var equations = new List<LinearEquation>();
+
+            for(int i = 0; i < (int)numPoints; i++)
+            {
+                var eq = new LinearEquation((int)numPoints);
+
+                // Compute unique inputs for these variables.
+                var inputs = new ulong[poly.numVars];
+                for(int vi = 0;  vi < poly.numVars; vi++)
+                    inputs[vi] = mmask & count;
+                // Note that we reuse the same input for [x0, x1, ...]
+                // This makes our basis technically both a newton and falling factorial basis.. which is useful.
+                count++;
+
+                if (i == 2)
+                    Debugger.Break();
+                for (int midx = 0; midx < i + 1; midx++)
+                {
+                    // Compute the monomial at index mi
+                    var mDegs = DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray();
+                    var monomial = new Monomial(mDegs);
+                    // Evaluate that monomial on the pair of inputs
+                    // Though we're using the newton basis instead of standard basis
+                    var meval = mmask & PolynomialEvaluator.EvalMonomial(monomial, inputs, canonicalBasis: false);
+
+                    eq.coeffs[midx] = meval;
+                    //coeffMatrix[i, midx] = meval;
+                }
+
+                //resultVector[i] = mmask & PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
+                eq.result = mmask & PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
+                equations.Add(eq);
+            }
+
+            var system = new LinearSystem(poly.width, poly.numVars, equations);
+
+            var solver = new LinearCongruenceSolver(poly.moduloMask);
+            var solutionMap = new ulong[numPoints];
+                
+            var solution = LinearEquationSolver.EnumerateSolutions(system, solver, solutionMap, 0, upperTriangular: false);
+
+            Debugger.Break();
+        }
+
+        private static int[] GetVarDegrees(SparsePolynomial poly)
+        {
+            var degrees = new int[poly.numVars];
+            foreach(var (m, coeff) in poly.coeffs)
+            {
+                if (coeff == 0)
+                    continue;
+
+                var mDegs = m.Degrees;
+                for(int i = 0; i < mDegs.Count; i++)
+                {
+                    var d = mDegs[i];
+                    if (d > degrees[i])
+                        degrees[i] = d;
+                }
+            }
+
+            return degrees;
+        }
+
+        // Compute the number of points uniquely determining a multivariate polynomial
+        private static ulong GetNumPoints(int[] varDegs)
+        {
+            ulong product = 1;
+            foreach(var d in varDegs)
+            {
+                product *= ((ulong)d + 1);
+            }
+
+            return product;
+        }
+
+
         // https://www.researchgate.net/publication/261421283_On_the_Newton_multivariate_polynomial_interpolation_with_applications
         public static void MvNewtonNew()
         {
