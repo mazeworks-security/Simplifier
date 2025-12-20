@@ -61,6 +61,8 @@ namespace Mba.Simplifier.LinEq
 
         public static uint MAXDEG = 65;
 
+        static string[] nameTable = new string[] { "x", "y", "c", "d"};
+
         public static void NewClassic()
         {
             var ms = new List<Monomial>() { new(1, 0), new(0,1) };
@@ -70,13 +72,14 @@ namespace Mba.Simplifier.LinEq
             poly.SetCoeff(new Monomial(2, 3), 1);
 
             poly = new SparsePolynomial(1, (byte)8);
-            poly.SetCoeff(new Monomial(2), 1); // works
+            //poly.SetCoeff(new Monomial(2), 1); // works
             poly.SetCoeff(new Monomial(10), 1); // works
 
             poly = new SparsePolynomial(2, (byte)8);
-            poly.SetCoeff(new Monomial(1, 1), 1);
+            poly.SetCoeff(new Monomial(1, 0), 1);
+            poly.SetCoeff(new Monomial(0, 1), 1);
 
-            poly = SparsePolynomial.ParsePoly("64 + 224*x + 64*x*x + 212*x*x*x*x*x + 205*x*x*x*x*x*x*x", 1, 8);
+            //poly = SparsePolynomial.ParsePoly("64 + 224*x + 64*x*x + 212*x*x*x*x*x + 205*x*x*x*x*x*x*x", 1, 8);
             //poly = SparsePolynomial.ParsePoly("x*x*x", 1, 8);
 
             //poly = SparsePolynomial.ParsePoly("64 + 224*x", 1, 8);
@@ -114,7 +117,16 @@ namespace Mba.Simplifier.LinEq
             // )
 
 
+            // Bivariate case:
+            // 1, x1-x0
+            // 1  y1-y0
+            // 1  (x2-x0)
+
+
             var x = new List<ulong>();
+
+            var varSeen = Enumerable.Repeat(1, poly.numVars).ToArray();
+            bool[] hasSeen = Enumerable.Repeat(false, poly.numVars).ToArray();
            
             for (int i = 0; i < (int)numPoints; i++)
             {
@@ -132,10 +144,54 @@ namespace Mba.Simplifier.LinEq
 
                 var sb = new StringBuilder();
 
+
+                // See Multivariate Newton Generalization.txt
                 var inputStr = String.Join(", ", inputs);
                 for (int midx = 0; midx < i + 1; midx++)
                 {
+                    ulong coeff = 1;                   
+                    var baseFunction = monomials[midx];
 
+                    if (midx == 0)
+                    {
+                        sb.Append($"1, ");
+                    }
+
+                    else
+                    {
+
+                        var degrees = baseFunction.Degrees;
+                        for (int degIdx = 0; degIdx < degrees.Count; degIdx++)
+                        {
+                            var deg = degrees[degIdx];
+                            // Skip degree zero
+                            if (deg == 0)
+                                continue;
+
+
+                            var seenI = varSeen[degIdx];
+                            hasSeen[degIdx] = true;
+                            //varSeen[degIdx] += 1;
+                            // var seenI = i;
+
+
+                            var name = nameTable[degIdx];
+                            for (int vIdx = 0; vIdx < deg; vIdx++)
+                            {
+                                sb.Append($"({name}{seenI}-{name}{vIdx})");
+                                if (vIdx != midx - 1)
+                                    sb.Append("*");
+
+                                coeff *= (x[seenI] - x[vIdx]);
+                            }
+
+                        }
+
+                        sb.Append(", ");
+                    }
+
+
+                    /*
                     ulong coeff = 1;
                     var iArray = new List<ulong>();
                     if(midx == 0)
@@ -157,11 +213,12 @@ namespace Mba.Simplifier.LinEq
 
                         sb.Append(", ");
                     }
+                    */
 
-                        // Compute the monomial at index mi
-                        //var mDegs = DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray();
-                        //var monomial = new Monomial(mDegs);
-                        var monomial = monomials[midx];
+                    // Compute the monomial at index mi
+                    //var mDegs = DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray();
+                    //var monomial = new Monomial(mDegs);
+                    var monomial = monomials[midx];
                     // Evaluate that monomial on the pair of inputs
                     // Though we're using the newton basis instead of standard basis
                     //var meval = mmask & PolynomialEvaluator.EvalMonomial(monomial, inputs, canonicalBasis: false);
@@ -180,6 +237,16 @@ namespace Mba.Simplifier.LinEq
                 //resultVector[i] = mmask & PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
                 eq.result = mmask & PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
                 equations.Add(eq);
+
+                var cDeg = monomials[i].Degrees;
+                for(int degIdx = 0; degIdx < cDeg.Count; degIdx++)
+                {
+                    //if (cDeg[degIdx] == 0)
+                    //    continue;
+                    if (hasSeen[degIdx])
+                        varSeen[degIdx] += 1;
+                }
+
             }
 
             var system = new LinearSystem(poly.width, poly.numVars, equations);

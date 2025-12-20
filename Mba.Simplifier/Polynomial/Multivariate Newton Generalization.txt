@@ -1,0 +1,18 @@
+// Univariate basis => multivariate basis
+1, x, x*2, x3**3
+=>
+1, x, y, x**2, x*y, y**2
+
+// Choosing the newton basis yields a lower triangular system of linear equation
+Each column is x raised to ci
+// Cancel some stuff out
+x^0, x^1.    x^2,            x^3
+1,
+1, (x1-x0),
+1, (x2-x0), (x2-x0)*(x2-x1),
+1, (x3-x0), (x3-x0)*(x3-x1), (x3-x0)*(x3-x1)*(x3-x2),
+1, (x4-x0), (x4-x0)*(x4-x1), (x4-x0)*(x4-x1)*(x4-x2), (x4-x0)*(x4-x1)*(x4-x2)*(x4-x3),
+1, (x5-x0), (x5-x0)*(x5-x1), (x5-x0)*(x5-x1)*(x5-x2), (x5-x0)*(x5-x1)*(x5-x2)*(x5-x3), (x5-x0)*(x5-x1)*(x5-x2)*(x5-x3)*(x5-x4),
+
+// The equivalent multivariate newton basis would look like this:
+0, x^1,     y^1,              x^2,                     x*y                              x**2
