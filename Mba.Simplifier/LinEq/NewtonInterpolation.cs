@@ -75,9 +75,15 @@ namespace Mba.Simplifier.LinEq
             //poly.SetCoeff(new Monomial(2), 1); // works
             poly.SetCoeff(new Monomial(10), 1); // works
 
+            // works
             poly = new SparsePolynomial(2, (byte)8);
             poly.SetCoeff(new Monomial(1, 0), 1);
             poly.SetCoeff(new Monomial(0, 1), 1);
+
+            poly = new SparsePolynomial(2, (byte)8);
+            poly.SetCoeff(new Monomial(1, 1), 1);
+
+            //poly = SparsePolynomial.ParsePoly("x + y*y", 1, 8);
 
             //poly = SparsePolynomial.ParsePoly("64 + 224*x + 64*x*x + 212*x*x*x*x*x + 205*x*x*x*x*x*x*x", 1, 8);
             //poly = SparsePolynomial.ParsePoly("x*x*x", 1, 8);
@@ -125,18 +131,31 @@ namespace Mba.Simplifier.LinEq
 
             var x = new List<ulong>();
 
-            var varSeen = Enumerable.Repeat(1, poly.numVars).ToArray();
+            var varSeen = Enumerable.Repeat(0, poly.numVars).ToArray();
             bool[] hasSeen = Enumerable.Repeat(false, poly.numVars).ToArray();
            
             for (int i = 0; i < (int)numPoints; i++)
             {
+                var cDeg = monomials[i].Degrees;
+
+                for (int degIdx = 0; degIdx < cDeg.Count; degIdx++)
+                {
+                    if (cDeg[degIdx] != 0 && !hasSeen[degIdx])
+                        varSeen[degIdx] += 1;
+                }
+
                 x.Add(count);
                 var eq = new LinearEquation((int)numPoints);
 
                 // Compute unique inputs for these variables.
+                /*
                 var inputs = new ulong[poly.numVars];
                 for(int vi = 0;  vi < poly.numVars; vi++)
                     inputs[vi] = mmask & count;
+                */
+
+                var inputs = varSeen.Select(x => (ulong)x).ToArray();
+
                 // Note that we reuse the same input for [x0, x1, ...]
                 // This makes our basis technically both a newton and falling factorial basis.. which is useful.
 
@@ -167,7 +186,6 @@ namespace Mba.Simplifier.LinEq
                             // Skip degree zero
                             if (deg == 0)
                                 continue;
-
 
                             var seenI = varSeen[degIdx];
                             hasSeen[degIdx] = true;
@@ -221,8 +239,8 @@ namespace Mba.Simplifier.LinEq
                     var monomial = monomials[midx];
                     // Evaluate that monomial on the pair of inputs
                     // Though we're using the newton basis instead of standard basis
-                    //var meval = mmask & PolynomialEvaluator.EvalMonomial(monomial, inputs, canonicalBasis: false);
-                    var meval = coeff;
+                    var meval = mmask & PolynomialEvaluator.EvalMonomial(monomial, inputs, canonicalBasis: false);
+                   // var meval = coeff;
 
         
                     //Console.WriteLine($"{monomial.ToString(false)} on f({inputStr}) == {meval}");
@@ -232,13 +250,13 @@ namespace Mba.Simplifier.LinEq
                     //coeffMatrix[i, midx] = meval;
                 }
 
-                Console.WriteLine(sb.ToString());
+                Console.WriteLine($"{sb.ToString()}: {inputStr}");
 
                 //resultVector[i] = mmask & PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
                 eq.result = mmask & PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
                 equations.Add(eq);
 
-                var cDeg = monomials[i].Degrees;
+                
                 for(int degIdx = 0; degIdx < cDeg.Count; degIdx++)
                 {
                     //if (cDeg[degIdx] == 0)
