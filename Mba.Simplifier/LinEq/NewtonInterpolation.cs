@@ -131,6 +131,10 @@ namespace Mba.Simplifier.LinEq
 
             var x = new List<ulong>();
 
+            // For multivariate polynomials there is no solution with the current formulation
+            // You need to solve for the linearly independent terms first.. x, y...
+            // x^1, y^1, xy, x^2y
+            // Sol
             var varSeen = Enumerable.Repeat(0, poly.numVars).ToArray();
             bool[] hasSeen = Enumerable.Repeat(false, poly.numVars).ToArray();
            
@@ -154,7 +158,8 @@ namespace Mba.Simplifier.LinEq
                     inputs[vi] = mmask & count;
                 */
 
-                var inputs = varSeen.Select(x => (ulong)x).ToArray();
+                //var inputs = varSeen.Select(x => (ulong)x).ToArray();
+                var inputs = monomials[i].DegArray.Select(x => (ulong)x).ToArray();
 
                 // Note that we reuse the same input for [x0, x1, ...]
                 // This makes our basis technically both a newton and falling factorial basis.. which is useful.
@@ -204,6 +209,10 @@ namespace Mba.Simplifier.LinEq
                             }
 
                         }
+
+                        // Given `y`, we created the newton basis form `y1 - y0`
+                        // If there are multple varibles we raised the powers together.
+                        // 
 
                         sb.Append(", ");
                     }
