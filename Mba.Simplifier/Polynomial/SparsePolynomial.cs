@@ -125,10 +125,13 @@ namespace Mba.Simplifier.Polynomial
                 var coeff = GetCoeff(key);
                 if (coeff == 0)
                     continue;
+                /*
                 if (key.GetTotalDeg() == 0)
                     terms.Add(coeff.ToString());
                 else
                     terms.Add($"{coeff}*{key.ToString(canonicalBasis)}");
+                */
+                terms.Add($"{coeff}*{key.ToString(canonicalBasis)}");
             }
 
             var txt = String.Join(" + ", terms.ToArray());

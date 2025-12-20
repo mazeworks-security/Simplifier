@@ -62,12 +62,12 @@ namespace Mba.Simplifier.LinEq
 
         public static void NewClassic()
         {
-            //var poly = new SparsePolynomial(2, (byte)8);
+            var poly = new SparsePolynomial(1, (byte)8);
             //poly.SetCoeff(new Monomial(2, 3), 1);
 
-            var poly = new SparsePolynomial(1, (byte)8);
+            //var poly = new SparsePolynomial(1, (byte)8);
             // poly.SetCoeff(new Monomial(2), 1); // works
-            poly.SetCoeff(new Monomial(10), 1);
+            poly.SetCoeff(new Monomial(10), 1); // works
 
             var reduced = PolynomialReducer.Reduce(poly);
 
@@ -87,6 +87,8 @@ namespace Mba.Simplifier.LinEq
             */
             var equations = new List<LinearEquation>();
 
+            var monomials = Enumerable.Range(0, (int)numPoints).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).ToArray();
+
             for(int i = 0; i < (int)numPoints; i++)
             {
                 var eq = new LinearEquation((int)numPoints);
@@ -99,13 +101,12 @@ namespace Mba.Simplifier.LinEq
                 // This makes our basis technically both a newton and falling factorial basis.. which is useful.
                 count++;
 
-                if (i == 2)
-                    Debugger.Break();
                 for (int midx = 0; midx < i + 1; midx++)
                 {
                     // Compute the monomial at index mi
-                    var mDegs = DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray();
-                    var monomial = new Monomial(mDegs);
+                    //var mDegs = DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray();
+                    //var monomial = new Monomial(mDegs);
+                    var monomial = monomials[midx];
                     // Evaluate that monomial on the pair of inputs
                     // Though we're using the newton basis instead of standard basis
                     var meval = mmask & PolynomialEvaluator.EvalMonomial(monomial, inputs, canonicalBasis: false);
@@ -124,7 +125,21 @@ namespace Mba.Simplifier.LinEq
             var solver = new LinearCongruenceSolver(poly.moduloMask);
             var solutionMap = new ulong[numPoints];
                 
-            var solution = LinearEquationSolver.EnumerateSolutions(system, solver, solutionMap, 0, upperTriangular: false);
+            var foundSolution = LinearEquationSolver.EnumerateSolutions(system, solver, solutionMap, 0, upperTriangular: false);
+            if (!foundSolution)
+                throw new InvalidOperationException("Unsolvable system!");
+
+            var factorialOutput = new SparsePolynomial(poly.numVars, poly.width);
+            for(int i = 0; i < (int)numPoints; i++)
+            {
+                var coeff = solutionMap[i];
+                var rcoeff = PolynomialReducer.GetReductionMask(poly.width, monomials[i]) & coeff;
+
+                factorialOutput.SetCoeff(monomials[i], rcoeff);
+            }
+
+            var standardOutput = PolynomialReducer.GetCanonicalForm(factorialOutput);
+
 
             Debugger.Break();
         }

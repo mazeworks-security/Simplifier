@@ -1,9 +1,11 @@
 ﻿using Mba.Simplifier.Pipeline;
+using Mba.Simplifier.Polynomial;
 using Mba.Utility;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -308,10 +310,13 @@ namespace Mba.Simplifier.LinEq
                 return false;
             int limit = lc.d > 255 ? 255 : (int)lc.d;
 
+            //var reduceMask = PolynomialReducer.GetReductionMask((byte)BitOperations.PopCount(linearSystem.ModuloMask), new Monomial(varIdx));
+
             bool anySuccess = false;
             for (int solutionIdx = 0; solutionIdx < limit; solutionIdx++)
             {
                 var solution = (ulong)congruenceSolver.GetSolution((UInt128)solutionIdx, lc);
+                //solution &= reduceMask
                 solutionMap[varIdx] = solution;
 
                 var end = upperTriangular ? 0 : solutionMap.Length - 1;
@@ -334,7 +339,7 @@ namespace Mba.Simplifier.LinEq
                     if (success)
                     {
                         anySuccess |= true;
-                        //return true;
+                        return true;
                     }
                 }
             }

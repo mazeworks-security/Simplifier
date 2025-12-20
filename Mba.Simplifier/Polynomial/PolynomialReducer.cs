@@ -65,7 +65,7 @@ namespace Mba.Simplifier.Polynomial
                     continue;
 
                 // Compute the expand form of this monomial's factorial basis
-                var expandedForm = GetCachedFactorialBasis(monom);
+                var expandedForm = GetCachedFactorialBasis(monom, input.width);
 
                 // Move the highest(current) degree term over to the new polynomial,
                 // then subtract the input polynomial by the lower degree parts.
@@ -105,8 +105,10 @@ namespace Mba.Simplifier.Polynomial
             return outPoly;
         }
 
-        private static IReadOnlyList<MonomialWithCoeff> GetCachedFactorialBasis(Monomial monom)
+        private static IReadOnlyList<MonomialWithCoeff> GetCachedFactorialBasis(Monomial monom, byte width)
         {
+            return GetSortedTerms(GetFactorialBasis(monom, width));
+
             // Get the factorial basis for this monomial
             if (!factorialMap.TryGetValue(monom, out var expandedForm))
             {
@@ -324,7 +326,7 @@ namespace Mba.Simplifier.Polynomial
                 if (degrees.Count == 0)
                     Debugger.Break();
 
-                var expanded = GetCachedFactorialBasis(monom);
+                var expanded = GetCachedFactorialBasis(monom, input.width);
                 foreach (var term in expanded)
                 {
                     var m = term.monomial;
