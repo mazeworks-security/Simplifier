@@ -8,6 +8,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace Mba.Simplifier.LinEq
 {
@@ -63,8 +64,178 @@ namespace Mba.Simplifier.LinEq
 
         static string[] nameTable = new string[] { "x", "y", "c", "d"};
 
+        public static void NewClassic2()
+        {
+            var poly = SparsePolynomial.ParsePoly("x + y + x*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
+
+            var maxDeg = (int)GetMaxDegree(poly);
+            var varDegrees = Enumerable.Repeat(maxDeg, poly.numVars).ToArray();
+            var numPoints = GetNumPoints(poly.numVars, maxDeg);
+            var monomials = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).Where(x => x.GetTotalDeg() <= maxDeg).OrderBy(x => x).ToArray();
+
+            // There will be times where we cannot plug in zero
+            var equations = new List<LinearEquation>();
+
+
+            // Values of e.g. x0, x1, x2, x3, ...
+            var variableAssignments = new ulong[poly.numVars, numPoints];
+
+            // What index a variable is currently assigned to.
+            //  Aka the value of `xk`.
+            //var variableIterations = new ulong[poly.numVars];
+            var variableIterations = Enumerable.Repeat(1ul, poly.numVars).ToArray();
+
+            var inUse = new bool[poly.numVars];
+
+            // x, y, x*y problem..
+            // Solved by setting zero for undeamnded variables..
+            for(int equationIdx = 0; equationIdx < (int)numPoints; equationIdx++)
+            {
+                var eq = new LinearEquation((int)numPoints);
+                // Each equation is effectively adding a monomial.
+                // If the monomial is zero, just add it.
+                var addedMonomial = monomials[equationIdx];
+                if(addedMonomial.GetTotalDeg() == 0)
+                {
+
+                    //var eval = PolynomialEvaluator.Eval(poly, new ulong[poly.numVars]);
+                    //eq.coeffs[0] = eval;
+                    eq.coeffs[0] = 1;
+                    equations.Add(eq);
+                    Console.WriteLine("1, ");
+                    continue;
+                }
+
+                /*
+                // Otherwise we are adding an actual monomial.. some book keeping needs to be done.
+                for(int i = 0; i < addedMonomial.Degrees.Count; i++)
+                {
+                    // If a variable is not demanded, we assign it to zero.
+                    var deg = addedMonomial.Degrees[i];
+                    if (deg == 0)
+                        continue;
+
+                    // Otherwise its demanded. First increment its version
+                    variableIterations[i] += 1;
+
+                    // Then assign it
+                    variableAssignments[i, variableIterations[i]] = 1 + variableAssignments[i, variableIterations[i] - 1];
+                }
+                */
+
+                // Otherwise we are adding an actual monomial.. some book keeping needs to be done.
+                for (int varIdx = 0; varIdx < addedMonomial.Degrees.Count; varIdx++)
+                {
+                    // If a variable is not demanded, we assign it to zero.
+                    var deg = addedMonomial.Degrees[varIdx];
+                    if (deg == 0)
+                        continue;
+
+                    // Then assign it to a non zero, always incrementing.
+                    variableAssignments[varIdx, variableIterations[varIdx]] = variableIterations[varIdx];
+                    inUse[varIdx] = true;
+                }
+
+                var sb = new StringBuilder();
+                for (int midx = 0; midx < equationIdx + 1; midx++)
+                {
+                    var baseFunction = monomials[midx];
+
+                    ulong coeff = 1;
+                    var degrees = baseFunction.Degrees;
+
+
+                    for (int vIdx = 0; vIdx < degrees.Count; vIdx++)
+                    {
+                        // Skip if this variable is dead
+                        var deg = degrees[vIdx];
+                        if (deg == 0)
+                            continue;
+
+                        var name = nameTable[vIdx];
+                        for (int xi = 0; xi < deg; xi++)
+                        {
+                            var xkIteration = variableIterations[vIdx];
+                            var xkVal = variableAssignments[vIdx, xkIteration];
+                            var x = variableAssignments[vIdx, xi];
+
+                            //sb.Append($"({name}{seenI}-{name}{vIdx})");
+                            sb.Append($"({name}{xkIteration}-{name}{xi})");
+                            if (vIdx != midx - 1)
+                                sb.Append("*");
+
+                            coeff *= (xkVal - x);
+
+                        }
+                    }
+
+                    sb.Append(midx == 0 ? "1, " : ", ");
+
+              
+                    var meval = coeff;
+                    eq.coeffs[midx] = meval;
+
+                }
+
+
+                var inputs = new ulong[poly.numVars];
+                for (int vIdx = 0; vIdx < poly.numVars; vIdx++)
+                {
+                    inputs[vIdx] = variableAssignments[vIdx, variableIterations[vIdx]];
+                }
+
+                var result = PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
+                eq.result = result;
+
+                var inputStr = String.Join(", ", inputs);
+
+                Console.WriteLine($"Got {result} on inputs ({inputStr})");
+
+
+                Console.WriteLine(sb.ToString());
+                for (int varIdx = 0; varIdx < poly.numVars; varIdx++)
+                {
+                    if (inUse[varIdx])
+                        variableIterations[varIdx] += 1;
+                }
+
+                equations.Add(eq);
+
+
+            }
+
+            Console.WriteLine("\n");
+
+            var system = new LinearSystem(poly.width, poly.numVars, equations);
+
+            Console.WriteLine(system.ToZ3String());
+
+            var solver = new LinearCongruenceSolver(poly.moduloMask);
+            var solutionMap = new ulong[numPoints];
+
+            var foundSolution = LinearEquationSolver.EnumerateSolutions(system, solver, solutionMap, 0, upperTriangular: false);
+            if (!foundSolution)
+                throw new InvalidOperationException("Unsolvable system!");
+
+            var factorialOutput = new SparsePolynomial(poly.numVars, poly.width);
+            for (int i = 0; i < (int)numPoints; i++)
+            {
+                var coeff = solutionMap[i];
+                var rcoeff = PolynomialReducer.GetReductionMask(poly.width, monomials[i]) & coeff;
+
+                factorialOutput.SetCoeff(monomials[i], rcoeff);
+            }
+
+            var standardOutput = PolynomialReducer.GetCanonicalForm(factorialOutput);
+
+            Debugger.Break();
+        }
+
         public static void NewClassic()
         {
+            NewClassic2();
             var ms = new List<Monomial>() { new(1, 0), new(0,1) };
             ms.Sort();
 
@@ -83,6 +254,11 @@ namespace Mba.Simplifier.LinEq
             poly = new SparsePolynomial(2, (byte)8);
             poly.SetCoeff(new Monomial(1, 1), 1);
 
+            poly = SparsePolynomial.ParsePoly("x + y + x*y + x*x + y*y", 2, 8);
+
+
+
+            //poly = SparsePolynomial.ParsePoly("12 x*x*x*x ", 2, 8);
             //poly = SparsePolynomial.ParsePoly("x + y*y", 1, 8);
 
             //poly = SparsePolynomial.ParsePoly("64 + 224*x + 64*x*x + 212*x*x*x*x*x + 205*x*x*x*x*x*x*x", 1, 8);
@@ -90,6 +266,18 @@ namespace Mba.Simplifier.LinEq
 
             //poly = SparsePolynomial.ParsePoly("64 + 224*x", 1, 8);
             //var reduced = PolynomialReducer.Reduce(poly);
+
+            //poly = SparsePolynomial.ParsePoly("64 + 224*x + 64*x*x + 212*x*x*x*x*x + 205*x*x*x*x*x*x*x + 2123*y + 12*y*y + 3443*y + 3443*x*x*y*y + 3443*x*x*x*y", 1, 8);
+
+            poly = SparsePolynomial.ParsePoly("x + y + x*y + x*x + y*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("17*x + 33*y + 53*x*y + 77*x*x + 83*y*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*x*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("64 + 224*x + 64*x*x + 212*x*x*x*x*x + 205*x*x*x*x*x*x*x", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("3*x*x*x", 2, 8);
 
             var mmask = poly.moduloMask;
 
@@ -119,6 +307,12 @@ namespace Mba.Simplifier.LinEq
             //var monomials = Enumerable.Range(0, (int)numPoints).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).OrderBy(x => x).ToArray();
             var monomials = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).Where(x => x.GetTotalDeg() <= maxDeg).OrderBy(x => x).ToArray();
 
+            var mArray = new (byte, byte)[] { (0, 0), (0, 1), (1, 0), (0, 2), (2, 0), (1, 1), (0, 3), (3, 0), (1, 2), (2, 1) };
+
+            monomials = mArray.Select(x => new Monomial(x.Item1, x.Item2)).ToArray();
+
+            Console.WriteLine(String.Join(", ", monomials.Select(x => $"({x.Degrees[0]}, {x.Degrees[1]})")));
+
             // x3-x0, (x3-x0)*(x3-x1), (x3-x0)*(x3-x1)*(x3-x2
             // )
 
@@ -129,15 +323,16 @@ namespace Mba.Simplifier.LinEq
             // 1  (x2-x0)
 
 
-            var x = new List<ulong>();
+            //var x = new List<ulong>();
 
             // For multivariate polynomials there is no solution with the current formulation
             // You need to solve for the linearly independent terms first.. x, y...
             // x^1, y^1, xy, x^2y
-            // Sol
             var varSeen = Enumerable.Repeat(0, poly.numVars).ToArray();
             bool[] hasSeen = Enumerable.Repeat(false, poly.numVars).ToArray();
-           
+
+
+            var allInputs = new List<ulong[]>();
             for (int i = 0; i < (int)numPoints; i++)
             {
                 var cDeg = monomials[i].Degrees;
@@ -148,7 +343,7 @@ namespace Mba.Simplifier.LinEq
                         varSeen[degIdx] += 1;
                 }
 
-                x.Add(count);
+                //x.Add(count);
                 var eq = new LinearEquation((int)numPoints);
 
                 // Compute unique inputs for these variables.
@@ -160,7 +355,7 @@ namespace Mba.Simplifier.LinEq
 
                 //var inputs = varSeen.Select(x => (ulong)x).ToArray();
                 var inputs = monomials[i].DegArray.Select(x => (ulong)x).ToArray();
-
+                allInputs.Add(inputs);
                 // Note that we reuse the same input for [x0, x1, ...]
                 // This makes our basis technically both a newton and falling factorial basis.. which is useful.
 
@@ -168,11 +363,18 @@ namespace Mba.Simplifier.LinEq
 
                 var sb = new StringBuilder();
 
+                // Iterate through each monomial in the current equation, e.g. [x, y, x^1, y^1]
+                // Problem: x*y creates an unsatsfiable system.. would need to plug in zeroes
+                for (int monomialIdx = 0; monomialIdx < i + 1; monomialIdx++)
+                {
 
-                // See Multivariate Newton Generalization.txt
-                var inputStr = String.Join(", ", inputs);
+                }
+
+                    // See Multivariate Newton Generalization.txt
+                    var inputStr = String.Join(", ", inputs);
                 for (int midx = 0; midx < i + 1; midx++)
                 {
+        
                     ulong coeff = 1;                   
                     var baseFunction = monomials[midx];
 
@@ -183,6 +385,7 @@ namespace Mba.Simplifier.LinEq
 
                     else
                     {
+
 
                         var degrees = baseFunction.Degrees;
                         for (int degIdx = 0; degIdx < degrees.Count; degIdx++)
@@ -201,11 +404,23 @@ namespace Mba.Simplifier.LinEq
                             var name = nameTable[degIdx];
                             for (int vIdx = 0; vIdx < deg; vIdx++)
                             {
-                                sb.Append($"({name}{seenI}-{name}{vIdx})");
+
+
+                                //var xSeenI = x[seenI];
+                                //var xVidx = x[vIdx];
+
+                                var xSeenI = allInputs[seenI][degIdx];
+                                var xVidx = allInputs[vIdx][degIdx];
+
+
+                                //sb.Append($"({name}{seenI}-{name}{vIdx})");
+                                sb.Append($"({name}{xSeenI}-{name}{xVidx})");
                                 if (vIdx != midx - 1)
                                     sb.Append("*");
 
-                                coeff *= (x[seenI] - x[vIdx]);
+                                coeff *= (xSeenI - xVidx);
+
+
                             }
 
                         }
@@ -298,7 +513,9 @@ namespace Mba.Simplifier.LinEq
 
             var standardOutput = PolynomialReducer.GetCanonicalForm(factorialOutput);
 
+            Console.WriteLine($"Before: {PolynomialReducer.Reduce(poly)}");
 
+            Console.WriteLine($"After: {PolynomialReducer.Reduce(standardOutput)}");
             Debugger.Break();
         }
 
