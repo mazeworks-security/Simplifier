@@ -130,7 +130,7 @@ namespace Mba.Simplifier.Polynomial
             for (int i = dimensions.Length - 1; i >= 0; i--)
             {
                 indices[i] = (int)((uint)index % (uint)(dimensions[i] + 1));
-                index = (int)((uint)index / (uint)(dimensions[i]) + 1);
+                index = (int)((uint)index / (uint)(dimensions[i] + 1));
             }
 
             return indices;

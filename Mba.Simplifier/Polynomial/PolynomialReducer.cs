@@ -308,6 +308,14 @@ namespace Mba.Simplifier.Polynomial
             return fact;
         }
 
+        public static BigInteger Factorial(BigInteger a)
+        {
+            ulong fact = 1;
+            for (ulong x = 1; x <= a; x++)
+                fact *= x;
+            return fact;
+        }
+
         public static ulong HighestPowerOfTwo(ulong n)
         {
             return (n & (~(n - 1)));

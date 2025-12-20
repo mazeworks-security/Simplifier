@@ -97,16 +97,19 @@ namespace Mba.Simplifier.Polynomial
             {
                 var degA = a.GetVarDeg(i);
                 var degB = b.GetVarDeg(i);
+                // Invalid cases
                 if (degA == byte.MaxValue)
                     return degB;
                 if (degB == byte.MaxValue)
                     return degA;
+
+
                 if (degA == degB)
                     continue;
                 if (degA > degB)
-                    return 1;
-                else
                     return -1;
+                else
+                    return 1;
             }
             return 0;
         }

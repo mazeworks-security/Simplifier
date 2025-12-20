@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -62,21 +63,31 @@ namespace Mba.Simplifier.LinEq
 
         public static void NewClassic()
         {
-            var poly = new SparsePolynomial(1, (byte)8);
-            //poly.SetCoeff(new Monomial(2, 3), 1);
+            var ms = new List<Monomial>() { new(1, 0), new(0,1) };
+            ms.Sort();
 
-            //var poly = new SparsePolynomial(1, (byte)8);
-            // poly.SetCoeff(new Monomial(2), 1); // works
+            var poly = new SparsePolynomial(1, (byte)8);
+            poly.SetCoeff(new Monomial(2, 3), 1);
+
+            poly = new SparsePolynomial(1, (byte)8);
+            poly.SetCoeff(new Monomial(2), 1); // works
             poly.SetCoeff(new Monomial(10), 1); // works
 
-            var reduced = PolynomialReducer.Reduce(poly);
+            poly = new SparsePolynomial(2, (byte)8);
+            poly.SetCoeff(new Monomial(1, 1), 1);
+
+            //var reduced = PolynomialReducer.Reduce(poly);
 
             var mmask = poly.moduloMask;
 
             // Compute the max degree of each variable
-            var varDegrees = GetVarDegrees(poly);
+            var maxDeg = (int)GetMaxDegree(poly);
+            var varDegrees = Enumerable.Repeat(maxDeg, poly.numVars).ToArray();
+            //var varDegrees = GetVarDegrees(poly);
+
             // Compute the number of points uniquely defining the polynomial
-            var numPoints = GetNumPoints(varDegrees);
+            //var numPoints = GetNumPoints(varDegrees);
+            var numPoints = GetNumPoints(poly.numVars, maxDeg);
 
             // Enumerate through each point.
             ulong count = 0;
@@ -87,7 +98,12 @@ namespace Mba.Simplifier.LinEq
             */
             var equations = new List<LinearEquation>();
 
-            var monomials = Enumerable.Range(0, (int)numPoints).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).ToArray();
+            
+
+            //var allDegs = Enumerable.Range(0, (int)numPoints).Select(midx => (DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).ToArray();
+            var monomials = Enumerable.Range(0, (int)numPoints).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).OrderBy(x => x).ToArray();
+
+
 
             for(int i = 0; i < (int)numPoints; i++)
             {
@@ -162,6 +178,17 @@ namespace Mba.Simplifier.LinEq
             }
 
             return degrees;
+        }
+
+        private static uint GetMaxDegree(SparsePolynomial poly)
+        {
+            return poly.coeffs.Keys.MaxBy(x => x.GetTotalDeg()).GetTotalDeg();
+        }
+
+        private static ulong GetNumPoints(int n, int d)
+        {
+            var r = PolynomialReducer.Factorial(n + d) / (PolynomialReducer.Factorial(d) * PolynomialReducer.Factorial(n));
+            return (ulong)r;
         }
 
         // Compute the number of points uniquely determining a multivariate polynomial
