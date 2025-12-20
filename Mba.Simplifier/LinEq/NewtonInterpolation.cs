@@ -64,6 +64,7 @@ namespace Mba.Simplifier.LinEq
 
         static string[] nameTable = new string[] { "x", "y", "c", "d"};
 
+        // Problem: We can't just pass zero..
         public static void NewClassic2()
         {
             var poly = SparsePolynomial.ParsePoly("x + y + x*y", 2, 8);
@@ -91,13 +92,13 @@ namespace Mba.Simplifier.LinEq
 
             // x, y, x*y problem..
             // Solved by setting zero for undeamnded variables..
-            for(int equationIdx = 0; equationIdx < (int)numPoints; equationIdx++)
+            for (int equationIdx = 0; equationIdx < (int)numPoints; equationIdx++)
             {
                 var eq = new LinearEquation((int)numPoints);
                 // Each equation is effectively adding a monomial.
                 // If the monomial is zero, just add it.
                 var addedMonomial = monomials[equationIdx];
-                if(addedMonomial.GetTotalDeg() == 0)
+                if (addedMonomial.GetTotalDeg() == 0)
                 {
 
                     //var eval = PolynomialEvaluator.Eval(poly, new ulong[poly.numVars]);
@@ -161,10 +162,13 @@ namespace Mba.Simplifier.LinEq
                             var xkVal = variableAssignments[vIdx, xkIteration];
                             var x = variableAssignments[vIdx, xi];
 
+                            Console.WriteLine($"{name}{xkIteration} = {xkVal}, {name}{xi} = {x}; ({xkVal}, {x})");
+
                             //sb.Append($"({name}{seenI}-{name}{vIdx})");
                             sb.Append($"({name}{xkIteration}-{name}{xi})");
                             if (vIdx != midx - 1)
                                 sb.Append("*");
+
 
                             coeff *= (xkVal - x);
 
@@ -173,7 +177,7 @@ namespace Mba.Simplifier.LinEq
 
                     sb.Append(midx == 0 ? "1, " : ", ");
 
-              
+
                     var meval = coeff;
                     eq.coeffs[midx] = meval;
 
@@ -215,6 +219,13 @@ namespace Mba.Simplifier.LinEq
             var solver = new LinearCongruenceSolver(poly.moduloMask);
             var solutionMap = new ulong[numPoints];
 
+            var lc = solver.LinearCongruence(12, 12, (UInt128)poly.moduloMask + 1);
+            for (UInt128 i = 0; i < lc.d; i++)
+            {
+                Console.WriteLine(solver.GetSolution(i, lc));
+            }
+
+
             var foundSolution = LinearEquationSolver.EnumerateSolutions(system, solver, solutionMap, 0, upperTriangular: false);
             if (!foundSolution)
                 throw new InvalidOperationException("Unsolvable system!");
@@ -229,6 +240,10 @@ namespace Mba.Simplifier.LinEq
             }
 
             var standardOutput = PolynomialReducer.GetCanonicalForm(factorialOutput);
+
+            Console.WriteLine($"Before: {PolynomialReducer.Reduce(poly)}");
+
+            Console.WriteLine($"After: {PolynomialReducer.Reduce(standardOutput)}");
 
             Debugger.Break();
         }
