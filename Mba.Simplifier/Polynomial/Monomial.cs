@@ -107,9 +107,9 @@ namespace Mba.Simplifier.Polynomial
                 if (degA == degB)
                     continue;
                 if (degA > degB)
-                    return -1;
-                else
                     return 1;
+                else
+                    return -1;
             }
             return 0;
         }
@@ -141,7 +141,7 @@ namespace Mba.Simplifier.Polynomial
                     continue;
                 }
 
-                bool unroll = false;
+                bool unroll = true;
                 string pow = null;
                 if (canonicalBasis)
                     pow = GetCanonicalBasisStr(varName, degree, unroll);

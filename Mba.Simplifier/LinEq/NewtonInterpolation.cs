@@ -76,6 +76,10 @@ namespace Mba.Simplifier.LinEq
             poly = new SparsePolynomial(2, (byte)8);
             poly.SetCoeff(new Monomial(1, 1), 1);
 
+            poly = SparsePolynomial.ParsePoly("64 + 224*x + 64*x*x + 212*x*x*x*x*x + 205*x*x*x*x*x*x*x", 1, 8);
+            //poly = SparsePolynomial.ParsePoly("x*x*x", 1, 8);
+
+            //poly = SparsePolynomial.ParsePoly("64 + 224*x", 1, 8);
             //var reduced = PolynomialReducer.Reduce(poly);
 
             var mmask = poly.moduloMask;
@@ -98,15 +102,23 @@ namespace Mba.Simplifier.LinEq
             */
             var equations = new List<LinearEquation>();
 
-            
 
-            //var allDegs = Enumerable.Range(0, (int)numPoints).Select(midx => (DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).ToArray();
-            var monomials = Enumerable.Range(0, (int)numPoints).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).OrderBy(x => x).ToArray();
 
 
 
-            for(int i = 0; i < (int)numPoints; i++)
+            //var allDegs = Enumerable.Range(0, (int)numPoints).Select(midx => (DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).ToArray();
+            //var monomials = Enumerable.Range(0, (int)numPoints).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).OrderBy(x => x).ToArray();
+            var monomials = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).Where(x => x.GetTotalDeg() <= maxDeg).OrderBy(x => x).ToArray();
+
+            // x3-x0, (x3-x0)*(x3-x1), (x3-x0)*(x3-x1)*(x3-x2
+            // )
+
+
+            var x = new List<ulong>();
+           
+            for (int i = 0; i < (int)numPoints; i++)
             {
+                x.Add(count);
                 var eq = new LinearEquation((int)numPoints);
 
                 // Compute unique inputs for these variables.
@@ -115,21 +127,55 @@ namespace Mba.Simplifier.LinEq
                     inputs[vi] = mmask & count;
                 // Note that we reuse the same input for [x0, x1, ...]
                 // This makes our basis technically both a newton and falling factorial basis.. which is useful.
+
                 count++;
 
+                var sb = new StringBuilder();
+
+                var inputStr = String.Join(", ", inputs);
                 for (int midx = 0; midx < i + 1; midx++)
                 {
-                    // Compute the monomial at index mi
-                    //var mDegs = DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray();
-                    //var monomial = new Monomial(mDegs);
-                    var monomial = monomials[midx];
+
+                    ulong coeff = 1;
+                    var iArray = new List<ulong>();
+                    if(midx == 0)
+                    {
+                        iArray.Add(1);
+                        sb.Append($"1, ");
+                    }
+
+                    else
+                    {
+                        for(int vIdx = 0; vIdx < midx; vIdx++)
+                        {
+                            sb.Append($"(x{i}-x{vIdx})");
+                            if (vIdx != midx - 1)
+                                sb.Append("*");
+
+                            coeff *= (x[i] - x[vIdx]); 
+                        }
+
+                        sb.Append(", ");
+                    }
+
+                        // Compute the monomial at index mi
+                        //var mDegs = DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray();
+                        //var monomial = new Monomial(mDegs);
+                        var monomial = monomials[midx];
                     // Evaluate that monomial on the pair of inputs
                     // Though we're using the newton basis instead of standard basis
-                    var meval = mmask & PolynomialEvaluator.EvalMonomial(monomial, inputs, canonicalBasis: false);
+                    //var meval = mmask & PolynomialEvaluator.EvalMonomial(monomial, inputs, canonicalBasis: false);
+                    var meval = coeff;
 
+        
+                    //Console.WriteLine($"{monomial.ToString(false)} on f({inputStr}) == {meval}");
+
+                    //sb.Append($"{monomial.ToString(false)} + ");
                     eq.coeffs[midx] = meval;
                     //coeffMatrix[i, midx] = meval;
                 }
+
+                Console.WriteLine(sb.ToString());
 
                 //resultVector[i] = mmask & PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
                 eq.result = mmask & PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
@@ -137,6 +183,8 @@ namespace Mba.Simplifier.LinEq
             }
 
             var system = new LinearSystem(poly.width, poly.numVars, equations);
+
+            Console.WriteLine(system.ToZ3String());
 
             var solver = new LinearCongruenceSolver(poly.moduloMask);
             var solutionMap = new ulong[numPoints];
