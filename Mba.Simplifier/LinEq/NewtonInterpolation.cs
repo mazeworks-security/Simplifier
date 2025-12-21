@@ -152,6 +152,10 @@ namespace Mba.Simplifier.LinEq
             poly = SparsePolynomial.ParsePoly("x + y + z", 3, 8);
 
             poly = SparsePolynomial.ParsePoly("x*y*z", 3, 8);
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y", 2, 8); // works
+
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z", 3, 8);
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z + 33*x*x*x*x*x + 3443*x*x*x*z*z*y", 3, 8);
             //poly = SparsePolynomial.ParsePoly("x + y + x*y", 2, 8);
             //poly = SparsePolynomial.ParsePoly("x*x*x*x", 1, 8);
 
@@ -255,8 +259,10 @@ namespace Mba.Simplifier.LinEq
                             prevMax = Math.Max(prevMax, (long)m.Degrees[varIdx] - 1);
                         }
 
-                        //inputs[varIdx] = initialValues[varIdx];
-                        inputs[varIdx] = (ulong)prevMax;
+
+                        //inputs[varIdx] = (ulong)prevMax;
+
+                        inputs[varIdx] = 0;
                         continue;
                     }
 
