@@ -60,28 +60,44 @@ namespace Mba.Simplifier.LinEq
 
         }
 
-        public static uint MAXDEG = 65;
 
         static string[] nameTable = new string[] { "x", "y", "c", "d"};
 
         // Problem: We can't just pass zero..
         public static void NewClassic2()
         {
-            var poly = SparsePolynomial.ParsePoly("x + y + x*y", 2, 8);
+            var poly = SparsePolynomial.ParsePoly("x + y + x*y  ", 2, 8);
 
             poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("x + y + x*y", 2, 8);
+
+            //poly = SparsePolynomial.ParsePoly("x + y + x*y + x*x*x*x*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*x*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("y + x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 2, 8);
+            var mmask = poly.moduloMask;
 
             var maxDeg = (int)GetMaxDegree(poly);
             var varDegrees = Enumerable.Repeat(maxDeg, poly.numVars).ToArray();
             var numPoints = GetNumPoints(poly.numVars, maxDeg);
             var monomials = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).Where(x => x.GetTotalDeg() <= maxDeg).OrderBy(x => x).ToArray();
 
+            //var sortedMonomials = new (byte, byte)[] { (0, 0), (0, 1), (1, 0), (1,1), (2, 0), (0, 2) };
+            //monomials = sortedMonomials.Select(x => new Monomial(x.Item1, x.Item2)).ToArray();
+
             // There will be times where we cannot plug in zero
             var equations = new List<LinearEquation>();
 
 
+
             // Values of e.g. x0, x1, x2, x3, ...
             var variableAssignments = new ulong[poly.numVars, numPoints];
+
+
+           // variableAssignments[0, 0] = 0;
+            //variableAssignments[1, 0] = 1;
 
             // What index a variable is currently assigned to.
             //  Aka the value of `xk`.
@@ -89,6 +105,10 @@ namespace Mba.Simplifier.LinEq
             var variableIterations = Enumerable.Repeat(1ul, poly.numVars).ToArray();
 
             var inUse = new bool[poly.numVars];
+
+            var dependencies = new Dictionary<int, HashSet<int>>();
+            for (int v = 0; v < poly.numVars; v++)
+                dependencies[v] = new();
 
             // x, y, x*y problem..
             // Solved by setting zero for undeamnded variables..
@@ -126,16 +146,40 @@ namespace Mba.Simplifier.LinEq
                 }
                 */
 
+                for (int i = 0; i < addedMonomial.Degrees.Count; i++)
+                {
+                    for(int j = i + 1; j < addedMonomial.Degrees.Count; j++)
+                    {
+                        var m1 = addedMonomial.Degrees[i];
+                        var m2 = addedMonomial.Degrees[j];
+                        if (m1 == 0 || m2 == 0)
+                            continue;
+
+                        dependencies[i].Add(j);
+                        dependencies[j].Add(i);
+                    }
+                    
+                }
+
                 // Otherwise we are adding an actual monomial.. some book keeping needs to be done.
                 for (int varIdx = 0; varIdx < addedMonomial.Degrees.Count; varIdx++)
                 {
                     // If a variable is not demanded, we assign it to zero.
                     var deg = addedMonomial.Degrees[varIdx];
-                    if (deg == 0)
+                    if (deg == 0 && dependencies[varIdx].Count == 0)
                         continue;
+                    // Correction: If this monomial is just `x`, set all other variables to zero!
+
+    
+
+                    //if (addedMonomial.GetTotalDeg() == 1 && deg == 0)
+                   //     continue;
+                    //if (deg == 0)
+                    //   continue;
 
                     // Then assign it to a non zero, always incrementing.
-                    variableAssignments[varIdx, variableIterations[varIdx]] = variableIterations[varIdx];
+                    //variableAssignments[varIdx, variableIterations[varIdx]] = variableIterations[varIdx];
+                    variableAssignments[varIdx, variableIterations[varIdx]] = 1 + variableAssignments[varIdx, variableIterations[varIdx] - 1];
                     inUse[varIdx] = true;
                 }
 
@@ -146,7 +190,6 @@ namespace Mba.Simplifier.LinEq
 
                     ulong coeff = 1;
                     var degrees = baseFunction.Degrees;
-
 
                     for (int vIdx = 0; vIdx < degrees.Count; vIdx++)
                     {
@@ -178,7 +221,7 @@ namespace Mba.Simplifier.LinEq
                     sb.Append(midx == 0 ? "1, " : ", ");
 
 
-                    var meval = coeff;
+                    var meval = mmask & coeff;
                     eq.coeffs[midx] = meval;
 
                 }
@@ -190,7 +233,7 @@ namespace Mba.Simplifier.LinEq
                     inputs[vIdx] = variableAssignments[vIdx, variableIterations[vIdx]];
                 }
 
-                var result = PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
+                var result = mmask & PolynomialEvaluator.Eval(poly, inputs, canonicalBasis: true);
                 eq.result = result;
 
                 var inputStr = String.Join(", ", inputs);
@@ -234,10 +277,12 @@ namespace Mba.Simplifier.LinEq
             for (int i = 0; i < (int)numPoints; i++)
             {
                 var coeff = solutionMap[i];
-                var rcoeff = PolynomialReducer.GetReductionMask(poly.width, monomials[i]) & coeff;
-
+                //var rcoeff = PolynomialReducer.GetReductionMask(poly.width, monomials[i]) & coeff;
+                var rcoeff = coeff;
                 factorialOutput.SetCoeff(monomials[i], rcoeff);
             }
+
+            //Console.WriteLine($"After: {factorialOutput.ToString(false)}");
 
             var standardOutput = PolynomialReducer.GetCanonicalForm(factorialOutput);
 
@@ -577,7 +622,7 @@ namespace Mba.Simplifier.LinEq
             return product;
         }
 
-
+        public static uint MAXDEG = 10;
         // https://www.researchgate.net/publication/261421283_On_the_Newton_multivariate_polynomial_interpolation_with_applications
         public static void MvNewtonNew()
         {
@@ -590,8 +635,15 @@ namespace Mba.Simplifier.LinEq
             //poly.SetCoeff(new Monomial(14, 0), 65756);
             //poly.SetCoeff(new Monomial(13, 0), 2312132);
             //poly.SetCoeff(new Monomial(12, 0), 776546756767);
-            poly.SetCoeff(new Monomial(32, 0), 1);
+            //poly.SetCoeff(new Monomial(67, 0), 1);
 
+            //poly.SetCoeff(new Monomial(32, 0), 776546756767);
+
+            //poly.SetCoeff(new Monomial(1, 1), 1);
+
+            //poly = SparsePolynomial.ParsePoly("x + y + x*y + x*x + y*y + x*x*x + y*y*y + x*y*y + y*x*x", 2, 64);
+
+            // poly = SparsePolynomial.ParsePoly("y + x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 2, 64);
 
             //poly = SparsePolynomial.ParsePoly("12018333260144101810*y + 12670490878911611211*x + 80108105768519824*y*y + 13695898159358288600*x*y + 13363685499442732160*y*y*y + 12748260730795629248*x*y*y + 12465110187454997504*y*y*y*y + 10090656974170945024*x*y*y*y + 1378452286374879232*y*y*y*y*y + 10542703918158753792*x*y*y*y*y + 2889395752399339520*y*y*y*y*y*y + 9149001014639951872*x*y*y*y*y*y + 14816716637566664704*y*y*y*y*y*y*y + 7875404780207341568*x*y*y*y*y*y*y + 16411499749129060352*y*y*y*y*y*y*y*y + 18405398350772830208*x*y*y*y*y*y*y*y + 5006628381907746816*y*y*y*y*y*y*y*y*y + 7617777668603248640*x*y*y*y*y*y*y*y*y + 5811724210040471552*y*y*y*y*y*y*y*y*y*y + 8450204560567304192*x*y*y*y*y*y*y*y*y*y + 15940534159315828736*y*y*y*y*y*y*y*y*y*y*y + 12266303154647203840*x*y*y*y*y*y*y*y*y*y*y + 6796250300937142272*y*y*y*y*y*y*y*y*y*y*y*y + 9785671036442771456*x*y*y*y*y*y*y*y*y*y*y*y + 2197865607246905344*y*y*y*y*y*y*y*y*y*y*y*y*y + 17658263051113070592*x*y*y*y*y*y*y*y*y*y*y*y*y + 11578412693853306880*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 14171013283393306624*x*y*y*y*y*y*y*y*y*y*y*y*y*y + 12372452503642439680*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 7979441755793653760*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 9994120891832729600*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 2960940833135656960*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y + 1039487088992452608*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 64);
 
@@ -616,6 +668,10 @@ namespace Mba.Simplifier.LinEq
 
 
             //poly.SetCoeff(new Monomial(1, 1), 17);
+
+            // This polynomial with `MAXDEG == 33` does not work!
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x", 1, 8);
+
 
             var mmask = ModuloReducer.GetMask(poly.width);
             var solver = new LinearCongruenceSolver(mmask);
@@ -643,7 +699,7 @@ namespace Mba.Simplifier.LinEq
                 }
             }
 
-            
+
 
             //P(0, 0, 0, null);
             /*
@@ -661,6 +717,8 @@ namespace Mba.Simplifier.LinEq
 
 
             //P(0, 1, 1, table, zeroOrderTable);
+
+            int calls = 0;
 
             var n = MAXDEG;
             for(int tableI = (int)n - 1; tableI < n; tableI++)
@@ -720,9 +778,19 @@ namespace Mba.Simplifier.LinEq
 
                 if (tableI == n - 1)
                 {
-                    var before = DivDiffToPoly(tableI, coeffs);
+                    
+                    var (after, afterPoly) = DivDiffToPoly(poly.width, coeffs);
 
-                    Console.WriteLine($"Interpolation found polynomial:\n    {before}\n\n for input:\n    {poly}");
+
+                    Console.WriteLine($"\n{after}\n{afterPoly.ToString(false)}");
+              
+
+                    Console.WriteLine($"Before:\n    {PolynomialReducer.Reduce(poly)}\n\n");
+
+                    var standardOutput = PolynomialReducer.GetCanonicalForm(afterPoly);
+
+
+                    Console.WriteLine($"Interpolation found polynomial:\n   {standardOutput}\nwith o(n) time: {time}");
 
                     Debugger.Break();
                 }
@@ -738,26 +806,35 @@ namespace Mba.Simplifier.LinEq
             Debugger.Break();
         }
 
-        private static string DivDiffToPoly(int degree, Num[,] coeffs)
+        private static (string, SparsePolynomial) DivDiffToPoly(byte width, Num[,] coeffs)
         {
             var sb = new StringBuilder();
             // monomial order: 0, x, y, x*y
             //
 
+            var poly = new SparsePolynomial(2, width);
             for(int j = 0; j < coeffs.GetLength(1); j++)
             {
                 for(int i = 0;  i < coeffs.GetLength(0); i++)
                 {
                     var coeff = coeffs[i, j];
+
+                    var m = new Monomial((byte)i, (byte)j);
+                    coeff = PolynomialReducer.GetReductionMask(poly.width, m) & coeff;
+
                     if (coeff == 0)
                         continue;
 
-                    var s = GetMonomialStr(new Monomial((byte)i, (byte)j));
+
+
+
+                    var s = GetMonomialStr(m);
                     sb.Append($"{coeff}*{s} + ");
+                    poly.SetCoeff(m, coeff);
                 }
             }
 
-            return sb.ToString();
+            return (sb.ToString(), poly);
         }
 
         private static string GetMonomialStr(Monomial m)
@@ -777,10 +854,23 @@ namespace Mba.Simplifier.LinEq
         // If we have (a/b), we want to find a coefficient
         private static (ulong, bool) Mdiv(ulong mmask, LinearCongruenceSolver solver, ulong a, ulong b)
         {
-           // if (a > 255 || b > 255)
+            // if (a > 255 || b > 255)
             //    Debugger.Break();
-            var div = mmask & (a / b);
-            var undo = mmask & (div * b);
+
+            // var div = mmask & (a / b);
+            ulong div = 0;
+            if (a == 0 && b == 0)
+            {
+                // Probably illegal?
+                div = 0;
+            }
+
+            else
+            {
+                div = mmask & (a / b);
+            }
+
+                var undo = mmask & (div * b);
 
             bool valid = undo == a;
             var s = valid ? "GOOD" : "BAD";
@@ -904,11 +994,12 @@ namespace Mba.Simplifier.LinEq
             return (div, false);
         }
 
+        public static int time = 0;
 
 
         private static (ulong, bool) P(ulong mmask, LinearCongruenceSolver solver, int k, int i, int j, Dictionary<(int, int, int), (ulong, bool)> table, Num[,] zeroOrderTable)
         {
-
+            time += 1;
             var reduce = (ulong x) => mmask & x;
             var div = (ulong a, ulong b) => Mdiv(mmask, solver, a, b);
 

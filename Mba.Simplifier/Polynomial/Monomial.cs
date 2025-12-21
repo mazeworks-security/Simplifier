@@ -93,6 +93,19 @@ namespace Mba.Simplifier.Polynomial
             else if (totalB > totalA)
                 return -1;
 
+
+            // Pick the one with the most variables..
+            var one = -1;
+            var neg = 1;
+            var numA = a.Degrees.Count(x => x != 0);
+            var numB = b.Degrees.Count(x => x != 0);
+            if (numA > numB)
+                return one;
+            if (numB > numA)
+                return neg;
+
+            // Number of variables..
+            // Lowest deg
             for (int i = 0; i < 8; i++)
             {
                 var degA = a.GetVarDeg(i);
@@ -107,9 +120,9 @@ namespace Mba.Simplifier.Polynomial
                 if (degA == degB)
                     continue;
                 if (degA > degB)
-                    return 1;
+                    return one;
                 else
-                    return -1;
+                    return neg;
             }
             return 0;
         }
@@ -119,7 +132,7 @@ namespace Mba.Simplifier.Polynomial
             return ToString(true);
         }
 
-        public string ToString(bool canonicalBasis = true)
+        public string ToString(bool canonicalBasis = false)
         {
             var varDegrees = Degrees;
             List<string> powers = new();
