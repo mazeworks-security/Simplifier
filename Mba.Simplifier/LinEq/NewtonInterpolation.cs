@@ -622,10 +622,28 @@ namespace Mba.Simplifier.LinEq
             return product;
         }
 
-        public static uint MAXDEG = 10;
-        // https://www.researchgate.net/publication/261421283_On_the_Newton_multivariate_polynomial_interpolation_with_applications
-        public static void MvNewtonNew()
+     
+        public static void MvNewtonGeneralized()
         {
+            int numVars = 2;
+            var width = 8;
+            var deg = 2;
+            var poly = SparsePolynomial.ParsePoly("x + y", width, (byte)numVars);
+
+            var zeroOrderTable = new DensePolynomial(8, Enumerable.Repeat(deg, numVars).ToArray());
+            for(int i = 0; i < zeroOrderTable.coeffs.Length; i++)
+            {
+                var inputStr = String.Join(", ", zeroOrderTable.GetDegrees(i));
+                Console.WriteLine($"({inputStr})");
+            }
+            Debugger.Break();
+        }
+
+        public static uint MAXDEG = 3;
+        // https://www.researchgate.net/publication/261421283_On_the_Newton_multivariate_polynomial_interpolation_with_applications
+        public static void MvNewtonBivariate()
+        {
+            MvNewtonGeneralized();
             // 4 WORKS, 5 DOES NOT
             var poly = new SparsePolynomial(2, (byte)64);
             // poly.SetCoeff(new Monomial(3, 0), 127); // works with recent change
@@ -665,13 +683,16 @@ namespace Mba.Simplifier.LinEq
             // 4 works
             // 5 does not work
 
-
+            poly = SparsePolynomial.ParsePoly("x + y + x*y + x*x + y*y", 2, 8);
+            poly = SparsePolynomial.ParsePoly("x + y + x*y + x*x + y*y + x*x*x + y*y*y + x*y*y + y*x*x", 2, 64);
 
             //poly.SetCoeff(new Monomial(1, 1), 17);
 
             // This polynomial with `MAXDEG == 33` does not work!
-            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x", 1, 8);
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
+            poly = SparsePolynomial.ParsePoly("4243234*x + 42313443*y + 3432234*x*x + 23432432324*y*y + 234324*x*y + 23423443*x*y + 2453234342*x*x*y*y", 2, 5);
 
+            poly = SparsePolynomial.ParsePoly("4243234*x + 42313443*y + 3432234*x*x + 23432432324*y*y + 234324*x*y + 23423443*x*y + 2453234342*x*x*y*y", 2, 5);
 
             var mmask = ModuloReducer.GetMask(poly.width);
             var solver = new LinearCongruenceSolver(mmask);
@@ -687,6 +708,7 @@ namespace Mba.Simplifier.LinEq
                     var inputs = new ulong[] { (ulong)i, (ulong)j};
                     var y = mmask & PolynomialEvaluator.Eval(poly, new Num[] { (ulong)i, (ulong)j });
                     zeroOrderTable[i, j] = y;
+                    Console.WriteLine($"({i}, {j})");
                 }
             }
 
@@ -1027,6 +1049,8 @@ namespace Mba.Simplifier.LinEq
                 goto done;
             }
 
+            // If x >= degree and j is already within the bounds of the degrees, solve for x
+            // 
             if (j <= k - 1 && i > k-1)
             {
                 var (p0, p0Bad) = P(mmask, solver, k - 1, i, j, table, zeroOrderTable);
