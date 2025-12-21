@@ -1,4 +1,5 @@
-﻿using Mba.Simplifier.Pipeline;
+﻿using Mba.Simplifier.Jit;
+using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Polynomial;
 using Mba.Utility;
 using System;
@@ -102,7 +103,7 @@ namespace Mba.Simplifier.LinEq
                 var offset = offsets[varIdx];
                 for (int d = 0; d < deg; d++)
                 {
-                    sb.Append($"({name} - {offset - d})");
+                    sb.Append($"({name} - {d})");
                     if (d != deg - 1)
                         sb.Append("*");
                 }
@@ -142,7 +143,17 @@ namespace Mba.Simplifier.LinEq
 
             poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z + 33*x*x*x*x*x + 3443*x*x*x*z*z*y", 3, 8);
 
-            poly = SparsePolynomial.ParsePoly("x*x*x*x", 1, 8);
+
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y", 2, 8);
+
+            // Broiken
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z", 3, 8);
+            poly = SparsePolynomial.ParsePoly("2 + 4*x + 8*y + 16*x*y", 2, 8);
+            poly = SparsePolynomial.ParsePoly("x + y + z", 3, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*y*z", 3, 8);
+            //poly = SparsePolynomial.ParsePoly("x + y + x*y", 2, 8);
+            //poly = SparsePolynomial.ParsePoly("x*x*x*x", 1, 8);
 
             var mmask = poly.moduloMask;
 
@@ -150,6 +161,7 @@ namespace Mba.Simplifier.LinEq
             var varDegrees = Enumerable.Repeat(maxDeg, poly.numVars).ToArray();
             var numPoints = GetNumPoints(poly.numVars, maxDeg);
             var monomials = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).Where(x => x.GetTotalDeg() <= maxDeg).OrderBy(x => x).ToArray();
+
 
 
             //var sortedMonomials = new (byte, byte)[] { (0, 0), (0, 1), (1, 0), (1,1), (2, 0), (0, 2) };
@@ -204,7 +216,8 @@ namespace Mba.Simplifier.LinEq
             // Initially assign each variable to an increasing value.
             for (int i = 0; i < poly.numVars; i++)
             {
-                vValues[i] = 1 + (ulong)i;
+                //vValues[i] = 1 + (ulong)i;
+                vValues[i] = 0;
                 initialValues[i] = vValues[i];
             }
 
@@ -225,6 +238,9 @@ namespace Mba.Simplifier.LinEq
                 //if (equationIdx == limit - 1)
                 //    Debugger.Break();
 
+                //if (equationIdx == 2)
+                //    Debugger.Break();
+
                 var inputs = new ulong[vValues.Length];
                 for (int varIdx = 0; varIdx < addedMonomial.Degrees.Count; varIdx++)
                 {
@@ -233,7 +249,11 @@ namespace Mba.Simplifier.LinEq
                     {
                         var prevMax = (long)initialValues[varIdx];
                         foreach (var m in monomials.Take(equationIdx))
-                            prevMax = Math.Max(prevMax, (long)m.Degrees[varIdx]);
+                        {
+                            if (m.Degrees[varIdx] == 0)
+                                continue;
+                            prevMax = Math.Max(prevMax, (long)m.Degrees[varIdx] - 1);
+                        }
 
                         //inputs[varIdx] = initialValues[varIdx];
                         inputs[varIdx] = (ulong)prevMax;
@@ -271,7 +291,9 @@ namespace Mba.Simplifier.LinEq
                         {
                             var x = inputs[vIdx];
                             var x0 = initialValues[vIdx];
-                            product *= (x - (x0 + (Num)i));
+
+                            var sum = (x - (x0 + (Num)i));
+                            product *= sum;
 
                             sb.Append($"({x} - {x0} + {i})*");
                         }

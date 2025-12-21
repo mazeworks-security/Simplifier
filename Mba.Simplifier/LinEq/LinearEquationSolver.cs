@@ -310,6 +310,9 @@ namespace Mba.Simplifier.LinEq
                 return false;
             int limit = lc.d > 255 ? 255 : (int)lc.d;
 
+            //if (result == 0)
+            //    Debugger.Break();
+
             //var reduceMask = PolynomialReducer.GetReductionMask((byte)BitOperations.PopCount(linearSystem.ModuloMask), new Monomial(varIdx));
 
             bool anySuccess = false;
