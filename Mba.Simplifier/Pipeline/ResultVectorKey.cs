@@ -31,6 +31,36 @@ namespace Mba.Simplifier.Pipeline
         {
             return hashCode;
         }
+    }
+
+    public struct NthOrderKey : IEquatable<NthOrderKey>
+    {
+        public readonly int k;
+
+        public readonly int[] indices;
+
+        private readonly int hashCode;
+
+        public NthOrderKey(int k, int[] resultVector)
+        {
+            this.k = k;
+            this.indices = resultVector;
+
+            hashCode = k.GetHashCode();
+            foreach (var val in resultVector)
+                hashCode = hashCode * 17 + val.GetHashCode();
+
+        }
+
+        public bool Equals(NthOrderKey other)
+        {
+            return k == other.k && hashCode == other.hashCode &&  indices.SequenceEqual(other.indices);
+        }
+
+        public override int GetHashCode()
+        {
+            return hashCode;
+        }
 
     }
 }

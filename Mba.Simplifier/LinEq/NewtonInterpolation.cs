@@ -628,15 +628,204 @@ namespace Mba.Simplifier.LinEq
             int numVars = 2;
             var width = 8;
             var deg = 2;
-            var poly = SparsePolynomial.ParsePoly("x + y", width, (byte)numVars);
+            var poly = SparsePolynomial.ParsePoly("x + y", numVars, (byte)width);
 
-            var zeroOrderTable = new DensePolynomial(8, Enumerable.Repeat(deg, numVars).ToArray());
+            //  (1) Construct zero order table of initial values
+            var mmask = poly.moduloMask;
+            var dimensions = Enumerable.Repeat(deg, numVars).ToArray();
+            var zeroOrderTable = new DensePolynomial(8, dimensions);
             for(int i = 0; i < zeroOrderTable.coeffs.Length; i++)
             {
-                var inputStr = String.Join(", ", zeroOrderTable.GetDegrees(i));
-                Console.WriteLine($"({inputStr})");
+                // Compute x, y, z for f(x,y,z)
+                var inputs = zeroOrderTable.GetDegrees(i).Select(x => (ulong)x).ToArray();
+                var y = mmask & PolynomialEvaluator.Eval(poly, inputs);
+                zeroOrderTable.SetCoeff(i, y);
             }
+
+            // (2) Compute the kth order table of divided differences
+            var n = MAXDEG;
+            var solver = new LinearCongruenceSolver(mmask);
+            for (int tableI = (int)n - 1; tableI < n; tableI++)
+            {
+                Dictionary<NthOrderKey, ulong> table = new();
+                for (int coeffIndex = 0; coeffIndex < zeroOrderTable.coeffs.Length; coeffIndex++)
+                {
+      
+                    var indices = zeroOrderTable.GetDegrees(coeffIndex);
+                    if(indices.Sum() > n - 1)
+                    {
+                        continue;
+                    }
+
+                    var d = indices.Max();
+                    d = Math.Min(d, tableI);
+                    var nthOrder = new NthOrderKey(d, indices);
+
+                    Pm(mmask, solver, nthOrder, table, zeroOrderTable);
+                }
+
+
+                if (tableI == n - 1)
+                {
+                    var coeffs = new ulong[n, n];
+                    foreach(var (order, coeff) in table)
+                    {
+                        coeffs[order.indices[0], order.indices[1]] = coeff;
+                    }
+
+                    //var output = new DensePolynomial(zeroOrderTable.width, dimensions);
+
+
+
+                    var (after, afterPoly) = DivDiffToPoly(poly.width, coeffs);
+
+
+                    Console.WriteLine($"\n{after}\n{afterPoly.ToString(false)}");
+
+
+                    Console.WriteLine($"Before:\n    {PolynomialReducer.Reduce(poly)}\n\n");
+
+                    var standardOutput = PolynomialReducer.GetCanonicalForm(afterPoly);
+
+
+                    Console.WriteLine($"Interpolation found polynomial:\n   {standardOutput}\nwith o(n) time: {time}");
+
+                    Debugger.Break();
+                }
+            }
+
             Debugger.Break();
+        }
+
+        public static ulong Pm(ulong mmask, LinearCongruenceSolver solver, NthOrderKey nthOrder, Dictionary<NthOrderKey, ulong> table, DensePolynomial zeroOrderTable)
+        {
+            var reduce = (ulong x) => mmask & x;
+            var div = (ulong a, ulong b) => Mdiv(mmask, solver, a, b);
+            var P = (NthOrderKey order) => Pm(mmask, solver, order, table, zeroOrderTable);
+            if (table.ContainsKey(nthOrder))
+            {
+                return table[nthOrder];
+            }
+
+            var k = nthOrder.k;
+            if (k == 0)
+            {
+                table[nthOrder] = zeroOrderTable.GetCoeff(nthOrder.indices);
+                return table[nthOrder];
+            }
+
+            var indices = nthOrder.indices;
+            int toIsolate = -1;
+            for(int index1 = 0; index1 < indices.Length; index1++)
+            {
+                var i = indices[index1];
+                bool cond = i > k - 1;
+                if (!cond)
+                    continue;
+                
+
+                for (int index2 = 0; index2 < indices.Length; index2++)
+                {
+                    if (index1 == index2)
+                        continue;
+
+                    var j = indices[index2];
+                    cond = j <= k - 1;
+                    if (!cond)
+                        break;
+                }
+
+                if(cond)
+                {
+                    toIsolate = index1;
+                    break;
+                }
+            }
+
+            if(toIsolate != -1)
+            {
+                var p0 = P(new NthOrderKey(k - 1, indices.ToArray()));
+
+                var arr = indices.ToArray();
+                arr[toIsolate] -= 1;
+
+                var p1 = P(new NthOrderKey(k - 1, arr));
+
+                var xi = (ulong)indices[toIsolate];
+                var xik = (ulong)xi - (ulong)k;
+
+                var (diff, isBad) = div((reduce(p0 - p1)), (reduce(xi - xik)));
+                table[nthOrder] = diff;
+                return diff;
+            }
+
+            var n = MAXDEG;
+            bool allGreater = indices.All(x => x > k - 1);
+            bool bounded = indices.Sum() <= n;
+            // (00, 11) - (01, 10)
+            if(allGreater && bounded)
+            {
+                /*
+                var shifts = new List<int[]>()
+                {
+                    new int[] { 0, 0},
+                    new int[] { -1, -1},
+                    new int[] { 0, -1},
+                    new int[] { -1, 0},
+                };
+                */
+
+                var shifts = new List<int[]>();
+                var numCombinations = (int)Math.Pow(2, indices.Length);
+                for(int v = 0; v < numCombinations; v++)
+                {
+                    var arr = new int[indices.Length];
+                    for(ushort bitIndex = 0; bitIndex < indices.Length; bitIndex++)
+                    {
+                        int value = (v >> bitIndex) & 1;
+                        arr[bitIndex] = value;
+                    }
+
+                    shifts.Add(arr);
+                }
+
+                shifts = shifts.OrderBy(x => (x.Count(y => y == 1) % 2) != 0).ToList();
+
+                var sum1 = 0ul;
+                var sum2 = 0ul;
+
+                for(int shiftIndex = 0; shiftIndex < shifts.Count; shiftIndex++)
+                {
+                    var arr = indices.ToArray();
+                    for (int i = 0; i < arr.Length; i++)
+                        arr[i] -= shifts[shiftIndex][i];
+
+                    var r = P(new NthOrderKey(k - 1, arr));
+
+                    //ulong coeff = shiftIndex >= shifts.Count / 2 ? ulong.MaxValue : 1;
+                    //r *= coeff;
+
+                    if (shiftIndex < shifts.Count / 2)
+                        sum1 += r;
+                    else
+                        sum2 += r;
+                }
+
+                ulong product = 1;
+                for(int i = 0; i < indices.Length; i++)
+                {
+                    var xi = (ulong)indices[i];
+                    var xik = (ulong)xi - (ulong)k;
+                    product *= (xi - xik);
+                }
+
+                var (dif, isBad) = div(reduce(sum1 - sum2), reduce(product));
+                table[nthOrder] = dif;
+                return table[nthOrder];
+            }
+
+            Debugger.Break();
+            return 0;
         }
 
         public static uint MAXDEG = 3;
@@ -694,6 +883,7 @@ namespace Mba.Simplifier.LinEq
 
             poly = SparsePolynomial.ParsePoly("4243234*x + 42313443*y + 3432234*x*x + 23432432324*y*y + 234324*x*y + 23423443*x*y + 2453234342*x*x*y*y", 2, 5);
 
+            poly = SparsePolynomial.ParsePoly("x + y ", 2, 8);
             var mmask = ModuloReducer.GetMask(poly.width);
             var solver = new LinearCongruenceSolver(mmask);
             Console.WriteLine(poly);
@@ -752,13 +942,16 @@ namespace Mba.Simplifier.LinEq
                 {
                     for (int j = 0; j < n - i; j++)
                     {
+                        if (i == 2 && j == 2)
+                            Debugger.Break();
                         var d = Math.Max(i, j);
                         //d = Math.Min(d, i);
                         d = Math.Min(d, tableI);
 
                         //Console.WriteLine($"p{d}: {i},{j}");
-                       // if (d == 2 && i == 2 && j == 1)
-                       //     Debugger.Break();
+                        // if (d == 2 && i == 2 && j == 1)
+                        //     Debugger.Break();
+                        Console.WriteLine($"d: {d}, i: {i}, j: {j}");
                         P(mmask, solver, d, i, j, table, zeroOrderTable);
                     }
                 }
