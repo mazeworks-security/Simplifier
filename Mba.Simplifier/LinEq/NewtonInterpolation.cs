@@ -625,10 +625,11 @@ namespace Mba.Simplifier.LinEq
      
         public static void MvNewtonGeneralized()
         {
-            int numVars = 2;
+            int numVars = 3;
             var width = 8;
             var deg = 2;
-            var poly = SparsePolynomial.ParsePoly("x + y", numVars, (byte)width);
+            //var poly = SparsePolynomial.ParsePoly("x + y + z", numVars, (byte)width);
+            var poly = SparsePolynomial.ParsePoly("x + y + z", numVars, (byte)width);
 
             //  (1) Construct zero order table of initial values
             var mmask = poly.moduloMask;
@@ -668,19 +669,33 @@ namespace Mba.Simplifier.LinEq
                 if (tableI == n - 1)
                 {
                     var coeffs = new ulong[n, n];
+
+
+                    var outPoly = new SparsePolynomial(poly.numVars, poly.width);
+                    foreach (var (order, coeff) in table)
+                    {
+                        //if (order.k != n - 1)
+                        //    continue;
+                        var m = new Monomial(order.indices.Select(x => (byte)x).ToArray());
+                        outPoly.SetCoeff(m, coeff);
+                    }
+
+                    /*
                     foreach(var (order, coeff) in table)
                     {
-                        coeffs[order.indices[0], order.indices[1]] = coeff;
+                        coeffs[order.indices[0], order.indices[1], coeff] = coeff;
                     }
+                    */
 
                     //var output = new DensePolynomial(zeroOrderTable.width, dimensions);
 
 
 
-                    var (after, afterPoly) = DivDiffToPoly(poly.width, coeffs);
+                    //    var (after, afterPoly) = DivDiffToPoly(poly.width, coeffs);
+                    var (after, afterPoly) = ("", outPoly);
 
 
-                    Console.WriteLine($"\n{after}\n{afterPoly.ToString(false)}");
+                    Console.WriteLine($"After: \n{after}\n{afterPoly.ToString(true)}");
 
 
                     Console.WriteLine($"Before:\n    {PolynomialReducer.Reduce(poly)}\n\n");
@@ -690,6 +705,8 @@ namespace Mba.Simplifier.LinEq
 
                     Console.WriteLine($"Interpolation found polynomial:\n   {standardOutput}\nwith o(n) time: {time}");
 
+                    Console.WriteLine($"\n\nWith reduced form: {PolynomialReducer.Reduce(standardOutput)}");
+                    
                     Debugger.Break();
                 }
             }
@@ -715,6 +732,9 @@ namespace Mba.Simplifier.LinEq
             }
 
             var indices = nthOrder.indices;
+            //if (indices[0] == 0 && indices[1] == 1 && indices[2] == 1)
+            //    Debugger.Break();
+
             int toIsolate = -1;
             for(int index1 = 0; index1 < indices.Length; index1++)
             {
@@ -722,17 +742,27 @@ namespace Mba.Simplifier.LinEq
                 bool cond = i > k - 1;
                 if (!cond)
                     continue;
-                
 
+                cond = false;
                 for (int index2 = 0; index2 < indices.Length; index2++)
                 {
                     if (index1 == index2)
                         continue;
 
+                    /*
                     var j = indices[index2];
                     cond = j <= k - 1;
                     if (!cond)
                         break;
+                    */
+
+                    var j = indices[index2];
+                    //cond = j <= k - 1;
+                    if (j <= k - 1)
+                    {
+                        cond = true;
+                        break;
+                    }
                 }
 
                 if(cond)
@@ -1020,6 +1050,8 @@ namespace Mba.Simplifier.LinEq
 
             Debugger.Break();
         }
+
+
 
         private static (string, SparsePolynomial) DivDiffToPoly(byte width, Num[,] coeffs)
         {
