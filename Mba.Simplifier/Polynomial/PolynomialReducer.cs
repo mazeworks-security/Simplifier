@@ -310,7 +310,7 @@ namespace Mba.Simplifier.Polynomial
 
         public static BigInteger Factorial(BigInteger a)
         {
-            ulong fact = 1;
+            BigInteger fact = 1;
             for (ulong x = 1; x <= a; x++)
                 fact *= x;
             return fact;

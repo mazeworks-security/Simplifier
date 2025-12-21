@@ -156,6 +156,14 @@ namespace Mba.Simplifier.LinEq
 
             poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z", 3, 8);
             poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z + 33*x*x*x*x*x + 3443*x*x*x*z*z*y", 3, 8);
+
+
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
+            poly = SparsePolynomial.ParsePoly("x*y*z", 3, 8);
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z + 33*x*x*x*x*x + 3443*x*x*x*z*z*y", 3, 8);
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
             //poly = SparsePolynomial.ParsePoly("x + y + x*y", 2, 8);
             //poly = SparsePolynomial.ParsePoly("x*x*x*x", 1, 8);
 
@@ -166,6 +174,7 @@ namespace Mba.Simplifier.LinEq
             var numPoints = GetNumPoints(poly.numVars, maxDeg);
             var monomials = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).Where(x => x.GetTotalDeg() <= maxDeg).OrderBy(x => x).ToArray();
 
+            bool log = false;
 
 
             //var sortedMonomials = new (byte, byte)[] { (0, 0), (0, 1), (1, 0), (1,1), (2, 0), (0, 2) };
@@ -301,23 +310,29 @@ namespace Mba.Simplifier.LinEq
                             var sum = (x - (x0 + (Num)i));
                             product *= sum;
 
-                            sb.Append($"({x} - {x0} + {i})*");
+                            if(log)
+                                sb.Append($"({x} - {x0} + {i})*");
                         }
                     }
 
-                    sb.Append(", ");
+                    if (log)
+                        sb.Append(", ");
 
                     product &= mmask;
                     terms.Add((product, monomial));
                 }
 
-                Console.WriteLine(sb);
+                if (log)
+                    Console.WriteLine(sb);
 
                 var eq = new Equation(terms, y);
                 eqs.Add(eq);
 
-                var strI = String.Join(", ", inputs);
-                Console.WriteLine($"{eq} on inputs {strI}");
+                if (log)
+                {
+                    var strI = String.Join(", ", inputs);
+                    Console.WriteLine($"{eq} on inputs {strI}");
+                }
             }
 
 
@@ -335,8 +350,6 @@ namespace Mba.Simplifier.LinEq
 
             var newSystem = new LinearSystem(poly.width, poly.numVars, newEqs);
 
-            Console.WriteLine(newSystem.ToZ3String());
-
             var newSolver = new LinearCongruenceSolver(poly.moduloMask);
             var newSolutionMap = new ulong[limit];
 
@@ -344,6 +357,11 @@ namespace Mba.Simplifier.LinEq
             var newFoundSolution = LinearEquationSolver.EnumerateSolutions(newSystem, newSolver, newSolutionMap, 0, upperTriangular: false);
             if (!newFoundSolution)
                 throw new InvalidOperationException("Unsolvable system!");
+
+
+            if(log)
+                Console.WriteLine(newSystem.ToZ3String());
+
 
             Console.WriteLine($"op1 = {poly}");
 
@@ -353,7 +371,8 @@ namespace Mba.Simplifier.LinEq
             int ci = 0;
             foreach(var m in monomials)
             {
-                Console.Write($"c[{ci}]*{GetNewtonMonomialStr(m, names, offsets)} + ");
+                var coeff = log ? $"c[{ci}]" : newSolutionMap[ci].ToString();
+                Console.Write($"{coeff}*{GetNewtonMonomialStr(m, names, offsets)} + ");
                 ci += 1;
             }
 
@@ -831,7 +850,10 @@ namespace Mba.Simplifier.LinEq
 
         private static ulong GetNumPoints(int n, int d)
         {
-            var r = PolynomialReducer.Factorial(n + d) / (PolynomialReducer.Factorial(d) * PolynomialReducer.Factorial(n));
+            var a = PolynomialReducer.Factorial(n + d);
+            var b = (PolynomialReducer.Factorial(d) * PolynomialReducer.Factorial(n));
+
+            var r = a / b;
             return (ulong)r;
         }
 
