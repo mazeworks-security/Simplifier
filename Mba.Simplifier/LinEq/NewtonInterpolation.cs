@@ -61,7 +61,7 @@ namespace Mba.Simplifier.LinEq
         }
 
 
-        static string[] nameTable = new string[] { "x", "y", "c", "d"};
+        static string[] nameTable = new string[] { "x", "y", "z", "d"};
 
         //public record Equation(List<(ulong coeff, Monomial monomial)> Terms, ulong Result);
         public class Equation
@@ -82,9 +82,41 @@ namespace Mba.Simplifier.LinEq
             }
         }
 
+        private static string GetNewtonMonomialStr(Monomial m, string[] names, int[] offsets)
+        {
+            if (m.Degrees.All(x => x == 0))
+                return "1";
+
+            bool prev = false;
+            var sb = new StringBuilder();
+            for(int varIdx = 0; varIdx < m.Degrees.Count; varIdx++)
+            {
+                var deg = m.Degrees[varIdx];
+                if (deg == 0)
+                    continue;
+
+                if (prev)
+                    sb.Append("*");
+
+                var name = names[varIdx];
+                var offset = offsets[varIdx];
+                for (int d = 0; d < deg; d++)
+                {
+                    sb.Append($"({name} - {offset - d})");
+                    if (d != deg - 1)
+                        sb.Append("*");
+                }
+
+                prev = true;
+            }
+
+            return sb.ToString();
+        }
+
         // Problem: We can't just pass zero..
         public static void NewClassic2()
         {
+            //GetNewtonMonomialStr()
             var poly = SparsePolynomial.ParsePoly("x + y + x*y  ", 2, 8);
 
             poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
@@ -100,6 +132,17 @@ namespace Mba.Simplifier.LinEq
             poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
 
             poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y", 2, 8);
+
+
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z", 3, 8);
+
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + z", 3, 8);
+
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z + 33*x*x*x*x*x + 3443*x*x*x*z*z*y", 3, 8);
+
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z + 33*x*x*x*x*x + 3443*x*x*x*z*z*y", 3, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*x*x*x", 1, 8);
 
             var mmask = poly.moduloMask;
 
@@ -179,13 +222,36 @@ namespace Mba.Simplifier.LinEq
                     vValues[varIdx] += 1;
                 }
 
-                vValues = realInputs[equationIdx].ToArray();
+                //if (equationIdx == limit - 1)
+                //    Debugger.Break();
+
+                var inputs = new ulong[vValues.Length];
+                for (int varIdx = 0; varIdx < addedMonomial.Degrees.Count; varIdx++)
+                {
+                    // If this monomial is undemanded, cancel it out.
+                    if (addedMonomial.Degrees[varIdx] == 0)
+                    {
+                        var prevMax = (long)initialValues[varIdx];
+                        foreach (var m in monomials.Take(equationIdx))
+                            prevMax = Math.Max(prevMax, (long)m.Degrees[varIdx]);
+
+                        //inputs[varIdx] = initialValues[varIdx];
+                        inputs[varIdx] = (ulong)prevMax;
+                        continue;
+                    }
+
+                    inputs[varIdx] = initialValues[varIdx] + addedMonomial.Degrees[varIdx];
+                }
+                
+
+                //vValues = realInputs[equationIdx].ToArray();
+          
 
                 // Compute the result of evaluating this poly.
                 // c0*1 + c1*(x - 1) + c2*(y-2) =
                 // When evaluating c2, we need to give it a value that cancels out c1..
                 // The highest last x that was seen..
-                var y = mmask & PolynomialEvaluator.Eval(poly, vValues);
+                var y = mmask & PolynomialEvaluator.Eval(poly, inputs);
 
                 List<(ulong coeff, Monomial monomial)> terms = new();
 
@@ -203,7 +269,7 @@ namespace Mba.Simplifier.LinEq
 
                         for(int i = 0; i < deg; i++)
                         {
-                            var x = vValues[vIdx];
+                            var x = inputs[vIdx];
                             var x0 = initialValues[vIdx];
                             product *= (x - (x0 + (Num)i));
 
@@ -222,7 +288,7 @@ namespace Mba.Simplifier.LinEq
                 var eq = new Equation(terms, y);
                 eqs.Add(eq);
 
-                var strI = String.Join(", ", vValues);
+                var strI = String.Join(", ", inputs);
                 Console.WriteLine($"{eq} on inputs {strI}");
             }
 
@@ -250,6 +316,20 @@ namespace Mba.Simplifier.LinEq
             var newFoundSolution = LinearEquationSolver.EnumerateSolutions(newSystem, newSolver, newSolutionMap, 0, upperTriangular: false);
             if (!newFoundSolution)
                 throw new InvalidOperationException("Unsolvable system!");
+
+            Console.WriteLine($"op1 = {poly}");
+
+            Console.Write("op2 = ");
+            var names = nameTable;
+            var offsets = initialValues.Select(x => (int)x).ToArray();
+            int ci = 0;
+            foreach(var m in monomials)
+            {
+                Console.Write($"c[{ci}]*{GetNewtonMonomialStr(m, names, offsets)} + ");
+                ci += 1;
+            }
+
+            Console.WriteLine("");
 
             var inUse = new bool[poly.numVars];
 

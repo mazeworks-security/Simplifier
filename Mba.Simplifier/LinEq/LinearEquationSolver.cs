@@ -326,7 +326,7 @@ namespace Mba.Simplifier.LinEq
                     if (Solutions.Add(c))
                     {
 
-                        Console.WriteLine(c);
+                        //Console.WriteLine(c);
                     }
                     //Solutions.Add(solutionMap.ToArray());
                     return true;
