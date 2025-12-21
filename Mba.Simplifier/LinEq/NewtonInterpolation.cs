@@ -63,6 +63,25 @@ namespace Mba.Simplifier.LinEq
 
         static string[] nameTable = new string[] { "x", "y", "c", "d"};
 
+        //public record Equation(List<(ulong coeff, Monomial monomial)> Terms, ulong Result);
+        public class Equation
+        {
+            public Equation(List<(ulong coeff, Monomial monomial)> terms, ulong result)
+            {
+                Terms = terms;
+                Result = result;
+            }
+
+            public List<(ulong coeff, Monomial monomial)> Terms { get; }
+            public ulong Result { get; }
+
+            public override string ToString()
+            {
+                var sum = String.Join(" + ", Terms.Select(x => $"{x.coeff}*{x.monomial}"));
+                return $"[{sum}] == {Result}";
+            }
+        }
+
         // Problem: We can't just pass zero..
         public static void NewClassic2()
         {
@@ -80,12 +99,15 @@ namespace Mba.Simplifier.LinEq
 
             poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
 
+            poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
+
             var mmask = poly.moduloMask;
 
             var maxDeg = (int)GetMaxDegree(poly);
             var varDegrees = Enumerable.Repeat(maxDeg, poly.numVars).ToArray();
             var numPoints = GetNumPoints(poly.numVars, maxDeg);
             var monomials = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).Where(x => x.GetTotalDeg() <= maxDeg).OrderBy(x => x).ToArray();
+
 
             //var sortedMonomials = new (byte, byte)[] { (0, 0), (0, 1), (1, 0), (1,1), (2, 0), (0, 2) };
             //monomials = sortedMonomials.Select(x => new Monomial(x.Item1, x.Item2)).ToArray();
@@ -94,10 +116,35 @@ namespace Mba.Simplifier.LinEq
             var equations = new List<LinearEquation>();
 
 
+            var realInputs = new List<ulong[]>()
+            {
+                new ulong[] { 1, 2},
+                new ulong[] { 2, 2},
+                new ulong[] { 1, 3},
+                //new ulong[] { 1, 2},
+            };
+
+
+            realInputs = new List<ulong[]>()
+            {
+                new ulong[] { 1, 2},
+                new ulong[] { 2, 2},
+                new ulong[] { 1, 3},
+                new ulong[] { 2, 3},
+                new ulong[] { 3, 2},
+                new ulong[] { 2, 4},
+               // new ulong[] { 0, 0},
+               // new ulong[] { 0, 0},
+                //new ulong[] { 1, 2},
+            };
+
 
             // Values of e.g. x0, x1, x2, x3, ...
             var variableAssignments = new ulong[poly.numVars, numPoints];
 
+            // Initially assign each variable to an increasing value.
+            for (int i = 0; i < poly.numVars; i++)
+                variableAssignments[i, 0] = 1 + (ulong)i;
 
            // variableAssignments[0, 0] = 0;
             //variableAssignments[1, 0] = 1;
@@ -105,7 +152,105 @@ namespace Mba.Simplifier.LinEq
             // What index a variable is currently assigned to.
             //  Aka the value of `xk`.
             //var variableIterations = new ulong[poly.numVars];
-            var variableIterations = Enumerable.Repeat(1ul, poly.numVars).ToArray();
+            var variableIterations = Enumerable.Repeat(0ul, poly.numVars).ToArray();
+
+
+            var eqs = new List<Equation>();
+
+            var initialValues = new ulong[poly.numVars];
+            var vValues = new ulong[poly.numVars];
+            // Initially assign each variable to an increasing value.
+            for (int i = 0; i < poly.numVars; i++)
+            {
+                vValues[i] = 1 + (ulong)i;
+                initialValues[i] = vValues[i];
+            }
+
+            int limit = (int)numPoints;
+            // Alternatively just try generating the system.
+            for (int equationIdx = 0; equationIdx < (int)limit; equationIdx++)
+            {
+                var addedMonomial = monomials[equationIdx];
+                for(int varIdx = 0; varIdx < addedMonomial.Degrees.Count; varIdx++)
+                {
+                    if (addedMonomial.Degrees[varIdx] == 0)
+                        continue;
+
+                    // Increment a variables value when we actually need it?
+                    vValues[varIdx] += 1;
+                }
+
+                vValues = realInputs[equationIdx].ToArray();
+
+                // Compute the result of evaluating this poly.
+                // c0*1 + c1*(x - 1) + c2*(y-2) =
+                // When evaluating c2, we need to give it a value that cancels out c1..
+                // The highest last x that was seen..
+                var y = PolynomialEvaluator.Eval(poly, vValues);
+
+                List<(ulong coeff, Monomial monomial)> terms = new();
+
+                var sb = new StringBuilder();
+                for (int midx = 0; midx < equationIdx + 1; midx++)
+                {
+                    var monomial = monomials[midx];
+                    ulong product = 1;
+                    for(int vIdx = 0; vIdx < monomial.Degrees.Count; vIdx++)
+                    {
+                        var deg = monomial.Degrees[vIdx];
+                        if (deg == 0)
+                            continue;
+                        var name = nameTable[vIdx];
+
+                        for(int i = 0; i < deg; i++)
+                        {
+                            var x = vValues[vIdx];
+                            var x0 = initialValues[vIdx];
+                            product *= (x - (x0 + (Num)i));
+
+                            sb.Append($"({x} - {x0} + {i})*");
+                        }
+                    }
+
+                    sb.Append(", ");
+
+                    product &= mmask;
+                    terms.Add((product, monomial));
+                }
+
+                Console.WriteLine(sb);
+
+                var eq = new Equation(terms, y);
+                eqs.Add(eq);
+
+                var strI = String.Join(", ", vValues);
+                Console.WriteLine($"{eq} on inputs {strI}");
+            }
+
+
+
+            var newEqs = new List<LinearEquation>();
+            foreach(var eq in eqs)
+            {
+                var newEq = new LinearEquation(limit);
+                for (int i = 0; i < eq.Terms.Count; i++)
+                    newEq.coeffs[i] = eq.Terms[i].coeff;
+                newEq.result = eq.Result;
+
+                newEqs.Add(newEq);
+            }
+
+            var newSystem = new LinearSystem(poly.width, poly.numVars, newEqs);
+
+            Console.WriteLine(newSystem.ToZ3String());
+
+            var newSolver = new LinearCongruenceSolver(poly.moduloMask);
+            var newSolutionMap = new ulong[limit];
+
+
+            var newFoundSolution = LinearEquationSolver.EnumerateSolutions(newSystem, newSolver, newSolutionMap, 0, upperTriangular: false);
+            if (!newFoundSolution)
+                throw new InvalidOperationException("Unsolvable system!");
 
             var inUse = new bool[poly.numVars];
 
@@ -132,44 +277,14 @@ namespace Mba.Simplifier.LinEq
                     continue;
                 }
 
-                /*
-                // Otherwise we are adding an actual monomial.. some book keeping needs to be done.
-                for(int i = 0; i < addedMonomial.Degrees.Count; i++)
-                {
-                    // If a variable is not demanded, we assign it to zero.
-                    var deg = addedMonomial.Degrees[i];
-                    if (deg == 0)
-                        continue;
-
-                    // Otherwise its demanded. First increment its version
-                    variableIterations[i] += 1;
-
-                    // Then assign it
-                    variableAssignments[i, variableIterations[i]] = 1 + variableAssignments[i, variableIterations[i] - 1];
-                }
-                */
-
-                for (int i = 0; i < addedMonomial.Degrees.Count; i++)
-                {
-                    for(int j = i + 1; j < addedMonomial.Degrees.Count; j++)
-                    {
-                        var m1 = addedMonomial.Degrees[i];
-                        var m2 = addedMonomial.Degrees[j];
-                        if (m1 == 0 || m2 == 0)
-                            continue;
-
-                        dependencies[i].Add(j);
-                        dependencies[j].Add(i);
-                    }
-                    
-                }
-
                 // Otherwise we are adding an actual monomial.. some book keeping needs to be done.
                 for (int varIdx = 0; varIdx < addedMonomial.Degrees.Count; varIdx++)
                 {
                     // If a variable is not demanded, we assign it to zero.
                     var deg = addedMonomial.Degrees[varIdx];
-                    if (deg == 0 && dependencies[varIdx].Count == 0)
+                    //if (deg == 0 && dependencies[varIdx].Count == 0)
+                    //    continue;
+                    if (deg == 0)
                         continue;
                     // Correction: If this monomial is just `x`, set all other variables to zero!
 
@@ -182,7 +297,7 @@ namespace Mba.Simplifier.LinEq
 
                     // Then assign it to a non zero, always incrementing.
                     //variableAssignments[varIdx, variableIterations[varIdx]] = variableIterations[varIdx];
-                    variableAssignments[varIdx, variableIterations[varIdx]] = 1 + variableAssignments[varIdx, variableIterations[varIdx] - 1];
+                    //variableAssignments[varIdx, variableIterations[varIdx]] = 1 + variableAssignments[varIdx, variableIterations[varIdx] - 1];
                     inUse[varIdx] = true;
                 }
 
