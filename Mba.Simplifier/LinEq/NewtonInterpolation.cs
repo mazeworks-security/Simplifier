@@ -99,7 +99,7 @@ namespace Mba.Simplifier.LinEq
 
             poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
 
-            poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y", 2, 8);
 
             var mmask = poly.moduloMask;
 
@@ -123,7 +123,6 @@ namespace Mba.Simplifier.LinEq
                 new ulong[] { 1, 3},
                 //new ulong[] { 1, 2},
             };
-
 
             realInputs = new List<ulong[]>()
             {
@@ -186,7 +185,7 @@ namespace Mba.Simplifier.LinEq
                 // c0*1 + c1*(x - 1) + c2*(y-2) =
                 // When evaluating c2, we need to give it a value that cancels out c1..
                 // The highest last x that was seen..
-                var y = PolynomialEvaluator.Eval(poly, vValues);
+                var y = mmask & PolynomialEvaluator.Eval(poly, vValues);
 
                 List<(ulong coeff, Monomial monomial)> terms = new();
 
