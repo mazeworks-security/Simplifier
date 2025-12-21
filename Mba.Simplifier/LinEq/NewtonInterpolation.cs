@@ -77,6 +77,9 @@ namespace Mba.Simplifier.LinEq
             poly = SparsePolynomial.ParsePoly("x*x*y", 2, 8);
 
             poly = SparsePolynomial.ParsePoly("y + x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
+
             var mmask = poly.moduloMask;
 
             var maxDeg = (int)GetMaxDegree(poly);
@@ -732,10 +735,13 @@ namespace Mba.Simplifier.LinEq
             }
 
             var indices = nthOrder.indices;
+            Console.WriteLine(String.Join(", ", indices) + $" with k {nthOrder.k}");
             //if (indices[0] == 0 && indices[1] == 1 && indices[2] == 1)
             //    Debugger.Break();
 
             int toIsolate = -1;
+
+            /*
             for(int index1 = 0; index1 < indices.Length; index1++)
             {
                 var i = indices[index1];
@@ -749,12 +755,6 @@ namespace Mba.Simplifier.LinEq
                     if (index1 == index2)
                         continue;
 
-                    /*
-                    var j = indices[index2];
-                    cond = j <= k - 1;
-                    if (!cond)
-                        break;
-                    */
 
                     var j = indices[index2];
                     //cond = j <= k - 1;
@@ -771,9 +771,38 @@ namespace Mba.Simplifier.LinEq
                     break;
                 }
             }
+            */
 
-            if(toIsolate != -1)
+            // Compute the max variable.
+            var maxI = 0;
+            for(int vi = 0; vi < indices.Length; vi++)
             {
+                if (indices[vi] > indices[maxI])
+                    maxI = vi;
+            }
+
+
+            bool isolate = indices[maxI] > k - 1;
+            isolate &= indices.Any(x => x < indices[maxI]);
+            /*
+            for(int j = 0; j < indices.Length; j++)
+            {
+                if (maxI == j)
+                    continue;
+
+                // x**3*y**3 should not be processed
+                if (indices[j] >= indices[maxI])
+                {
+                    isolate = false;
+                    break;
+                }
+            }
+            */
+
+
+            if(isolate)
+            {
+                toIsolate = maxI;
                 var p0 = P(new NthOrderKey(k - 1, indices.ToArray()));
 
                 var arr = indices.ToArray();

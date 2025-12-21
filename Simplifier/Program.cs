@@ -43,9 +43,9 @@ inputText = " -x**63 + 64*x**62 - 2016*x**61 + 41664*x**60 - 635376*x**59 + 7624
 
 //inputText = " (64:i8+((((224:i8*x:i8)+(64:i8*(x:i8**2:i8)))+(212:i8*(x:i8**5:i8)))+(205:i8*(x:i8**7:i8))))";
 
- NewtonInterpolation.MvNewtonBivariate();
+ //NewtonInterpolation.MvNewtonBivariate();
 
-//NewtonInterpolation.NewClassic();
+NewtonInterpolation.NewClassic();
 
 var printHelp = () =>
 {
