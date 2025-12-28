@@ -132,7 +132,7 @@ namespace Mba.Simplifier.Polynomial
             return ToString(true);
         }
 
-        public string ToString(bool canonicalBasis = false)
+        public string ToString(bool canonicalBasis = false, bool unroll = true)
         {
             var varDegrees = Degrees;
             List<string> powers = new();
@@ -154,7 +154,6 @@ namespace Mba.Simplifier.Polynomial
                     continue;
                 }
 
-                bool unroll = true;
                 string pow = null;
                 if (canonicalBasis)
                     pow = GetCanonicalBasisStr(varName, degree, unroll);

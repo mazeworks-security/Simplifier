@@ -164,6 +164,16 @@ namespace Mba.Simplifier.LinEq
             poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
 
             poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z + 33*x*x*x*x*x + 3443*x*x*x*z*z*y", 3, 8);
+
+            poly = SparsePolynomial.ParsePoly("1143416480 + 1792289334*x0 + 1400439363*x1 + 1549354901*x2 + 750794788*x0*x1 + 227753240*x0*x2 + 1915127299*x1*x2 + 1672049526*x0*x0 + 1827198538*x1*x1 + 1408829269*x2*x2 + 1710567261*x0*x1*x2 + 21157709*x0*x0*x1 + 1113710701*x0*x0*x2 + 40185026*x0*x1*x1 + 159464183*x0*x2*x2 + 1297690672*x1*x1*x2 + 829342554*x1*x2*x2 + 1748266395*x0*x0*x0 + 474011095*x1*x1*x1 + 2076924414*x2*x2*x2 + 69212338*x0*x0*x1*x2 + 530993515*x0*x1*x1*x2 + 1420726564*x0*x1*x2*x2 + 2077245454*x0*x0*x0*x1 + 1887748253*x0*x0*x0*x2 + 1668604664*x0*x0*x1*x1 + 1375091916*x0*x0*x2*x2 + 193565932*x0*x1*x1*x1 + 1440319644*x0*x2*x2*x2 + 166847441*x1*x1*x1*x2 + 661804695*x1*x1*x2*x2 + 361173395*x1*x2*x2*x2 + 999045089*x0*x0*x0*x0 + 255405560*x1*x1*x1*x1 + 1878554461*x2*x2*x2*x2 + 514981880*x0*x0*x0*x1*x2 + 1304883535*x0*x0*x1*x1*x2 + 897376920*x0*x0*x1*x2*x2 + 625678132*x0*x1*x1*x1*x2 + 1586249817*x0*x1*x1*x2*x2 + 1292251793*x0*x1*x2*x2*x2 + 1106046332*x0*x0*x0*x0*x1 + 797630856*x0*x0*x0*x0*x2 + 968433722*x0*x0*x0*x1*x1 + 2033723153*x0*x0*x0*x2*x2 + 293095893*x0*x0*x1*x1*x1 + 91305014*x0*x0*x2*x2*x2 + 912758096*x0*x1*x1*x1*x1 + 33195109*x0*x2*x2*x2*x2 + 612494358*x1*x1*x1*x1*x2 + 70839255*x1*x1*x1*x2*x2 + 1178724485*x1*x1*x2*x2*x2 + 310065099*x1*x2*x2*x2*x2 + 618485120*x0*x0*x0*x0*x0 + 1691004408*x1*x1*x1*x1*x1 + 1031255725*x2*x2*x2*x2*x2 + 882046461*x0*x0*x0*x0*x1*x2 + 1448601662*x0*x0*x0*x1*x1*x2 + 1639255646*x0*x0*x0*x1*x2*x2 + 1862053245*x0*x0*x1*x1*x1*x2 + 1599996559*x0*x0*x1*x1*x2*x2 + 1384284621*x0*x0*x1*x2*x2*x2 + 917494271*x0*x1*x1*x1*x1*x2 + 2119693603*x0*x1*x1*x1*x2*x2 + 975152729*x0*x1*x1*x2*x2*x2 + 1983089818*x0*x1*x2*x2*x2*x2 + 777238427*x0*x0*x0*x0*x0*x1 + 973774198*x0*x0*x0*x0*x0*x2 + 850590070*x0*x0*x0*x0*x1*x1 + 1511250365*x0*x0*x0*x0*x2*x2 + 981390553*x0*x0*x0*x1*x1*x1 + 590764770*x0*x0*x0*x2*x2*x2 + 313160869*x0*x0*x1*x1*x1*x1 + 223991418*x0*x0*x2*x2*x2*x2 + 1941890719*x0*x1*x1*x1*x1*x1 + 1487330771*x0*x2*x2*x2*x2*x2 + 973899586*x1*x1*x1*x1*x1*x2 + 342071561*x1*x1*x1*x1*x2*x2 + 228372049*x1*x1*x1*x2*x2*x2 + 954124928*x1*x1*x2*x2*x2*x2 + 231947527*x1*x2*x2*x2*x2*x2 + 446364404*x0*x0*x0*x0*x0*x0 + 36485981*x1*x1*x1*x1*x1*x1 + 307062429*x2*x2*x2*x2*x2*x2", 3, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
+
             //poly = SparsePolynomial.ParsePoly("x + y + x*y", 2, 8);
             //poly = SparsePolynomial.ParsePoly("x*x*x*x", 1, 8);
 
@@ -173,6 +183,12 @@ namespace Mba.Simplifier.LinEq
             var varDegrees = Enumerable.Repeat(maxDeg, poly.numVars).ToArray();
             var numPoints = GetNumPoints(poly.numVars, maxDeg);
             var monomials = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).Where(x => x.GetTotalDeg() <= maxDeg).OrderBy(x => x).ToArray();
+
+            var rand = new Random();
+            foreach(var monomial in monomials)
+            {
+              //  Console.Write($"{(ulong)rand.Next()}*{monomial.ToString(canonicalBasis: true)} + ");
+            }
 
             bool log = false;
 
