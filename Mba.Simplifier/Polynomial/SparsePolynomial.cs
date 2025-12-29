@@ -138,6 +138,24 @@ namespace Mba.Simplifier.Polynomial
             return txt;
         }
 
+        public bool Equivalent(SparsePolynomial other)
+        {
+            if(numVars != other.numVars || moduloMask != other.moduloMask) 
+                return false;
+
+            var monomials = coeffs.Keys.Concat(other.coeffs.Keys);
+            foreach(var m in monomials)
+            {
+                var a = GetCoeffOrZero(m);
+                var b = other.GetCoeff(m);
+                if (a != b) 
+                    return false;   
+            }
+
+            return true;
+
+        }
+
         public SparsePolynomial Clone()
         {
             var clone = new SparsePolynomial(numVars, width);

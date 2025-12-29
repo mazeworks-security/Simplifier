@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -44,6 +45,8 @@ namespace Mba.Simplifier.Polynomial
 
         public uint GetNumVars()
         {
+            return GetNumVars(value);
+
             uint total = 0;
             for (int i = 0; i < 8; i++)
             {
@@ -54,6 +57,15 @@ namespace Mba.Simplifier.Polynomial
             }
 
             return total;
+        }
+
+        public static uint GetNumVars(ulong x)
+        {
+            var mask = x & (x >> 1);
+            mask &= (mask >> 2);
+            mask &= (mask >> 4);
+            mask &= 0x0101010101010101U;
+            return 8 - (uint)BitOperations.PopCount(mask);
         }
 
         public uint GetTotalDeg()

@@ -117,23 +117,35 @@ namespace Mba.Simplifier.LinEq
 
         }
 
-        // it makes perfect sense that you cant interpolate a divided difference polynomial of degree greater than width+1
-        // because you can only have w+1 roots 
-        public static void Test()
+
+        public static ulong MonomialFactorial(Monomial m, int numVars, ulong[] inputs, ulong[,] variableFactorials)
         {
-            SparsePolynomial poly;
-            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z", 3, 8);
+            ulong product = 1;
+            for(int varIdx = 0; varIdx < numVars; varIdx++)
+            {
+                var deg = (ulong)m.GetVarDeg(varIdx);
+                if (deg == 0)
+                    continue;
+                
 
-            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
+                var prev = variableFactorials[varIdx, deg - 1];
 
-            poly = SparsePolynomial.ParsePoly("0*x + 1*x + 3*x*x + 4*x*x*x + 5*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
+                var curr = prev * (inputs[varIdx] - ((ulong)deg - 1));
+                variableFactorials[varIdx, deg] = curr;
+                product *= curr;
+            }
 
-            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
+            return product;
+        }
 
-            poly = SparsePolynomial.ParsePoly("0*x + 1*x + 3*x*x + 4*x*x*x + 5*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
-
+        private static SparsePolynomial Interpolate(SparsePolynomial poly)
+        {
             var mmask = poly.moduloMask;
             var maxDeg = (int)GetMaxDegree(poly);
+
+
+            var w = BitOperations.PopCount(poly.moduloMask);
+            maxDeg = Math.Min(maxDeg, w + 2);
 
 
             var varDegrees = Enumerable.Repeat(maxDeg, poly.numVars).ToArray();
@@ -153,6 +165,10 @@ namespace Mba.Simplifier.LinEq
             var xs = new ulong[numPoints];
             var ys = new ulong[numPoints];
 
+            var variableFactorials = new ulong[numVars, maxDeg + 1];
+            for (int i = 0; i < numVars; i++)
+                variableFactorials[i, 0] = 1;
+
             for (int equationIdx = 0; equationIdx < numPoints; equationIdx++)
             {
                 var inputs = monomials[equationIdx].Degrees.Select(x => (ulong)x).ToArray();
@@ -165,7 +181,10 @@ namespace Mba.Simplifier.LinEq
                 for (int midx = 0; midx < equationIdx + 1; midx++)
                 {
                     var m = monomials[midx];
-                    var coeff = mmask & PolynomialEvaluator.EvalMonomial(m, inputs, false);
+                    //var coeff = mmask & PolynomialEvaluator.EvalMonomial(m, inputs, false);
+                    //var otherCoeff = mmask & MonomialFactorial(m, numVars, inputs, variableFactorials);
+                    var coeff = mmask & MonomialFactorial(m, numVars, inputs, variableFactorials); 
+
                     terms.Add((coeff, m));
                 }
 
@@ -201,11 +220,110 @@ namespace Mba.Simplifier.LinEq
             }
 
             PolynomialReducer.ReduceFacBasisPolynomial(newFactorialOutput);
-            var probEquiv = CheckEquiv(poly, true, newFactorialOutput, false);
-            Console.WriteLine($"Equivalent: {probEquiv}");
+
+            // Temporary perf optimization
+            return newFactorialOutput;
+
+            return PolynomialReducer.GetCanonicalForm(newFactorialOutput);
+        }
+
+
+
+        // it makes perfect sense that you cant interpolate a divided difference polynomial of degree greater than width+1
+        // because you can only have w+1 roots 
+        public static void Test()
+        {
+            SparsePolynomial poly;
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z", 3, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("0*x + 1*x + 3*x*x + 4*x*x*x + 5*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
+
+            poly = SparsePolynomial.ParsePoly("0*x + 1*x + 3*x*x + 4*x*x*x + 5*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
+
+            /*
+            var before = PolynomialReducer.Reduce(poly.Clone());
+            var after = Interpolate(poly.Clone());
+            Console.WriteLine($"Equiv: {before.Equivalent(after)}");
+            */
+            Fuzz();
 
             Debugger.Break();
         }
+
+        public static void Fuzz()
+        {
+            var rand = new SeededRandom();
+            var p = GetRandomPoly(rand);
+
+
+            p = new SparsePolynomial(4, 8);
+            p.SetCoeff(new Monomial(8, 8, 8, 8), 1);
+            while(true)
+            {
+                var sw = Stopwatch.StartNew();
+                var after = Interpolate(p.Clone());
+                sw.Stop();
+                Console.WriteLine($"Took {sw.ElapsedMilliseconds} to interpolate poly");
+            }
+
+         
+            for(int i = 0; i < 1000000; i++)
+            {
+                var poly = GetRandomPoly(rand);
+
+                var sw = Stopwatch.StartNew();
+                var before = PolynomialReducer.Reduce(poly.Clone());
+                Console.WriteLine($"Took {sw.ElapsedMilliseconds} to reduce poly");
+                sw.Restart();
+                var after = Interpolate(poly.Clone());
+
+                Console.WriteLine($"Took {sw.ElapsedMilliseconds} to interpolate poly");
+                Console.WriteLine($"Equiv: {before.Equivalent(after)}");
+            }
+
+            Debugger.Break();
+        }
+
+        public static SparsePolynomial GetRandomPoly(SeededRandom rand)
+        {
+            var numVars = rand.Next(1, 3);
+            var numTerms = rand.Next(10, 30);
+            // Pick the width of the output expression...
+            int width = rand.Next(0, 4) switch
+            {
+                0 => 8,
+                1 => 16,
+                2 => 32,
+                3 => 64,
+            };
+
+            var poly = new SparsePolynomial(numVars, (byte)width);
+
+            var maxDeg = width + 2;
+            for(int _ = 0; _ < numTerms; _++)
+            {
+                // Pick a coefficient
+                var coeff = rand.GetRandUlong();
+
+                // Pick a monomial
+                var leftOver = maxDeg;
+                var degrees = new byte[numVars];
+                for (int i = 0; i < numVars; i++)
+                {
+                    degrees[i] = (byte)rand.Next(0, leftOver);
+                    leftOver -= degrees[i];
+                }
+                var m = new Monomial(degrees);
+                poly.Sum(m, coeff);
+            }
+
+            return poly;
+        }
+
 
         private static void NewtonToMonomial(SparsePolynomial poly, List<Monomial> monomials)
         {

@@ -37,7 +37,8 @@ namespace Mba.Simplifier.Polynomial
         public static ulong EvalMonomial(Monomial m, ulong[] inputs, bool canonicalBasis = true)
         {
             ulong result = 1;
-            for (int i = 0; i < m.GetNumVars(); i++)
+            var numVars = m.GetNumVars();
+            for (int i = 0; i < numVars; i++)
             {
                 var deg = m.GetVarDeg(i);
                 if (canonicalBasis)
@@ -49,22 +50,17 @@ namespace Mba.Simplifier.Polynomial
             return result;
         }
 
-        // TODO: Use repeated squaring algorithm for high degrees.
-        public static ulong Pow(ulong x, byte power)
+        public static ulong Pow(ulong bbase, ulong exponent)
         {
-            if (power == 0)
-                return 1;
-            if (power == 1)
-                return x;
+            ulong result = 1;
 
-            var original = x;
-            var originalBv = x;
-            for(byte i = 1; i < power; i++)
+            for (ulong term = bbase; exponent != 0; term = term * term)
             {
-                x *= originalBv;
+                if (exponent % 2 != 0) { result *= term; }
+                exponent /= 2;
             }
 
-            return x;
+            return result;
         }
 
         public static ulong FactorialPow(ulong x, byte power) 

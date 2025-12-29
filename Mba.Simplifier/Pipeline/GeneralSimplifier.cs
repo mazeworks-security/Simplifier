@@ -224,19 +224,6 @@ namespace Mba.Simplifier.Pipeline
             return propagated;
         }
 
-        private static ulong Pow(ulong bbase, ulong exponent)
-        {
-            ulong result = 1;
-
-            for (ulong term = bbase; exponent != 0; term = term * term)
-            {
-                if(exponent % 2 != 0) { result *= term; }
-                exponent /= 2;
-            }
-
-            return result;
-        }
-
         private AstIdx GetAstWithSubstitutions(AstIdx id, Dictionary<AstIdx, AstIdx> substitutionMapping, ref bool isSemiLinear, bool inBitwise = false)
         {
             // Sometimes we perform constant folding in this method.
@@ -332,7 +319,7 @@ namespace Mba.Simplifier.Pipeline
                     var degree = SimplifyViaRecursiveSiMBA(ctx.GetOp1(id));
                     if(ctx.IsConstant(basis) && ctx.IsConstant(degree))
                     {
-                        var folded = Pow(ctx.GetConstantValue(basis), ctx.GetConstantValue(degree));
+                        var folded = PolynomialEvaluator.Pow(ctx.GetConstantValue(basis), ctx.GetConstantValue(degree));
                         return visitReplacement(ctx.Constant(folded, ctx.GetWidth(basis)), inBitwise, ref isSemiLinear);
                     }
 
