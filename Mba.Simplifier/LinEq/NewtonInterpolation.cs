@@ -135,7 +135,6 @@ namespace Mba.Simplifier.LinEq
             var mmask = poly.moduloMask;
             var maxDeg = (int)GetMaxDegree(poly);
 
-            maxDeg = 33;
 
             var varDegrees = Enumerable.Repeat(maxDeg, poly.numVars).ToArray();
             var numPoints = (int)GetNumPoints(poly.numVars, maxDeg);
