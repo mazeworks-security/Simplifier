@@ -117,6 +117,8 @@ namespace Mba.Simplifier.LinEq
 
         }
 
+        // it makes perfect sense that you cant interpolate a divided difference polynomial of degree greater than width+1
+        // because you can only have w+1 roots 
         public static void Test()
         {
             SparsePolynomial poly;
@@ -124,12 +126,16 @@ namespace Mba.Simplifier.LinEq
 
             poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
 
-            poly = SparsePolynomial.ParsePoly("0*x + 1*x + 3*x*x, 4*x*x*x + 5*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
+            poly = SparsePolynomial.ParsePoly("0*x + 1*x + 3*x*x + 4*x*x*x + 5*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
 
-       
+
+
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x", 1, 8);
 
             var mmask = poly.moduloMask;
             var maxDeg = (int)GetMaxDegree(poly);
+            maxDeg = 65;
+
             var varDegrees = Enumerable.Repeat(maxDeg, poly.numVars).ToArray();
             var numPoints = (int)GetNumPoints(poly.numVars, maxDeg);
             var monomials = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).Where(x => x.GetTotalDeg() <= maxDeg).OrderBy(x => x).ToArray();
@@ -257,7 +263,30 @@ namespace Mba.Simplifier.LinEq
             if (a == 0 || b == 0)
                 return (0, false);
 
+            var possibleLc = solver.LinearCongruence(b, a, (UInt128)mmask + 1);
+            if(possibleLc != null)
+            {
+                var cand = (ulong)solver.GetSolution(0, possibleLc);
+                return (cand, false);
+                Debugger.Break();
+            }
 
+
+            var tzcnt = (ushort)BitOperations.TrailingZeroCount(b);
+            var shiftedB = b >> tzcnt;
+
+            //var coeff = GetModularInverse(solver, mmask, shiftedB).Value;
+            
+
+
+
+            //var gcd = GCD(b, mmask + 1);
+
+
+            //Debugger.Break();
+
+
+            
 
             if ((a % 2) == 0 && (b % 2) == 0)
             {
@@ -291,7 +320,7 @@ namespace Mba.Simplifier.LinEq
                         // 25 / 2
                         // => (2 / 164)
                         // => 1/82
-                        // => 
+                        // =?
                         var aShift = a >> BitOperations.TrailingZeroCount(gcd);
                         var bShift = b >> BitOperations.TrailingZeroCount(gcd);
 
@@ -299,6 +328,7 @@ namespace Mba.Simplifier.LinEq
 
                         if((bShift % 2) == 0)
                         {
+                            goto igiveup;
                             var bestSol = solver.GetSolution(0, lcfinal);
 
                             Debugger.Break();
@@ -324,7 +354,8 @@ namespace Mba.Simplifier.LinEq
             }
 
 
-
+        igiveup:
+   
 
             // if (a > 255 || b > 255)
             //    Debugger.Break();
