@@ -45,7 +45,7 @@ inputText = " -x**63 + 64*x**62 - 2016*x**61 + 41664*x**60 - 635376*x**59 + 7624
 
  //NewtonInterpolation.MvNewtonBivariate();
 
-NewtonInterpolation.NewClassic();
+NewtonInterpolation.Test();
 
 var printHelp = () =>
 {
