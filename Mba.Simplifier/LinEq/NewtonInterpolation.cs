@@ -1,4 +1,5 @@
-﻿using Mba.Simplifier.Jit;
+﻿using Mba.Simplifier.Fuzzing;
+using Mba.Simplifier.Jit;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Polynomial;
 using Mba.Utility;
@@ -114,8 +115,26 @@ namespace Mba.Simplifier.LinEq
             return sb.ToString();
         }
 
-        private static bool CheckEquiv(SparsePolynomial a, SparsePolynomial b)
+        private static bool CheckEquiv(SparsePolynomial a, bool aCanonical, SparsePolynomial b, bool bCanonical)
         {
+            var rand = new SeededRandom();
+            var numVars = Math.Max(a.numVars, b.numVars);
+
+            for(int _ = 0; _ < 2048; _++)
+            {
+                var inputs = new ulong[numVars];
+                for(int i = 0; i < numVars; i++)
+                {
+                    inputs[i] = rand.GetRandUlong();
+                }
+
+                var before = a.moduloMask & PolynomialEvaluator.Eval(a, inputs, aCanonical);
+                var after = b.moduloMask & PolynomialEvaluator.Eval(b, inputs, bCanonical);
+                if(before != after)
+                    return false;
+            }
+
+            return true;
 
         }
 
@@ -177,6 +196,8 @@ namespace Mba.Simplifier.LinEq
             poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
 
             poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
+            poly = SparsePolynomial.ParsePoly("2*x + 2*y", 2, 8);
+            // Causes stackoverflow!
             poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
 
             //poly = SparsePolynomial.ParsePoly("x + y + x*y", 2, 8);
@@ -375,13 +396,24 @@ namespace Mba.Simplifier.LinEq
  
             var (newFoundSolution, newSolutionMap) = LinearEquationSolver.EnumerateSolutionsIterative(newSystem, newSolver, upperTriangular: false);
 
-            // var newSolutionMap = new ulong[limit];
-            // var newFoundSolution = LinearEquationSolver.EnumerateSolutions(newSystem, newSolver, newSolutionMap, 0, upperTriangular: false);
+            //var newSolutionMap = new ulong[limit];
+            //var newFoundSolution = LinearEquationSolver.EnumerateSolutions(newSystem, newSolver, newSolutionMap, 0, upperTriangular: false);
             if (!newFoundSolution)
                 throw new InvalidOperationException("Unsolvable system!");
 
+            var newFactorialOutput = new SparsePolynomial(poly.numVars, poly.width);
+            for (int i = 0; i < (int)numPoints; i++)
+            {
+                var coeff = newSolutionMap[i];
+                //var rcoeff = PolynomialReducer.GetReductionMask(poly.width, monomials[i]) & coeff;
+                var rcoeff = coeff;
+                newFactorialOutput.SetCoeff(monomials[i], rcoeff);
+            }
 
-            if(log)
+            var probEquiv = CheckEquiv(poly, true, newFactorialOutput, false);
+            Console.WriteLine($"Equivalent: {probEquiv}");
+
+            if (log)
                 Console.WriteLine(newSystem.ToZ3String());
 
 
