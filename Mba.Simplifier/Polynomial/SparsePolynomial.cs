@@ -147,7 +147,7 @@ namespace Mba.Simplifier.Polynomial
             foreach(var m in monomials)
             {
                 var a = GetCoeffOrZero(m);
-                var b = other.GetCoeff(m);
+                var b = other.GetCoeffOrZero(m);
                 if (a != b) 
                     return false;   
             }
@@ -219,7 +219,7 @@ namespace Mba.Simplifier.Polynomial
             foreach (var term in terms)
             {
                 var coeff = (ulong)(UInt128)term.coeff;
-                var varDegs = term.varDegs.Select(x => (allVars.IndexOf(x.Item1), x.Item2));
+                var varDegs = term.varDegs.Select(x => (allVars.IndexOf(x.Item1), x.Item2)).ToList();
 
                 List<byte> degs = new();
                 foreach (var (varIdx, degree) in varDegs.OrderBy(x => x.Item1))

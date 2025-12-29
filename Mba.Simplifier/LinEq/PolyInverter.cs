@@ -83,10 +83,10 @@ namespace Mba.Simplifier.LinEq
 
         // Given a list of variables and their max degrees, e.g. x**3,y**7,z**10,
         // enumerate all 2^t permutations and theirq
-        public static List<Monomial> Enumerate(byte[] degrees)
+        public static List<Monomial> Enumerate(byte[] degrees, byte maxDegree)
         {
             var monomials = new List<Monomial>();
-            EnumerateInternal(0, degrees, degrees.Max(), monomials);
+            EnumerateInternal(0, degrees, maxDegree, monomials);
 
             // Add a monomial representing the constant offset
             monomials.Add(new Monomial(new byte[degrees.Length]));

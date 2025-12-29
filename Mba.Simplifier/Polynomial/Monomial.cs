@@ -13,7 +13,7 @@ namespace Mba.Simplifier.Polynomial
     {
         // Each byte represents the degree of a variable.
         // Note that 255 is a special value representing the end of the degree list.
-        private readonly ulong value = ulong.MaxValue;
+        public readonly ulong value = ulong.MaxValue;
 
         public IReadOnlyList<byte> Degrees => BitConverter.GetBytes(value).TakeWhile(x => x != 255).ToList();
 
@@ -144,7 +144,7 @@ namespace Mba.Simplifier.Polynomial
             return ToString(true);
         }
 
-        public string ToString(bool canonicalBasis = false, bool unroll = true)
+        public string ToString(bool canonicalBasis = false, bool unroll = false)
         {
             var varDegrees = Degrees;
             List<string> powers = new();

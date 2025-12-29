@@ -290,8 +290,13 @@ namespace Mba.Simplifier.LinEq
             bool solved = false;
             while (varIdx != end)
             {
+                
+
                 var lineq = linearSystem.Equations[varIdx];
                 var result = lineq.result;
+
+                //if (varIdx == 3)
+                //    Debugger.Break();
 
                 // TODO: Implement lower triangular
                 Debug.Assert(!upperTriangular);
