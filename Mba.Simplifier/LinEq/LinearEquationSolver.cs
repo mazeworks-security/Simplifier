@@ -276,7 +276,7 @@ namespace Mba.Simplifier.LinEq
 
         public static HashSet<int> Solutions = new();
 
-        public static bool EnumerateSolutionsIterative(LinearSystem linearSystem, LinearCongruenceSolver congruenceSolver, bool upperTriangular)
+        public static (bool, ulong[]) EnumerateSolutionsIterative(LinearSystem linearSystem, LinearCongruenceSolver congruenceSolver, bool upperTriangular)
         {
             int numVars = linearSystem.Equations[0].NumVars;
             var begin = upperTriangular ? numVars - 1 : 0;
@@ -287,14 +287,15 @@ namespace Mba.Simplifier.LinEq
             var moduloMask = linearSystem.ModuloMask;
             var state = new (ulong solution, Lc lc, int solutionIdx)[numVars];
             int varIdx = begin;
+            bool solved = false;
             while (varIdx != end)
             {
                 var lineq = linearSystem.Equations[varIdx];
                 var result = lineq.result;
 
                 // TODO: Implement lower triangular
-                Debug.Assert(upperTriangular);
-                for (int i = varIdx + 1; i < linearSystem.NumVars; i++)
+                Debug.Assert(!upperTriangular);
+                for (int i = 0; i < varIdx; i++)
                 {
                     var coeff = lineq.coeffs[i];
                     var mul = coeff * state[i].solution;
@@ -329,8 +330,9 @@ namespace Mba.Simplifier.LinEq
                 state[varIdx].solution = solution;
                 state[varIdx].solutionIdx = solutionIdx + 1;
 
-
+                // Move on to the next variable
                 varIdx += step;
+                solved = varIdx == end;
                 continue;
 
             backtrack:
@@ -342,7 +344,10 @@ namespace Mba.Simplifier.LinEq
 
             }
 
-            return false;
+            var solutions = state.Select(x => x.solution).ToArray();
+            return (solved, solutions);
+
+            //return false;
         }
 
         public static bool EnumerateSolutions(LinearSystem linearSystem, LinearCongruenceSolver congruenceSolver,  ulong[] solutionMap, int varIdx, bool upperTriangular)

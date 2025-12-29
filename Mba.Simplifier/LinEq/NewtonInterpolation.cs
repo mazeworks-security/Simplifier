@@ -114,6 +114,11 @@ namespace Mba.Simplifier.LinEq
             return sb.ToString();
         }
 
+        private static bool CheckEquiv(SparsePolynomial a, SparsePolynomial b)
+        {
+
+        }
+
         // Problem: We can't just pass zero..
         public static void NewClassic2()
         {
@@ -365,12 +370,13 @@ namespace Mba.Simplifier.LinEq
             }
 
             var newSystem = new LinearSystem(poly.width, poly.numVars, newEqs);
-
             var newSolver = new LinearCongruenceSolver(poly.moduloMask);
-            var newSolutionMap = new ulong[limit];
 
+ 
+            var (newFoundSolution, newSolutionMap) = LinearEquationSolver.EnumerateSolutionsIterative(newSystem, newSolver, upperTriangular: false);
 
-            var newFoundSolution = LinearEquationSolver.EnumerateSolutions(newSystem, newSolver, newSolutionMap, 0, upperTriangular: false);
+            // var newSolutionMap = new ulong[limit];
+            // var newFoundSolution = LinearEquationSolver.EnumerateSolutions(newSystem, newSolver, newSolutionMap, 0, upperTriangular: false);
             if (!newFoundSolution)
                 throw new InvalidOperationException("Unsolvable system!");
 
@@ -391,6 +397,8 @@ namespace Mba.Simplifier.LinEq
                 Console.Write($"{coeff}*{GetNewtonMonomialStr(m, names, offsets)} + ");
                 ci += 1;
             }
+
+
 
             Console.WriteLine("");
 
