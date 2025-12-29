@@ -258,12 +258,21 @@ namespace Mba.Simplifier.LinEq
                 newEqs.Add(newEq);
             }
 
+
+
+
             var system = new LinearSystem(poly.width, poly.width, newEqs);
 
             var solver = new LinearCongruenceSolver(poly.moduloMask);
             var (solvable, solutions) = LinearEquationSolver.EnumerateSolutionsIterative(system, solver, upperTriangular: false);
 
+            var divDiffCoeffs = DivDiff(mmask, solver, xs, ys);
 
+            var divDiffFactorial = new SparsePolynomial(numVars, poly.width);
+            for (int i = 0; i < monomials.Length; i++)
+                divDiffFactorial.SetCoeff(monomials[i], divDiffCoeffs[i]);
+            PolynomialReducer.ReduceFacBasisPolynomial(divDiffFactorial);
+            return divDiffFactorial;
 
             var newFactorialOutput = new SparsePolynomial(poly.numVars, poly.width);
             for (int i = 0; i < (int)numPoints; i++)
@@ -310,6 +319,7 @@ namespace Mba.Simplifier.LinEq
             //var before = PolynomialReducer.Reduce(poly.Clone());
             //var after = Interpolate(poly.Clone());
 
+            /*
             var before = PolynomialReducer.GetFactorialForm(poly.Clone());
             PolynomialReducer.ReduceFacBasisPolynomial(before);
 
@@ -329,6 +339,7 @@ namespace Mba.Simplifier.LinEq
             Console.WriteLine($"After: {after}");
 
             //poly = SparsePolynomial
+            */
 
             Fuzz();
 
@@ -338,20 +349,24 @@ namespace Mba.Simplifier.LinEq
         public static void Fuzz()
         {
             var rand = new SeededRandom();
-            /*
+            
             var p = GetRandomPoly(rand);
 
 
             p = new SparsePolynomial(4, 8);
             p.SetCoeff(new Monomial(8, 8, 8, 8), 1);
-            while(false)
+
+            p = new SparsePolynomial(2, 64);
+            p.SetCoeff(new Monomial(32, 32), 1);
+
+            while (false)
             {
                 var sw = Stopwatch.StartNew();
                 var after = Interpolate(p.Clone());
                 sw.Stop();
                 Console.WriteLine($"Took {sw.ElapsedMilliseconds} to interpolate poly");
             }
-            */
+            
 
          
             for(int i = 0; i < 1000000; i++)
@@ -390,6 +405,9 @@ namespace Mba.Simplifier.LinEq
         public static SparsePolynomial GetRandomPoly(SeededRandom rand)
         {
             var numVars = rand.Next(1, 3);
+
+            numVars = 1;
+
             var numTerms = rand.Next(10, 30);
             // Pick the width of the output expression...
             int width = rand.Next(0, 4) switch
@@ -421,6 +439,272 @@ namespace Mba.Simplifier.LinEq
             }
 
             return poly;
+        }
+
+
+        public static ulong[] DivDiff(ulong mmask, LinearCongruenceSolver solver, ulong[] x, ulong[] y)
+        {
+            var coeffs = y.ToArray();
+            var n = x.Length;
+            for (int j = 1; j < n; j++)
+            {
+                for (int i = n - 1; i >= j; i--)
+                {
+                    //coeffs[i] = (coeffs[i] - coeffs[i - 1]) / (x[i] - x[i - j]);
+                    coeffs[i] = mmask & Mdiv(mmask, solver, (coeffs[i] - coeffs[i - 1]), (x[i] - x[i - j])).Item1;
+                }
+            }
+
+            return coeffs;
+        }
+
+        private static ulong GCD(ulong a, ulong b)
+        {
+            while (a != 0 && b != 0)
+            {
+                if (a > b)
+                    a %= b;
+                else
+                    b %= a;
+            }
+
+            return a | b;
+        }
+
+        // 12/29/2025: If you have (even/even), e.g. (2/96), divide by gc of modulus and gets 1/48?
+        private static (ulong, bool) Mdiv(ulong mmask, LinearCongruenceSolver solver, ulong a, ulong b)
+        {
+            a &= mmask;
+            b &= mmask;
+
+            if (b % 2 != 0)
+            {
+                var inv = GetModularInverse(solver, mmask, b).Value;
+                return (mmask & (a * inv), false);
+            }
+
+
+            if (a == 0 || b == 0)
+                return (0, false);
+
+            var possibleLc = solver.LinearCongruence(b, a, (UInt128)mmask + 1);
+            if (possibleLc != null)
+            {
+                var cand = (ulong)solver.GetSolution(0, possibleLc);
+                return (cand, false);
+                Debugger.Break();
+            }
+
+
+            var tzcnt = (ushort)BitOperations.TrailingZeroCount(b);
+            var shiftedB = b >> tzcnt;
+
+            //var coeff = GetModularInverse(solver, mmask, shiftedB).Value;
+
+
+
+
+            //var gcd = GCD(b, mmask + 1);
+
+
+            //Debugger.Break();
+
+
+
+
+            if ((a % 2) == 0 && (b % 2) == 0)
+            {
+                if (b > a)
+                {
+                    var gcd1 = GCD(a, mmask + 1);
+                    var gcd2 = GCD(b, mmask + 1);
+                    var gcd = Math.Min(gcd1, gcd2);
+
+                    var aShift = a >> BitOperations.TrailingZeroCount(gcd);
+                    var bShift = b >> BitOperations.TrailingZeroCount(gcd);
+
+                    Debug.Assert((bShift % 2) != 0);
+
+                    var inv = GetModularInverse(solver, mmask, bShift);
+
+                    var sol = mmask & (gcd * inv);
+
+                    return (sol.Value, false);
+                }
+
+                else
+                {
+                    var gcd = GCD(a, b);
+                    if (gcd != b)
+                    {
+                        var gcd1 = GCD(a, mmask + 1);
+                        var gcd2 = GCD(b, mmask + 1);
+                        gcd = Math.Min(gcd1, gcd2);
+
+                        // 25 / 2
+                        // => (2 / 164)
+                        // => 1/82
+                        // =?
+                        var aShift = a >> BitOperations.TrailingZeroCount(gcd);
+                        var bShift = b >> BitOperations.TrailingZeroCount(gcd);
+
+                        var lcfinal = solver.LinearCongruence(aShift, bShift, mmask + 1);
+
+                        if ((bShift % 2) == 0)
+                        {
+                            goto igiveup;
+                            var bestSol = solver.GetSolution(0, lcfinal);
+
+                            Debugger.Break();
+                        }
+
+                        Debug.Assert((bShift % 2) != 0);
+
+
+                        var inv = GetModularInverse(solver, mmask, bShift);
+
+                        var sol = mmask & (gcd * inv);
+
+                        //Debugger.Break();
+
+                        return (sol.Value, false);
+                    }
+
+                    // Otherwise a is a multiple of b
+                    return (a / b, false);
+                }
+
+                //Debugger.Break();
+            }
+
+
+        igiveup:
+
+
+            // if (a > 255 || b > 255)
+            //    Debugger.Break();
+
+            // var div = mmask & (a / b);
+            ulong div = 0;
+            if (a == 0 && b == 0)
+            {
+                // Probably illegal?
+                div = 0;
+
+            }
+
+            else
+            {
+                div = mmask & (a / b);
+            }
+
+            var undo = mmask & (div * b);
+
+            bool valid = undo == a;
+            var s = valid ? "GOOD" : "BAD";
+            //Console.WriteLine($"{s}: {a} / {b}");
+
+            // if (!valid && (b % 2) == 0)
+            //     Debugger.Break();
+
+
+            /*
+             *  var lc = solver.LinearCongruence(a, div, (UInt128)mmask + 1);
+            if (lc == null || lc.d == 0)
+            {
+                Debugger.Break();
+            }
+  
+
+            // If the
+            if(lc != null)
+            {
+                //return div;
+                var solution = (ulong)solver.GetSolution(0, lc);
+                Debug.Assert((mmask & (solution * a)) == div);
+                return solution;
+                //Debugger.Break();
+            }
+
+            else
+            {
+                //Debugger.Break();
+            }
+                      */
+
+
+            if (undo != a)
+            //if (false)
+            {
+                // If the divisor has a modular inverse, rewrite as division.
+                var inverse = GetModularInverse(solver, mmask, b);
+                if (inverse != null)
+                {
+                    div = mmask & (inverse.Value * a);
+                    return (div, false);
+                }
+
+                // If the divisor is even, can we rewrite this as a linear congruence?
+                // e.g. if coeff == (58/6),
+                // reformulate it as 6*coeff == 58
+                //var lc = solver.LinearCongruence(a, b, (UInt128)mmask + 1); // originally worked
+                var lc = solver.LinearCongruence(b, a, (UInt128)mmask + 1);
+                if (lc == null || lc.d == 0)
+                {
+
+
+                    //var other = solver.LinearCongruence(b, a, (UInt128)mmask + 1);
+
+                    // Still if we have e.g. c = 81/12, there may be no solution
+                    // Shifting terms around yields c*12 = 81, which is unsatisfiable.
+                    // But because 81 is odd, we can arbitrarily change the coeff...
+
+
+                    // Solve for c1*a == b
+                    var target = b;
+                    lc = solver.LinearCongruence(a, b, (UInt128)mmask + 1);
+
+                    // All of this is extremely dubious at best..
+                    if (lc == null || lc.d == 0)
+                    {
+                        Debugger.Break();
+                        throw new InvalidOperationException();
+                    }
+
+                    var sol = (ulong)solver.GetSolution(0, lc);
+
+
+                    // now we have c1*x == 1
+                    var lhs = mmask & (sol * b);
+                    var rhs = mmask & (sol * a);
+
+                    // Absolutely completely incorrect for some cases
+                    inverse = GetModularInverse(solver, mmask, rhs);
+                    div = mmask & (inverse.Value * lhs);
+                    return (div, false);
+
+
+                    return (sol, false);
+                }
+
+                var solution = (ulong)solver.GetSolution(0, lc);
+                return (solution, false);
+
+            }
+
+        done:
+            return (div, false);
+        }
+
+        private static ulong? GetModularInverse(LinearCongruenceSolver congruenceSolver, ulong moduloMask, ulong coeff)
+        {
+            var lc = congruenceSolver.LinearCongruence((UInt128)coeff, 1, (UInt128)moduloMask + 1);
+            if (lc == null)
+                return null;
+            if (lc.d == 0)
+                return null;
+
+            return (ulong)congruenceSolver.GetSolution(0, lc);
         }
 
 
