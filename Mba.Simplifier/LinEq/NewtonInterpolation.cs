@@ -152,6 +152,8 @@ namespace Mba.Simplifier.LinEq
             var numPoints = (int)GetNumPoints(poly.numVars, maxDeg);
             var monomials = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).Where(x => x.GetTotalDeg() <= maxDeg).OrderBy(x => x).ToArray();
 
+            var me = Enumerable.Range(0, (int)GetNumPoints(varDegrees)).Select(midx => new Monomial(DensePolynomial.GetDegreesWithZeroes(midx, varDegrees).Select(x => (byte)x).ToArray())).ToList();
+
             // TODO: We should still be able to do divided differences
             // Don't delete the linear system code though, it's still useful
             var monomialValues = new ulong[monomials.Length];
