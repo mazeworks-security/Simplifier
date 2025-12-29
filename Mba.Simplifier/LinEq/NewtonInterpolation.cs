@@ -179,7 +179,11 @@ namespace Mba.Simplifier.LinEq
             poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*x*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y*y", 2, 8);
 
             //poly = SparsePolynomial.ParsePoly("x + y + x*y", 2, 8);
-            //poly = SparsePolynomial.ParsePoly("x*x*x*x", 1, 8);
+            poly = SparsePolynomial.ParsePoly("x*x*x", 1, 8);
+
+            poly = SparsePolynomial.ParsePoly("3*x + 4*x*x + 7*x*x*x + 25*x*x*x*x + 34234*x*x*x*x*x*x", 1, 8);
+
+            Console.WriteLine($"Input: {poly}");
 
             var mmask = poly.moduloMask;
 
@@ -254,6 +258,7 @@ namespace Mba.Simplifier.LinEq
                 initialValues[i] = vValues[i];
             }
 
+            var roots = new List<ulong[]>();
             int limit = (int)numPoints;
             // Alternatively just try generating the system.
             for (int equationIdx = 0; equationIdx < (int)limit; equationIdx++)
@@ -297,15 +302,16 @@ namespace Mba.Simplifier.LinEq
 
                     inputs[varIdx] = initialValues[varIdx] + addedMonomial.Degrees[varIdx];
                 }
-                
+
 
                 //vValues = realInputs[equationIdx].ToArray();
-          
+
 
                 // Compute the result of evaluating this poly.
                 // c0*1 + c1*(x - 1) + c2*(y-2) =
                 // When evaluating c2, we need to give it a value that cancels out c1..
                 // The highest last x that was seen..
+                roots.Add(inputs);
                 var y = mmask & PolynomialEvaluator.Eval(poly, inputs);
 
                 List<(ulong coeff, Monomial monomial)> terms = new();
@@ -388,12 +394,46 @@ namespace Mba.Simplifier.LinEq
                 newFactorialOutput.SetCoeff(monomials[i], rcoeff);
             }
 
+            PolynomialReducer.ReduceFacBasisPolynomial(newFactorialOutput);
+
+
             var probEquiv = CheckEquiv(poly, true, newFactorialOutput, false);
             Console.WriteLine($"Equivalent: {probEquiv}");
+
+            Console.WriteLine($"Expected result: {PolynomialReducer.Reduce(poly.Clone())}");
+
+            ChangeOfBasis(newFactorialOutput, roots, monomials.ToList());
 
             Debugger.Break();
         }
 
+        /*
+        private static DensePolynomial ToDensePoly(SparsePolynomial poly)
+        {
+            //var dense = new DensePolynomial(poly.width);
+        }
+        */
+
+        private static void ChangeOfBasis(SparsePolynomial poly, List<ulong[]> roots, List<Monomial> monomials)
+        {
+            var f = poly.Clone();
+
+            var n = monomials.Count;
+            var r = new ulong[n];
+            for (int i = 0; i < monomials.Count; i++)
+                r[i] = poly.GetCoeff(monomials[i]);
+
+            for (int i = n - 2; i >= 0; i--)
+            {
+                for (int j = i; j < n - 1; j++)
+                {
+                    r[j] -= r[j + 1] * roots[i][0];
+                    r[j] &= poly.moduloMask;
+                }
+            }
+
+            Debugger.Break();
+        }
 
 
         private static uint GetMaxDegree(SparsePolynomial poly)
