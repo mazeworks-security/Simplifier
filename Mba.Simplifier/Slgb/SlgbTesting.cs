@@ -1,6 +1,7 @@
 ﻿using Mba.Common.MSiMBA;
 using Mba.Parsing;
 using Mba.Simplifier.Bindings;
+using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
 using System;
@@ -25,8 +26,12 @@ namespace Mba.Simplifier.Slgb
 
             var str = "((((x&7)^(y&3)))|(z&3))";
             str = "((((x&103)^(y&115)))|(z&174))";
+
+            str = "x0|x1|x2|c3";
+
             //str = "((((x&7)^(y&3)))|(z&3))";
             var boolean = RustAstParser.Parse(ctx, str, width);
+
 
             var variables = ctx.CollectVariables(boolean);
             var ttSize = (int)Math.Pow(2, variables.Count);

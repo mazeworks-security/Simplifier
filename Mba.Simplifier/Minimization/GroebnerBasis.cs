@@ -29,6 +29,9 @@ namespace Mba.Simplifier.Minimization
 
         private unsafe (List<List<uint>> gb, bool negated) Compute()
         {
+            var sb = new StringBuilder();
+            sb.AppendLine("$fieldsize 2");
+            sb.AppendLine($"$vars {table.NumVars} x");
             // Eliminate the nil entry if possible.
             bool negated = false;
             if(table.GetBit(0))
@@ -37,6 +40,9 @@ namespace Mba.Simplifier.Minimization
                 table.Negate();
             }
 
+            bool log = false;
+
+            HashSet<string> allMs = new();
             // Construct a system of boolean polynomials out of the truth table(ignoring nil rows)
             var polys = new List<List<uint>>();
             for(int i = 0; i < table.NumBits; i++)
@@ -48,6 +54,33 @@ namespace Mba.Simplifier.Minimization
                 // If the row is positive, construct algebraic normal form for this row.
                 // TODO: Use a more space / time efficienty method, 'GetRowAnf' is overkill.
                 var monoms = GetRowAnf(i);
+
+                List<string> terms = new();
+                foreach (var m in monoms)
+                {
+                    List<string> variables = new();
+                    for (int vIdx = 0; vIdx < table.NumVars; vIdx++)
+                    {
+                        if ((m & (1u << (ushort)vIdx)) != 0)
+                        {
+                            if (log)
+                                variables.Add($"x{vIdx}");
+                        }
+                    }
+
+                    if (log)
+                    {
+                        var s = String.Join("*", variables);
+                        terms.Add(s);
+                        allMs.Add(s);
+                    }
+                }
+
+                if(log)
+                    sb.AppendLine(String.Join(" + ", terms));
+                //Console.WriteLine(String.Join(" + ", terms));
+
+
                 polys.Add(monoms);  
             }
 
@@ -78,6 +111,8 @@ namespace Mba.Simplifier.Minimization
             Console.WriteLine(rr);
             */
 
+            File.WriteAllText("system.in", sb.ToString());
+
             // Serialize the buffer to a C-compatible memory representation.
             var inBuffer = SerializeSystem(polys);
 
@@ -86,8 +121,17 @@ namespace Mba.Simplifier.Minimization
             uint outSize = 0;
             fixed (uint* ptr = &inBuffer[0])
             {
-                outBuffer = Api.GetGroebnerBasis((uint)table.NumVars, ptr, &outSize);
+                while (true)
+                {
+                    var sw = Stopwatch.StartNew();
+                    outBuffer = Api.GetGroebnerBasis((uint)table.NumVars, ptr, &outSize);
+                    sw.Stop();
+
+                    Console.WriteLine($"Took {sw.ElapsedMilliseconds}ms");
+
+                }
             }
+
 
             var groebnerBasis = DeserializeSystem(outBuffer);
             Api.FreeGroebnerBasis((nint)outBuffer);

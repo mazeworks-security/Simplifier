@@ -19,6 +19,8 @@ namespace Mba.Simplifier.Minimization
 
         public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable, bool negate = false)
         {
+            //var dnf2 = EspressoMinimizer.SimplifyBoolean(ctx, truthTable.AsList(), variables).ast;
+
             GroebnerMinimizer.Run(ctx, variables, truthTable);
 
             // If requested, negate the result vector to find a negated expression.
@@ -26,7 +28,7 @@ namespace Mba.Simplifier.Minimization
             {
                 truthTable.Negate();
             }
-
+            //z`
             // Exit early if the boolean function is a constant.
             var asConstant = AsConstant(ctx, truthTable, ctx.GetWidth(variables[0]));
             if (asConstant != null)

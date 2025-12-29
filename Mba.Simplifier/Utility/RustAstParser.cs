@@ -43,7 +43,7 @@ namespace Mba.Simplifier.Utility
                 AstKind.Const => ctx.Constant((ulong)(node as ConstNode).Value, bitWidth),
                 AstKind.Var => ctx.Symbol((node as VarNode).Name, bitWidth),
                 AstKind.Add => binop(AstOp.Add),
-                AstKind.Power => binop(AstOp.Pow),
+                AstKind.Pow => binop(AstOp.Pow),
                 AstKind.Mul => binop(AstOp.Mul),
                 AstKind.And => binop(AstOp.And),
                 AstKind.Or => binop(AstOp.Or),
