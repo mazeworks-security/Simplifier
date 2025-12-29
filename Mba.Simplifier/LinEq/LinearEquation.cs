@@ -19,6 +19,12 @@ namespace Mba.Simplifier.LinEq
             coeffs = new ulong[numElements];
         }
 
+        public LinearEquation(ulong[] coeffs, ulong result)
+        {
+            this.coeffs = coeffs;
+            this.result = result;
+        }
+
         public override string ToString()
         {
             bool array = true;

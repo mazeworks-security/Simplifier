@@ -319,6 +319,9 @@ namespace Mba.Simplifier.LinEq
                 // Backtrack down.
                 var lc = state[varIdx].lc;
                 var solutionIdx = state[varIdx].solutionIdx;
+                if (solutionIdx >= 1)
+                    Debugger.Break();
+
                 int limit = lc.d > 255 ? 255 : (int)lc.d;
                 if (solutionIdx >= limit)
                 {

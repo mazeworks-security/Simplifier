@@ -30,9 +30,7 @@ namespace Mba.Simplifier.Polynomial
                 sum += result;
             }
 
-
-
-            return sum;
+            return poly.moduloMask & sum;
         }
 
 
