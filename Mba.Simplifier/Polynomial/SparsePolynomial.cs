@@ -147,6 +147,9 @@ namespace Mba.Simplifier.Polynomial
             return clone;
         }
 
+        public void Clear()
+            => coeffs.Clear();
+
         public static SparsePolynomial GetUnivariate(byte width, params ulong[] coeffs)
         {
             var poly = new SparsePolynomial(1, width);

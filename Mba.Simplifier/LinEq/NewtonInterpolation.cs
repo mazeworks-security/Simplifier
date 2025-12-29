@@ -183,8 +183,17 @@ namespace Mba.Simplifier.LinEq
 
             poly = SparsePolynomial.ParsePoly("3*x + 4*x*x + 7*x*x*x + 25*x*x*x*x + 34234*x*x*x*x*x*x", 1, 8);
 
+            poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z", 3, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*x*x", 1, 8);
+
+            poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z", 3, 8);
+
             Console.WriteLine($"Input: {poly}");
 
+      
             var mmask = poly.moduloMask;
 
             var maxDeg = (int)GetMaxDegree(poly);
@@ -402,22 +411,17 @@ namespace Mba.Simplifier.LinEq
 
             Console.WriteLine($"Expected result: {PolynomialReducer.Reduce(poly.Clone())}");
 
-            ChangeOfBasis(newFactorialOutput, roots, monomials.ToList());
+            NewtonToMonomial(newFactorialOutput, monomials.ToList());
 
+
+            var clone = poly.Clone();
+            MonomialToNewton(clone, monomials.ToList());
+            NewtonToMonomial(clone, monomials.ToList());
             Debugger.Break();
         }
 
-        /*
-        private static DensePolynomial ToDensePoly(SparsePolynomial poly)
+        private static void NewtonToMonomial(SparsePolynomial poly, List<Monomial> monomials)
         {
-            //var dense = new DensePolynomial(poly.width);
-        }
-        */
-
-        private static void ChangeOfBasis(SparsePolynomial poly, List<ulong[]> roots, List<Monomial> monomials)
-        {
-            var f = poly.Clone();
-
             var n = monomials.Count;
             var r = new ulong[n];
             for (int i = 0; i < monomials.Count; i++)
@@ -427,12 +431,45 @@ namespace Mba.Simplifier.LinEq
             {
                 for (int j = i; j < n - 1; j++)
                 {
-                    r[j] -= r[j + 1] * roots[i][0];
+                    r[j] -= r[j + 1] * GetDegreeProduct(monomials[i]);
                     r[j] &= poly.moduloMask;
                 }
             }
 
-            Debugger.Break();
+            poly.Clear();
+            for (int i = 0; i < monomials.Count; i++)
+                poly[monomials[i]] = r[i];
+
+        }
+
+        private static void MonomialToNewton(SparsePolynomial poly, List<Monomial> monomials)
+        {
+            var n = monomials.Count;
+            var r = new ulong[n];
+            for (int i = 0; i < monomials.Count; i++)
+                r[i] = poly.GetCoeffOrZero(monomials[i]);
+
+            for(int i = 0; i < n - 1; i++)
+            {
+                for (int j = n - 2; j >= i; j--)
+                {
+                    r[j] += r[j + 1] * GetDegreeProduct(monomials[i]);
+                    r[j] &= poly.moduloMask;
+                }
+            }
+
+            poly.Clear();
+            for (int i = 0; i < monomials.Count; i++)
+                poly[monomials[i]] = r[i];
+
+        }
+
+        private static ulong GetDegreeProduct(Monomial monomial)
+        {
+            ulong product = 1;
+            foreach (var root in monomial.Degrees)
+                product *= root;
+            return product;
         }
 
 
