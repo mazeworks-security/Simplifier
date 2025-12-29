@@ -1785,7 +1785,7 @@ namespace Mba.Simplifier.Pipeline
 
             if (terms.Count >= 63 || sparsePoly.ToString() == "64 + 224*x + 64*x*x + 212*x*x*x*x*x + 205*x*x*x*x*x*x*x")
             {
-                PolyInverter.InterpolateExample(sparsePoly);
+                //PolyInverter.InterpolateExample(sparsePoly);
                 Debugger.Break();
             }
 

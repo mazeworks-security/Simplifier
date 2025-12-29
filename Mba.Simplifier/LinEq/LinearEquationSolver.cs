@@ -1,6 +1,7 @@
 ﻿using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Polynomial;
 using Mba.Utility;
+using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -275,6 +276,75 @@ namespace Mba.Simplifier.LinEq
 
         public static HashSet<int> Solutions = new();
 
+        public static bool EnumerateSolutionsIterative(LinearSystem linearSystem, LinearCongruenceSolver congruenceSolver, bool upperTriangular)
+        {
+            int numVars = linearSystem.Equations[0].NumVars;
+            var begin = upperTriangular ? numVars - 1 : 0;
+            var step = upperTriangular ? -1 : 1;
+            var end = upperTriangular ? -1 : numVars;
+
+
+            var moduloMask = linearSystem.ModuloMask;
+            var state = new (ulong solution, Lc lc, int solutionIdx)[numVars];
+            int varIdx = begin;
+            while (varIdx != end)
+            {
+                var lineq = linearSystem.Equations[varIdx];
+                var result = lineq.result;
+
+                // TODO: Implement lower triangular
+                Debug.Assert(upperTriangular);
+                for (int i = varIdx + 1; i < linearSystem.NumVars; i++)
+                {
+                    var coeff = lineq.coeffs[i];
+                    var mul = coeff * state[i].solution;
+                    result -= mul;
+                    result &= moduloMask;
+                }
+
+                // Setup a linear congruence if we haven't reached this variable yet
+                if (state[varIdx].lc == null)
+                {
+                    // An unsolvable linear congruence means there is no solution
+                    var ourCoeff = lineq.coeffs[varIdx];
+                    var congruence = congruenceSolver.LinearCongruence(ourCoeff, result, (UInt128)moduloMask + 1);
+                    if (congruence == null)
+                        goto backtrack;
+
+                    state[varIdx].lc = congruence;
+                }
+
+                // If we've reached the iteration limit, there probably is no solution.
+                // Backtrack down.
+                var lc = state[varIdx].lc;
+                var solutionIdx = state[varIdx].solutionIdx;
+                int limit = lc.d > 255 ? 255 : (int)lc.d;
+                if (solutionIdx >= limit)
+                {
+                    goto backtrack;
+                }
+                
+                // Pick the nth solution
+                var solution = (ulong)congruenceSolver.GetSolution((UInt128)solutionIdx, lc);
+                state[varIdx].solution = solution;
+                state[varIdx].solutionIdx = solutionIdx + 1;
+
+
+                varIdx += step;
+                continue;
+
+            backtrack:
+                // Reset state
+                state[varIdx] = default;
+                // Move back to the previous variable
+                varIdx -= step;
+                continue;
+
+            }
+
+            return false;
+        }
+
         public static bool EnumerateSolutions(LinearSystem linearSystem, LinearCongruenceSolver congruenceSolver,  ulong[] solutionMap, int varIdx, bool upperTriangular)
         {
             var moduloMask = linearSystem.ModuloMask;
@@ -283,7 +353,7 @@ namespace Mba.Simplifier.LinEq
             var lineq = linearSystem.Equations[varIdx];
             var result = lineq.result;
 
-            var sum = (int i) =>
+            var sum = (int i, ref ulong result) =>
             {
                 var coeff = lineq.coeffs[i];
                 var mul = coeff * solutionMap[i];
@@ -294,17 +364,17 @@ namespace Mba.Simplifier.LinEq
             if (upperTriangular)
             {
                 for (int i = varIdx + 1; i < linearSystem.NumVars; i++)
-                    sum(i);
+                    sum(i, ref result);
             }
 
             else
             {
                 for (int i = 0; i < varIdx; i++)
-                    sum(i);
+                    sum(i, ref result);
             }
 
 
-                var ourCoeff = lineq.coeffs[varIdx];
+            var ourCoeff = lineq.coeffs[varIdx];
             var lc = congruenceSolver.LinearCongruence(ourCoeff, result, (UInt128)moduloMask + 1);
             if (lc == null)
                 return false;
