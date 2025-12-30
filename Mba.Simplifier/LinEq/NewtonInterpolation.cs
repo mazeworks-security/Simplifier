@@ -152,7 +152,7 @@ namespace Mba.Simplifier.LinEq
 
             var mmask = poly.moduloMask;
             var maxDeg = (int)GetMaxDegree(poly);
-
+            var maxDegOld = (int)GetMaxDegree(poly);
 
             var w = BitOperations.PopCount(poly.moduloMask);
             maxDeg = Math.Min(maxDeg, w + 2);
@@ -179,10 +179,10 @@ namespace Mba.Simplifier.LinEq
             }
 
             var mSet = monomials.ToHashSet();
-            bool diffMonomialAlgorith = true;
+            bool diffMonomialAlgorith = false;
             if (diffMonomialAlgorith)
             {
-                var allMs = PolyInverter.Enumerate(maxDegs, (byte)maxDeg).ToList();
+                var allMs = PolyInverter.Enumerate(maxDegs, (byte)Math.Min(maxDegOld + 1, w + 2)).ToList();
                 allMs.Sort();
 
                 /*
@@ -266,13 +266,31 @@ namespace Mba.Simplifier.LinEq
             var solver = new LinearCongruenceSolver(poly.moduloMask);
             var (solvable, solutions) = LinearEquationSolver.EnumerateSolutionsIterative(system, solver, upperTriangular: false);
 
-            var divDiffCoeffs = DivDiff(mmask, solver, xs, ys);
+            bool divDiff = true;
+            if (divDiff)
+            {
+                ulong[] divDiffCoeffs = null;
 
-            var divDiffFactorial = new SparsePolynomial(numVars, poly.width);
-            for (int i = 0; i < monomials.Length; i++)
-                divDiffFactorial.SetCoeff(monomials[i], divDiffCoeffs[i]);
-            PolynomialReducer.ReduceFacBasisPolynomial(divDiffFactorial);
-            return divDiffFactorial;
+                bool mv = true;
+                if (mv)
+                {
+                    divDiffCoeffs = DivDiffMv(mmask, solver, monomials.ToList(), ys);
+                }
+
+                else
+                {
+                    DivDiff(mmask, solver, xs, ys);
+                }
+
+                //if (!divDiffCoeffs.SequenceEqual(divDiffMv))
+                //    Debugger.Break();
+
+                var divDiffFactorial = new SparsePolynomial(numVars, poly.width);
+                for (int i = 0; i < monomials.Length; i++)
+                    divDiffFactorial.SetCoeff(monomials[i], divDiffCoeffs[i]);
+                PolynomialReducer.ReduceFacBasisPolynomial(divDiffFactorial);
+                return divDiffFactorial;
+            }
 
             var newFactorialOutput = new SparsePolynomial(poly.numVars, poly.width);
             for (int i = 0; i < (int)numPoints; i++)
@@ -319,7 +337,15 @@ namespace Mba.Simplifier.LinEq
             //var before = PolynomialReducer.Reduce(poly.Clone());
             //var after = Interpolate(poly.Clone());
 
-            /*
+            //poly = SparsePolynomial.ParsePoly("17 + 233*x + 323*y + 34*x*y + 343434*x*y*z", 3, 8);
+
+
+            poly = SparsePolynomial.ParsePoly("x + y", 2, 8);
+
+            //poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
+
+            //poly = SparsePolynomial.ParsePoly("1 + 3*x + 17*x*x + 33*x*x*x", 1, 8);
+
             var before = PolynomialReducer.GetFactorialForm(poly.Clone());
             PolynomialReducer.ReduceFacBasisPolynomial(before);
 
@@ -339,7 +365,7 @@ namespace Mba.Simplifier.LinEq
             Console.WriteLine($"After: {after}");
 
             //poly = SparsePolynomial
-            */
+            
 
             Fuzz();
 
@@ -442,6 +468,97 @@ namespace Mba.Simplifier.LinEq
         }
 
 
+        public static ulong[] DivDiffMv(ulong mmask, LinearCongruenceSolver solver, List<Monomial> x, ulong[] y)
+        {
+
+        }
+
+        public static ulong[] DivDiffMvOld(ulong mmask, LinearCongruenceSolver solver, List<Monomial> x, ulong[] y)
+        {
+            
+
+
+            var coeffs = y.ToArray();
+            var n = x.Count;
+            for (int j = 1; j < n; j++)
+            {
+                Console.WriteLine();
+                for (int i = n - 1; i >= j; i--)
+                {
+                    //coeffs[i] = (coeffs[i] - coeffs[i - 1]) / (x[i] - x[i - j]);
+
+                    // (coeffs[n] - coeffs[n - 1]
+                    //  / 
+                    // x[i] - x[i - j]
+
+                    //var oldMonomial = x[i - j];
+                    var oldMonomial = x[j];
+                    var m = x[i];
+
+                    bool isMultiple = true;
+                    for (int varIdx = 0; varIdx < m.Degrees.Count; varIdx++)
+                    {
+                        var prevDeg = oldMonomial.Degrees[varIdx];
+                        var currDeg = m.Degrees[varIdx];
+                        // Skip if they're both zero
+                        if (prevDeg == 0 && currDeg == 0)
+                        {
+                            isMultiple = false;
+                            break;
+                        }
+
+                        
+                        // If the previous degree was zero, its not a multiple..
+                        if (prevDeg == 0)
+                        {
+                            isMultiple = false;
+                            break;
+                        }
+
+
+                        // If the previous degree was zero, its not a multiple..
+                        if (currDeg == 0)
+                        {
+                            isMultiple = false;
+                            break;
+                        }
+                    }
+
+                    if ((i - j) == 0)
+                        isMultiple = true;
+
+                    Console.WriteLine($"({i}, {j}), {oldMonomial}, {m}");
+                    if (!isMultiple)
+                        continue;
+
+                    ulong product = 1;
+                    for(int varIdx = 0; varIdx < m.Degrees.Count; varIdx++)
+                    {
+                        // x[i]
+                        var deg = m.Degrees[varIdx];
+                        if (deg == 0)
+                            continue;
+
+                        // x[i-j
+                        var oldDeg = oldMonomial.Degrees[varIdx];
+
+                        var diff = (ulong)deg - oldDeg;
+
+                        product *= diff;
+      
+                    }
+
+
+                    product &= mmask;
+
+                    //coeffs[i] = mmask & Mdiv(mmask, solver, (coeffs[i] - coeffs[i - 1]), (x[i] - x[i - j])).Item1;
+                    coeffs[i] = mmask & Mdiv(mmask, solver, (coeffs[i] - coeffs[i - 1]), product).Item1;
+                }
+            }
+
+            return coeffs;
+        }
+
         public static ulong[] DivDiff(ulong mmask, LinearCongruenceSolver solver, ulong[] x, ulong[] y)
         {
             var coeffs = y.ToArray();
@@ -451,6 +568,11 @@ namespace Mba.Simplifier.LinEq
                 for (int i = n - 1; i >= j; i--)
                 {
                     //coeffs[i] = (coeffs[i] - coeffs[i - 1]) / (x[i] - x[i - j]);
+
+                    // (coeffs[n] - coeffs[n - 1]
+                    //  / 
+                    // x[i] - x[i - j]
+
                     coeffs[i] = mmask & Mdiv(mmask, solver, (coeffs[i] - coeffs[i - 1]), (x[i] - x[i - j])).Item1;
                 }
             }
