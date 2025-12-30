@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Numerics;
+using System.Reflection;
 using System.Runtime.Intrinsics;
 using System.Security.Cryptography;
 using System.Text;
@@ -223,7 +224,7 @@ namespace Mba.Simplifier.FastGb
     // Problem: Monomial needs to have `isOne` field
     // Monomials are created by indices..
     // isOne = varMask == -1
-    public struct Monomial<T> : IEquatable<Monomial<T>> where T : IVector<ulong, T>
+    public struct Monomial<T> : IComparable<Monomial<T>>, IEquatable<Monomial<T>> where T : IVector<ulong, T>
     {
         public static int NumVars => T.NumVars;
 
@@ -344,6 +345,19 @@ namespace Mba.Simplifier.FastGb
         public static Monomial<T> One()
             => new Monomial<T>(0, true);
 
+        public int CompareTo(Monomial<T> other)
+        {
+            var totalA = BitOperations.PopCount(mVars);
+            var totalB = BitOperations.PopCount(other.mVars);
+
+            if (totalA > totalB)
+                return 1;
+            if (totalB > totalA)
+                return -1;
+
+            // Otherwise the degree is equal
+            return mVars.CompareTo(other.mVars);
+        }
     }
 
     // Dense truth table in algebraic normal form
@@ -395,7 +409,27 @@ namespace Mba.Simplifier.FastGb
 
         public void SetZero() => value.SetConstant(0);
         // 0th bit indicates whether the polynomial has a constant offset
-        public void SetOne() => value.SetConstant(1);   
+        public void SetOne() => value.SetConstant(1);
+
+        public int PopCount()
+        {
+            return BitOperations.PopCount(value.GetWord(0));
+        }
+
+        public int GetDegree()
+        {
+            int max = 0;
+            var word = value.GetWord(0);
+            for(int i = 0; i < 64; i++)
+            {
+                var v = 1 & (word >> (ushort)i);
+                if (v == 0)
+                    continue;
+
+                max = Math.Max(max, BitOperations.PopCount((uint)i));
+            }
+            return max;
+        }
 
         private int TrailingZeroCount()
         {
@@ -477,6 +511,9 @@ namespace Mba.Simplifier.FastGb
                 yield return m;
             }
         }
+
+        public ulong AsUlong()
+            => value.GetWord(0);
 
         public Monomial<T> GetBit(int index)
         {

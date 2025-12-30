@@ -4,8 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices.Marshalling;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Net.WebRequestMethods;
 using Poly = Mba.Simplifier.FastGb.BoolPoly<Mba.Simplifier.FastGb.U64>;
 namespace Mba.Simplifier.FastGb
 {
@@ -254,16 +256,61 @@ namespace Mba.Simplifier.FastGb
 
         private static List<Poly> Autoreduce(List<Poly> F)
         {
+            //F = F.OrderByDescending(x => x.GetDegree()).ToList();
+            //F.Sort(x => x.PopCount());
+
+            //F = F.OrderByDescending(x => x.Lm).ToList();
+            //F = F.OrderBy(x => x.Lm).ToList();
+
             var g = F.Select(x => x.Clone()).ToList();
             var P = new List<Poly>();
+            ulong pCombinedMask = 0;
+
+            var reducedSet = new List<Poly>();
+            var notReducedSet = new List<Poly>();
+
+            bool log = false;
 
             while (g.Any())
             {
+                pCombinedMask = 0;
+                //foreach(var p in )
+
                 var h = g.Last();
                 g.RemoveAt(g.Count - 1);
+                var before = h.Clone();
+
+                var hMask = h.AsUlong();
+                bool prediction = (hMask & pCombinedMask) == 0;
+
+                /*
+                foreach (var m in h.Monomials)
+                {
+                    pCombinedMask |= (1UL << m.Index);
+                }
+                */
+
                 h = NormalForm(h, P);
+
+                //bool changed = h.AsUlong() != before.AsUlong();
+
+
+                //Console.WriteLine(changed);
+                //Console.WriteLine($"{prediction == changed}");
+                //Console.WriteLine($"IsZero: {h.IsZero()} for poly{before}");
+                if (log)
+                {
+                    if (h.IsZero())
+                        notReducedSet.Add(before);
+                    else
+                        reducedSet.Add(before);
+                }
+
+                
+
                 if (!h.IsZero())
                 {
+                    //pCombinedMask = 0;
                     var newP = new List<Poly>();
                     foreach (var itp in P)
                     {
@@ -274,11 +321,40 @@ namespace Mba.Simplifier.FastGb
                             continue;
                         }
 
+                        /*
+                        foreach(var m in itp.Monomials)
+                        {
+                            pCombinedMask |= (1UL << m.Index);
+                        }
+                        */
+                        //pCombinedMask |= itp.AsUlong();
+
+                        //pCombinedMask |= (1UL << itp.Lm.Index);
+
                         newP.Add(itp);
                     }
 
                     P = newP;
+
+                    /*
+                    foreach (var m in h.Monomials)
+                    {
+                        pCombinedMask |= (1UL << m.Index);
+                    }
+                    */
+
+                    //pCombinedMask |= h.AsUlong();
+                    //pCombinedMask |= (1UL << h.Lm.Index);
+
                     P.Add(h);
+
+                    pCombinedMask = 0;
+                    foreach(var poly in P)
+                    {
+                        pCombinedMask |= (1UL << poly.Lm.Index);
+                    }
+
+
                 }
             }
 
@@ -298,6 +374,23 @@ namespace Mba.Simplifier.FastGb
                     P.Add(h);
                 }
             }
+
+
+            if (log)
+            {
+                Console.WriteLine($"Reduced: ");
+                foreach (var reduced in reducedSet)
+                {
+                    Console.WriteLine($"    {reduced}");
+                }
+
+                Console.WriteLine($"\n\nNot reduced:");
+                foreach (var reduced in notReducedSet)
+                {
+                    Console.WriteLine($"    {reduced}");
+                }
+            }
+
 
             return P;
             Console.WriteLine($"Computed groebner basis with {P.Count} elements\n[\n{String.Join("\n", P.Select(x => "    " + x.ToString() + ","))}\n]");
