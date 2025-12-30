@@ -212,6 +212,25 @@ namespace Mba.Simplifier.FastGb
             return new(a.mVars ^ b.mVars);
         }
 
+        public override string ToString()
+        {
+            if (IsZero)
+                return "0";
+            if (IsOne)
+                return "1";
+
+            List<string> vNames = new();
+            for(int i = 0; i < T.NumVars; i++)
+            {
+                if ((mVars & (1u << i)) == 0)
+                    continue;
+
+                vNames.Add($"x{vNames.Count}");
+            }
+
+            return String.Join($"*", vNames);
+        }
+
         public static Monomial<T> Zero()
            => new Monomial<T>(0);
 
@@ -309,10 +328,16 @@ namespace Mba.Simplifier.FastGb
 
             // Slower but less chance of screwing up the "isOne" check
             for (int i = 0; i < T.NumBits; i++)
-                yield return GetBit(i);
+            {
+                var m = GetBit(i);
+                if (m.IsZero)
+                    continue;
+
+                yield return m;
+            }
         }
 
-        private Monomial<T> GetBit(int index)
+        public Monomial<T> GetBit(int index)
         {
             var wordIdx = index >> 6;
             var bitIdx = index - (64 * wordIdx);
@@ -327,7 +352,7 @@ namespace Mba.Simplifier.FastGb
             return new((uint)index);
         }
 
-        private void SetBit(int index, bool v)
+        public void SetBit(int index, bool v)
         {
             var wordIdx = index >> 6;
             var bitIdx = index - (64 * wordIdx);
@@ -425,6 +450,12 @@ namespace Mba.Simplifier.FastGb
         private static bool Equals(BoolPoly<T> a, BoolPoly<T> b)
         {
             return a.value.Eq(b.value);
+        }
+
+        public override string ToString()
+        {
+            var mStrs = Monomials.Select(x => x.ToString()).ToList();
+            return String.Join(" + ", mStrs);
         }
     }
 

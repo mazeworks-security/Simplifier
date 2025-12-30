@@ -1,5 +1,6 @@
 ﻿using Mba.Common.MSiMBA;
 using Mba.Simplifier.Bindings;
+using Mba.Simplifier.FastGb;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -42,6 +43,8 @@ namespace Mba.Simplifier.Minimization
 
             bool log = false;
 
+            List<BoolPoly<TableSize>> newPolys = new();
+
             HashSet<string> allMs = new();
             // Construct a system of boolean polynomials out of the truth table(ignoring nil rows)
             var polys = new List<List<uint>>();
@@ -81,7 +84,14 @@ namespace Mba.Simplifier.Minimization
                 //Console.WriteLine(String.Join(" + ", terms));
 
 
-                polys.Add(monoms);  
+                var p = new BoolPoly<TableSize>();
+                foreach(var m in monoms)
+                {
+                    p.SetBit((int)m, true);
+                }
+
+                polys.Add(monoms);
+                newPolys.Add(p);
             }
 
             /*
