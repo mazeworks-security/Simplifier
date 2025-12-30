@@ -225,7 +225,7 @@ namespace Mba.Simplifier.FastGb
                 if ((mVars & (1u << i)) == 0)
                     continue;
 
-                vNames.Add($"x{vNames.Count}");
+                vNames.Add($"x{i}");
             }
 
             return String.Join($"*", vNames);
@@ -235,7 +235,7 @@ namespace Mba.Simplifier.FastGb
            => new Monomial<T>(0);
 
         public static Monomial<T> One()
-            => new Monomial<T>(0);
+            => new Monomial<T>(0, true);
 
     }
 
@@ -264,7 +264,20 @@ namespace Mba.Simplifier.FastGb
         private Monomial<T> GetLm()
         {
             var index = (uint)LeadingZeroCount();
-            return index == T.NumBits ? new(0) : new(index);
+            var nb = T.NumBits;
+            if (nb < 64)
+                index -= (uint)(64 - nb);
+
+            if (index >= nb)
+                return Monomial<T>.Zero();
+
+            var invIndex = (uint)-(index - (nb - 1));
+
+            Monomial<T> inv = new(invIndex);
+            //return (index - (nb - 1)
+
+
+            return index >= nb ? Monomial<T>.Zero() : inv;
         }
 
         public bool IsZero()

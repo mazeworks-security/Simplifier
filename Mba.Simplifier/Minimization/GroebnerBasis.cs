@@ -123,6 +123,8 @@ namespace Mba.Simplifier.Minimization
 
             File.WriteAllText("system.in", sb.ToString());
 
+            new BoolGb().Buchberger(newPolys);
+
             // Serialize the buffer to a C-compatible memory representation.
             var inBuffer = SerializeSystem(polys);
 
