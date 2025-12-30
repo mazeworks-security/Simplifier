@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Mba.Simplifier.Polynomial;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -9,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.FastGb
 {
-    public interface IVector<T, TSelf> : IBitwiseOperators<TSelf, TSelf, TSelf>, IEquatable<TSelf>  where TSelf: IVector<T, TSelf>
+    public interface IVector<T, TSelf> : IEquatable<TSelf>  where TSelf: IVector<T, TSelf>
     {
         static abstract int NumVars { get; }
 
@@ -19,9 +20,16 @@ namespace Mba.Simplifier.FastGb
 
         ulong GetWord(int index);
 
-        bool IsZero();
+        void SetWord(int index, ulong value);
+
+        bool IsConstant(ulong value);
+
+        void SetConstant(ulong value);
 
         bool Eq(TSelf other);
+
+        static abstract TSelf operator +(TSelf left, TSelf right);
+        static abstract TSelf operator *(TSelf left, TSelf right);
     }
 
     public struct U4 : IVector<Vector64<ulong>, U4>
@@ -99,9 +107,16 @@ namespace Mba.Simplifier.FastGb
             return mVars == other.mVars && IsOne == other.IsOne;
         }
 
+        public override int GetHashCode()
+        {
+            return isOne.GetHashCode() + 17 * mVars.GetHashCode();
+        }
+
         public bool IsZero => !isOne && mVars == 0;
 
         public bool IsOne => isOne;
+
+        public int Index => isOne ? 0 : (int)mVars;
 
         public int Degree => BitOperations.PopCount((uint)mVars);
 
@@ -196,7 +211,14 @@ namespace Mba.Simplifier.FastGb
         }
 
         public bool IsZero()
-            => value.IsZero();
+            => value.IsConstant(0);
+
+        public bool IsOne()
+            => GetBit(0).IsOne && value.IsConstant(1);
+
+        public void SetZero() => value.SetConstant(0);
+        // 0th bit indicates whether the polynomial has a constant offset
+        public void SetOne() => value.SetConstant(1);   
 
         private int TrailingZeroCount()
         {
@@ -230,30 +252,123 @@ namespace Mba.Simplifier.FastGb
 
         private IEnumerable<Monomial<T>> GetMonomials()
         {
+            /*
             for(int wordIdx = 0;  wordIdx < T.NumWords; wordIdx++)
             {
                 var word = value.GetWord(wordIdx);
                 for(int i = 0; i < T.NumBits; i++)
                 {
-                    var bit = (uint)(1 & (word >> i));
+                    var bit = (1 & (word >> i));
                     if (bit == 0)
                         continue;
 
-                    // If the 0th bit is demanded, we have the zero monomial.
+                    // If the 0th bit is demanded, we have a 1.
                     if (wordIdx == 0 && i == 0)
-                        yield return new Monomial<T>(uint.MaxValue);
+                        yield return Monomial<T>.One();
 
-                    yield return new Monomial<T>(bit);
+                    yield return new Monomial<T>((uint)i);
                 }
             }
+            */
+
+            // Slower but less chance of screwing up the "isOne" check
+            for (int i = 0; i < T.NumBits; i++)
+                yield return GetBit(i);
         }
 
-        public static BoolPoly<T> operator +(BoolPoly<T> left, BoolPoly<T> right) => new BoolPoly<T> { value = left.value ^ right.value };
-        public static BoolPoly<T> operator *(BoolPoly<T> left, BoolPoly<T> right) => new BoolPoly<T> { value = left.value & right.value };
-        public static BoolPoly<T> operator &(BoolPoly<T> left, BoolPoly<T> right) => new BoolPoly<T> { value = left.value & right.value };
-        public static BoolPoly<T> operator |(BoolPoly<T> left, BoolPoly<T> right) => new BoolPoly<T> { value = left.value | right.value };
-        public static BoolPoly<T> operator ^(BoolPoly<T> left, BoolPoly<T> right) => new BoolPoly<T> { value = left.value ^ right.value };
-        public static BoolPoly<T> operator ~(BoolPoly<T> left) => new BoolPoly<T> { value = ~left.value };
+        private Monomial<T> GetBit(int index)
+        {
+            var wordIdx = index >> 6;
+            var bitIdx = index - (64 * wordIdx);
+            var v = 1 & (value.GetWord(wordIdx) >> (ushort)bitIdx);
+            // Return zero if the monomial is not present in the set.
+            if (v == 0)
+                return Monomial<T>.Zero();
+            // Special case: The 0th bit is set, indicating a constant offset of one
+            if (index == 0)
+                return Monomial<T>.One();
+
+            return new((uint)index);
+        }
+
+        private void SetBit(int index, bool v)
+        {
+            var wordIdx = index >> 6;
+            var bitIdx = index - (64 * wordIdx);
+
+            var val = Convert.ToUInt64(v);
+            var word = value.GetWord(wordIdx);
+            word &= ~(1ul << bitIdx);
+            word |= (val << bitIdx);
+
+            value.SetWord(wordIdx, word);
+        }
+
+        private void XorBit(int index, bool v)
+        {
+            var wordIdx = index >> 6;
+            var bitIdx = index - (64 * wordIdx);
+
+            var val = Convert.ToUInt64(v);
+            var word = value.GetWord(wordIdx);
+            word ^= (val << bitIdx);
+            value.SetWord(wordIdx, word);
+        }
+
+        public static BoolPoly<T> operator +(BoolPoly<T> left, BoolPoly<T> right) => new BoolPoly<T> { value = left.value + right.value };
+        public static BoolPoly<T> operator +(BoolPoly<T> left, Monomial<T> right)
+        {
+            // Clone the poly
+            left = left.Clone();
+
+            // Fetch the nth bit containing the `right` monomial
+            var idx = right.Index;
+            var a = left.GetBit(idx);
+
+            // XOR the bit coefficient by 1
+            bool value = !a.IsZero ^ true;
+            left.SetBit(idx, value);
+            return left;
+        }
+
+        // Might be wrong?
+        public static BoolPoly<T> operator *(BoolPoly<T> left, BoolPoly<T> right)
+        {
+            var result = new BoolPoly<T>();
+
+            var a = left.Clone();
+            while(!a.IsZero())
+            {
+                var i = a.TrailingZeroCount();
+                a.SetBit(i, false);
+
+                var b = right.Clone();
+                while (!b.IsZero())
+                {
+                    int j = b.TrailingZeroCount();
+                    b.SetBit(j, false);
+
+                    result.XorBit(i | j, true);
+                }
+            }
+
+            return result;
+        }
+        public static BoolPoly<T> operator *(BoolPoly<T> left, Monomial<T> right)
+        {
+            // Zero / one identities
+            if (right.IsZero)
+                return new BoolPoly<T>();
+            if (right.IsOne)
+                return new BoolPoly<T>() { value = left.value };
+
+            // Construct a new polynomial and multiply
+            var rhs = new BoolPoly<T>();
+            rhs.SetBit(right.Index, true);
+            return left * rhs;
+        }
+
+        public BoolPoly<T> Clone() => new BoolPoly<T>() { value = value};
 
         public static bool operator ==(BoolPoly<T> left, BoolPoly<T> right) => Equals(left, right);
         public static bool operator !=(BoolPoly<T> left, BoolPoly<T> right) => !Equals(left, right);
@@ -264,6 +379,11 @@ namespace Mba.Simplifier.FastGb
                 return false;
 
             return Equals(this, other);
+        }
+
+        public override int GetHashCode()
+        {
+            return value.GetHashCode();
         }
 
         private static bool Equals(BoolPoly<T> a, BoolPoly<T> b)
