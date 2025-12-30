@@ -86,6 +86,58 @@ namespace Mba.Simplifier.FastGb
         //public static U4 operator +(U4 left, U4 right) => new U4 { Value = left.Value + right.Value };
     }
 
+
+    public struct U64 : IVector<ulong, U64>
+    {
+        public Vector64<ulong> Value;
+
+        public static int NumVars => BitOperations.TrailingZeroCount(NumBits);
+
+        public static int NumBits => 64;
+
+        public static int NumWords => NumBits <= 64 ? 1 : (NumBits >> 6);
+
+        public bool Eq(U64 other)
+        {
+            return Value == other.Value;
+        }
+
+        public bool Equals(U64 other)
+        {
+            return Value == other.Value;
+        }
+
+        public ulong GetWord(int index)
+        {
+            return Value.GetElement(index);
+        }
+
+        public bool IsConstant(ulong value)
+        {
+            return Value == Vector64.Create<ulong>(value);
+        }
+
+        public void SetConstant(ulong value)
+        {
+            Value = Vector64.Create<ulong>(value);
+        }
+
+        public void SetWord(int index, ulong value)
+        {
+            Value = Value.WithElement(index, value);
+        }
+
+        public static U64 operator +(U64 left, U64 right)
+        {
+            return new() { Value = left.Value ^ right.Value };
+        }
+
+        public static U64 operator *(U64 left, U64 right)
+        {
+            return new() { Value = left.Value & right.Value };
+        }
+    }
+
     /*
     public struct U64 : IVector<Vector64<ulong>, U64>
     {
@@ -307,13 +359,28 @@ namespace Mba.Simplifier.FastGb
 
         private int LeadingZeroCount()
         {
+            /*
             for (int i = T.NumWords - 1; i >= 0; i--)
             {
                 var word = value.GetWord(i);
                 var lzcnt = BitOperations.LeadingZeroCount(word);
-                if (lzcnt != 0)
+                if (lzcnt == 0)
                 {
                     return (64 * i) + lzcnt;
+                }
+            }
+
+            return T.NumBits;
+            */
+
+            for (int i = T.NumWords - 1; i >= 0; i--)
+            {
+                var word = value.GetWord(i);
+                if (word != 0)
+                {
+                    var lzcnt = BitOperations.LeadingZeroCount(word);
+                    // Account for all the zero words above this one
+                    return ((T.NumWords - 1 - i) * 64) + lzcnt;
                 }
             }
 

@@ -1,4 +1,4 @@
-﻿global using TableSize = Mba.Simplifier.FastGb.U8;
+﻿global using TableSize = Mba.Simplifier.FastGb.U64;
 using Mba.Simplifier.Slgb;
 using System;
 using System.Collections.Generic;
@@ -6,12 +6,104 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Poly = Mba.Simplifier.FastGb.BoolPoly<Mba.Simplifier.FastGb.U8>;
+using Poly = Mba.Simplifier.FastGb.BoolPoly<Mba.Simplifier.FastGb.U64>;
 namespace Mba.Simplifier.FastGb
 {
     public class BoolGb
     {
-        public List<Poly> Buchberger(List<Poly> polys)
+        public List<Poly> Buchberger(List<Poly> F)
+        {
+            var numVars = TableSize.NumVars;
+            var G = Autoreduce(F);
+            var pairs = new List<(int i, int j)>();
+            int k = G.Count;
+
+            // Matrix M with treated pairs
+            var M = Enumerable.Range(0, k)
+                              .Select(_ => Enumerable.Repeat(false, k).ToList())
+                              .ToList();
+
+            for (int i = -numVars; i < k; ++i)
+            {
+                for (int j = 0; j < k; ++j)
+                {
+                    if (i < j) pairs.Add((i, j));
+                }
+            }
+
+            while (pairs.Count > 0)
+            {
+                var (i, j) = pairs[0];
+                pairs.RemoveAt(0);
+
+                Poly s;
+                if (i < 0)
+                {
+                    var gjLm = G[j].Lm;
+                    var xi = new Monomial<TableSize>(1u << Math.Abs(i));
+
+                    if (gjLm.IsRelativelyPrime(xi))
+                        continue;
+
+                    // TODO: We are doingm copy on write, maybe this is wrong?
+                    s = G[j] * xi;
+                }
+                else
+                {
+                    M[i][j] = true;
+                    var p = G[i];
+                    var q = G[j];
+
+                    if (Criteria(i, j, p, q, M, G))
+                        continue;
+
+                    s = Spoly(p, q);
+                }
+
+                var h = NormalForm(s, G);
+                if (!h.IsZero())
+                {
+                    G.Add(h);
+                    for (int ii = -numVars; ii < k; ++ii)
+                    {
+                        pairs.Add((ii, k));
+                    }
+
+                    ++k;
+
+                    foreach (var row in M) row.Add(false);
+                    M.Add(Enumerable.Repeat(false, k).ToList());
+                }
+            }
+
+            G = Autoreduce(G);
+            return G;
+        }
+
+        public static bool Criteria(
+            int i,
+            int j,
+            Poly p,
+            Poly q,
+            List<List<bool>> M,
+            List<Poly> G)
+        {
+            if (p.Lm.IsRelativelyPrime(q.Lm))
+                return true;
+
+            var pqLm = p.Lm * q.Lm;
+
+            int gSize = G.Count;
+            for (int k = 0; k < gSize; ++k)
+            {
+                if (M[i][k] && M[k][j] && G[k].Lm.IsDivisible(pqLm))
+                    return true;
+            }
+
+            return false;
+        }
+
+        public List<Poly> BuchbergerOld(List<Poly> polys)
         {
             //var G = polys;
             var G = Autoreduce(polys);
