@@ -249,6 +249,8 @@ namespace Mba.Simplifier.FastGb
         // Only exists for the debugger view, because I hate expanding enumerators
         public List<Monomial<T>> MList => GetMonomials().ToList();
 
+        public Monomial<T> Lm => GetLm();
+
         public BoolPoly()
         {
             
@@ -259,7 +261,7 @@ namespace Mba.Simplifier.FastGb
             this.value = value;
         }
 
-        public Monomial<T> Lm()
+        private Monomial<T> GetLm()
         {
             var index = (uint)LeadingZeroCount();
             return index == T.NumBits ? new(0) : new(index);
