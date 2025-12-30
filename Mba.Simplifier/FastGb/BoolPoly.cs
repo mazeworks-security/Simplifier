@@ -32,25 +32,61 @@ namespace Mba.Simplifier.FastGb
         static abstract TSelf operator *(TSelf left, TSelf right);
     }
 
-    public struct U4 : IVector<Vector64<ulong>, U4>
+    public struct U8 : IVector<ulong, U8>
     {
         public Vector64<ulong> Value;
 
         public static int NumVars => BitOperations.TrailingZeroCount(NumBits);
 
-        public static int NumBits => 4;
+        public static int NumBits => 8;
 
         public static int NumWords => NumBits <= 64 ? 1 : (NumBits >> 6);
 
-        public static U4 operator +(U4 left, U4 right)
+        public bool Eq(U8 other)
         {
-            throw new NotImplementedException();
+            return Value == other.Value;
         }
+
+        public bool Equals(U8 other)
+        {
+            return Value == other.Value;
+        }
+
+        public ulong GetWord(int index)
+        {
+            return Value.GetElement(index);
+        }
+
+        public bool IsConstant(ulong value)
+        {
+            return Value == Vector64.Create<ulong>(value);
+        }
+
+        public void SetConstant(ulong value)
+        {
+            Value = Vector64.Create<ulong>(value); 
+        }
+
+        public void SetWord(int index, ulong value)
+        {
+            Value = Value.WithElement(index, value);
+        }
+
+        public static U8 operator +(U8 left, U8 right)
+        {
+            return new() { Value = left.Value ^ right.Value };
+        }
+
+        public static U8 operator *(U8 left, U8 right)
+        {
+            return new() { Value = left.Value & right.Value };
+        }
+
 
         //public static U4 operator +(U4 left, U4 right) => new U4 { Value = left.Value + right.Value };
     }
 
-
+    /*
     public struct U64 : IVector<Vector64<ulong>, U64>
     {
         public Vector64<ulong> Value;
@@ -75,6 +111,7 @@ namespace Mba.Simplifier.FastGb
         public static int NumWords => NumBits <= 64 ? 1 : (NumBits >> 6);
 
     }
+    */
 
     // Problem: Monomial needs to have `isOne` field
     // Monomials are created by indices..
@@ -183,9 +220,8 @@ namespace Mba.Simplifier.FastGb
 
     }
 
-
     // Dense truth table in algebraic normal form
-    public class BoolPoly<T> where T : IVector<ulong, T>, IBitwiseOperators<T, T, T>, IEquatable<T>
+    public class BoolPoly<T> where T : IVector<ulong, T>, IEquatable<T>
     {
         public T value;
 

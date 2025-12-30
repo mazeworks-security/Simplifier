@@ -27,7 +27,7 @@ namespace Mba.Simplifier.Slgb
             var str = "((((x&7)^(y&3)))|(z&3))";
             str = "((((x&103)^(y&115)))|(z&174))";
 
-            str = "x0|x1|x2|c3";
+            str = "x0|x1|x2";
 
             //str = "((((x&7)^(y&3)))|(z&3))";
             var boolean = RustAstParser.Parse(ctx, str, width);
