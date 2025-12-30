@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -123,8 +124,24 @@ namespace Mba.Simplifier.Minimization
 
             File.WriteAllText("system.in", sb.ToString());
 
-            new BoolGb().Buchberger(newPolys);
+            while (true)
+            {
+                var sw = Stopwatch.StartNew();
+                for (int i = 0; i < 100; i++)
+                {
+                 
+                    var clone = new List<BoolPoly<TableSize>>(newPolys.Count());
+                    clone.Clear();
+                    foreach (var p in newPolys)
+                        clone.Add(p.Clone());
+                    new BoolGb().Buchberger(clone);
+                    
+               
+                }
 
+                sw.Stop();
+                Console.WriteLine($"Took {sw.ElapsedMilliseconds}ms");
+            }
             // Serialize the buffer to a C-compatible memory representation.
             var inBuffer = SerializeSystem(polys);
 

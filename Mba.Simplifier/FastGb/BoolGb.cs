@@ -13,8 +13,8 @@ namespace Mba.Simplifier.FastGb
     {
         public List<Poly> Buchberger(List<Poly> polys)
         {
-            var G = polys;
-            //var G = Autoreduce(polys);
+            //var G = polys;
+            var G = Autoreduce(polys);
             //List<Polynomial> g = new();
             List<(int, int)> pairs = new();
 
@@ -207,6 +207,7 @@ namespace Mba.Simplifier.FastGb
                 }
             }
 
+            return P;
             Console.WriteLine($"Computed groebner basis with {P.Count} elements\n[\n{String.Join("\n", P.Select(x => "    " + x.ToString() + ","))}\n]");
 
 
