@@ -1,10 +1,12 @@
 ﻿using Mba.Simplifier.Polynomial;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.Intrinsics;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -89,6 +91,58 @@ namespace Mba.Simplifier.FastGb
 
     public struct U64 : IVector<ulong, U64>
     {
+        public ulong Value;
+
+        public static int NumVars => BitOperations.TrailingZeroCount(NumBits);
+
+        public static int NumBits => 64;
+
+        public static int NumWords => NumBits <= 64 ? 1 : (NumBits >> 6);
+
+        public bool Eq(U64 other)
+        {
+            return Value == other.Value;
+        }
+
+        public bool Equals(U64 other)
+        {
+            return Value == other.Value;
+        }
+
+        public ulong GetWord(int index)
+        {
+            return Value;
+        }
+
+        public bool IsConstant(ulong value)
+        {
+            return Value == value;
+        }
+
+        public void SetConstant(ulong value)
+        {
+            Value = value;
+        }
+
+        public void SetWord(int index, ulong value)
+        {
+            Value = value;
+        }
+
+        public static U64 operator +(U64 left, U64 right)
+        {
+            return new() { Value = left.Value ^ right.Value };
+        }
+
+        public static U64 operator *(U64 left, U64 right)
+        {
+            return new() { Value = left.Value & right.Value };
+        }
+    }
+
+    /*
+    public struct U64 : IVector<ulong, U64>
+    {
         public Vector64<ulong> Value;
 
         public static int NumVars => BitOperations.TrailingZeroCount(NumBits);
@@ -137,6 +191,7 @@ namespace Mba.Simplifier.FastGb
             return new() { Value = left.Value & right.Value };
         }
     }
+    */
 
     /*
     public struct U64 : IVector<Vector64<ulong>, U64>
@@ -344,7 +399,9 @@ namespace Mba.Simplifier.FastGb
 
         private int TrailingZeroCount()
         {
-            for(int i = 0; i < T.NumWords; i++)
+            return BitOperations.TrailingZeroCount(value.GetWord(0));
+
+            for (int i = 0; i < T.NumWords; i++)
             {
                 var word = value.GetWord(i);
                 var tzcnt = BitOperations.TrailingZeroCount(word);
@@ -359,6 +416,8 @@ namespace Mba.Simplifier.FastGb
 
         private int LeadingZeroCount()
         {
+            return BitOperations.LeadingZeroCount(value.GetWord(0));
+
             /*
             for (int i = T.NumWords - 1; i >= 0; i--)
             {
@@ -474,9 +533,41 @@ namespace Mba.Simplifier.FastGb
             return left;
         }
 
+
+        public static BoolPoly<T> operator *(BoolPoly<T> left, Monomial<T> right)
+        {
+            // Zero / one identities
+            if (right.IsZero)
+                return new BoolPoly<T>();
+            if (right.IsOne)
+                return new BoolPoly<T>() { value = left.value };
+
+            var r2 = AnfMultiplyFast(left.value.GetWord(0), 1ul << (ushort)right.Index);
+            var r = new BoolPoly<T>();
+            r.value.SetConstant(r2);
+            return r;
+
+
+
+            // Construct a new polynomial and multiply
+            var rhs = new BoolPoly<T>();
+            rhs.SetBit(right.Index, true);
+
+            var r1 = left * rhs;
+
+
+
+
+            if (r1.value.GetWord(0) != r2)
+                Debugger.Break();
+
+            return r1;
+        }
+
         // Might be wrong?
         public static BoolPoly<T> operator *(BoolPoly<T> left, BoolPoly<T> right)
         {
+
             var result = new BoolPoly<T>();
 
             var a = left.Clone();
@@ -497,18 +588,88 @@ namespace Mba.Simplifier.FastGb
 
             return result;
         }
-        public static BoolPoly<T> operator *(BoolPoly<T> left, Monomial<T> right)
-        {
-            // Zero / one identities
-            if (right.IsZero)
-                return new BoolPoly<T>();
-            if (right.IsOne)
-                return new BoolPoly<T>() { value = left.value };
 
-            // Construct a new polynomial and multiply
-            var rhs = new BoolPoly<T>();
-            rhs.SetBit(right.Index, true);
-            return left * rhs;
+        /*
+        public static ulong Mul(ulong left, ulong right)
+        {
+
+            ulong result = 0;
+
+            var a = left;
+            while (a != 0)
+            {
+                var i = BitOperations.TrailingZeroCount(a);
+                //a.SetBit(i, false);
+                a &= (a - 1);
+
+                var b = right;
+                while (b != 0)
+                {
+                    int j = BitOperations.TrailingZeroCount(b);
+                    b &= (b - 1);
+                    //b.SetBit(j, false);
+
+                    //result.XorBit(i | j, true);
+                    result ^= 1UL << (i | j);
+                }
+            }
+
+            return result;
+        }
+        */
+        public static ulong AnfMultiply(ulong left, ulong right)
+        {
+            // If either is zero, the product is zero
+            if (left == 0 || right == 0) return 0;
+
+            ulong result = 0;
+            ulong a = left;
+
+            while (a != 0)
+            {
+                int i = BitOperations.TrailingZeroCount(a);
+                a &= a - 1; // Clear lowest set bit
+
+                ulong b = right;
+                while (b != 0)
+                {
+                    int j = BitOperations.TrailingZeroCount(b);
+                    b &= b - 1; // Clear lowest set bit
+
+                    // Monomial multiplication: x^I * x^J = x^(I OR J)
+                    // Coefficient addition: XOR
+                    result ^= 1UL << (i | j);
+                }
+            }
+
+            return result;
+        }
+
+        public static ulong AnfMultiplyFast(ulong left, ulong right)
+        {
+            // If either is zero, the product is zero
+            if (left == 0 || right == 0) return 0;
+
+            ulong result = 0;
+            ulong a = left;
+
+            while (a != 0)
+            {
+                int i = BitOperations.TrailingZeroCount(a);
+                a &= a - 1; // Clear lowest set bit
+
+                ulong b = right;
+
+                int j = BitOperations.TrailingZeroCount(b);
+                b &= b - 1; // Clear lowest set bit
+
+                // Monomial multiplication: x^I * x^J = x^(I OR J)
+                // Coefficient addition: XOR
+                result ^= 1UL << (i | j);
+                
+            }
+
+            return result;
         }
 
         public BoolPoly<T> Clone() => new BoolPoly<T>() { value = value};

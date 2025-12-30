@@ -127,7 +127,7 @@ namespace Mba.Simplifier.Minimization
             while (true)
             {
                 var sw = Stopwatch.StartNew();
-                for (int i = 0; i < 100; i++)
+                for (int i = 0; i < 2000; i++)
                 {
                  
                     var clone = new List<BoolPoly<TableSize>>(newPolys.Count());
