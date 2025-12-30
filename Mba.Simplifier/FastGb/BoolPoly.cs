@@ -68,17 +68,23 @@ namespace Mba.Simplifier.FastGb
 
     }
 
+    // Problem: Monomial needs to have `isOne` field
+    // Monomials are created by indices..
+    // isOne = varMask == -1
     public struct Monomial<T> : IEquatable<Monomial<T>> where T : IVector<ulong, T>
     {
         public static int NumVars => T.NumVars;
 
         public static int NumBits => T.NumBits;
-         
-        public int VarMask;
 
-        public Monomial(int varMask)
+        public bool isOne;
+
+        public uint mVars;
+
+        public Monomial(uint varMask, bool isOne = false)
         {
-            VarMask = varMask;
+            mVars = varMask;
+            this.isOne = isOne;
         }
 
         public override bool Equals([NotNullWhen(true)] object? obj)
@@ -90,16 +96,32 @@ namespace Mba.Simplifier.FastGb
 
         public bool Equals(Monomial<T> other)
         {
-            return VarMask == other.VarMask;
+            return mVars == other.mVars;
         }
 
-        public bool IsZero => VarMask == 0;
+        public bool IsZero => !isOne && mVars == 0;
 
-        public int Degree => BitOperations.PopCount((uint)VarMask);
+        public bool IsOne => isOne;
+
+        public int Degree => BitOperations.PopCount((uint)mVars);
 
         public bool IsDivisible(Monomial<T> other)
         {
+            if (other.IsOne)
+                return true;
+            if (IsOne)
+                return false;
+            return mVars == (mVars | other.mVars);
+        }
 
+        public bool IsRelativelyPrime(Monomial<T> other)
+        {
+            if (mVars == other.mVars)
+                return true;
+            if (IsOne)
+                return true;
+
+            var lcm = mVars | other.mVars;
         }
 
         public static bool operator ==(Monomial<T> a, Monomial<T> b) => a.Equals(b);
@@ -107,13 +129,30 @@ namespace Mba.Simplifier.FastGb
 
         public static Monomial<T> operator *(Monomial<T> a, Monomial<T> b)
         {
-            // a * 0 == 0
-            if (a.VarMask == 0 || b.VarMask == 0)
-                return new(0);
+            // a*a == a
+            if (a == b)
+                return a;
 
-            // (a*b) * (c*d) == a*b*c*d
-            return new(a.VarMask | b.VarMask);
+            // 1*b == b
+            if (a.IsOne)
+                return b;
+            
+            // a*1 == 1
+            if (b.IsOne)
+                return a;
+
+            // a*0 == 0 
+            if (a.IsZero || b.IsZero)
+                return Monomial<T>.Zero();
+
+            return new(a.mVars | b.mVars);
         }
+
+        public static Monomial<T> Zero()
+           => new Monomial<T>(0);
+
+        public static Monomial<T> One()
+            => new Monomial<T>(0);
 
     }
 
@@ -140,7 +179,7 @@ namespace Mba.Simplifier.FastGb
 
         public Monomial<T> Lm()
         {
-            var index = LeadingZeroCount();
+            var index = (uint)LeadingZeroCount();
             return index == T.NumBits ? new(0) : new(index);
         }
 
@@ -184,8 +223,15 @@ namespace Mba.Simplifier.FastGb
                 var word = value.GetWord(wordIdx);
                 for(int i = 0; i < T.NumBits; i++)
                 {
-                    var bit = 1 & (word >> i);
-                    yield return new Monomial<T>((int)bit);
+                    var bit = (uint)(1 & (word >> i));
+                    if (bit == 0)
+                        continue;
+
+                    // If the 0th bit is demanded, we have the zero monomial.
+                    if (wordIdx == 0 && i == 0)
+                        yield return new Monomial<T>(uint.MaxValue);
+
+                    yield return new Monomial<T>(bit);
                 }
             }
         }
