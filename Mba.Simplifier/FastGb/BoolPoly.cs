@@ -96,7 +96,7 @@ namespace Mba.Simplifier.FastGb
 
         public bool Equals(Monomial<T> other)
         {
-            return mVars == other.mVars;
+            return mVars == other.mVars && IsOne == other.IsOne;
         }
 
         public bool IsZero => !isOne && mVars == 0;
@@ -122,6 +122,7 @@ namespace Mba.Simplifier.FastGb
                 return true;
 
             var lcm = mVars | other.mVars;
+            return (lcm ^ mVars) == other.mVars;
         }
 
         public static bool operator ==(Monomial<T> a, Monomial<T> b) => a.Equals(b);
@@ -146,6 +147,17 @@ namespace Mba.Simplifier.FastGb
                 return Monomial<T>.Zero();
 
             return new(a.mVars | b.mVars);
+        }
+
+        public static Monomial<T> operator /(Monomial<T> a, Monomial<T> b)
+        {
+            if (b.IsOne)
+                return a;
+            if (a == b)
+                return One();
+            if (!a.IsDivisible(b))
+                return Zero();
+            return new(a.mVars ^ b.mVars);
         }
 
         public static Monomial<T> Zero()
