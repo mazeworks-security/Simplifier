@@ -355,22 +355,42 @@ namespace Mba.Simplifier.FastGb
             if (totalB > totalA)
                 return -1;
 
-            // Otherwise the degree is equal
-            return mVars.CompareTo(other.mVars);
+            if (mVars > other.mVars)
+                return 1;
+            if (mVars < other.mVars)
+                return -1;
+
+            // Otherwise total degree and integer is identical..
+            return 0;
         }
     }
 
     // Dense truth table in algebraic normal form
-    public class BoolPoly<T> where T : IVector<ulong, T>, IEquatable<T>
+    public class BoolPoly<T> : IComparable<BoolPoly<T>> where T : IVector<ulong, T>, IEquatable<T>
     {
         public T value;
 
+        private Monomial<T> cachedLm = new(uint.MaxValue);
+
         public IEnumerable<Monomial<T>> Monomials => GetMonomials();
+
+        public int NumBits => T.NumBits;
 
         // Only exists for the debugger view, because I hate expanding enumerators
         public List<Monomial<T>> MList => GetMonomials().ToList();
 
-        public Monomial<T> Lm => GetLm();
+        public Monomial<T> Lm
+        {
+            get
+            {
+                return cachedLm;
+
+                var computed = GetLm();
+                if (computed != cachedLm)
+                    throw new InvalidOperationException("Cache not maintianed!");
+                return cachedLm;
+            }
+        }
 
         public BoolPoly()
         {
@@ -380,6 +400,11 @@ namespace Mba.Simplifier.FastGb
         public BoolPoly(T value)
         {
             this.value = value;
+        }
+
+        public void UpdateLm()
+        {
+            cachedLm = GetLm();
         }
 
         private Monomial<T> GetLm()
@@ -401,15 +426,25 @@ namespace Mba.Simplifier.FastGb
             return index >= nb ? Monomial<T>.Zero() : inv;
         }
 
+        public Monomial<T> GetTm()
+        {
+            var index = (uint)TrailingZeroCount();
+            var nb = T.NumBits;
+            if (index >= nb)
+                return Monomial<T>.Zero();
+
+            return new Monomial<T>(index, index == 0);
+        }
+
         public bool IsZero()
             => value.IsConstant(0);
 
         public bool IsOne()
             => GetBit(0).IsOne && value.IsConstant(1);
 
-        public void SetZero() => value.SetConstant(0);
+        //public void SetZero() => value.SetConstant(0);
         // 0th bit indicates whether the polynomial has a constant offset
-        public void SetOne() => value.SetConstant(1);
+        //public void SetOne() => value.SetConstant(1);
 
         public int PopCount()
         {
@@ -515,6 +550,9 @@ namespace Mba.Simplifier.FastGb
         public ulong AsUlong()
             => value.GetWord(0);
 
+        public void SetUlong(ulong v)
+            => value.SetWord(0, v);
+
         public Monomial<T> GetBit(int index)
         {
             var wordIdx = index >> 6;
@@ -579,7 +617,7 @@ namespace Mba.Simplifier.FastGb
             if (right.IsOne)
                 return new BoolPoly<T>() { value = left.value };
 
-            var r2 = AnfMultiplyFast(left.value.GetWord(0), 1ul << (ushort)right.Index);
+            var r2 = FastAnfMultiply(left.value.GetWord(0), 1ul << (ushort)right.Index);
             var r = new BoolPoly<T>();
             r.value.SetConstant(r2);
             return r;
@@ -604,7 +642,7 @@ namespace Mba.Simplifier.FastGb
         // Might be wrong?
         public static BoolPoly<T> operator *(BoolPoly<T> left, BoolPoly<T> right)
         {
-
+            /*
             var result = new BoolPoly<T>();
 
             var a = left.Clone();
@@ -624,6 +662,10 @@ namespace Mba.Simplifier.FastGb
             }
 
             return result;
+            */
+
+            // Correct but probably should not be used
+            throw new InvalidOperationException();
         }
 
         /*
@@ -682,7 +724,8 @@ namespace Mba.Simplifier.FastGb
             return result;
         }
 
-        public static ulong AnfMultiplyFast(ulong left, ulong right)
+        // Algebraic normal form multiplication, but assuming that `right` is just a single monomial index
+        public static ulong FastAnfMultiply(ulong left, ulong right)
         {
             // If either is zero, the product is zero
             if (left == 0 || right == 0) return 0;
@@ -700,8 +743,7 @@ namespace Mba.Simplifier.FastGb
                 int j = BitOperations.TrailingZeroCount(b);
                 b &= b - 1; // Clear lowest set bit
 
-                // Monomial multiplication: x^I * x^J = x^(I OR J)
-                // Coefficient addition: XOR
+
                 result ^= 1UL << (i | j);
                 
             }
@@ -709,7 +751,7 @@ namespace Mba.Simplifier.FastGb
             return result;
         }
 
-        public BoolPoly<T> Clone() => new BoolPoly<T>() { value = value};
+        public BoolPoly<T> Clone() => new BoolPoly<T>() {  cachedLm = cachedLm, value = value};
 
         public static bool operator ==(BoolPoly<T> left, BoolPoly<T> right) => Equals(left, right);
         public static bool operator !=(BoolPoly<T> left, BoolPoly<T> right) => !Equals(left, right);
@@ -736,6 +778,33 @@ namespace Mba.Simplifier.FastGb
         {
             var mStrs = Monomials.Select(x => x.ToString()).ToList();
             return String.Join(" + ", mStrs);
+        }
+
+        public int CompareTo(BoolPoly<T>? other)
+        {
+            // Compare leading monomial
+            var cmp = Lm.CompareTo(other.Lm);
+            if (cmp != 0)
+                return cmp;
+
+            // Compare total degree
+            var totalA = GetDegree();
+            var totalB = other.GetDegree();
+            if (totalA > totalB)
+                return 1;
+            if (totalB > totalA)
+                return -1;
+
+            // Finally number of terms
+            totalA = PopCount();
+            totalB = other.PopCount();
+            if (totalA > totalB)
+                return 1;
+            if (totalB > totalA)
+                return -1;
+
+            return 0;
+
         }
     }
 

@@ -18,18 +18,23 @@ namespace Mba.Simplifier.Slgb
         public static void Run()
         {
             var ctx = new AstCtx();
-
-            Globs.Width = 8;
+            AstIdx.ctx = ctx;
+            Globs.Width = 16;
             Globs.ModuloMask = (ulong)ModuloReducer.GetMask((uint)Globs.Width);
 
             var width = (uint)Globs.Width;
 
             var str = "((((x&7)^(y&3)))|(z&3))";
-            str = "((((x&103)^(y&115)))|(z&174))";
+            //str = "((((x&103)^(y&115)))|(z&174))";
 
-            str = "x0|x1|x2";
+            //str = "x0|x1|x2";
+
+            //str = "(x0&1111)|(x2&2222)|x3 ";
+
 
             //str = "((((x&7)^(y&3)))|(z&3))";
+            str = "((((x0&7)^(x1&3)))|(x2&3))";
+            str = "(x0&1111)|(x2&9999)|(x3&343)";
             var boolean = RustAstParser.Parse(ctx, str, width);
 
 
@@ -100,6 +105,22 @@ namespace Mba.Simplifier.Slgb
 
             var system = polys.Select(x => new Polynomial(x.Item2.Select(y => Monomial.CreateProduct(x.Item1, y)).ToList()))
                 .ToList();
+
+            var orStr = String.Join(", ", system.Select(x => $"({x})")).Replace("&", "*");
+
+            var orBoolStr = orStr.Replace("*", "&").Replace("+", "^").Replace(", ", "|");
+
+            Console.WriteLine("\n\n");
+            foreach(var poly in system)
+            {
+                //Console.WriteLine(poly.ToString().Replace("&", "*"));
+                Console.WriteLine(poly.ToString().Replace("*", "&"));
+            }
+
+
+            Console.WriteLine($"\n\n{orStr}\n\n");
+
+            Console.WriteLine(orBoolStr);
 
             var calc = new SlgbCalculator();
             var gb = calc.Buchberger(system);

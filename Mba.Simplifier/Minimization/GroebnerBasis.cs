@@ -124,6 +124,16 @@ namespace Mba.Simplifier.Minimization
 
             File.WriteAllText("system.in", sb.ToString());
 
+            foreach (var poly in newPolys)
+            {
+                poly.UpdateLm();
+            }
+
+
+            //Console.WriteLine("SORTING");
+            //newPolys = newPolys.OrderByDescending(x => x).ToList();
+            // Compute Lm so we don't have to do this again..
+  
             while (true)
             {
                 var sw = Stopwatch.StartNew();
@@ -150,7 +160,8 @@ namespace Mba.Simplifier.Minimization
             uint outSize = 0;
             fixed (uint* ptr = &inBuffer[0])
             {
-                while (true)
+                outBuffer = Api.GetGroebnerBasis((uint)table.NumVars, ptr, &outSize);
+                while (false)
                 {
                     var sw = Stopwatch.StartNew();
                     outBuffer = Api.GetGroebnerBasis((uint)table.NumVars, ptr, &outSize);

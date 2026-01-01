@@ -85,7 +85,7 @@ namespace Mba.Simplifier.Slgb
                 terms.Add($"x{i}");
             }
 
-            return $"{Coefficient}*({String.Join('&', terms)})";
+            return $"({Coefficient}*({String.Join('&', terms)}))";
         }
 
         public override int GetHashCode()
