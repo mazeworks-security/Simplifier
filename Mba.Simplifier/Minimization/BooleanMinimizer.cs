@@ -21,7 +21,7 @@ namespace Mba.Simplifier.Minimization
         {
             //var dnf2 = EspressoMinimizer.SimplifyBoolean(ctx, truthTable.AsList(), variables).ast;
 
-            GroebnerMinimizer.Run(ctx, variables, truthTable);
+            return GroebnerMinimizer.Run(ctx, variables, truthTable);
 
             // If requested, negate the result vector to find a negated expression.
             if (negate)

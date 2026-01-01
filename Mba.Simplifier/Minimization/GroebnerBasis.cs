@@ -144,8 +144,10 @@ namespace Mba.Simplifier.Minimization
                     clone.Clear();
                     foreach (var p in newPolys)
                         clone.Add(p.Clone());
-                    new BoolGb().Buchberger(clone);
                     
+                    var gb = new BoolGb().Buchberger(clone);
+                    var gbUint = gb.Select(x => x.Monomials.Select(y => (uint)y.Index).ToList()).ToList();
+                    return (gbUint, negated);
                
                 }
 

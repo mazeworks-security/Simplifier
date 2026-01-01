@@ -39,6 +39,21 @@ namespace Mba.Simplifier.FastGb
 
         ulong BitReverse(ulong v)
         {
+            ulong output = 0;
+
+            for(ushort i = 0; i < 64; i++)
+            {
+                var isSet = (1 & (v >> i)) == 0 ? 0ul : 1;
+                var otherEnd = 63 - i;
+
+                output |= (isSet << otherEnd);
+
+            }
+
+
+
+
+            var og = v;
             // Swap odd and even bits
             v = ((v >> 1) & 0x5555555555555555UL) | ((v & 0x5555555555555555UL) << 1);
             // Swap consecutive pairs of bits
@@ -51,11 +66,13 @@ namespace Mba.Simplifier.FastGb
             v = ((v >> 16) & 0x0000FFFF0000FFFFUL) | ((v & 0x0000FFFF0000FFFFUL) << 16);
             // Swap 32-bit double words to complete the 64-bit reversal
             v = (v >> 32) | (v << 32);
+
+
             return v;
         }
 
-        // Convert a lower triangular gf2 matrix to upper triangular form
-        private void UpperTriangularize(List<Poly> F)
+        // Convert lower triangular matrix to upper triangular, or vice versa
+        private void FlipTriangle(List<Poly> F)
         {
             // Reverse the list of polynomials
             F.Reverse();
@@ -64,9 +81,12 @@ namespace Mba.Simplifier.FastGb
             {
                 p.SetUlong(BitReverse(p.AsUlong()));
             }
+
+            //var sorted = F.OrderBy(x => x.Lm.li)
+
         }
 
-        private void RREFTriangular(List<Poly> F)
+        private void RREFUpperTriangular(List<Poly> F)
         {
             var rows = F.Count;
             var cols = F[0].NumBits;
@@ -91,16 +111,64 @@ namespace Mba.Simplifier.FastGb
             }
         }
 
+        private void RREFLowerTriangular(List<Poly> F)
+        {
+            var rows = F.Count;
+            var cols = F[0].NumBits;
+            for (int r = 0; r < rows; r++)
+            {
+                var p = F[r];
+                var pivotCol = p.Lm;
+                if (pivotCol.IsZero)
+                    continue;
+
+                for (int lowerRow = r + 1; lowerRow < rows; lowerRow++)
+                {
+                    if (F[lowerRow].GetBit(pivotCol.Index).IsZero)
+                        continue;
+
+                    F[lowerRow] = F[lowerRow] + F[r];
+                    F[lowerRow].UpdateLm();
+                }
+            }
+        }
+
+
         // Assumes that the matrix is already in RREF
         private void RREF(List<Poly> F)
         {
+            /*
+            Console.WriteLine(GetMatBinaryString(F));
+            RREFLowerTriangular(F);
+            Console.WriteLine(GetMatBinaryString(F));
+            Debugger.Break();
+            */
 
+            // Convert the lower triangular matrix to upper triangular
+            FlipTriangle(F);
+
+
+            Console.WriteLine(GetMatBinaryString(F));
+            // Compute RREF
+            RREFUpperTriangular(F);
+
+
+            Console.WriteLine(GetMatBinaryString(F));
+
+            // Back to upper triangular
+            FlipTriangle(F);
+
+            Console.WriteLine(GetMatBinaryString(F));
+
+
+
+            return;
 
             // Upper triangular
             bool upperTriangular = true;
             if(upperTriangular)
             {
-                UpperTriangularize(F);
+                FlipTriangle(F);
                 Debugger.Break();
             }
 
@@ -274,6 +342,7 @@ namespace Mba.Simplifier.FastGb
             // Now put it in RREF
             RREF(F);
 
+            return F;
 
             //return F;
             Console.WriteLine("Before: ");
@@ -354,7 +423,7 @@ namespace Mba.Simplifier.FastGb
             F = Preprocess(F);
 
             var G = Autoreduce(F);
-            return null;
+            return G;
 
             var pairs = new List<(int i, int j)>();
             int k = G.Count;
@@ -773,7 +842,7 @@ namespace Mba.Simplifier.FastGb
                 
             }
 
-            return null;
+            return P;
 
             int pSize = P.Count;
             for (int i = 0; i < pSize; i++)
