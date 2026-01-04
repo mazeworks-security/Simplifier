@@ -1,10 +1,12 @@
 ﻿global using TableSize = Mba.Simplifier.FastGb.U64;
+using Iced.Intel;
 using Mba.Simplifier.Slgb;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.InteropServices.Marshalling;
 using System.Text;
 using System.Threading.Tasks;
@@ -113,6 +115,8 @@ namespace Mba.Simplifier.FastGb
 
         private void RREFLowerTriangular(List<Poly> F)
         {
+
+
             var rows = F.Count;
             var cols = F[0].NumBits;
             for (int r = 0; r < rows; r++)
@@ -137,12 +141,14 @@ namespace Mba.Simplifier.FastGb
         // Assumes that the matrix is already in RREF
         private void RREF(List<Poly> F)
         {
-            /*
-            Console.WriteLine(GetMatBinaryString(F));
+           // var setStr = String.Join(", ", F.Select(x => $"0x{x.AsUlong().ToString("X")}"));
+          //  Console.WriteLine(setStr);
+
+          //  Console.WriteLine(GetMatBinaryString(F));
             RREFLowerTriangular(F);
-            Console.WriteLine(GetMatBinaryString(F));
-            Debugger.Break();
-            */
+          //  Console.WriteLine(GetMatBinaryString(F));
+            //Debugger.Break();
+            return;
 
             // Convert the lower triangular matrix to upper triangular
             FlipTriangle(F);
@@ -314,18 +320,125 @@ namespace Mba.Simplifier.FastGb
             return sb.ToString();
         }
 
-        private List<Poly> Preprocess(List<Poly> F)
+        private void PostProcess(List<Poly> F)
+        {
+  
+            int iter = 0;
+        before:
+            bool changed = true;
+            while(changed)
+            {
+                changed = false;
+                for(int i = 0; i < F.Count; i++)
+                {
+                    for (int j = 0; j < F.Count; j++)
+                    {
+                        if (i == j)
+                            continue;
+
+                        var p1 = F[i];
+                        var p2 = F[j];
+                        var op1 = F[i].AsUlong();
+                        var op2 = F[j].AsUlong();
+
+
+                        var sum = op1 ^ op2;
+                        var sumCount = BitOperations.PopCount(sum);
+                        var beforeSize = BitOperations.PopCount(op1);
+                        if (sumCount >= beforeSize)
+                            continue;
+
+                        F[i] = p1 + p2;
+                        changed = true;
+                        continue;
+
+                        //Debugger.Break();
+
+                        var shared = (op1 & op2);
+
+                        var notShared = op1 ^ op2;
+
+                        //var notShared = (op1 & ~shared);
+                        //var notShared = op1 ^ op2;
+
+                        var sharedCount = BitOperations.PopCount(shared);
+                        var notSharedCount = BitOperations.PopCount(notShared);
+                        //var notSharedCount = BitOperations.PopCount(op1 | op2) - sharedCount;
+                        if (notSharedCount > sharedCount)
+                            continue;
+                        if (notSharedCount == sharedCount && !(BitOperations.PopCount(op1) <= BitOperations.PopCount(op2)))
+                            continue;
+
+                            //Debug.Assert(BitOperations.PopCount(op2) <= BitOperations.PopCount(op1));
+                            //F[i] = p1 + p2;
+
+                            Debug.Assert(BitOperations.PopCount(op1) <= BitOperations.PopCount(op2));
+                        F[j] = p1 + p2;
+                        changed = true;
+
+                        // Otherwise most bits are set.
+                        //Debugger.Break();
+
+                    }
+                }
+            }
+
+            if(iter == 0)
+            {
+                // m = x1*x3*x4
+                var before = new Monomial<U64>(26);
+                var after = new Monomial<U64>(14);
+                F.RemoveAt(2);
+
+                iter++;
+                for(int i = 0; i < F.Count; i++)
+                {
+                    var p = F[i];
+                    if (p.GetBit(before.Index).IsZero)
+                        continue;
+
+                    p = p + before;
+                    p = p + after;
+                    F[i] = p;
+                }
+
+                goto before;
+            }
+
+            if(iter == 1)
+            {
+                iter++;
+                F.RemoveAt(1);
+            }
+
+            Console.WriteLine("Before gauss:");
+            foreach (var p in F)
+                Console.WriteLine(p);
+
+            Console.WriteLine("\n\n");
+            F = Preprocess(F);
+
+            Console.WriteLine("After gauss:");
+            foreach(var p in F)
+                Console.WriteLine(p);
+
+            Debugger.Break();
+        }
+
+        private List<Poly> Preprocess(List<Poly> F, bool sageGauss = false)
         {
 
-
+            /*
             //var integers = new List<ulong>() { 0x8000000000000000, 0x4000000000000000, 0x2000000000000000, 0x1000000000000000, 0x800000000000000, 0x400000000000000, 0x200000000000000, 0x100000000000000, 0x80000000000000, 0x40000000000000, 0x20000000000000, 0x10000000000000, 0x8000000000000, 0x4000000000000, 0x2000000000000, 0x1000000000000, 0x800000000000, 0x400000000000, 0x200000000000, 0x100000000000, 0x80000000000, 0x40000000000, 0x20000000000, 0x10000000000, 0x8000000000, 0x4000000000, 0x2000000000, 0x1000000000, 0x800000000, 0x400000000, 0x200000000, 0x100000000, 0x80000000, 0x40000000, 0x20000000, 0x10000000, 0x8000000, 0x4000000, 0x2000000, 0x1000000, 0x800000, 0x400000, 0x200000, 0x100000, 0x80000, 0x40000, 0x20000, 0x10000, 0x8000, 0x4000, 0x2000, 0x1000, 0xa00, 0x600, 0xa0, 0x60, 0xa, 0x6 };
 
-            /*
+            
             var integers = new List<ulong>() { 0x8000000000000000, 0x4000000000000000, 0x2000000000000000, 0x1000000000000000, 0x800000000000000, 0x400000000000000, 0x200000000000000, 0x100000000000000, 0x80000000000000, 0x40000000000000, 0x20000000000000, 0x10000000000000, 0x8000000000000, 0x4000000000000, 0x2000000000000, 0x1000000000000, 0x800000000000, 0x400000000000, 0x200000000000, 0x100000000000, 0x80000000000, 0x40000000000, 0x20000000000, 0x10000000000, 0x8000000000, 0x4000000000, 0x2000000000, 0x1000000000, 0x800000000, 0x400000000, 0x200000000, 0x100000000, 0x80000000, 0x40000000, 0x20000000, 0x10000000, 0x8000000, 0x4000000, 0x2000000, 0x1000000, 0x800000, 0x400000, 0x200000, 0x100000, 0x80000, 0x40000, 0x20000, 0x10000, 0x8000, 0x4000, 0x2000, 0x1000, 0x800, 0x400, 0x200, 0x100, 0x80, 0x40, 0x20, 0x10, 0x8, 0x4, 0x2 };
 
             integers = new List<ulong>() { 0x8000000000000000, 0x4000000000000000, 0x2000000000000000, 0x1000000000000000, 0x800000000000000, 0x400000000000000, 0x200000000000000, 0x100000000000000, 0x80000000000000, 0x40000000000000, 0x20000000000000, 0x10000000000000, 0x8000000000000, 0x4000000000000, 0x2000000000000, 0x1000000000000, 0x800000000000, 0x400000000000, 0x200000000000, 0x100000000000, 0x80000000000, 0x40000000000, 0x20000000000, 0x10000000000, 0x8000000000, 0x4000000000, 0x2000000000, 0x1000000000, 0x800000000, 0x400000000, 0x200000000, 0x100000000, 0x80000000, 0x40000000, 0x20000000, 0x10000000, 0x8000000, 0x4000000, 0x2000000, 0x1000000, 0x800000, 0x400000, 0x200000, 0x100000, 0x80000, 0x40000, 0x20000, 0x10000, 0x8000, 0x4000, 0x2000, 0x1000, 0xa00, 0x600, 0xa0, 0x60, 0xa, 0x6 };
 
             integers = new List<ulong>() { 0x8000000000000000, 0x4000000000000000, 0x2000000000000000, 0x1000001000101000, 0x800000000000000, 0x400000000000000, 0x200000000000000, 0x100001000101000, 0x80000000000000, 0x40000000000000, 0x20000000000000, 0x10001001111000, 0x8000000000000, 0x4000000000000, 0x2000000000000, 0x1001001111000, 0x800000000000, 0x400000000000, 0x200000000000, 0x101001010000, 0x80000000000, 0x40000000000, 0x20000000000, 0x10101010000, 0x8000000000, 0x4000000000, 0x2000000000, 0x800000000, 0x400000000, 0x200000000, 0x80000000, 0x40000000, 0x20000000, 0x11110000, 0x8000000, 0x4000000, 0x2000000, 0x800000, 0x400000, 0x200000, 0x80000, 0x40000, 0x20000, 0x8000, 0x4000, 0x2000, 0x800, 0x400, 0x200, 0x80, 0x40, 0x20, 0x8, 0x4, 0x2 };
+
+            integers = new List<ulong>() { 0x8000000000000000, 0x4000000000000000, 0x2001001115521daa, 0x1001001105727d0a, 0x800000800080800, 0x40000080400c800, 0x20100001763e8a0, 0x1010000034b4800, 0x80000000000000, 0x40000000000000, 0x21001115521daa, 0x110011152a95aa, 0x8000800080800, 0x40008004c8000, 0x300001763e8a0, 0x800000080800, 0x400000080800, 0x20130033ff00, 0x101310139fa0, 0x80800000000, 0x4080408c000, 0x20202020a0a, 0x1020102350a, 0x8000080800, 0x4c004c8000, 0x330033ff00, 0x80088800, 0x40084800, 0x2020a0a0, 0x8080000, 0x888800 };
 
             for (int i = 0; i < F.Count; i++)
             {
@@ -334,8 +447,10 @@ namespace Mba.Simplifier.FastGb
                 p.UpdateLm();
             }
             return F;
-
             */
+            if (sageGauss)
+                goto sageGauss;
+            
             // Sort to put system in REF for free!
             F = F.OrderBy(x => x.Lm.Index).Reverse().ToList();
 
@@ -344,6 +459,7 @@ namespace Mba.Simplifier.FastGb
 
             return F;
 
+        sageGauss:
             //return F;
             Console.WriteLine("Before: ");
             foreach (var p in F)
@@ -417,13 +533,38 @@ namespace Mba.Simplifier.FastGb
 
         public List<Poly> Buchberger(List<Poly> F)
         {
+            //F = F.Take(3).ToList();
+            //F[0].SetUlong(1111);
+            //F[1].SetUlong(2222);
+            //F[2].SetUlong(6);
+            //F[3].SetUlong(3327);
+            //F[3].SetUlong(2216);
+
             var numVars = TableSize.NumVars;
+
+            //PostProcess(F);
 
             // Probably illegal.. gaussian elimination
             F = Preprocess(F);
 
+            Dictionary<Monomial<U64>, int> counts = new();
+            foreach(var p in F)
+            {
+                foreach(var m in p.Monomials)
+                {
+                    counts.TryAdd(m, 0);
+                    counts[m] += 1;
+                }
+            }
+
             var G = Autoreduce(F);
-            return G;
+
+            PostProcess(G);
+
+            G = Autoreduce(G);
+            // var bar = Preprocess(G, false);
+
+            //return G;
 
             var pairs = new List<(int i, int j)>();
             int k = G.Count;
@@ -775,9 +916,9 @@ namespace Mba.Simplifier.FastGb
 
                 //Console.WriteLine(changed);
                 //Console.WriteLine($"{prediction == changed}");
-                var setStr = String.Join(" , ", P);
+                //var setStr = String.Join(" , ", P);
 
-                Console.WriteLine($"IsZero: {h.IsZero()} with prediction {prediction} for poly{before}, with set [{setStr}]");
+                //Console.WriteLine($"IsZero: {h.IsZero()} with prediction {prediction} for poly{before}, with set [{setStr}]");
                 if (log)
                 {
                     if (h.IsZero())

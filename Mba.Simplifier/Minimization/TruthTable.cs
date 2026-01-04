@@ -12,7 +12,7 @@ namespace Mba.Simplifier.Minimization
 {
     public struct TruthTable
     {
-        public int NumVars { get; }
+        public int NumVars { get; set; }
 
         public int NumBits => 1 << (ushort)NumVars;
 

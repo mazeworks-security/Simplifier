@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -17,11 +18,71 @@ namespace Mba.Simplifier.Minimization
     {
         private const bool useLegacyMinimizer = true;
 
+
+        public static Random rng = new();
+
+
+        public static ulong AppendVariables(ulong truthTable, ulong numExistingVars, ulong numVarsToAdd)
+        {
+            ulong outTable = truthTable;
+            var numOriginal = (ulong)Math.Pow(2, numExistingVars);
+            var numIter = (ulong)Math.Pow(2, numExistingVars + numVarsToAdd);
+            for (ulong i = 0; i < numIter; i++)
+            {
+                var bitIdx = i % numOriginal;
+                var oldBit = (truthTable >> (ushort)bitIdx) & 1;
+                outTable |= (oldBit << (ushort)i);
+            }
+
+            return outTable;
+        }
+
         public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, TruthTable truthTable, bool negate = false)
         {
-            //var dnf2 = EspressoMinimizer.SimplifyBoolean(ctx, truthTable.AsList(), variables).ast;
+            //truthTable.arr[0] = uint.MaxValue & RandomBitGenerator.GenerateUniformWeightUInt64();
+            //var other = MobiusTransform(truthTable.arr[0]);
 
-            return GroebnerMinimizer.Run(ctx, variables, truthTable);
+
+            //var dnf2 = EspressoMinimizer.SimplifyBoolean(ctx, truthTable.AsList(), variables).ast;
+            //truthTable.arr[0] = 0xc1ea5ead149dc922;
+            // truthTable.arr[0] = MobiusTransform(truthTable.arr[0]);
+            //truthTable.arr[0] = Transform(truthTable.arr[0]);
+            var rand = new Random();
+
+            truthTable.arr[0] = AppendVariables(truthTable.arr[0], (ulong)truthTable.NumVars, (ulong)6 - (ulong)truthTable.NumVars);
+            truthTable.NumVars = 6;
+            variables = variables.Concat(new List<AstIdx>() { ctx.Symbol("zzzz", ctx.GetWidth(variables[0])) }).ToList();
+
+            var old = truthTable.arr[0];
+            var og = GroebnerMinimizer.Run(ctx, variables, truthTable);
+            var best = uint.MaxValue;
+
+            while(false)
+            {
+                //var mask = RandomBitGenerator.GenerateUniformWeightUInt64();
+                var mask = (ulong)0;
+                if ((old ^ mask) == 0 || (old ^ mask) == ulong.MaxValue)
+                    continue;
+                if ((mask) == 0 || (mask) == ulong.MaxValue)
+                    continue;
+                truthTable.arr[0] = old ^ mask;
+             
+                var r1 = GroebnerMinimizer.Run(ctx, variables, truthTable);
+                truthTable.arr[0] = mask;
+
+                var r2 = GroebnerMinimizer.Run(ctx, variables, truthTable);
+
+                var rr = ctx.Add(r1, r2);
+
+                var cost = ctx.GetCost(rr);
+                if(cost < best)
+                {
+                    best = cost;
+                    Console.WriteLine($"{rr} with cost {cost} and mask {mask}");
+                }
+            }
+
+            return 0;
 
             // If requested, negate the result vector to find a negated expression.
             if (negate)
