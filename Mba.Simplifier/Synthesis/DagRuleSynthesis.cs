@@ -52,16 +52,26 @@ namespace Mba.Simplifier.Synthesis
             var seen = new HashSet<AstIdx>();
             Collect(idx, seen);
 
+            HashSet<AstIdx> simplSeen = new();
 
             foreach (var subtree in seen)
             {
                 var state = new NodeState();
-                var all = EnumeratePatterns(subtree, 13, state);
+
+                var range = Enumerable.Range(3, 10);
+
+                //var all = EnumeratePatterns(subtree, 13, state);
+                var all = range.SelectMany(x => EnumeratePatterns(subtree, x, new NodeState()));
 
                 foreach (var p in all)
                 {
                     var before = p.Idx;
-                    var after = LinearSimplifier.Run(1, ctx, before, false, false);
+                    if (simplSeen.Contains(before))
+                        continue;
+                    simplSeen.Add(before);
+
+                    var after = LinearSimplifier.Run(ctx.GetWidth(before), ctx, before, false, false);
+                 
 
                     var c0 = ctx.GetCost(after);
                     var c1 = ctx.GetCost(before);

@@ -16,7 +16,7 @@ using System.Diagnostics;
 
 bool printUsage = false;
 bool onlyLinear = true;
-uint bitWidth = 1;
+uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = true;
 string inputText = "a ? b : c ";
@@ -187,7 +187,20 @@ inputText = "(a&b)|(a&~b)";
 
 inputText = "((((x1:i1^(x2:i1^x0:i1))&((~x9:i1)&((x5:i1&(~x3:i1))&((~x8:i1)&((~x7:i1)&(x6:i1&(~x4:i1)))))))^((x4:i1&(((x1:i1^(x2:i1^x0:i1))&(~x9:i1))^(((x1:i1^(x2:i1^x0:i1))&(x8:i1&(~x9:i1)))^(x7:i1&((x1:i1^(x2:i1^x0:i1))&((~x9:i1)&(~x8:i1)))))))^((x3:i1&(~(x1:i1^x2:i1)))^((~x7:i1)&(x9:i1&x8:i1)))))^((x7:i1^((~(x7:i1^x3:i1))&(x9:i1^x8:i1)))^(x3:i1&(x7:i1^((x7:i1&((x8:i1&((~x9:i1)&(x4:i1|(~(x1:i1^(x2:i1^x0:i1))))))^((x1:i1^(x2:i1^x0:i1))&((~x9:i1)&(~x4:i1)))))^((x8:i1&((x1:i1^(x2:i1^x0:i1))&((~x9:i1)&(~x4:i1))))^((x0:i1^((x1:i1^(x2:i1^x0:i1))&(x4:i1&(~x9:i1))))^(x9:i1&((x1:i1^(x2:i1^x0:i1))^(x7:i1^x8:i1))))))))))";
 
+inputText = "((((x1^(x2^x0))&((~x9)&((x5&(~x3))&((~x8)&((~x7)&(x6&(~x4)))))))^((x4&(((x1^(x2^x0))&(~x9))^(((x1^(x2^x0))&(x8&(~x9)))^(x7&((x1^(x2^x0))&((~x9)&(~x8)))))))^((x3&(~(x1^x2)))^((~x7)&(x9&x8)))))^((x7^((~(x7^x3))&(x9^x8)))^(x3&(x7^((x7&((x8&((~x9)&(x4|(~(x1^(x2^x0))))))^((x1^(x2^x0))&((~x9)&(~x4)))))^((x8&((x1^(x2^x0))&((~x9)&(~x4))))^((x0^((x1^(x2^x0))&(x4&(~x9))))^(x9&((x1^(x2^x0))^(x7^x8))))))))))";
 
+
+inputText = "(x7:i64^(((x1:i64^(x2:i64^x0:i64))&((~x9:i64)&(((~x3:i64)&(~x8:i64))&((x6:i64&(~x4:i64))&(x5:i64&(~x7:i64))))))^((((~(x3:i64^x7:i64))&(x9:i64^x8:i64))^(x3:i64&(((~(x1:i64^x2:i64))^((x1:i64^(x2:i64^x0:i64))&((~x9:i64)&(x8:i64&(~x4:i64)))))^((x0:i64^(((x1:i64^(x2:i64^x0:i64))&((~x9:i64)&x4:i64))^(x9:i64&(x2:i64^(x0:i64^(x8:i64^(x1:i64^x7:i64)))))))^(x7:i64&(~(((~x9:i64)&(x8:i64&(x4:i64|(~(x1:i64^(x2:i64^x0:i64))))))^((x1:i64^(x2:i64^x0:i64))&((~x9:i64)&(~x4:i64))))))))))^((x4:i64&((x1:i64^(x2:i64^x0:i64))&((~x7:i64)&((~x9:i64)&(~x8:i64)))))^(x9:i64&(x8:i64&(~x7:i64)))))))";
+
+inputText = "(x7^(((x1^(x2^x0))&((~x9)&(((~x3)&(~x8))&((x6&(~x4))&(x5&(~x7))))))^((((~(x3^x7))&(x9^x8))^(x3&(((~(x1^x2))^((x1^(x2^x0))&((~x9)&(x8&(~x4)))))^((x0^(((x1^(x2^x0))&((~x9)&x4))^(x9&(x2^(x0^(x8^(x1^x7)))))))^(x7&(~(((~x9)&(x8&(x4|(~(x1^(x2^x0))))))^((x1^(x2^x0))&((~x9)&(~x4))))))))))^((x4&((x1^(x2^x0))&((~x7)&((~x9)&(~x8)))))^(x9&(x8&(~x7)))))))";
+
+inputText = "((x3:i64&(x0:i64^(((~(x1:i64^x2:i64))^((x1:i64^(x2:i64^x0:i64))&((~x4:i64)&((~x9:i64)&x8:i64))))^((x9:i64&(x0:i64^(x8:i64^(x1:i64^(x7:i64^x2:i64)))))^(((x1:i64^(x2:i64^x0:i64))&((~x9:i64)&x4:i64))^(x7:i64&(~(((x4:i64|(~(x1:i64^(x2:i64^x0:i64))))&((~x9:i64)&x8:i64))^((x1:i64^(x2:i64^x0:i64))&((~x9:i64)&(~x4:i64)))))))))))^(((x5:i64&((~x3:i64)&((~x9:i64)&(~x8:i64))))&((x1:i64^(x2:i64^x0:i64))&(x6:i64&((~x4:i64)&(~x7:i64)))))^(((~(x7:i64^x3:i64))&(x9:i64^x8:i64))^(((x1:i64^(x2:i64^x0:i64))&((~x9:i64)&((~x7:i64)&((~x8:i64)&x4:i64))))^(0:i64+(x7:i64|(x9:i64&x8:i64)))))))";
+
+inputText = "((x3:i64&(((~x4:i64)&((x0:i64^(x1:i64^x2:i64))&((~x9:i64)&x8:i64)))^((x7:i64&(~(((~x9:i64)&(x8:i64&(x4:i64|(~(x0:i64^(x1:i64^x2:i64))))))^((~x9:i64)&((x0:i64^(x1:i64^x2:i64))&(~x4:i64))))))^(((~(x1:i64^x2:i64))^(x9:i64&(x0:i64^(x2:i64^(x1:i64^(x8:i64^x7:i64))))))^(x0:i64^((x0:i64^(x1:i64^x2:i64))&(x4:i64&(~x9:i64))))))))^((x7:i64|(x9:i64&x8:i64))^(((x0:i64^(x1:i64^x2:i64))&((~x3:i64)&(((~x9:i64)&(~x8:i64))&((~x4:i64)&(x5:i64&(x6:i64&(~x7:i64)))))))^(((~(x3:i64^x7:i64))&(x9:i64^x8:i64))^((x0:i64^(x1:i64^x2:i64))&((~x9:i64)&(x4:i64&((~x8:i64)&(~x7:i64)))))))))";
+
+inputText = "((x3&(((~x4)&((x0^(x1^x2))&((~x9)&x8)))^((x7&(~(((~x9)&(x8&(x4|(~(x0^(x1^x2))))))^((~x9)&((x0^(x1^x2))&(~x4))))))^(((~(x1^x2))^(x9&(x0^(x2^(x1^(x8^x7))))))^(x0^((x0^(x1^x2))&(x4&(~x9))))))))^((x7|(x9&x8))^(((x0^(x1^x2))&((~x3)&(((~x9)&(~x8))&((~x4)&(x5&(x6&(~x7)))))))^(((~(x3^x7))&(x9^x8))^((x0^(x1^x2))&((~x9)&(x4&((~x8)&(~x7)))))))))";
+
+//inputText = "(subst0^((subst0&subst1)^subst2))";
 //inputText = "((x8&((~x9)&subst0))^(x9&subst0))";
 
 //inputText = "((((y:i32^x:i32)&2:i32) == 0:i32)|((x:i32&(y:i32&1:i32)) == 0:i32))";
@@ -292,7 +305,7 @@ bool useMultibitSimba = false;
 var generalSimplifier = new GeneralSimplifier(ctx);
 for (int i = 0; i < 20; i++)
 {
-    if (true && i == 0)
+    if (false && i == 0)
     {
         new EgraphRuleSynthesis(ctx, egraph).Run();
     }
@@ -300,7 +313,7 @@ for (int i = 0; i < 20; i++)
 
     Console.WriteLine($"Iter {i}");
     var sww = Stopwatch.StartNew();
-    egraph.Run(1, 10000);
+    egraph.Run(1000, 10000);
     sww.Stop();
     Console.WriteLine($"Done eqsat.. took {sww.ElapsedMilliseconds} ");
     //var classes = egraph.GetClasses();
@@ -309,7 +322,7 @@ for (int i = 0; i < 20; i++)
     sww = Stopwatch.StartNew();
     var all = egraph.ExtractAll(ctx);
     sww.Stop();
-    Console.WriteLine($"Extraction took {sww.ElapsedMilliseconds} ");
+    Console.WriteLine($"Extraction took {sww.ElapsedMilliseconds}  ");
     //  goto skip;
     sww = Stopwatch.StartNew();
 
@@ -318,7 +331,7 @@ for (int i = 0; i < 20; i++)
     foreach(var (c, extracted)  in all)
     {
 
-        Console.WriteLine(ctx.GetAstString(c));
+        //Console.WriteLine(ctx.GetAstString(c));
         continue;
         var sl = LinearSimplifier.Run(ctx.GetWidth(extracted), ctx, extracted, false, useMultibitSimba);
 
