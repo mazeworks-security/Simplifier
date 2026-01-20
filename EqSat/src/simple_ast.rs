@@ -4082,6 +4082,36 @@ pub extern "C" fn EGraphGetClasses(egraph_p: *mut EEGraph, out_len: *mut u64) ->
 }
 
 #[no_mangle]
+pub extern "C" fn EGraphGetClassNodes(
+    egraph_p: *mut EEGraph,
+    id: Id,
+    storage: *mut Context,
+    out_len: *mut u64,
+) -> *const Id {
+    let mut egraph: &mut EEGraph = unsafe { &mut (*egraph_p) };
+
+    let mut ctx: &mut Context = unsafe { &mut (*storage) };
+
+    // Fetch all SimpleAst implementations
+    let eclass = egraph[id].clone();
+
+    // Problem: Each enode doesn't have a unique ID?
+    // We would need to throw all of these into an egraph basically..
+    let mut members = Vec::new();
+    for node in eclass.nodes {
+        let id = ctx.arena.insert_ast_node(node.clone(), eclass.data);
+        members.push(id);
+    }
+
+    unsafe { *out_len = members.len() as u64 };
+
+    let boxed = members.into_boxed_slice();
+    let released = Box::into_raw(boxed);
+
+    return released as *const Id;
+}
+
+#[no_mangle]
 pub extern "C" fn EGraphExtractAll(
     egraph_p: *mut EEGraph,
     ctx_p: *mut Context,

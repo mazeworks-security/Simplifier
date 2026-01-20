@@ -316,6 +316,28 @@ namespace Mba.Simplifier.Bindings
             Api.ContextExecute(isMultibit ? 1u : 0, bitWidth, (ulong)variables.Length, numCombinations, (ulong*)rwxPagePtr, (ulong*)outputArrayPtr, isOneBitVars ? 1u : 0);
         }
 
+        public static int GetOpcount(AstOp opc)
+        {
+            return opc switch
+            {
+                AstOp.None => 0,
+                AstOp.Add => 2,
+                AstOp.Mul => 2,
+                AstOp.Pow => 2,
+                AstOp.And => 2,
+                AstOp.Or => 2,
+                AstOp.Xor => 2,
+                AstOp.Neg => 1,
+                AstOp.Lshr => 2,
+                AstOp.Constant => 0,
+                AstOp.Symbol => 0,
+                AstOp.Zext => 2,
+                AstOp.Trunc => 2,
+                AstOp.ICmp => 2,
+                AstOp.Select => 3,
+            };
+        }
+
         // Apply term rewriting, but not recursively.
         public unsafe AstIdx SingleSimplify(AstIdx id) => Api.ContextSingleSimplify(this, id);
         // Apply recursive term rewriting via ISLE.

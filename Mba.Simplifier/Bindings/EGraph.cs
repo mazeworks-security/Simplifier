@@ -67,6 +67,24 @@ namespace Mba.Simplifier.Bindings
             return vec;
         }
 
+        public unsafe IReadOnlyList<AstIdx> GetClassNodes(AstCtx ctx, AstIdx idx)
+        {
+            ulong len = 0;
+            var ptr = Api.EGraphGetClassNodes(this, idx, ctx, &len);
+            var vec = new List<AstIdx>();
+            for (int i = 0; i < (int)len; i += 1)
+            {
+                // Get a ptr to the elem at this idx.
+                var pItem = &ptr[i];
+
+                // Push the variable.
+                var nodeIdx = *pItem;
+                vec.Add(nodeIdx);
+            }
+
+            return vec;
+        }
+
         public unsafe AstIdx Extract(AstCtx ctx, AstIdx eclass)
             => Api.EGraphExtract(this, ctx, eclass);
 
@@ -98,6 +116,9 @@ namespace Mba.Simplifier.Bindings
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx* EGraphExtractAll(OpaqueEGraph* egraph, OpaqueAstCtx* ctx, ulong* outLen);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx* EGraphGetClassNodes(OpaqueEGraph* egraph, AstIdx eclass, OpaqueAstCtx* storage, ulong* outLen);
 
             [DllImport("eq_sat")]
             public unsafe static extern void EGraphUnion(OpaqueEGraph* egraph, AstIdx a, AstIdx b);
