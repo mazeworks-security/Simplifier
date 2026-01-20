@@ -16,7 +16,7 @@ namespace Mba.Simplifier.Minimization
 {
     public static class BooleanMinimizer
     {
-        private const bool useOptimal5 = false;
+        private const bool useOptimal5 = true;
 
         private const bool useLegacyMinimizer = false;
 

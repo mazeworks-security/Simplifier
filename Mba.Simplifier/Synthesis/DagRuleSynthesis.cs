@@ -1,4 +1,5 @@
 ﻿using Mba.Simplifier.Bindings;
+using Mba.Simplifier.Pipeline;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,7 +13,7 @@ namespace Mba.Simplifier.Synthesis
     {
         Undecided = 0,
         Cut = 1,
-        Expand = 1,
+        Expand = 2,
     }
 
     public class NodeState
@@ -48,9 +49,57 @@ namespace Mba.Simplifier.Synthesis
 
         public void Run(AstIdx idx)
         {
-            var state = new NodeState();
-            EnumeratePatterns(idx, 5, state);
+            var seen = new HashSet<AstIdx>();
+            Collect(idx, seen);
+
+
+            foreach (var subtree in seen)
+            {
+                var state = new NodeState();
+                var all = EnumeratePatterns(subtree, 13, state);
+
+                foreach (var p in all)
+                {
+                    var before = p.Idx;
+                    var after = LinearSimplifier.Run(1, ctx, before, false, false);
+
+                    var c0 = ctx.GetCost(after);
+                    var c1 = ctx.GetCost(before);
+                    if (c0 < c1)
+                    {
+                        Console.WriteLine($"{before}\n=>\n{after}\n{c0} => {c1}\n\n");
+                    }
+                }
+            }
             Debugger.Break();
+        }
+
+        private void Collect(AstIdx idx, HashSet<AstIdx> seen)
+        {
+            if (seen.Contains(idx))
+                return;
+
+            seen.Add(idx);
+            var opc = ctx.GetOpcode(idx);
+            if (opc == AstOp.Constant || opc == AstOp.Symbol)
+                return;
+
+            switch(opc)
+            {
+                case AstOp.Neg:
+                    Collect(ctx.GetOp0(idx), seen);
+                    break;
+
+                case AstOp.And:
+                case AstOp.Or:
+                case AstOp.Xor:
+                    Collect(ctx.GetOp0(idx), seen);
+                    Collect(ctx.GetOp1(idx), seen);
+                    break;
+                default:
+                    throw new InvalidOperationException();
+
+            }
         }
 
         private List<Pattern> EnumeratePatterns(AstIdx idx, int budget, NodeState state)
@@ -61,13 +110,18 @@ namespace Mba.Simplifier.Synthesis
             // Substitute the node with a variable if we have not committed to using it in the tree.
             bool isSymbol = ctx.IsSymbol(idx);
             var decision = state.Get(idx);
+
+
+            bool COND0 = decision != NodeDecision.Expand;
+            bool COND1 = decision != NodeDecision.Cut && budget > 1;
             if (decision != NodeDecision.Expand || isSymbol)
             {
+       
                 var newState = state.Clone();
                 newState.Set(idx, NodeDecision.Cut);
                 var holeSymbol = ctx.Symbol($"subst{state.Holes.Count}", ctx.GetWidth(idx));
-                newState.Holes.Add(idx, holeSymbol);
-                results.Add(new Pattern(holeSymbol, 1, newState));
+                newState.Holes.TryAdd(idx, holeSymbol);
+                results.Add(new Pattern(newState.Holes[idx], 1, newState));
 
                 // Variables automatically become holes!
                 if (isSymbol)
@@ -81,22 +135,53 @@ namespace Mba.Simplifier.Synthesis
                 currentState.Set(idx, NodeDecision.Expand);
 
                 var remainingBudget = budget - 1;
-                
-                var left = EnumeratePatterns(ctx.GetOp0(idx), remainingBudget, currentState);
+
+                if (ctx.IsSymbol(idx))
+                {
+                    var sPattern = new Pattern(idx, 1, currentState);
+                    results.Add(sPattern);
+                    return results;
+                }
+
+
+                var op0 = ctx.GetOp0(idx);
+                var lefts = EnumeratePatterns(op0, remainingBudget, currentState);
                 var opc = ctx.GetOpcode(idx);
                 if (opc == AstOp.Neg)
                 {
+                    // For unary operations there is no rhs.
+                    foreach(var pattern in lefts)
+                    {
+                        var newIdx = ctx.Neg(pattern.Idx);
+                        var newPattern = new Pattern(newIdx, pattern.Cost + 1, pattern.State);
+                        results.Add(newPattern);
+                    }
 
+                    return results;
                 }
 
-                Debugger.Break();
+                foreach (var leftPattern in lefts)
+                {
+                    var op1 = ctx.GetOp1(idx);
+                    var rightBudget = remainingBudget - leftPattern.Cost;
+                    var rights = EnumeratePatterns(op1, rightBudget, leftPattern.State);
+                    foreach(var rightPattern in rights)
+                    {
+                        var totalCost = 1 + leftPattern.Cost + rightPattern.Cost;
+                        var patternIdx = ctx.Binop(opc, leftPattern.Idx, rightPattern.Idx);
+                        var newPattern = new Pattern(patternIdx, totalCost, rightPattern.State);
+                        results.Add(newPattern);
+                    }
+                }
+
+                //Debugger.Break();
             }
 
             // In this case we should also return a hole.
             // Or if its a constant then we can return it.
             // Also literals should always be holes
-            if (budget <= 1)
-                Debugger.Break();
+            //if (budget <= 1)
+            //    Debugger.Break();
 
 
             return results;
