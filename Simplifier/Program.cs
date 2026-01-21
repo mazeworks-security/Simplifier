@@ -16,7 +16,7 @@ using System.Diagnostics;
 
 bool printUsage = false;
 bool onlyLinear = true;
-uint bitWidth = 64;
+uint bitWidth = 8;
 bool useEqsat = false;
 bool proveEquivalence = true;
 string inputText = "a ? b : c ";
@@ -199,6 +199,8 @@ inputText = "((x3:i64&(x0:i64^(((~(x1:i64^x2:i64))^((x1:i64^(x2:i64^x0:i64))&((~
 inputText = "((x3:i64&(((~x4:i64)&((x0:i64^(x1:i64^x2:i64))&((~x9:i64)&x8:i64)))^((x7:i64&(~(((~x9:i64)&(x8:i64&(x4:i64|(~(x0:i64^(x1:i64^x2:i64))))))^((~x9:i64)&((x0:i64^(x1:i64^x2:i64))&(~x4:i64))))))^(((~(x1:i64^x2:i64))^(x9:i64&(x0:i64^(x2:i64^(x1:i64^(x8:i64^x7:i64))))))^(x0:i64^((x0:i64^(x1:i64^x2:i64))&(x4:i64&(~x9:i64))))))))^((x7:i64|(x9:i64&x8:i64))^(((x0:i64^(x1:i64^x2:i64))&((~x3:i64)&(((~x9:i64)&(~x8:i64))&((~x4:i64)&(x5:i64&(x6:i64&(~x7:i64)))))))^(((~(x3:i64^x7:i64))&(x9:i64^x8:i64))^((x0:i64^(x1:i64^x2:i64))&((~x9:i64)&(x4:i64&((~x8:i64)&(~x7:i64)))))))))";
 
 inputText = "((x3&(((~x4)&((x0^(x1^x2))&((~x9)&x8)))^((x7&(~(((~x9)&(x8&(x4|(~(x0^(x1^x2))))))^((~x9)&((x0^(x1^x2))&(~x4))))))^(((~(x1^x2))^(x9&(x0^(x2^(x1^(x8^x7))))))^(x0^((x0^(x1^x2))&(x4&(~x9))))))))^((x7|(x9&x8))^(((x0^(x1^x2))&((~x3)&(((~x9)&(~x8))&((~x4)&(x5&(x6&(~x7)))))))^(((~(x3^x7))&(x9^x8))^((x0^(x1^x2))&((~x9)&(x4&((~x8)&(~x7)))))))))";
+
+inputText = "(y^(y|15)) - ((x&15))";
 
 //inputText = "(subst0^((subst0&subst1)^subst2))";
 //inputText = "((x8&((~x9)&subst0))^(x9&subst0))";
