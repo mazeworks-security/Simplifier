@@ -16,7 +16,7 @@ using System.Diagnostics;
 
 bool printUsage = false;
 bool onlyLinear = true;
-uint bitWidth = 8;
+uint bitWidth = 4;
 bool useEqsat = false;
 bool proveEquivalence = true;
 string inputText = "a ? b : c ";
@@ -109,7 +109,7 @@ inputText = "((((x:i64&y:i64)&1:i64) == 1)&(((x:i64^(~y:i64))&2:i64) == 0:i64)) 
 //inputText = "((((xcoerce:i64 tr i1)^(ycoerce:i64 tr i1)) zx i8)|((((xcoerce:i64 tr i8)&254:i8)+((ycoerce:i64 tr i8)&254:i8))+(2:i8*(1:i8&((xcoerce:i64 tr i8)&(ycoerce:i64 tr i8))))))";
 
 bool diff = false;
-Amd64AssemblerDifferentialTester.Test();
+//Amd64AssemblerDifferentialTester.Test();
 //Console.WriteLine("Done testing..");
 //Debugger.Break();
 
@@ -200,7 +200,21 @@ inputText = "((x3:i64&(((~x4:i64)&((x0:i64^(x1:i64^x2:i64))&((~x9:i64)&x8:i64)))
 
 inputText = "((x3&(((~x4)&((x0^(x1^x2))&((~x9)&x8)))^((x7&(~(((~x9)&(x8&(x4|(~(x0^(x1^x2))))))^((~x9)&((x0^(x1^x2))&(~x4))))))^(((~(x1^x2))^(x9&(x0^(x2^(x1^(x8^x7))))))^(x0^((x0^(x1^x2))&(x4&(~x9))))))))^((x7|(x9&x8))^(((x0^(x1^x2))&((~x3)&(((~x9)&(~x8))&((~x4)&(x5&(x6&(~x7)))))))^(((~(x3^x7))&(x9^x8))^((x0^(x1^x2))&((~x9)&(x4&((~x8)&(~x7)))))))))";
 
-inputText = "(y^(y|15)) - ((x&15))";
+inputText = "(y^(y|15)) - ((x&15)) ";
+
+inputText = "((~(((~(((~((1&(in2>>0))&(1&(in1>>0))))|(~((1&(in2>>1))^(1&(in1>>1)))))&(~((1&(in2>>1))&(1&(in1>>1))))))&((1&(in2>>2))^(1&(in1>>2))))|((1&(in2>>2))&(1&(in1>>2)))))^(~((1&(in2>>3))^(1&(in1>>3)))))";
+
+inputText = "((~(1:i4&(((in2:i4&in1:i4)>>2:i4)|((((1:i4&(in2:i4>>1:i4))|(1:i4&(in1:i4>>1:i4)))&(((in2:i4&in1:i4)>>0:i4)|((in2:i4&in1:i4)>>1:i4)))&((in2:i4|in1:i4)>>2:i4)))))^(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4)))))";
+
+inputText = "((~(1:i4&(((in2:i4|in1:i4)>>2:i4)&(((in2:i4&in1:i4)>>2:i4)|(((in2:i4&in1:i4)>>1:i4)|(((in2:i4&in1:i4)>>0:i4)&((in2:i4|in1:i4)>>1:i4)))))))^(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4)))))";
+
+inputText = "((~(((in2:i4|in1:i4)>>2:i4)&(1:i4&(((in2:i4&in1:i4)>>2:i4)|(((in2:i4|in1:i4)>>1:i4)&(((in2:i4&in1:i4)>>1:i4)|(in2:i4&in1:i4)))))))^(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4)))))";
+
+inputText = "((~(((~(((~((1&(in2>>0))&(1&(in1>>0))))|(~((1&(in2>>1))^(1&(in1>>1)))))&(~((1&(in2>>1))&(1&(in1>>1))))))&((1&(in2>>2))^(1&(in1>>2))))|((1&(in2>>2))&(1&(in1>>2)))))^(~((1&(in2>>3))^(1&(in1>>3)))))";
+
+inputText = "(4:i4*((1:i4&(~(((1:i4&(~((1:i4&(in2:i4>>0:i4))&(1:i4&(in1:i4>>0:i4)))))|(1:i4&(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))&(1:i4&(~((1:i4&(in2:i4>>1:i4))&(1:i4&(in1:i4>>1:i4))))))))^((1:i4&(in2:i4>>2:i4))^(1:i4&(in1:i4>>2:i4)))))";
+
+inputText = "(4:i4*((1:i4&(((in2:i4&in1:i4)>>1:i4)|(~(1:i4&((~(1:i4&(in2:i4&in1:i4)))|(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4)))))))))^((1:i4&(in2:i4>>2:i4))^(1:i4&(in1:i4>>2:i4)))))";
 
 //inputText = "(subst0^((subst0&subst1)^subst2))";
 //inputText = "((x8&((~x9)&subst0))^(x9&subst0))";
@@ -226,6 +240,15 @@ if(useNewDsl)
     var backend = new NewEggBackend(dsl);
     backend.Generate();
     Debugger.Break();
+}
+
+bool circuitSynthesis = false;
+if (circuitSynthesis)
+{
+    var circuitCtx = new AstCtx();
+    AstIdx.ctx = circuitCtx;
+    var circuitText = File.ReadAllText(@"Synthesis/Circuits/add4_circuit.v");
+    CircuitParser.Parse(circuitCtx, circuitText);
 }
 
 var printHelp = () =>
@@ -291,8 +314,8 @@ var barrr = LinearSimplifier.Run(ctx.GetWidth(id), ctx, id, false, true);
 Console.WriteLine(ctx.GetAstString(barrr));
 
 
-new DagRuleSynthesis(ctx).Run(id);
-Debugger.Break();
+//new DagRuleSynthesis(ctx).Run(id);
+//Debugger.Break();
 
 var egraph = new EGraph();
 var eclass = egraph.AddFromContext(ctx, id);
@@ -334,13 +357,13 @@ for (int i = 0; i < 20; i++)
     {
 
         //Console.WriteLine(ctx.GetAstString(c));
-        continue;
+        //continue;
         var sl = LinearSimplifier.Run(ctx.GetWidth(extracted), ctx, extracted, false, useMultibitSimba);
 
         //Console.WriteLine(ctx.GetAstString(extracted));
         // ctx.GetClass(extracted) == AstClassification.Nonlinear
         //var b4Str = ctx.GetAstString(extracted);
-        if (false)
+        if (true)
         {
             bool equiv = ProbableEquivalenceChecker.ProbablyEquivalent(ctx, extracted, sl, false, pagePtr1, pagePtr2);
             if (!equiv && ctx.GetClass(extracted) != AstClassification.Nonlinear)

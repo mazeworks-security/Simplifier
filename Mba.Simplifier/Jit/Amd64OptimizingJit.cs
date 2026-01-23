@@ -456,7 +456,7 @@ namespace Mba.Simplifier.Interpreter
                 case AstOp.Lshr:
                     // TODO: For logical shifts, we need to reduce the other side modulo some constant!
                     // Actually maybe not, we should have already reduced modulo?
-                    if (width % 8 != 0)
+                    if (width % 2 != 0)
                         throw new InvalidOperationException($"Cannot jit shr of non power of 2 width");
                     // Reduce shift count modulo bit width of operation
                     // TODO: Hand non power of two bit widths

@@ -50,6 +50,16 @@
     <None Update="Minimization\TruthTables\4variable_truthtable.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Synthesis\Circuits\add4.v">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Synthesis\Circuits\add4_circuit.v">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Synthesis\Circuits\" />
   </ItemGroup>
 
 </Project>
