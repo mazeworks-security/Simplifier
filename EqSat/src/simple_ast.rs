@@ -2042,6 +2042,30 @@ pub extern "C" fn ContextSelect(ctx: *mut Context, a: AstIdx, b: AstIdx, c: AstI
 }
 
 #[no_mangle]
+pub extern "C" fn ContextExtract(ctx: *mut Context, a: AstIdx, b: u8, c: u8) -> AstIdx {
+    unsafe {
+        let id = (*ctx).arena.extract(a, b, c);
+        return id;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ContextConcat(ctx: *mut Context, a: AstIdx, b: AstIdx) -> AstIdx {
+    unsafe {
+        let id = (*ctx).arena.concat(a, b);
+        return id;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ContextCarry(ctx: *mut Context, a: AstIdx, b: AstIdx, c: AstIdx) -> AstIdx {
+    unsafe {
+        let id = (*ctx).arena.carry(a, b, c);
+        return id;
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn ContextConstant(ctx: *mut Context, c: u64, width: u8) -> AstIdx {
     unsafe {
         let id = (*ctx).arena.constant(c, width);

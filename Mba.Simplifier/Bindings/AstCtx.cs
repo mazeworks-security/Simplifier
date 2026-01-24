@@ -32,6 +32,9 @@ namespace Mba.Simplifier.Bindings
         Trunc = 12,
         ICmp = 13,
         Select = 14,
+        Extract = 15,
+        Concat = 16,
+        Carry = 17,
     }
 
     public class AstCtx
@@ -64,6 +67,9 @@ namespace Mba.Simplifier.Bindings
         public unsafe AstIdx Trunc(AstIdx a, byte width) => Api.ContextTrunc(this, a, width);
         public unsafe AstIdx ICmp(Predicate pred, AstIdx a, AstIdx b) => Api.ContextICmp(this, pred, a, b);
         public unsafe AstIdx Select(AstIdx a, AstIdx b, AstIdx c) => Api.ContextSelect(this, a, b, c);
+        public unsafe AstIdx Extract(AstIdx a, byte high, byte low) => Api.ContextConcat(this, high, low);
+        public unsafe AstIdx Concat(AstIdx a, AstIdx b) => Api.ContextConcat(this, a, b);
+        public unsafe AstIdx Carry(AstIdx a, AstIdx b, AstIdx c) => Api.ContextCarry(this, a, b, c);
         public unsafe AstIdx Constant(ulong c, byte width) => Api.ContextConstant(this, c, width);
         public unsafe AstIdx Constant(ulong c, uint width) => Api.ContextConstant(this, c, (byte)width);
         public unsafe AstIdx Symbol(string s, byte width) => Api.ContextSymbol(this, new MarshaledString(s), width);
@@ -390,6 +396,15 @@ namespace Mba.Simplifier.Bindings
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextSelect(OpaqueAstCtx* ctx, AstIdx a, AstIdx b, AstIdx c);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextExtract(OpaqueAstCtx* ctx, AstIdx a, byte high, byte low);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextConcat(OpaqueAstCtx* ctx, AstIdx a, AstIdx b);
+
+            [DllImport("eq_sat")]
+            public unsafe static extern AstIdx ContextCarry(OpaqueAstCtx* ctx, AstIdx a, AstIdx b, AstIdx c);
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextConstant(OpaqueAstCtx* ctx, ulong c, byte width);
