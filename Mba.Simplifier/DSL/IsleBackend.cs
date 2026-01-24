@@ -13,7 +13,7 @@ namespace Mba.Simplifier.DSL
     // Class for lowering our term rewriting DSL down to ISLE definitions
     public static class IsleBackend
     {
-        public static string GenerateIsleDsl(IReadOnlyList<DslRule> rules)
+        public static string GenerateIsleDsl(IReadOnlyList<DslRuleOld> rules)
         {
             var sb = new StringBuilder();
             int rc = 0;
@@ -140,7 +140,7 @@ namespace Mba.Simplifier.DSL
         {
             return kind switch
             {
-                AstKind.Power => "Pow",
+                AstKind.Pow => "Pow",
                 AstKind.Add => "Add",
                 AstKind.Mul => "Mul",
                 AstKind.And => "And",
