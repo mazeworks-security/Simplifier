@@ -216,6 +216,16 @@ inputText = "(4:i4*((1:i4&(~(((1:i4&(~((1:i4&(in2:i4>>0:i4))&(1:i4&(in1:i4>>0:i4
 
 inputText = "(4:i4*((1:i4&(((in2:i4&in1:i4)>>1:i4)|(~(1:i4&((~(1:i4&(in2:i4&in1:i4)))|(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4)))))))))^((1:i4&(in2:i4>>2:i4))^(1:i4&(in1:i4>>2:i4)))))";
 
+inputText = "(4:i4*(1:i4&(~(((1:i4&(~((1:i4&(in2:i4>>0:i4))&(1:i4&(in1:i4>>0:i4)))))|(1:i4&(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))&(1:i4&(~((1:i4&(in2:i4>>1:i4))&(1:i4&(in1:i4>>1:i4)))))))))";
+
+inputText = "(4:i4*(1:i4&(~(((1:i4&(~((1:i4&(in2:i4>>0:i4))&(1:i4&(in1:i4>>0:i4)))))|(1:i4&(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))&(1:i4&(~((1:i4&(in2:i4>>1:i4))&(1:i4&(in1:i4>>1:i4)))))))))";
+
+inputText = "(4:i4*(1:i4&(((in2:i4&in1:i4)>>1:i4)|(~(1:i4&((~(in2:i4&(1:i4&in1:i4)))|(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))))))";
+
+inputText = "(((((1:i4&(in2:i4>>0:i4))^(1:i4&(in1:i4>>0:i4)))|(2:i4*((1:i4&(~((1:i4&(in2:i4>>0:i4))&(1:i4&(in1:i4>>0:i4)))))^(1:i4&(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))))|(4:i4*((1:i4&(~(((1:i4&(~((1:i4&(in2:i4>>0:i4))&(1:i4&(in1:i4>>0:i4)))))|(1:i4&(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))&(1:i4&(~((1:i4&(in2:i4>>1:i4))&(1:i4&(in1:i4>>1:i4))))))))^((1:i4&(in2:i4>>2:i4))^(1:i4&(in1:i4>>2:i4))))))|(8:i4*((1:i4&(~(((1:i4&(~(((1:i4&(~((1:i4&(in2:i4>>0:i4))&(1:i4&(in1:i4>>0:i4)))))|(1:i4&(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))&(1:i4&(~((1:i4&(in2:i4>>1:i4))&(1:i4&(in1:i4>>1:i4))))))))&((1:i4&(in2:i4>>2:i4))^(1:i4&(in1:i4>>2:i4))))|((1:i4&(in2:i4>>2:i4))&(1:i4&(in1:i4>>2:i4))))))^(1:i4&(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4))))))))";
+
+inputText = "((2:i4*((1:i4&(~(in2:i4&(1:i4&in1:i4))))^(1:i4&(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4)))))))+(8:i4+((8:i4*(((1:i4&(((in2:i4&in1:i4)>>2:i4)|(((in2:i4&in1:i4)>>1:i4)|(~(1:i4&((~(in2:i4&(1:i4&in1:i4)))|(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))))))&((in2:i4|in1:i4)>>2:i4))+(1:i4&(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4)))))))+(((1:i4&in2:i4)^(1:i4&in1:i4))+(4:i4*((1:i4&(((in2:i4&in1:i4)>>1:i4)|(~(1:i4&((~(in2:i4&(1:i4&in1:i4)))|(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4)))))))))^((1:i4&(in2:i4>>2:i4))^(1:i4&(in1:i4>>2:i4)))))))))";
+
 //inputText = "(subst0^((subst0&subst1)^subst2))";
 //inputText = "((x8&((~x9)&subst0))^(x9&subst0))";
 
@@ -338,16 +348,16 @@ for (int i = 0; i < 20; i++)
 
     Console.WriteLine($"Iter {i}");
     var sww = Stopwatch.StartNew();
-    egraph.Run(1000, 10000);
+    egraph.Run(1000, 1000);
     sww.Stop();
-    Console.WriteLine($"Done eqsat.. took {sww.ElapsedMilliseconds} ");
+    Console.WriteLine($"Done eqsat.. took {sww.ElapsedMilliseconds}  ");
     //var classes = egraph.GetClasses();
     //for(int ei = 0; ei < classes.Count; ei++)
 
     sww = Stopwatch.StartNew();
     var all = egraph.ExtractAll(ctx);
     sww.Stop();
-    Console.WriteLine($"Extraction took {sww.ElapsedMilliseconds}  ");
+    Console.WriteLine($"Extraction took {sww.ElapsedMilliseconds}   ");
     //  goto skip;
     sww = Stopwatch.StartNew();
 
@@ -365,7 +375,7 @@ for (int i = 0; i < 20; i++)
         //var b4Str = ctx.GetAstString(extracted);
         if (true)
         {
-            bool equiv = ProbableEquivalenceChecker.ProbablyEquivalent(ctx, extracted, sl, false, pagePtr1, pagePtr2);
+            bool equiv = ProbableEquivalenceChecker.ProbablyEquivalent(ctx, extracted, sl, true, pagePtr1, pagePtr2);
             if (!equiv && ctx.GetClass(extracted) != AstClassification.Nonlinear)
             {
                 // TODO: Debug
@@ -384,14 +394,14 @@ for (int i = 0; i < 20; i++)
         if (sl == barrr)
             continue;
 
-        /*
+        
         if (ctx.GetWidth(barrr) == ctx.GetWidth(sl))
         {
             var sub = LinearSimplifier.Run(ctx.GetWidth(extracted), ctx, ctx.Sub(barrr, sl), false, true);
             if (ctx.IsConstant(sub))
                 continue;
         }
-        */
+        
 
         //Console.WriteLine($"{b4Str} => {ctx.GetAstString(sl)}");
 

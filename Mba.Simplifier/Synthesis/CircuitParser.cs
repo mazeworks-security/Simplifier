@@ -36,15 +36,24 @@ namespace Mba.Simplifier.Synthesis
             var result = visitor.Visit(expr);
 
             var outBits = visitor.outputs.Values.Single().Select(x => x.Value).ToList();
+            List<AstIdx> terms = new();
             for (int i = 0; i < outBits.Count; i++) 
             {
-                if (i != 2)
-                    continue;
+                //if (i != 2)
+                //    continue;
                 var output = outBits[i];
                 var w = ctx.GetWidth(output);
 
+
+                //var opc = ctx.GetOpcode(output);
+                //if (opc != AstOp.Xor)
+                //    Debugger.Break();
+
+                //output = ctx.GetOp0(output);
+
                 var shiftBy = (ulong)Math.Pow(2, i);
                 output = ctx.Mul(ctx.Constant(shiftBy, w), output);
+                terms.Add(output);
 
                 Console.WriteLine(ctx.GetAstString(output));
 
@@ -65,8 +74,8 @@ namespace Mba.Simplifier.Synthesis
                 */
             }
 
- 
-
+            var joined = ctx.Or(terms);
+            Console.WriteLine("\n\n\n" + ctx.GetAstString(joined));
             Debugger.Break();
         }
     }

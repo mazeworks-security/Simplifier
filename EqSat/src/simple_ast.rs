@@ -4053,6 +4053,10 @@ pub extern "C" fn EGraphRun(egraph_p: *mut EEGraph, ms_limit: u64, iter_limit: u
         .with_iter_limit(iter_limit as usize)
         .with_egraph(egraph);
 
+    println!(
+        "Starting egraph run with limit {} ms and {} iters",
+        ms_limit, iter_limit
+    );
     // Run equality saturation
     let rules = get_generated_rules();
     runner = runner.run(&rules);
