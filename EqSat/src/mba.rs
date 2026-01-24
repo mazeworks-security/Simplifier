@@ -33,6 +33,9 @@ pub trait Context {
     fn trunc(&mut self, arg0: AstIdx, arg1: u8) -> SimpleAst;
     fn icmp(&mut self, pred: Predicate, arg0: AstIdx, arg1: AstIdx) -> SimpleAst;
     fn select(&mut self, arg0: AstIdx, arg1: AstIdx, arg2: AstIdx) -> SimpleAst;
+    fn extract(&mut self, arg0: AstIdx, arg1: u8, arg2: u8) -> SimpleAst;
+    fn concat(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst;
+    fn carry(&mut self, arg0: AstIdx, arg1: AstIdx, arg2: AstIdx) -> SimpleAst;
     fn fold_add(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst;
     fn get_width(&mut self, arg0: AstIdx) -> u8;
     fn is_constant_modulo(&mut self, arg0: u64, arg1: u64, arg2: u8) -> Option<Empty>;

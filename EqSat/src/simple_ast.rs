@@ -119,7 +119,10 @@ pub trait INodeUtil {
         let c2 = self.get_class(b);
 
         let has_constant = self.is_constant(a) || self.is_constant(b);
+        return self.bitwise_class_transfer(c1, c2, has_constant);
+    }
 
+    fn bitwise_class_transfer(&self, c1: AstClass, c2: AstClass, has_constant: bool) -> AstClass {
         let mut max = max_class(
             c1,
             c2,
@@ -394,6 +397,63 @@ pub trait INodeUtil {
         };
         return data;
     }
+
+    fn extract_transfer(&self, a: AstIdx, high: u8, low: u8) -> AstData {
+        let has_poly = self.get_data(a).has_poly;
+        let width = 1 + high - low;
+
+        //  TODO: Knownbits and classification are overapproximated for now.
+        let kb = KnownBits::empty(width);
+        let data = AstData {
+            width: width,
+            cost: 1 + self.get_data(a).cost,
+            has_poly: has_poly,
+            class: AstClass::Nonlinear,
+            known_bits: kb,
+            imut_data: 0,
+        };
+        return data;
+    }
+
+    fn concat_transfer(&self, a: AstIdx, b: AstIdx) -> AstData {
+        let has_poly = self.union_contains_poly_part(a, b);
+        let width = self.get_width(a) + self.get_width(b);
+
+        // TODO: Knownbits and classification are overapproximated for now.
+        let kb = KnownBits::empty(width);
+        let data = AstData {
+            width: width,
+            cost: 1 + self.get_data(a).cost + self.get_data(b).cost,
+            has_poly: has_poly,
+            class: AstClass::Nonlinear,
+            known_bits: kb,
+            imut_data: 0,
+        };
+        return data;
+    }
+
+    fn carry_transfer(&self, a: AstIdx, b: AstIdx, c: AstIdx) -> AstData {
+        let width = self.get_bin_width(a, b);
+
+        let has_constant = self.is_constant(a) || self.is_constant(b) || self.is_constant(c);
+        let subclass =
+            self.bitwise_class_transfer(self.get_class(a), self.get_class(b), has_constant);
+
+        // Knownbits is unimplemented for now.
+        let class = self.bitwise_class_transfer(subclass, self.get_class(c), has_constant);
+        let has_poly = self.union_contains_poly_part(a, b) || self.get_data(c).has_poly;
+        let kb = KnownBits::empty(width);
+        let data = AstData {
+            width: width,
+            cost: 1 + self.get_data(a).cost + self.get_data(b).cost + self.get_data(c).cost,
+            has_poly: has_poly,
+            class: class,
+            known_bits: kb,
+            imut_data: 0,
+        };
+
+        return data;
+    }
 }
 
 impl INodeUtil for Arena {
@@ -548,6 +608,23 @@ impl Arena {
         );
     }
 
+    pub fn extract(&mut self, a: AstIdx, b: u8, c: u8) -> AstIdx {
+        let data = self.extract_transfer(a, b, c);
+        let b_node = self.constant(b as u64, data.width);
+        let c_node = self.constant(c as u64, data.width);
+        return self.insert_ast_node(SimpleAst::Extract([a, b_node, c_node]), data);
+    }
+
+    pub fn concat(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+        let data = self.concat_transfer(a, b);
+        return self.insert_ast_node(SimpleAst::Concat([a, b]), data);
+    }
+
+    pub fn carry(&mut self, a: AstIdx, b: AstIdx, c: AstIdx) -> AstIdx {
+        let data = self.carry_transfer(a, b, c);
+        return self.insert_ast_node(SimpleAst::Carry([a, b, c]), data);
+    }
+
     pub fn constant(&mut self, c: u64, width: u8) -> AstIdx {
         let data = self.constant_transfer(c, width);
         // Reduce the constant modulo 2**width
@@ -625,6 +702,11 @@ impl Arena {
             SimpleAst::Select {
                 children: [a, b, c],
             } => self.select(a, b, c),
+            SimpleAst::Extract([a, b, c]) => {
+                self.extract(a, self.get_constant(b) as u8, self.get_constant(c) as u8)
+            }
+            SimpleAst::Concat([a, b]) => self.concat(a, b),
+            SimpleAst::Carry([a, b, c]) => self.carry(a, b, c),
         }
     }
 
@@ -782,6 +864,9 @@ impl Language for SimpleAst {
                 children,
             } => children,
             SimpleAst::Select { children } => children,
+            SimpleAst::Extract(children) => children,
+            SimpleAst::Concat(children) => children,
+            SimpleAst::Carry(children) => children,
         }
     }
     /// Returns a mutable slice of the children of this e-node.
@@ -804,6 +889,9 @@ impl Language for SimpleAst {
                 children,
             } => children,
             SimpleAst::Select { children } => children,
+            SimpleAst::Extract(children) => children,
+            SimpleAst::Concat(children) => children,
+            SimpleAst::Carry(children) => children,
         }
     }
 }
@@ -830,6 +918,9 @@ impl ::std::fmt::Display for SimpleAst {
                 children,
             } => f.write_str(format!("icmp {}", predicate).as_str()),
             SimpleAst::Select { children } => f.write_str("select"),
+            SimpleAst::Extract([a, b, c]) => f.write_str("extract"),
+            SimpleAst::Concat([a, b]) => f.write_str("++"),
+            SimpleAst::Carry([a, b, c]) => f.write_str("carry"),
         }
     }
 }
@@ -978,8 +1069,6 @@ impl Analysis<SimpleAst> for MbaAnalysis {
             SimpleAst::Xor([a, b]) => util.xor_transfer(*a, *b),
             SimpleAst::Neg([a]) => util.neg_transfer(*a),
             SimpleAst::Lshr([a, b]) => util.lshr_transfer(*a, *b),
-            // SimpleAst::Zext([a, to]) => util.zext_transfer(*a, *to),
-            // SimpleAst::Trunc([a, to]) => util.trunc_transfer(*a, *to),
             SimpleAst::Zext([a, to]) => util.zext_transfer(
                 *a,
                 util.get_data(*to).known_bits.as_constant().unwrap() as u8,
@@ -997,6 +1086,13 @@ impl Analysis<SimpleAst> for MbaAnalysis {
             SimpleAst::Select { children } => {
                 util.select_transfer(children[0], children[1], children[2])
             }
+            SimpleAst::Extract([a, b, c]) => util.extract_transfer(
+                *a,
+                util.get_data(*b).known_bits.as_constant().unwrap() as u8,
+                util.get_data(*c).known_bits.as_constant().unwrap() as u8,
+            ),
+            SimpleAst::Concat([a, b]) => util.concat_transfer(*a, *b),
+            SimpleAst::Carry([a, b, c]) => util.carry_transfer(*a, *b, *c),
         };
 
         return data;
@@ -1179,6 +1275,13 @@ pub enum SimpleAst {
     Select {
         children: [AstIdx; 3],
     },
+
+    // Extract(src, high, low),
+    Extract([AstIdx; 3]),
+    // Concat(src, high, low),
+    Concat([AstIdx; 2]),
+    // Carry of adding three one-bit values
+    Carry([AstIdx; 3]),
 }
 
 pub struct Context {
@@ -1329,6 +1432,21 @@ impl mba::Context for Context {
         return self.arena.get_node(select).clone();
     }
 
+    fn extract(&mut self, arg0: AstIdx, arg1: u8, arg2: u8) -> SimpleAst {
+        let extract = self.arena.extract(arg0, arg1, arg2);
+        return self.arena.get_node(extract).clone();
+    }
+
+    fn concat(&mut self, arg0: AstIdx, arg1: AstIdx) -> SimpleAst {
+        let concat = self.arena.concat(arg0, arg1);
+        return self.arena.get_node(concat).clone();
+    }
+
+    fn carry(&mut self, arg0: AstIdx, arg1: AstIdx, arg2: AstIdx) -> SimpleAst {
+        let carry = self.arena.carry(arg0, arg1, arg2);
+        return self.arena.get_node(carry).clone();
+    }
+
     fn any(&mut self, arg0: AstIdx) -> SimpleAst {
         return self.arena.get_node(arg0).clone();
     }
@@ -1425,6 +1543,9 @@ impl AstPrinter {
                 children,
             } => &predicate.clone().to_string(),
             SimpleAst::Select { children } => "",
+            SimpleAst::Extract([a, b, c]) => "extract",
+            SimpleAst::Concat([a, b]) => "++",
+            SimpleAst::Carry([a, b, c]) => "carry",
         };
 
         // Don't put parens for constants or symbols
@@ -1440,7 +1561,8 @@ impl AstPrinter {
             | SimpleAst::And([a, b])
             | SimpleAst::Or([a, b])
             | SimpleAst::Xor([a, b])
-            | SimpleAst::Lshr([a, b]) => {
+            | SimpleAst::Lshr([a, b])
+            | SimpleAst::Concat([a, b]) => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
                 self.output.push_str(&format!("{}", operator));
                 self.print_node(ctx, ctx.arena.get_node(*b));
@@ -1468,7 +1590,6 @@ impl AstPrinter {
                 ctx.arena.get_symbol_name(*id).clone(),
                 width
             )),
-            // (a) >= (b)
             SimpleAst::ICmp {
                 predicate,
                 children,
@@ -1477,13 +1598,29 @@ impl AstPrinter {
                 self.output.push_str(&format!(" {} ", operator));
                 self.print_node(ctx, ctx.arena.get_node(children[1]));
             }
-            // a ? b : c
             SimpleAst::Select { children } => {
                 self.print_node(ctx, ctx.arena.get_node(children[0]));
                 self.output.push_str(&format!(" ? "));
                 self.print_node(ctx, ctx.arena.get_node(children[1]));
                 self.output.push_str(&format!(" : "));
                 self.print_node(ctx, ctx.arena.get_node(children[2]));
+            }
+            SimpleAst::Extract([a, b, c]) => {
+                self.print_node(ctx, ctx.arena.get_node(*a));
+                self.output.push_str(&format!(
+                    "[{}..{}]",
+                    ctx.arena.get_constant(*b),
+                    ctx.arena.get_constant(*c)
+                ));
+            }
+            SimpleAst::Carry([a, b, c]) => {
+                self.output.push_str("maj(");
+                self.print_node(ctx, ctx.arena.get_node(*a));
+                self.output.push_str(&format!(", "));
+                self.print_node(ctx, ctx.arena.get_node(*b));
+                self.output.push_str(&format!(", "));
+                self.print_node(ctx, ctx.arena.get_node(*c));
+                self.output.push_str(")");
             }
         }
 
@@ -1541,6 +1678,7 @@ pub fn eval_ast(ctx: &Context, idx: AstIdx, value_mapping: &HashMap<AstIdx, u64>
                 e(&children[2])
             }
         }
+        _ => todo!(),
     };
 
     r & get_modulo_mask(ctx.arena.get_width(idx))
@@ -1603,6 +1741,25 @@ pub fn recursive_simplify(ctx: &mut Context, idx: AstIdx) -> AstIdx {
             let op2 = recursive_simplify(ctx, children[1]);
             let op3 = recursive_simplify(ctx, children[2]);
             ast = ctx.select(op1, op2, op3);
+        }
+        SimpleAst::Extract([a, b, c]) => {
+            let op1 = recursive_simplify(ctx, a);
+            ast = ctx.extract(
+                op1,
+                ctx.arena.get_constant(b) as u8,
+                ctx.arena.get_constant(c) as u8,
+            );
+        }
+        SimpleAst::Concat([a, b]) => {
+            let op1 = recursive_simplify(ctx, a);
+            let op2 = recursive_simplify(ctx, b);
+            ast = ctx.concat(op1, op2);
+        }
+        SimpleAst::Carry([a, b, c]) => {
+            let op1 = recursive_simplify(ctx, a);
+            let op2 = recursive_simplify(ctx, b);
+            let op3 = recursive_simplify(ctx, c);
+            ast = ctx.carry(op1, op2, op3);
         }
     }
 
@@ -1689,28 +1846,14 @@ fn collect_var_indices_internal(
     };
 
     match ast {
-        SimpleAst::Add([a, b])
-        | SimpleAst::Mul([a, b])
-        | SimpleAst::Pow([a, b])
-        | SimpleAst::And([a, b])
-        | SimpleAst::Or([a, b])
-        | SimpleAst::Xor([a, b])
-        | SimpleAst::Lshr([a, b]) => vbin(*a, *b),
-        SimpleAst::Neg([a]) | SimpleAst::Zext([a, _]) | SimpleAst::Trunc([a, _]) => {
-            collect_var_indices_internal(ctx, *a, visited, out_vars)
-        }
         SimpleAst::Constant { c, width } => return,
         SimpleAst::Symbol { id, width } => {
             out_vars.insert(idx);
             return;
         }
-        SimpleAst::ICmp {
-            predicate,
-            children,
-        } => vbin(children[0], children[1]),
-        SimpleAst::Select { children } => {
-            for c in children {
-                collect_var_indices_internal(ctx, *c, visited, out_vars);
+        _ => {
+            for child in ast.children() {
+                collect_var_indices_internal(ctx, *child, visited, out_vars);
             }
         }
     }
@@ -1949,6 +2092,9 @@ pub fn get_opcode(ctx: &Context, id: AstIdx) -> u8 {
             children,
         } => 13,
         SimpleAst::Select { children } => 14,
+        SimpleAst::Extract(_) => 15,
+        SimpleAst::Concat(_) => 16,
+        SimpleAst::Carry(_) => 17,
     };
 }
 
@@ -2403,6 +2549,9 @@ unsafe fn jit_rec(
             children,
         } => todo!(),
         SimpleAst::Select { children } => todo!(),
+        SimpleAst::Extract(_) => todo!(),
+        SimpleAst::Concat(_) => todo!(),
+        SimpleAst::Carry(_) => todo!(),
     };
 
     // mov rax, constant
@@ -3572,7 +3721,8 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
             | SimpleAst::And([a, b])
             | SimpleAst::Or([a, b])
             | SimpleAst::Xor([a, b])
-            | SimpleAst::Lshr([a, b]) => {
+            | SimpleAst::Lshr([a, b])
+            | SimpleAst::Concat([a, b]) => {
                 Self::collect_info(ctx, a, dfs);
                 Self::collect_info(ctx, b, dfs);
 
@@ -3589,6 +3739,11 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
                 children,
             } => todo!(),
             SimpleAst::Select { children } => todo!(),
+            SimpleAst::Extract([a, b, c]) => {
+                Self::collect_info(ctx, a, dfs);
+                Self::inc_users(ctx, a);
+            }
+            SimpleAst::Carry(_) => todo!(),
         }
 
         dfs.push(idx);
@@ -3656,6 +3811,9 @@ impl<T: IAmd64Assembler> Amd64OptimizingJit<T> {
                     children,
                 } => todo!(),
                 SimpleAst::Select { children } => todo!(),
+                SimpleAst::Extract(_) => todo!(),
+                SimpleAst::Concat(_) => todo!(),
+                SimpleAst::Carry(_) => todo!(),
             }
         }
 

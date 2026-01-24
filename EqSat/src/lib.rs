@@ -92,6 +92,9 @@ impl<'a> CostFunction<SimpleAst> for EGraphCostFn<'a> {
                 children,
             } => 6,
             SimpleAst::Select { children } => 6,
+            SimpleAst::Extract(_) => 1,
+            SimpleAst::Concat(_) => 1,
+            SimpleAst::Carry(_) => 1,
         };
         enode.fold(op_cost, |sum, i| sum + _costs(i))
     }
