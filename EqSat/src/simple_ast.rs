@@ -1003,6 +1003,10 @@ impl egg::FromOp for SimpleAst {
             "select" => Ok(SimpleAst::Select {
                 children: [children[0], children[1], children[2]],
             }),
+            "++" => Ok(SimpleAst::Concat([children[0], children[1]])),
+            "extract" => Ok(SimpleAst::Extract([children[0], children[1], children[2]])),
+            "carry" => Ok(SimpleAst::Carry([children[0], children[1], children[2]])),
+
             _ => {
                 if let Some((c, width)) = parse_constant(op) {
                     //panic!("hello2");
