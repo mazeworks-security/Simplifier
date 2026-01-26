@@ -264,9 +264,10 @@ namespace Mba.Simplifier.LinEq
             var system = new LinearSystem(poly.width, poly.width, newEqs);
 
             var solver = new LinearCongruenceSolver(poly.moduloMask);
+            //LinearEquationSolver.EnumerateSolutions(system, solver, new Num[monomials.Length], 0, upperTriangular: false);
             var (solvable, solutions) = LinearEquationSolver.EnumerateSolutionsIterative(system, solver, upperTriangular: false);
 
-            bool divDiff = true;
+            bool divDiff = false;
             if (divDiff)
             {
                 ulong[] divDiffCoeffs = null;
@@ -274,7 +275,7 @@ namespace Mba.Simplifier.LinEq
                 bool mv = true;
                 if (mv)
                 {
-                    divDiffCoeffs = DivDiffMv(mmask, solver, monomials.ToList(), ys);
+                    //divDiffCoeffs = DivDiffMv(mmask, solver, monomials.ToList(), ys);
                 }
 
                 else
@@ -342,12 +343,31 @@ namespace Mba.Simplifier.LinEq
 
             poly = SparsePolynomial.ParsePoly("x + y", 2, 8);
 
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x + y", 2, 8);
+
+            poly = SparsePolynomial.ParsePoly("8356627538633988050*x0 + 14987979559889010688*x0*x1 + 17293822569102704640*x0*x1*x1 + 16429131440647569408*x0*x0*x1 + 13258597302978740224*x0*x1*x1*x1 + 15636497906230362112*x0*x0*x1*x1 + 10304235947423694848*x0*x0*x0*x1 + 432345564227567616*x0*x1*x1*x1*x1 + 9511602413006487552*x0*x0*x1*x1*x1 + 11475171850540023808*x0*x0*x0*x1*x1 + 1152921504606846976*x0*x0*x0*x0*x1 + 9511602413006487552*x0*x1*x1*x1*x1*x1 + 54043195528445952*x0*x0*x1*x1*x1*x1 + 12718165347694280704*x0*x0*x0*x1*x1*x1 + 6917529027641081856*x0*x0*x0*x0*x1*x1 + 1242993497154256896*x0*x0*x0*x0*x0*x1 + 17870283321406128128*x0*x1*x1*x1*x1*x1*x1 + 5170132372221329408*x0*x0*x1*x1*x1*x1*x1 + 15469864720017653760*x0*x0*x0*x1*x1*x1*x1 + 108086391056891904*x0*x0*x0*x0*x1*x1*x1 + 10299732347796324352*x0*x0*x0*x0*x0*x1*x1 + 16122886665986375680*x0*x0*x0*x0*x0*x0*x1 + 2305843009213693952*x0*x1*x1*x1*x1*x1*x1*x1 + 5098074778183401472*x0*x0*x1*x1*x1*x1*x1*x1 + 12650611353283723264*x0*x0*x0*x1*x1*x1*x1*x1 + 9979976774253019136*x0*x0*x0*x0*x1*x1*x1*x1 + 9574652807789674496*x0*x0*x0*x0*x0*x1*x1*x1 + 11659819435262214144*x0*x0*x0*x0*x0*x0*x1*x1 + 17762196930349236224*x0*x0*x0*x0*x0*x0*x0*x1 + 3891110078048108544*x0*x1*x1*x1*x1*x1*x1*x1*x1 + 5944751508129054720*x0*x0*x1*x1*x1*x1*x1*x1*x1 + 15244684738649128960*x0*x0*x0*x1*x1*x1*x1*x1*x1 + 2206763817411543040*x0*x0*x0*x0*x1*x1*x1*x1*x1 + 16439264539809153024*x0*x0*x0*x0*x0*x1*x1*x1*x1 + 8043428934483705856*x0*x0*x0*x0*x0*x0*x1*x1*x1 + 351280770934898688*x0*x0*x0*x0*x0*x0*x0*x1*x1 + 12862280535770136576*x0*x0*x0*x0*x0*x0*x0*x0*x1 + 3746994889972252672*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 3188548536178311168*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1 + 12673129351420575744*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1 + 5971773105893277696*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1 + 10388678440436891648*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1 + 10388678440436891648*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1 + 8484781697966014464*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1 + 8926134461448323072*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1 + 6431140267885068288*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1 + 8935141660703064064*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 11367085459483131904*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 418834765345456128*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1 + 12195747790919303168*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1 + 5290603662253490176*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1 + 5261330264675581952*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1 + 758856537211928576*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1 + 9745789593629753344*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1 + 1508705875169116160*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1 + 13384698092545114112*x0*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1 + 1387108685230112768*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 3823556083637551104*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 558446353793941504*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1 + 533676555843403776*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1 + 14935062264267407360*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1 + 4438297432773623808*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1 + 9675983799405510656*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1 + 3233584532452016128*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1 + 8165026124422709248*x0*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1 + 15902210284245221376*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 16618282624997130240*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 2196630718249959424*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1 + 2465720795985346560*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1 + 17372635562581688320*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1 + 12787971141918523392*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1 + 5378423854987214848*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1 + 17555031347490193408*x0*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1 + 18077448904265170944*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 17387272261370642432*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 16731998515588235264*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1 + 2472476195426402304*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1 + 7509752378640302080*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1 + 4083638962118197248*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1 + 5209538868960821248*x0*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1 + 433471464134410240*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 1325184190353768448*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 9923681778910887936*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1 + 14632195189326741504*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1 + 7200129904258580480*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1 + 7287950096992305152*x0*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1 + 5299610861508231168*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 2438699198221123584*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 6428888468071383040*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1 + 5937996108687998976*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1 + 14187464726123905024*x0*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1 + 9784070190462402560*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 4014959067800797184*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 8501670196568653824*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1 + 14625439789885685760*x0*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1 + 5649765732536287232*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 17135070682237894656*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 3500422810373718016*x0*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1 + 14376615910473465856*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 14376615910473465856*x0*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1 + 12388276674989391872*x0*x0*x0*x0*x0*x0*x0*x0*x0*x0*x1*x1*x1*x1*x1*x1*x1*x1*x1*x1", 2, 64);
+
+
+            poly = SparsePolynomial.ParsePoly("75*x + 50*y + 216*x*y + 144*y*y + 128*x*x*y + 64*x*y*y", 2, 8);
+
             //poly = SparsePolynomial.ParsePoly("x*y", 2, 8);
 
             //poly = SparsePolynomial.ParsePoly("1 + 3*x + 17*x*x + 33*x*x*x", 1, 8);
 
+            poly = SparsePolynomial.ParsePoly("x*x", 1, 8);
+
+            poly = SparsePolynomial.ParsePoly("x*x*x*x*x*x*x*x*x*x", 1, 8);
+
+            //poly = PolynomialReducer.GetCanonicalForm(poly);
+
             var before = PolynomialReducer.GetFactorialForm(poly.Clone());
-            PolynomialReducer.ReduceFacBasisPolynomial(before);
+
+          
+            //var clone = poly.Clone();
+            //var mms = PolyInverter.Enumerate(new byte[] { 16, 16 }, 32);
+            //MonomialToNewton(clone, mms);
+
+            //PolynomialReducer.ReduceFacBasisPolynomial(before);
 
             var after = Interpolate(poly.Clone());
 
@@ -468,10 +488,10 @@ namespace Mba.Simplifier.LinEq
         }
 
 
-        public static ulong[] DivDiffMv(ulong mmask, LinearCongruenceSolver solver, List<Monomial> x, ulong[] y)
-        {
+        //public static ulong[] DivDiffMv(ulong mmask, LinearCongruenceSolver solver, List<Monomial> x, ulong[] y)
+        //{
 
-        }
+        //}
 
         public static ulong[] DivDiffMvOld(ulong mmask, LinearCongruenceSolver solver, List<Monomial> x, ulong[] y)
         {
