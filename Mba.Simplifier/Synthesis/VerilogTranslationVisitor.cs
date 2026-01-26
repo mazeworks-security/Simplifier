@@ -104,7 +104,7 @@ namespace Mba.Simplifier.Synthesis
             var neg = ctx.Neg(op0.Value);
 
             var w = ctx.GetWidth(neg);
-            neg = ctx.And(ctx.Constant(1, w), neg);
+            // neg = ctx.And(ctx.Constant(1, w), neg);
             return neg;
         }
 
@@ -115,14 +115,15 @@ namespace Mba.Simplifier.Synthesis
             if (bitSelect == null)
                 return wireAssignments[name];
 
-            var index = (int)ParseNumber(bitSelect.number());
+            var index = (byte)ParseNumber(bitSelect.number());
 
             // Shift the selected bit to the 0th index
             var symbol = inputs[name];
             var w = ctx.GetWidth(symbol);
-            var output = ctx.Lshr(symbol, ctx.Constant((ulong)index, w));
+            //var output = ctx.Lshr(symbol, ctx.Constant((ulong)index, w));
 
-            output = ctx.And(ctx.Constant(1, w), output);
+            //output = ctx.And(ctx.Constant(1, w), output);
+            var output = ctx.Extract(symbol, index, index);
             return output;
         }
 

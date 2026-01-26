@@ -1612,7 +1612,7 @@ impl AstPrinter {
             SimpleAst::Extract([a, b, c]) => {
                 self.print_node(ctx, ctx.arena.get_node(*a));
                 self.output.push_str(&format!(
-                    "[{}..{}]",
+                    "[{}:{}]",
                     ctx.arena.get_constant(*b),
                     ctx.arena.get_constant(*c)
                 ));
@@ -2042,9 +2042,9 @@ pub extern "C" fn ContextSelect(ctx: *mut Context, a: AstIdx, b: AstIdx, c: AstI
 }
 
 #[no_mangle]
-pub extern "C" fn ContextExtract(ctx: *mut Context, a: AstIdx, b: u8, c: u8) -> AstIdx {
+pub extern "C" fn ContextExtract(ctx: *mut Context, a: AstIdx, high: u8, low: u8) -> AstIdx {
     unsafe {
-        let id = (*ctx).arena.extract(a, b, c);
+        let id = (*ctx).arena.extract(a, high, low);
         return id;
     }
 }

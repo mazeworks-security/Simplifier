@@ -67,7 +67,7 @@ namespace Mba.Simplifier.Bindings
         public unsafe AstIdx Trunc(AstIdx a, byte width) => Api.ContextTrunc(this, a, width);
         public unsafe AstIdx ICmp(Predicate pred, AstIdx a, AstIdx b) => Api.ContextICmp(this, pred, a, b);
         public unsafe AstIdx Select(AstIdx a, AstIdx b, AstIdx c) => Api.ContextSelect(this, a, b, c);
-        public unsafe AstIdx Extract(AstIdx a, byte high, byte low) => Api.ContextConcat(this, high, low);
+        public unsafe AstIdx Extract(AstIdx a, byte high, byte low) => Api.ContextExtract(this, a, high, low);
         public unsafe AstIdx Concat(AstIdx a, AstIdx b) => Api.ContextConcat(this, a, b);
         public unsafe AstIdx Carry(AstIdx a, AstIdx b, AstIdx c) => Api.ContextCarry(this, a, b, c);
         public unsafe AstIdx Constant(ulong c, byte width) => Api.ContextConstant(this, c, width);

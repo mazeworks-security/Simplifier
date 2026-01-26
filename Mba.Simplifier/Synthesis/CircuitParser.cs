@@ -51,8 +51,8 @@ namespace Mba.Simplifier.Synthesis
 
                 //output = ctx.GetOp0(output);
 
-                var shiftBy = (ulong)Math.Pow(2, i);
-                output = ctx.Mul(ctx.Constant(shiftBy, w), output);
+                //var shiftBy = (ulong)Math.Pow(2, i);
+                //output = ctx.Mul(ctx.Constant(shiftBy, w), output);
                 terms.Add(output);
 
                 Console.WriteLine(ctx.GetAstString(output));
