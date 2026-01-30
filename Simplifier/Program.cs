@@ -16,7 +16,7 @@ using System.Diagnostics;
 
 bool printUsage = false;
 bool onlyLinear = true;
-uint bitWidth = 32;
+uint bitWidth = 1;
 bool useEqsat = false;
 bool proveEquivalence = true;
 string inputText = "a ? b : c ";
@@ -230,6 +230,12 @@ inputText = "(((((((((a ^ b) + 0x7ED55D16 + ((a ^ b) << 0xC)) ^ 0xC761C23C)^ (((
 
 inputText = "((4251993797:i32+(((3925396509:i32+((((2127912214:i32+((a:i32^b:i32)*4097:i32))^3345072700:i32)^((2127912214:i32+((a:i32^b:i32)*4097:i32))>>19:i32))*33:i32))^(2899272192:i32+((((2127912214:i32+((a:i32^b:i32)*4097:i32))^3345072700:i32)^((2127912214:i32+((a:i32^b:i32)*4097:i32))>>19:i32))*16896:i32)))*9:i32))^(3042594569:i32^((3951179304:i32+(((3925396509:i32+((((2127912214:i32+((a:i32^b:i32)*4097:i32))^3345072700:i32)^((2127912214:i32+((a:i32^b:i32)*4097:i32))>>19:i32))*33:i32))^(2899272192:i32+((((2127912214:i32+((a:i32^b:i32)*4097:i32))^3345072700:i32)^((2127912214:i32+((a:i32^b:i32)*4097:i32))>>19:i32))*16896:i32)))*16:i32))>>16:i32)))";
 
+inputText = "(a&~b)|(~a&b)";
+
+inputText = "a^b";
+
+
+inputText = "a|b";
 
 
 //inputText = "(subst0^((subst0&subst1)^subst2))";
@@ -330,6 +336,12 @@ Console.WriteLine(ctx.GetClass(id));
 var barrr = LinearSimplifier.Run(ctx.GetWidth(id), ctx, id, false, true);
 Console.WriteLine(ctx.GetAstString(barrr));
 
+
+bool brahma = true;
+if(brahma)
+{
+    new BrahmaSynthesis(ctx, id).Run();
+}
 
 //new DagRuleSynthesis(ctx).Run(id);
 //Debugger.Break();

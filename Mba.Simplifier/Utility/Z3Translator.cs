@@ -15,7 +15,7 @@ namespace Mba.Simplifier.Utility
 
         private readonly Context z3Ctx;
 
-        private readonly Dictionary<AstIdx, Expr> cache = new Dictionary<AstIdx, Expr>();
+        public readonly Dictionary<AstIdx, Expr> cache = new Dictionary<AstIdx, Expr>();
 
         public Z3Translator(AstCtx ctx) : this(ctx, new Context())
         {
