@@ -25,7 +25,7 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 3;
+        private readonly int numInstructions = 5;
 
         private readonly Dictionary<Z3_decl_kind, int> components = new()
         {
