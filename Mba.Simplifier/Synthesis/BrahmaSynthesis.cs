@@ -25,14 +25,14 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 5;
+        private readonly int numInstructions = 10;
 
         private readonly Dictionary<Z3_decl_kind, int> components = new()
         {
             // Constants
             // Not present on booleans
             //{ Z3_decl_kind.Z3_OP_UNINTERPRETED, 2},
-
+            { Z3_decl_kind.Z3_OP_UNINTERPRETED, 2},
             { Z3_decl_kind.Z3_OP_BNOT, 2},
             { Z3_decl_kind.Z3_OP_BAND, 2},
             { Z3_decl_kind.Z3_OP_BOR, 2},
@@ -64,6 +64,26 @@ namespace Mba.Simplifier.Synthesis
             s.Add(forall);
             var check = s.Check();
             Console.WriteLine(check);
+
+            if (check == Status.SATISFIABLE)
+            {
+                var model = s.Model;
+                var from = new List<Expr>();
+                var to = new List<Expr>();
+                foreach (var decl in model.Decls)
+                {
+                    if (decl.Arity == 0)
+                    {
+                        from.Add(solver.MkConst(decl));
+                        to.Add(model.ConstInterp(decl));
+                    }
+                }
+
+                var result = after.Substitute(from.ToArray(), to.ToArray());
+                Console.WriteLine(result.Simplify());
+                Console.WriteLine("");
+            }
+
             Debugger.Break();
 
 
@@ -81,14 +101,20 @@ namespace Mba.Simplifier.Synthesis
                 lines.Add(new VarLine(i, translator.cache[inputs[i]]));
 
             // Each instruction gets assigned its own line.
-            var opcodeBitsize = GetBitsNeeded(components.Count);
+            var opcodeBitsize = GetBitsNeeded(components.Count - 1);
+            //var opcodeBitsize = GetBitsNeeded(32);
             for (int i = lines.Count; i < numInstructions; i++)
             {
                 // Choose the opcode
                 var opcode = solver.MkBVConst($"code{i}", (uint)opcodeBitsize);
 
                 // Choose the operands
-                var operandBitsize = GetBitsNeeded(components.Count);
+                //var operandBitsize = GetBitsNeeded(components.Count);
+                //var operandBitsize = GetBitsNeeded(i);
+                //var operandBitsize = GetBitsNeeded(32);
+                //var operandBitsize = GetBitsNeeded(255);
+                var operandBitsize = GetBitsNeeded(i - 1);
+                //Console.WriteLine($"Got {other} bits needed for operands of line {i} with lz {BitOperations.LeadingZeroCount((ulong)i)}");
                 var op0 = solver.MkBVConst($"{i}_op0", (uint)operandBitsize);
                 var op1 = solver.MkBVConst($"{i}_op1", (uint)operandBitsize);
 
@@ -97,15 +123,28 @@ namespace Mba.Simplifier.Synthesis
             return lines;
         }
 
+        public static int BvWidth(uint maxValue)
+        {
+ 
+            if (maxValue == 0) 
+                return 1;
+
+            return BitOperations.Log2(maxValue) + 1;
+        }
+
         private int GetBitsNeeded(int maxValue)
         {
-            return 63 - BitOperations.LeadingZeroCount((ulong)maxValue);
+            return BvWidth((uint)maxValue);
+            //return 8;
+            var bar = 63 - BitOperations.LeadingZeroCount((ulong)maxValue);
+            //Console.WriteLine($"{bar} bits needed for value {maxValue}");
+            return bar;
         }
 
         private Expr GetExpression(IReadOnlyList<Line> lines)
         {
             var exprs = new List<Expr>();
-            for(int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+            for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
             {
                 var line = lines[lineIndex];
                 if (line is VarLine varLine)
@@ -121,10 +160,11 @@ namespace Mba.Simplifier.Synthesis
 
                 // Compute expressions for each opcode
                 var candidates = new List<Expr>(exprs.Count);
-                foreach(var opc in components.Keys.OrderBy(x => x))
+                foreach (var opc in components.Keys.OrderBy(x => x))
                 {
                     var expr = opc switch
                     {
+                        Z3_decl_kind.Z3_OP_UNINTERPRETED => solver.MkBV(0, 1),
                         Z3_decl_kind.Z3_OP_BNOT => solver.MkBVNot(op0),
                         Z3_decl_kind.Z3_OP_BAND => solver.MkBVAND(op0, op1),
                         Z3_decl_kind.Z3_OP_BOR => solver.MkBVOR(op0, op1),
@@ -177,7 +217,7 @@ namespace Mba.Simplifier.Synthesis
             {
                 op0 = solver.MkZeroExt(w1 - w0, (BitVecExpr)op0);
             }
-                
+
             return solver.MkITE(icmp, op0, op1);
         }
     }
