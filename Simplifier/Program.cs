@@ -14,10 +14,10 @@ using System.ComponentModel;
 using System.Diagnostics;
 
 bool printUsage = false;
-bool onlyLinear = false;
-uint bitWidth = 64;
+bool onlyLinear = true;
+uint bitWidth = 32;
 bool useEqsat = false;
-bool proveEquivalence = false;
+bool proveEquivalence = true;
 string inputText = null;
 
 
@@ -39,14 +39,21 @@ inputText = " -x**63 + 64*x**62 - 2016*x**61 + 41664*x**60 - 635376*x**59 + 7624
 
 inputText = "x**10";
 
+inputText = "i + ((0x6C078965 * (x ^ (0x147363F3 - (x >> 30)) ^ 0x147363F3)) ^ 0x3B3F9FDF) + ((0xD80F12CA * (x ^ (0x147363F3 - (x >> 30)) ^ 0x147363F3)) & 0x767F3FBE) - 0x3B3F9FDE";
+
+inputText = "((0x6C078965 * v0) ^ 0x3B3F9FDF) + ((0xD80F12CA * v0) & 0x767F3FBE) - 0x3B3F9FDE";
+
+inputText = "((3300941858+(994025439^((1812433253*v0))))+(1988050878&((3624866506*v0))))";
+
+inputText = "(((994025439^((1812433253*v0))))+(1988050878&((3624866506*v0))))";
 
 //PolyInverter.Hello();
 
 //inputText = " (64:i8+((((224:i8*x:i8)+(64:i8*(x:i8**2:i8)))+(212:i8*(x:i8**5:i8)))+(205:i8*(x:i8**7:i8))))";
 
- //NewtonInterpolation.MvNewtonBivariate();
+//NewtonInterpolation.MvNewtonBivariate();
 
-NewtonInterpolation.Test();
+//NewtonInterpolation.Test();
 
 var printHelp = () =>
 {

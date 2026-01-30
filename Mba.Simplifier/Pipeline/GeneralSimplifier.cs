@@ -812,6 +812,11 @@ namespace Mba.Simplifier.Pipeline
             if(substitutionMapping.Count == 0)
                 return null;
 
+            // TODO: Delete this
+            // i + ((0x6C078965 * (x ^ (0x147363F3 - (x >> 30)) ^ 0x147363F3)) ^ 0x3B3F9FDF) + ((0xD80F12CA * (x ^ (0x147363F3 - (x >> 30)) ^ 0x147363F3)) & 0x767F3FBE) - 0x3B3F9FDE
+            // right shifts, integer comparisons, etc need to be banned
+            //return null;
+
             // Compute demanded bits for each variable
             // TODO: Keep track of which bits are demanded by the parent(withSubstitutions)
             Dictionary<AstIdx, ulong> varToDemandedBits = new();
