@@ -50,12 +50,13 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 14;
+        private readonly int numInstructions = 6;
 
 
         private bool usesTruthOperator = false;
         private const int TRUTHVARS = 2;
         private const uint TRUTHSIZE = 1u << TRUTHVARS;
+
 
         /*
         private readonly Dictionary<SynthOpc, int> components = new()
@@ -91,7 +92,11 @@ namespace Mba.Simplifier.Synthesis
             new(SynthOpc.Not),
             new(SynthOpc.And),
             new(SynthOpc.Or),
-            //new(SynthOpc.Xor),
+            //new(SynthOpc.TruthTable)
+
+            new(SynthOpc.Xor),
+
+            new(SynthOpc.Add),
         };
 
         public BrahmaSynthesis(AstCtx ctx, AstIdx idx)
@@ -225,7 +230,7 @@ namespace Mba.Simplifier.Synthesis
                 }
 
                 Expr select = null;
-                bool select3 = false;
+                bool select3 = true;
                 if (select3 && candidates.Count == 3)
                     select = Select3(exprLine.Opcode, candidates);
                 else
@@ -380,6 +385,42 @@ namespace Mba.Simplifier.Synthesis
 
                         constraints.Add(solver.MkImplies(isIdempotent, zeroOp));
                     }
+                }
+
+                bool pruneCommonSubexp = false;
+                if (pruneCommonSubexp)
+                {
+                    for(int j = i + 1; j < lines.Count; j++)
+                    {
+                        var l0 = lines[i] as ExprLine;
+                        var l1 = lines[j] as ExprLine;
+                        var lw0 = l1.Op0.SortSize - l0.Op0.SortSize;
+                        if (lw0 > 0)
+                        {
+                            var ext0 = solver.MkZeroExt(lw0, l0.Op0);
+                            var ext1 = solver.MkZeroExt(lw0, l0.Op1);
+                            l0 = new ExprLine(l0.Opcode, ext0, ext1, l0.TruthTable);
+                        }
+
+
+
+                        var sameOpcode = solver.MkEq(l0.Opcode, l1.Opcode);
+
+       
+                        var sameOp0 = solver.MkEq(l0.Op0, l1.Op0);
+                        var sameOp1 = solver.MkEq(l0.Op1, l1.Op1);
+
+                        var sameOperands = solver.MkAnd(sameOp0, sameOp1);
+                        
+                        // TODO: Commutative matching
+                        // (a+b) == (b+a)
+
+                        var identical = solver.MkAnd(sameOpcode, sameOperands);
+                        constraints.Add(solver.MkNot(identical));
+                    }
+
+
+
                 }
 
                 /*

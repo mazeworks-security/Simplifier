@@ -16,7 +16,7 @@ using System.Diagnostics;
 
 bool printUsage = false;
 bool onlyLinear = true;
-uint bitWidth = 1;
+uint bitWidth = 8;
 bool useEqsat = false;
 bool proveEquivalence = true;
 string inputText = "a ? b : c ";
@@ -281,6 +281,14 @@ inputText = "~(a|b|c|d|e|f|g)";
 inputText = "~(a|b|c|d|e|f|g)";
 
 inputText = "~(a&b|c|d|e|f|g)";
+inputText = "~(a|b|c|d|e|f|g)";
+
+// 14 operators, 6000ms synthesis time with operators AND,OR,NOT
+inputText = "~(a|b|c|d|e|f|g)";
+
+inputText = "(((x|a)+y)^y)";
+
+//inputText = "~(a|b|c)";
 
 //inputText = "~(a|b|c)";
 
