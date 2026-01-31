@@ -25,18 +25,18 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 10;
+        private readonly int numInstructions = 30;
 
         private readonly Dictionary<Z3_decl_kind, int> components = new()
         {
             // Constants
             // Not present on booleans
-            //{ Z3_decl_kind.Z3_OP_UNINTERPRETED, 2},
-            { Z3_decl_kind.Z3_OP_UNINTERPRETED, 2},
+            // { Z3_decl_kind.Z3_OP_UNINTERPRETED, 2},
             { Z3_decl_kind.Z3_OP_BNOT, 2},
             { Z3_decl_kind.Z3_OP_BAND, 2},
             { Z3_decl_kind.Z3_OP_BOR, 2},
             { Z3_decl_kind.Z3_OP_BXOR, 2},
+
         };
 
         public BrahmaSynthesis(AstCtx ctx, AstIdx idx)
@@ -47,6 +47,11 @@ namespace Mba.Simplifier.Synthesis
             translator = new Z3Translator(ctx, solver);
         }
 
+        // Ideas:
+        //      - Tree synthesis
+        //      - Heuristic for finding good quality counterexamples. Small functions or partial inputs cover large parts of the truth table. 
+        //      -   Feasible for boolean circuits. Needs to be generalized for word level expressions. 
+        //  
         public void Run()
         {
             var before = translator.Translate(idx);
@@ -58,7 +63,10 @@ namespace Mba.Simplifier.Synthesis
             after = after.Simplify();
 
             var symbols = lines.Where(x => x is VarLine).Select(x => (x as VarLine).Symbol).ToArray();
-            var forall = solver.MkForall(symbols, solver.MkEq(before, after));
+
+
+            //var forall = GetEquivalenceConstraint(symbols, before, after);
+            var forall = GetBooleanEquivalenceConstraint(before, after, symbols);
 
             var s = solver.MkSolver();
             s.Add(forall);
@@ -89,6 +97,36 @@ namespace Mba.Simplifier.Synthesis
 
         }
 
+        private BoolExpr GetEquivalenceConstraint(Expr[] symbols, Expr before, Expr after)
+        {
+            var forall = solver.MkForall(symbols, solver.MkEq(before, after));
+            return forall;
+        }
+
+        private BoolExpr GetBooleanEquivalenceConstraint(Expr before, Expr after, Expr[] symbols)
+        {
+            var constraints = new List<BoolExpr>();
+            long combinationCount = 1L << symbols.Length;
+
+            for (long i = 0; i < combinationCount; i++)
+            {
+                var values = new Expr[symbols.Length];
+                for (int j = 0; j < symbols.Length; j++)
+                {
+                    bool isSet = ((i >> j) & 1) == 1;
+                    var sort = ((BitVecExpr)symbols[j]).SortSize;
+                    values[j] = isSet ? solver.MkBV(1, sort) : solver.MkBV(0, sort);
+                }
+
+                var subBefore = before.Substitute(symbols, values);
+                var subAfter = after.Substitute(symbols, values);
+
+                constraints.Add(solver.MkEq(subBefore, subAfter));
+            }
+
+            return solver.MkAnd(constraints.ToArray());
+        }
+
         private IReadOnlyList<Line> GetLines()
         {
             // For each instruction, we need a variable representing the opcode, and a variable representing the operands.
@@ -101,7 +139,7 @@ namespace Mba.Simplifier.Synthesis
                 lines.Add(new VarLine(i, translator.cache[inputs[i]]));
 
             // Each instruction gets assigned its own line.
-            var opcodeBitsize = GetBitsNeeded(components.Count - 1);
+            var opcodeBitsize = BvWidth(components.Count - 1);
             //var opcodeBitsize = GetBitsNeeded(32);
             for (int i = lines.Count; i < numInstructions; i++)
             {
@@ -109,11 +147,7 @@ namespace Mba.Simplifier.Synthesis
                 var opcode = solver.MkBVConst($"code{i}", (uint)opcodeBitsize);
 
                 // Choose the operands
-                //var operandBitsize = GetBitsNeeded(components.Count);
-                //var operandBitsize = GetBitsNeeded(i);
-                //var operandBitsize = GetBitsNeeded(32);
-                //var operandBitsize = GetBitsNeeded(255);
-                var operandBitsize = GetBitsNeeded(i - 1);
+                var operandBitsize = BvWidth(i - 1);
                 //Console.WriteLine($"Got {other} bits needed for operands of line {i} with lz {BitOperations.LeadingZeroCount((ulong)i)}");
                 var op0 = solver.MkBVConst($"{i}_op0", (uint)operandBitsize);
                 var op1 = solver.MkBVConst($"{i}_op1", (uint)operandBitsize);
@@ -123,22 +157,12 @@ namespace Mba.Simplifier.Synthesis
             return lines;
         }
 
-        public static int BvWidth(uint maxValue)
+        public static int BvWidth(int maxValue)
         {
- 
-            if (maxValue == 0) 
+            if (maxValue == 0)
                 return 1;
 
-            return BitOperations.Log2(maxValue) + 1;
-        }
-
-        private int GetBitsNeeded(int maxValue)
-        {
-            return BvWidth((uint)maxValue);
-            //return 8;
-            var bar = 63 - BitOperations.LeadingZeroCount((ulong)maxValue);
-            //Console.WriteLine($"{bar} bits needed for value {maxValue}");
-            return bar;
+            return BitOperations.Log2((uint)maxValue) + 1;
         }
 
         private Expr GetExpression(IReadOnlyList<Line> lines)
