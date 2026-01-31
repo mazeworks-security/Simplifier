@@ -6,6 +6,7 @@ using Mba.Utility;
 using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
@@ -19,9 +20,7 @@ namespace Mba.Simplifier.Synthesis
 
     public enum SynthOpc
     {
-        // Leafs
         Constant,
-
         // Boolean
         Not,
         And,
@@ -38,7 +37,7 @@ namespace Mba.Simplifier.Synthesis
 
     public abstract record Line();
     public record VarLine(int Index, Expr Symbol) : Line();
-    public record ExprLine(BitVecExpr Opcode, BitVecExpr Op0, BitVecExpr Op1, Expr TruthTable) : Line();
+    public record ExprLine(BitVecExpr Opcode, BitVecExpr Op0, BitVecExpr Op1, Expr TruthTable, Expr ConstantData) : Line();
 
     public class BrahmaSynthesis
     {
@@ -50,12 +49,14 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 14;
+        private readonly int numInstructions = 5;
 
 
         private bool usesTruthOperator = false;
         private const int TRUTHVARS = 2;
         private const uint TRUTHSIZE = 1u << TRUTHVARS;
+
+        private int maxConstants = 1;
 
 
         /*
@@ -87,16 +88,16 @@ namespace Mba.Simplifier.Synthesis
 
         List<Component> components = new List<Component>()
         {
-            //new(SynthOpc.Constant),
+            new(SynthOpc.Constant),
 
             new(SynthOpc.Not),
             new(SynthOpc.And),
             new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
-            new(SynthOpc.Xor),
+            //new(SynthOpc.Xor),
 
-            new(SynthOpc.Add),
+            //new(SynthOpc.Add),
         };
 
         public BrahmaSynthesis(AstCtx ctx, AstIdx idx)
@@ -178,6 +179,8 @@ namespace Mba.Simplifier.Synthesis
             // Each instruction gets assigned its own line.
             var opcodeBitsize = BvWidth(components.Count - 1);
             //var opcodeBitsize = GetBitsNeeded(32);
+
+            int allocatedConstants = 0;
             for (int i = lines.Count; i < numInstructions; i++)
             {
                 // Choose the opcode
@@ -193,8 +196,15 @@ namespace Mba.Simplifier.Synthesis
                 if (usesTruthOperator)
                     truthTable = solver.MkBVConst($"{i}_tt", TRUTHSIZE);
 
+                BitVecExpr constant = solver.MkBV(0, ctx.GetWidth(idx));
+                if (allocatedConstants < maxConstants)
+                {
+                    constant = solver.MkBVConst($"{i}_const", ctx.GetWidth(idx));
+                    allocatedConstants++;
+                }
 
-                lines.Add(new ExprLine(opcode, op0, op1, truthTable));
+
+                lines.Add(new ExprLine(opcode, op0, op1, truthTable, constant));
             }
             return lines;
         }
@@ -230,24 +240,24 @@ namespace Mba.Simplifier.Synthesis
                 {
                     var expr = opc.Opcode switch
                     {
-                        SynthOpc.Constant => solver.MkBV(0, ctx.GetWidth(idx)),
                         SynthOpc.Not => solver.MkBVNot(op0),
                         SynthOpc.And => solver.MkBVAND(op0, op1),
                         SynthOpc.Or => solver.MkBVOR(op0, op1),
                         SynthOpc.Xor => solver.MkBVXOR(op0, op1),
                         SynthOpc.Add => solver.MkBVAdd(op0, op1),
                         SynthOpc.TruthTable => TruthTableToExpr((BitVecExpr)exprLine.TruthTable, op0, op1),
+                        SynthOpc.Constant => exprLine.ConstantData,
                         _ => throw new InvalidOperationException()
                     };
                     candidates.Add(expr);
                 }
 
                 Expr select = null;
-                bool select3 = true;
+                bool select3 = false;
                 if (select3 && candidates.Count == 3)
                     select = Select3(exprLine.Opcode, candidates);
                 else
-                    select = ConditionalSelect((BitVecExpr)exprLine.Opcode, candidates, 0);
+                    select = LinearSelect((BitVecExpr)exprLine.Opcode, candidates);
 
                 var selectS = select.Simplify();
 
@@ -279,7 +289,7 @@ namespace Mba.Simplifier.Synthesis
 
         private Expr SelectOperand(Expr selector, List<Expr> exprs)
         {
-            return ConditionalSelect((BitVecExpr)selector, exprs, 0);
+            return LinearSelect((BitVecExpr)selector, exprs);
         }
 
         private Expr Select3(BitVecExpr index, List<Expr> elements)
@@ -294,35 +304,55 @@ namespace Mba.Simplifier.Synthesis
         }
 
         // Given a symbolic index and a list of N values, pick the ith value
-        private Expr ConditionalSelect(BitVecExpr inputNode, List<Expr> phiValues, int index)
+        private Expr LinearSelect(BitVecExpr index, List<Expr> options)
         {
-            if (phiValues.Count == 0)
-                return phiValues[0];
+            int n = options.Count;
+            if (n == 0)
+                throw new InvalidOperationException();
+            if (n == 1)
+                return options[0];
 
-            Expr op0 = null;
-            Expr op1 = null;
+            var casted = options.Select(x => (BitVecExpr)x).ToList();
 
-            var icmp = solver.MkEq(inputNode, solver.MkBV(index, inputNode.SortSize));
-            if (index + 1 == phiValues.Count)
+            if (n > 12)
+                return PrunedSelect(index, casted);
+
+
+            BitVecExpr result = (BitVecExpr)options[n - 1];
+
+            for (int i = n - 2; i >= 0; i--)
             {
-                (op0, op1) = (phiValues[index], phiValues[index]);
+                BoolExpr condition = solver.MkEq(index, solver.MkBV(i, index.SortSize));
+                result = (BitVecExpr)solver.MkITE(condition, (Expr)options[i], result);
             }
-
-            else
-            {
-                var otherIte = ConditionalSelect(inputNode, phiValues, index + 1);
-                (op0, op1) = (phiValues[index], otherIte);
-            }
-
-            var w0 = (op0 as BitVecExpr).SortSize;
-            var w1 = (op1 as BitVecExpr).SortSize;
-            if (w0 < w1)
-            {
-                op0 = solver.MkZeroExt(w1 - w0, (BitVecExpr)op0);
-            }
-
-            return solver.MkITE(icmp, op0, op1);
+          
+            return result;
         }
+
+        public BitVecExpr PrunedSelect(BitVecExpr index, List<BitVecExpr> options)
+        {
+            return BuildPrunedTree(solver, index, options, 0, options.Count);
+        }
+
+        private static BitVecExpr BuildPrunedTree(Context ctx, BitVecExpr index, List<BitVecExpr> options, int offset, int count)
+        {
+            if (count == 1) return options[offset];
+
+            int requiredBits = (int)Math.Ceiling(Math.Log2(count));
+            int msbIndex = requiredBits - 1;
+            int splitSize = 1 << msbIndex;
+            int rightCount = count - splitSize;
+
+            BitVecExpr condBit = ctx.MkExtract((uint)msbIndex, (uint)msbIndex, index);
+            BoolExpr condition = ctx.MkEq(condBit, ctx.MkBV(1, 1));
+
+            // Visit next branch of the tree
+            BitVecExpr lowResult = BuildPrunedTree(ctx, index, options, offset, splitSize);
+            BitVecExpr highResult = BuildPrunedTree(ctx, index, options, offset + splitSize, rightCount);
+
+            return (BitVecExpr)ctx.MkITE(condition, highResult, lowResult);
+        }
+
 
         private bool HasComponent(SynthOpc opc)
             => components.Any(x => x.Opcode == opc);
@@ -333,6 +363,8 @@ namespace Mba.Simplifier.Synthesis
   
         private BoolExpr GetProgramConstraints(IReadOnlyList<Line> lines)
         {
+            int allocatedConstants = 0;
+
             var constraints = new List<BoolExpr>();
             for (int i = 0; i < lines.Count; i++)
             {
@@ -417,7 +449,7 @@ namespace Mba.Simplifier.Synthesis
                         {
                             var ext0 = solver.MkZeroExt(lw0, l0.Op0);
                             var ext1 = solver.MkZeroExt(lw0, l0.Op1);
-                            l0 = new ExprLine(l0.Opcode, ext0, ext1, l0.TruthTable);
+                            l0 = new ExprLine(l0.Opcode, ext0, ext1, l0.TruthTable, l0.ConstantData);
                         }
 
 
@@ -439,7 +471,7 @@ namespace Mba.Simplifier.Synthesis
                 }
 
                 // Assert that every instructions is used at least once
-                bool useAllSteps = true;
+                bool useAllSteps = false;
                 if(useAllSteps && i != lines.Count - 1)
                 {
                     var usageConditions = new List<BoolExpr>();
@@ -456,6 +488,18 @@ namespace Mba.Simplifier.Synthesis
                     }
 
                     constraints.Add(solver.MkOr(usageConditions));
+                }
+
+                if(allocatedConstants < maxConstants)
+                {
+                    allocatedConstants++;
+                }
+
+                else
+                {
+                    var constComponent = GetComponent(SynthOpc.Constant);
+                    var notConstant = solver.MkNot(solver.MkEq(line.Opcode, solver.MkBV(constComponent.Data.Index, line.Opcode.SortSize)));
+                    constraints.Add(notConstant);
                 }
 
                 /*
@@ -477,6 +521,7 @@ namespace Mba.Simplifier.Synthesis
 
         private void CEGIS(Solver s, Expr[] symbols, Expr before, Expr after, IReadOnlyList<Line> lines)
         {
+            Console.WriteLine("Beginning cegis");
             var sw = Stopwatch.StartNew();
 
             // Optionally force the last opcode to be something
@@ -527,6 +572,20 @@ namespace Mba.Simplifier.Synthesis
 
                 }
 
+
+                bool export = false;
+                if (export)
+                {
+
+                    Console.WriteLine("Exporting");
+                    ExportSmtToFile(solver, s, @"C:\Users\colton\Downloads\Bitwuzla\your_problem.smt2");
+
+                    Console.WriteLine("Exported");
+                    Console.ReadLine();
+                    //Debugger.Break();
+                }
+
+
                 var check = s.Check();
                 if (check == Status.UNSATISFIABLE)
                 {
@@ -561,8 +620,27 @@ namespace Mba.Simplifier.Synthesis
                         Console.WriteLine($"{decl.Name} = {model.ConstInterp(decl)}");
                 }
 
+                Console.WriteLine("done");
+                Console.ReadLine();
                 Debugger.Break();
             }
+        }
+
+        public static void ExportSmtToFile(Context ctx, Solver solver, string filePath)
+        {
+            // Ensure the solver is in a state that reflects all constraints
+            // (Z3 Solver.ToString() produces SMT-LIB v2 formatted output)
+            string smtString = solver.ToString();
+
+            // Standard SMT files should end with (check-sat) and (get-model) 
+            // if you want the external solver to perform those actions.
+            if (!smtString.Contains("(check-sat)"))
+            {
+                smtString += "\n(check-sat)\n(get-model)\n";
+            }
+
+            System.IO.File.WriteAllText(filePath, smtString);
+            Console.WriteLine($"SMT problem exported to: {filePath}");
         }
 
         private BoolExpr GetEquivalenceConstraint(Expr[] symbols, Expr before, Expr after)
