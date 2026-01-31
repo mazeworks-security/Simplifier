@@ -14,7 +14,10 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.Synthesis
 {
-    enum SynthOpc
+    public record Component(SynthOpc Opcode, CompontentData Data = null);
+    public record CompontentData(int Index);
+
+    public enum SynthOpc
     {
         // Leafs
         Constant,
@@ -54,18 +57,19 @@ namespace Mba.Simplifier.Synthesis
         private const int TRUTHVARS = 2;
         private const uint TRUTHSIZE = 1u << TRUTHVARS;
 
+        /*
         private readonly Dictionary<SynthOpc, int> components = new()
         {
             // Constants
             // Not present on booleans
             { SynthOpc.Constant, 2},
 
-            /*
-            { SynthOpc.Not, 2},
-            { SynthOpc.And, 2},
-            { SynthOpc.Or, 2},
-            { SynthOpc.Xor, 2},
-            */
+            
+            //{ SynthOpc.Not, 2},
+            //{ SynthOpc.And, 2},
+            //{ SynthOpc.Or, 2},
+            //{ SynthOpc.Xor, 2},
+            
 
         
             
@@ -77,7 +81,15 @@ namespace Mba.Simplifier.Synthesis
             
 
             //{ SynthOpc.TruthTable, 2}
+        };
+        */
 
+        List<Component> components = new List<Component>()
+        {
+            new(SynthOpc.Constant),
+
+            new(SynthOpc.Not),
+            new(SynthOpc.Or),
         };
 
         public BrahmaSynthesis(AstCtx ctx, AstIdx idx)
@@ -87,7 +99,16 @@ namespace Mba.Simplifier.Synthesis
                 { "html_mode", "false"}
             };
 
-            usesTruthOperator = components.ContainsKey(SynthOpc.TruthTable);
+            components = components.OrderBy(x => x.Opcode).ToList();
+            for(int i = 0; i < components.Count; i++)
+            {
+                components[i] = new(components[i].Opcode, new(i));
+            }
+
+            usesTruthOperator = components.Any(x => x.Opcode == SynthOpc.TruthTable);
+
+            
+
 
             this.ctx = ctx;
             this.idx = idx;
@@ -118,8 +139,8 @@ namespace Mba.Simplifier.Synthesis
 
             var s = solver.MkSolver();
             var constraints = GetProgramConstraints(lines);
-            //s.Add(constraints);
-     
+            s.Add(constraints);
+
 
             CEGIS(s, symbols, before, after, lines);
 
@@ -188,9 +209,9 @@ namespace Mba.Simplifier.Synthesis
 
                 // Compute expressions for each opcode
                 var candidates = new List<Expr>(exprs.Count);
-                foreach (var opc in components.Keys.OrderBy(x => x))
+                foreach (var opc in components)
                 {
-                    var expr = opc switch
+                    var expr = opc.Opcode switch
                     {
                         SynthOpc.Constant => solver.MkBV(0, ctx.GetWidth(idx)),
                         SynthOpc.Not => solver.MkBVNot(op0),
@@ -204,7 +225,7 @@ namespace Mba.Simplifier.Synthesis
                     candidates.Add(expr);
                 }
 
-                
+
                 var select = ConditionalSelect((BitVecExpr)exprLine.Opcode, candidates, 0);
 
                 var selectS = select.Simplify();
@@ -271,10 +292,13 @@ namespace Mba.Simplifier.Synthesis
             return solver.MkITE(icmp, op0, op1);
         }
 
+        private Component GetComponent(SynthOpc opc)
+            => components.Single(x => x.Opcode == opc);
+
         private BoolExpr GetProgramConstraints(IReadOnlyList<Line> lines)
         {
             var constraints = new List<BoolExpr>();
-            for(int i = 0; i < lines.Count; i++)
+            for (int i = 0; i < lines.Count; i++)
             {
                 if (lines[i] is VarLine)
                     continue;
@@ -296,6 +320,13 @@ namespace Mba.Simplifier.Synthesis
                 var lineNumber = solver.MkBV((uint)i, (uint)w0);
                 constraints.Add(solver.MkBVULT(op0, lineNumber));
                 constraints.Add(solver.MkBVULT(op1, lineNumber));
+
+
+                var isUnary = solver.MkEq(line.Opcode, solver.MkBV(GetComponent(SynthOpc.Not).Data.Index, line.Opcode.SortSize));
+
+                var zeroOp = solver.MkEq(op1, solver.MkBV(0, op1.SortSize));
+
+                constraints.Add(solver.MkImplies(isUnary, zeroOp));
 
                 /*
 
@@ -325,8 +356,8 @@ namespace Mba.Simplifier.Synthesis
                 var last = lines.Last() as ExprLine;
                 var lastopc = (BitVecExpr)last.Opcode;
 
-                var tgt = solver.MkBV(components.Keys.OrderBy(x => x).ToList().IndexOf(SynthOpc.And), lastopc.SortSize);
-                s.Add(solver.MkEq(lastopc, tgt));
+               // var tgt = solver.MkBV(components.OrderBy(x => x).ToList().IndexOf(SynthOpc.And), lastopc.SortSize);
+               // s.Add(solver.MkEq(lastopc, tgt));
             }
 
             var rng = new SeededRandom();
