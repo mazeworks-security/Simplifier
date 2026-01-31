@@ -86,10 +86,10 @@ namespace Mba.Simplifier.Synthesis
 
         List<Component> components = new List<Component>()
         {
-            new(SynthOpc.Constant),
+            //new(SynthOpc.Constant),
 
             new(SynthOpc.Not),
-            //new(SynthOpc.And),
+            new(SynthOpc.And),
             new(SynthOpc.Or),
             //new(SynthOpc.Xor),
         };
@@ -294,6 +294,9 @@ namespace Mba.Simplifier.Synthesis
             return solver.MkITE(icmp, op0, op1);
         }
 
+        private bool HasComponent(SynthOpc opc)
+            => components.Any(x => x.Opcode == opc);
+
         private Component GetComponent(SynthOpc opc)
             => components.SingleOrDefault(x => x.Opcode == opc);
 
@@ -325,9 +328,10 @@ namespace Mba.Simplifier.Synthesis
                 constraints.Add(solver.MkBVULT(op1, lineNumber));
 
                 // Enforce that unary operations do not care about their child
-                var notComponent = GetComponent(SynthOpc.Not);
-                if (notComponent != null)
+
+                if (HasComponent(SynthOpc.Not))
                 {
+                    var notComponent = GetComponent(SynthOpc.Not);
                     var isUnary = solver.MkEq(line.Opcode, solver.MkBV(notComponent.Data.Index, line.Opcode.SortSize));
 
                     var zeroOp = solver.MkEq(op1, solver.MkBV(0, op1.SortSize));
@@ -348,6 +352,20 @@ namespace Mba.Simplifier.Synthesis
 
                         constraints.Add(solver.MkImplies(isAssociative, sorted));
 
+                    }
+                }
+
+                bool pruneIdempotentOps = true;
+                if (pruneIdempotentOps)
+                {
+                    var idempotentOps = components.Where(x => x.Opcode.IsIdempotent());
+                    foreach(var component in idempotentOps)
+                    {
+                        var isIdempotent = solver.MkEq(line.Opcode, solver.MkBV(component.Data.Index, line.Opcode.SortSize));
+
+                        var zeroOp = solver.MkNot(solver.MkEq(line.Op0, line.Op1));
+
+                        constraints.Add(solver.MkImplies(isIdempotent, zeroOp));
                     }
                 }
 

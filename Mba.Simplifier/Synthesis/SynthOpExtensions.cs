@@ -16,5 +16,15 @@ namespace Mba.Simplifier.Synthesis
                 _ => false,
             };
         }
+
+
+        public static bool IsIdempotent(this SynthOpc opc)
+        {
+            return opc switch
+            {
+                SynthOpc.And or SynthOpc.Xor or SynthOpc.Xor => true,
+                _ => false,
+            };
+        }
     }
 }
