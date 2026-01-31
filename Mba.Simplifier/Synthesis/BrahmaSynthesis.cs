@@ -97,7 +97,7 @@ namespace Mba.Simplifier.Synthesis
 
             //new(SynthOpc.Xor),
 
-            //new(SynthOpc.Add),
+            new(SynthOpc.Add),
         };
 
         public BrahmaSynthesis(AstCtx ctx, AstIdx idx)

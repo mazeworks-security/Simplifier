@@ -16,7 +16,7 @@ using System.Diagnostics;
 
 bool printUsage = false;
 bool onlyLinear = true;
-uint bitWidth = 4;
+uint bitWidth = 32;
 bool useEqsat = false;
 bool proveEquivalence = true;
 string inputText = "a ? b : c ";
@@ -289,6 +289,8 @@ inputText = "~(a|b|c|d|e|f|g)";
 
 
 inputText = "a&(b|1111)";
+
+inputText = "(RSI + RBP) & 0xFFFFFFFF ";
 
 // 6 operators, 2500ms synth time, with operators NOT, AND, OR, XOR, ADD
 //inputText = "(((x|a)+y)^y)";
