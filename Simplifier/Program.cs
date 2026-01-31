@@ -293,6 +293,7 @@ inputText = "(RSI + RBP) & 0xFFFFFFFF ";
 
 inputText = "(((x|11111)+y)^y)";
 
+inputText = "~(a|b|c|d|e|f|g)";
 
 
 // 6 operators, 2500ms synth time, with operators NOT, AND, OR, XOR, ADD

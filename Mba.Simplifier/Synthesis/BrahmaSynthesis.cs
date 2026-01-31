@@ -49,7 +49,7 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 6;
+        private readonly int numInstructions = 14;
 
 
         private bool usesTruthOperator = false;
@@ -88,16 +88,16 @@ namespace Mba.Simplifier.Synthesis
 
         List<Component> components = new List<Component>()
         {
-            new(SynthOpc.Constant),
+            //new(SynthOpc.Constant),
 
             new(SynthOpc.Not),
             new(SynthOpc.And),
             new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
-            new(SynthOpc.Xor),
+            //new(SynthOpc.Xor),
 
-            new(SynthOpc.Add),
+           // new(SynthOpc.Add),
         };
 
         public BrahmaSynthesis(AstCtx ctx, AstIdx idx)
@@ -530,9 +530,12 @@ namespace Mba.Simplifier.Synthesis
 
                 else
                 {
-                    var constComponent = GetComponent(SynthOpc.Constant);
-                    var notConstant = solver.MkNot(solver.MkEq(line.Opcode, solver.MkBV(constComponent.Data.Index, line.Opcode.SortSize)));
-                    constraints.Add(notConstant);
+                    if (HasComponent(SynthOpc.Constant))
+                    {
+                        var constComponent = GetComponent(SynthOpc.Constant);
+                        var notConstant = solver.MkNot(solver.MkEq(line.Opcode, solver.MkBV(constComponent.Data.Index, line.Opcode.SortSize)));
+                        constraints.Add(notConstant);
+                    }
                 }
 
                 /*
@@ -580,41 +583,53 @@ namespace Mba.Simplifier.Synthesis
             var rng = new SeededRandom();
             var constraints = new List<BoolExpr>();
             var points = new HashSet<ResultVectorKey>();
+
+            var getEquivOnPointsConstraint = (BitVecNum[] bvPoints) =>
+            {
+                var subBefore = before.Substitute(symbols, bvPoints).Simplify();
+                var subAfter = solver.MkApp(synthFunc, bvPoints);
+                return solver.MkEq(subBefore, subAfter);
+            };
+
+            bool boolean = false;
+            if (boolean)
+            {
+                s.Add(GetBooleanEquivalenceConstraint(before, after, symbols));
+            }
+
+            else
+            {
+                // Evaluate the expression on 8 random IO points
+                for (var _ = 0; _ < 100; _++)
+                {
+                    var keys = Enumerable.Range(0, symbols.Length)
+                        .Select(x => rng.GetRandUlong())
+                        .ToArray();
+
+                    points.Add(new ResultVectorKey(keys));
+
+                    var bvPoints = keys
+                        .Select(x => solver.MkBV(rng.GetRandUlong(), (before as BitVecExpr).SortSize))
+                        .ToArray();
+
+
+                    //var subBefore = before.Substitute(symbols, bvPoints).Simplify();
+                    //var subAfter = solver.MkApp(synthFunc, bvPoints);
+                    //constraints.Add(solver.MkEq(subBefore, subAfter));
+
+                    var constraint = getEquivOnPointsConstraint(bvPoints);
+                    constraints.Add(constraint);
+
+                }
+
+                var and = solver.MkAnd(constraints.ToArray());
+                s.Add(and);
+
+            }
+
+
             while (true)
             {
-                bool boolean = false;
-                if (boolean)
-                {
-                    s.Add(GetBooleanEquivalenceConstraint(before, after, symbols));
-                }
-
-                else
-                {
-                    // Evaluate the expression on 8 random IO points
-                    for (var _ = 0; _ < 10; _++)
-                    {
-                        var keys = Enumerable.Range(0, symbols.Length)
-                            .Select(x => rng.GetRandUlong())
-                            .ToArray();
-
-                        points.Add(new ResultVectorKey(keys));
-
-                        var bvPoints = keys
-                            .Select(x => solver.MkBV(rng.GetRandUlong(), (before as BitVecExpr).SortSize))
-                            .ToArray();
-
-
-                        var subBefore = before.Substitute(symbols, bvPoints).Simplify();
-                        var subAfter = solver.MkApp(synthFunc, bvPoints);
-                        constraints.Add(solver.MkEq(subBefore, subAfter));
-                    }
-
-                    var and = solver.MkAnd(constraints.ToArray());
-                    s.Add(and);
-
-                }
-
-
                 bool export = false;
                 if (export)
                 {
@@ -622,8 +637,8 @@ namespace Mba.Simplifier.Synthesis
                     Console.WriteLine("Exporting");
                     ExportSmtToFile(solver, s, @"C:\Users\colton\Downloads\Bitwuzla\your_problem.smt2");
 
-                    Console.WriteLine("Exported");
-                    Console.ReadLine();
+                    //Console.WriteLine("Exported");
+                    //Console.ReadLine();
                     //Debugger.Break();
                 }
 
@@ -653,7 +668,8 @@ namespace Mba.Simplifier.Synthesis
                 Console.WriteLine("\n\n" + result.Simplify());
                 Console.WriteLine("");
 
-                var equiv = ProveEquivalence(before, result) == Status.UNSATISFIABLE;
+                var equivSolver = solver.MkSolver();
+                var equiv = ProveEquivalence(equivSolver, before, result) == Status.UNSATISFIABLE;
                 Console.WriteLine($"Equivalent: {equiv}");
 
                 foreach (var decl in model.Decls)
@@ -662,10 +678,23 @@ namespace Mba.Simplifier.Synthesis
                         Console.WriteLine($"{decl.Name} = {model.ConstInterp(decl)}");
                 }
 
-                Console.WriteLine("done");
-                Console.ReadLine();
-                Debugger.Break();
+                if (equiv)
+                {
+
+                    Console.WriteLine("done");
+                    Console.ReadLine();
+                    Debugger.Break();
+                }
+
+                else
+                {
+                    var bvPoints = symbols.Select(x => (BitVecNum)equivSolver.Model.Eval(x)).ToArray();
+                    var constraint = getEquivOnPointsConstraint(bvPoints);
+                    s.Add(constraint);
+                    Console.WriteLine("");
+                }
             }
+            
         }
 
         public static void ExportSmtToFile(Context ctx, Solver solver, string filePath)
@@ -692,9 +721,8 @@ namespace Mba.Simplifier.Synthesis
             return forall;
         }
 
-        private Status ProveEquivalence(Expr a, Expr b)
+        private Status ProveEquivalence(Solver s, Expr a, Expr b)
         {
-            var s = solver.MkSolver();
             s.Add(solver.MkNot(solver.MkEq(a, b)));
             var check = s.Check();
             return check;
