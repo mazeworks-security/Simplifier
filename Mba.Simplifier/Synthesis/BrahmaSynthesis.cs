@@ -151,9 +151,6 @@ namespace Mba.Simplifier.Synthesis
 
         private IReadOnlyList<Line> GetLines()
         {
-            // For each instruction, we need a variable representing the opcode, and a variable representing the operands.
-            var opcodeCount = components.Count + 1;
-
             var lines = new List<Line>();
 
             // Each variable gets assigned its own line
@@ -227,8 +224,12 @@ namespace Mba.Simplifier.Synthesis
                     candidates.Add(expr);
                 }
 
-
-                var select = ConditionalSelect((BitVecExpr)exprLine.Opcode, candidates, 0);
+                Expr select = null;
+                bool select3 = false;
+                if (select3 && candidates.Count == 3)
+                    select = Select3(exprLine.Opcode, candidates);
+                else
+                    select = ConditionalSelect((BitVecExpr)exprLine.Opcode, candidates, 0);
 
                 var selectS = select.Simplify();
 
@@ -261,6 +262,17 @@ namespace Mba.Simplifier.Synthesis
         private Expr SelectOperand(Expr selector, List<Expr> exprs)
         {
             return ConditionalSelect((BitVecExpr)selector, exprs, 0);
+        }
+
+        private Expr Select3(BitVecExpr index, List<Expr> elements)
+        {
+            Debug.Assert(elements.Count == 3);
+
+            var b0 = solver.MkExtract(0, 0, index);
+            var b1 = solver.MkExtract(1, 1, index);
+
+            var lowerHalf = solver.MkITE(solver.MkEq(b0, solver.MkBV(1, 1)), elements[1], elements[0]);
+            return solver.MkITE(solver.MkEq(b1, solver.MkBV(1, 1)), elements[2], lowerHalf);
         }
 
         // Given a symbolic index and a list of N values, pick the ith value
@@ -339,6 +351,7 @@ namespace Mba.Simplifier.Synthesis
                     constraints.Add(solver.MkImplies(isUnary, zeroOp));
                 }
 
+                // NOT has a overlapping constraint, basically asserting that op1 >= op0
                 bool sortAssociativeOps = false;
                 if (sortAssociativeOps)
                 {
