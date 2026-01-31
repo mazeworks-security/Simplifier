@@ -344,8 +344,7 @@ namespace Mba.Simplifier.Synthesis
                 constraints.Add(solver.MkBVULT(op0, lineNumber));
                 constraints.Add(solver.MkBVULT(op1, lineNumber));
 
-                // Enforce that unary operations do not care about their child
-
+                // If the instruction has one operand, set the 2nd operand to zero.
                 if (HasComponent(SynthOpc.Not))
                 {
                     var notComponent = GetComponent(SynthOpc.Not);
@@ -356,6 +355,8 @@ namespace Mba.Simplifier.Synthesis
                     constraints.Add(solver.MkImplies(isUnary, zeroOp));
                 }
 
+                // Sort operands of commutative operators
+                // Rewrite add(b, a) as add(a, b)
                 // NOT has a overlapping constraint, basically asserting that op1 >= op0
                 bool sortAssociativeOps = false;
                 if (sortAssociativeOps)
@@ -373,6 +374,8 @@ namespace Mba.Simplifier.Synthesis
                     }
                 }
 
+                // Idempotency elimination: Do not allow (a&a), (a|a), (a^a)
+                // TODO: ~(~a))
                 bool pruneIdempotentOps = true;
                 if (pruneIdempotentOps)
                 {
@@ -387,6 +390,8 @@ namespace Mba.Simplifier.Synthesis
                     }
                 }
 
+                // CSE (common subexpression elimination)
+                // Assert that no two lines are identical
                 bool pruneCommonSubexp = false;
                 if (pruneCommonSubexp)
                 {
@@ -418,9 +423,26 @@ namespace Mba.Simplifier.Synthesis
                         var identical = solver.MkAnd(sameOpcode, sameOperands);
                         constraints.Add(solver.MkNot(identical));
                     }
+                }
 
+                // Assert that every instructions is used at least once
+                bool useAllSteps = true;
+                if(useAllSteps && i != lines.Count - 1)
+                {
+                    var usageConditions = new List<BoolExpr>();
+                    for(int k = i + 1; k < lines.Count; k++)
+                    {
+                        var k0 = (lines[k] as ExprLine).Op0;
+                        var k1 = (lines[k] as ExprLine).Op1;
+                        var used0 = solver.MkEq(k0, solver.MkBV(i, k0.SortSize));
+                        usageConditions.Add(used0);
 
+                        // We should
+                        var used1 = solver.MkEq(k1, solver.MkBV(i, k1.SortSize));
+                        usageConditions.Add(used1);
+                    }
 
+                    constraints.Add(solver.MkOr(usageConditions));
                 }
 
                 /*
