@@ -1,4 +1,6 @@
 ﻿using Mba.Simplifier.Bindings;
+using Mba.Simplifier.Fuzzing;
+using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
 using Microsoft.Z3;
 using System;
@@ -11,9 +13,28 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.Synthesis
 {
+    enum SynthOpc
+    {
+        // Leafs
+        Constant,
+
+        // Boolean
+        Not,
+        And,
+        Or,
+        Xor,
+
+        // Arithmetic
+        Add,
+        Mul,
+
+        // Special
+        TruthTable,
+    }
+
     public abstract record Line();
     public record VarLine(int Index, Expr Symbol) : Line();
-    public record ExprLine(Expr Opcode, Expr Op0, Expr Op1) : Line();
+    public record ExprLine(Expr Opcode, Expr Op0, Expr Op1, Expr TruthTable) : Line();
 
     public class BrahmaSynthesis
     {
@@ -21,29 +42,54 @@ namespace Mba.Simplifier.Synthesis
         private readonly AstIdx idx;
         private readonly List<AstIdx> inputs;
 
-        private readonly Context solver = new();
+        private readonly Context solver;
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 30;
+        private readonly int numInstructions = 13;
 
-        private readonly Dictionary<Z3_decl_kind, int> components = new()
+
+        private bool usesTruthOperator = false;
+        private const int TRUTHVARS = 2;
+        private const uint TRUTHSIZE = 1u << TRUTHVARS;
+
+        private readonly Dictionary<SynthOpc, int> components = new()
         {
             // Constants
             // Not present on booleans
-            // { Z3_decl_kind.Z3_OP_UNINTERPRETED, 2},
-            { Z3_decl_kind.Z3_OP_BNOT, 2},
-            { Z3_decl_kind.Z3_OP_BAND, 2},
-            { Z3_decl_kind.Z3_OP_BOR, 2},
-            { Z3_decl_kind.Z3_OP_BXOR, 2},
+            { SynthOpc.Constant, 2},
+
+            /*
+            { SynthOpc.Not, 2},
+            { SynthOpc.And, 2},
+            { SynthOpc.Or, 2},
+            { SynthOpc.Xor, 2},
+            */
+
+        
+
+           // { SynthOpc.Add, 2},
+            
+
+            { SynthOpc.TruthTable, 2}
 
         };
 
         public BrahmaSynthesis(AstCtx ctx, AstIdx idx)
         {
+            var config = new Dictionary<string, string>()
+            {
+                { "html_mode", "false"}
+            };
+
+            usesTruthOperator = components.ContainsKey(SynthOpc.TruthTable);
+
             this.ctx = ctx;
             this.idx = idx;
             inputs = ctx.CollectVariables(idx);
+
+            solver = new();
+            solver.PrintMode = Z3_ast_print_mode.Z3_PRINT_LOW_LEVEL;
             translator = new Z3Translator(ctx, solver);
         }
 
@@ -54,6 +100,7 @@ namespace Mba.Simplifier.Synthesis
         //  
         public void Run()
         {
+
             var before = translator.Translate(idx);
 
             var lines = GetLines();
@@ -64,71 +111,15 @@ namespace Mba.Simplifier.Synthesis
 
             var symbols = lines.Where(x => x is VarLine).Select(x => (x as VarLine).Symbol).ToArray();
 
-
-            //var forall = GetEquivalenceConstraint(symbols, before, after);
-            var forall = GetBooleanEquivalenceConstraint(before, after, symbols);
-
-            var s = solver.MkSolver();
-            s.Add(forall);
-            var check = s.Check();
-            Console.WriteLine(check);
-
-            if (check == Status.SATISFIABLE)
-            {
-                var model = s.Model;
-                var from = new List<Expr>();
-                var to = new List<Expr>();
-                foreach (var decl in model.Decls)
-                {
-                    if (decl.Arity == 0)
-                    {
-                        from.Add(solver.MkConst(decl));
-                        to.Add(model.ConstInterp(decl));
-                    }
-                }
-
-                var result = after.Substitute(from.ToArray(), to.ToArray());
-                Console.WriteLine(result.Simplify());
-                Console.WriteLine("");
-            }
+            CEGIS(symbols, before, after, lines);
 
             Debugger.Break();
-
-
-        }
-
-        private BoolExpr GetEquivalenceConstraint(Expr[] symbols, Expr before, Expr after)
-        {
-            var forall = solver.MkForall(symbols, solver.MkEq(before, after));
-            return forall;
-        }
-
-        private BoolExpr GetBooleanEquivalenceConstraint(Expr before, Expr after, Expr[] symbols)
-        {
-            var constraints = new List<BoolExpr>();
-            long combinationCount = 1L << symbols.Length;
-
-            for (long i = 0; i < combinationCount; i++)
-            {
-                var values = new Expr[symbols.Length];
-                for (int j = 0; j < symbols.Length; j++)
-                {
-                    bool isSet = ((i >> j) & 1) == 1;
-                    var sort = ((BitVecExpr)symbols[j]).SortSize;
-                    values[j] = isSet ? solver.MkBV(1, sort) : solver.MkBV(0, sort);
-                }
-
-                var subBefore = before.Substitute(symbols, values);
-                var subAfter = after.Substitute(symbols, values);
-
-                constraints.Add(solver.MkEq(subBefore, subAfter));
-            }
-
-            return solver.MkAnd(constraints.ToArray());
         }
 
         private IReadOnlyList<Line> GetLines()
         {
+
+
             // For each instruction, we need a variable representing the opcode, and a variable representing the operands.
             var opcodeCount = components.Count + 1;
 
@@ -152,7 +143,12 @@ namespace Mba.Simplifier.Synthesis
                 var op0 = solver.MkBVConst($"{i}_op0", (uint)operandBitsize);
                 var op1 = solver.MkBVConst($"{i}_op1", (uint)operandBitsize);
 
-                lines.Add(new ExprLine(opcode, op0, op1));
+                Expr truthTable = null;
+                if (usesTruthOperator)
+                    truthTable = solver.MkBVConst($"{i}_tt", TRUTHSIZE);
+
+
+                lines.Add(new ExprLine(opcode, op0, op1, truthTable));
             }
             return lines;
         }
@@ -188,11 +184,13 @@ namespace Mba.Simplifier.Synthesis
                 {
                     var expr = opc switch
                     {
-                        Z3_decl_kind.Z3_OP_UNINTERPRETED => solver.MkBV(0, 1),
-                        Z3_decl_kind.Z3_OP_BNOT => solver.MkBVNot(op0),
-                        Z3_decl_kind.Z3_OP_BAND => solver.MkBVAND(op0, op1),
-                        Z3_decl_kind.Z3_OP_BOR => solver.MkBVOR(op0, op1),
-                        Z3_decl_kind.Z3_OP_BXOR => solver.MkBVXOR(op0, op1),
+                        SynthOpc.Constant => solver.MkBV(0, ctx.GetWidth(idx)),
+                        SynthOpc.Not => solver.MkBVNot(op0),
+                        SynthOpc.And => solver.MkBVAND(op0, op1),
+                        SynthOpc.Or => solver.MkBVOR(op0, op1),
+                        SynthOpc.Xor => solver.MkBVXOR(op0, op1),
+                        SynthOpc.Add => solver.MkBVAdd(op0, op1),
+                        SynthOpc.TruthTable => TruthTableToExpr((BitVecExpr)exprLine.TruthTable, op0, op1),
                         _ => throw new InvalidOperationException()
                     };
                     candidates.Add(expr);
@@ -207,6 +205,25 @@ namespace Mba.Simplifier.Synthesis
 
             //Debugger.Break();
             return exprs.Last();
+        }
+
+        private Expr TruthTableToExpr(BitVecExpr table, BitVecExpr x, BitVecExpr y)
+        {
+            var width = x.SortSize;
+
+            var t = Enumerable.Range(0, 4).Select(x => GetMask(width, (uint)x, table)).ToList();
+            var low = BitwiseMux(y, t[1], t[0]);
+            var high = BitwiseMux(y, t[3], t[2]);
+            return BitwiseMux(x, high, low);
+        }
+
+        private BitVecExpr BitwiseMux(BitVecExpr cond, BitVecExpr onTrue, BitVecExpr onFalse)
+            => solver.MkBVOR(solver.MkBVAND(cond, onTrue), solver.MkBVAND(solver.MkBVNot(cond), onFalse));
+
+        private BitVecExpr GetMask(uint width, uint index, BitVecExpr tableBv)
+        {
+            var bit = solver.MkExtract(index, index, tableBv);
+            return (BitVecExpr)solver.MkITE(solver.MkEq(bit, solver.MkBV(1, 1)), solver.MkBV(ulong.MaxValue, width), solver.MkBV(0, width));
         }
 
         private Expr SelectOperand(Expr selector, List<Expr> exprs)
@@ -244,5 +261,142 @@ namespace Mba.Simplifier.Synthesis
 
             return solver.MkITE(icmp, op0, op1);
         }
+
+
+
+        private void CEGIS(Expr[] symbols, Expr before, Expr after, IReadOnlyList<Line> lines)
+        {
+            var sw = Stopwatch.StartNew();
+            var s = solver.MkSolver();
+
+            // Optionally force the last opcode to be something
+            bool constrainLastOpcode = false;
+            if (constrainLastOpcode)
+            {
+                var last = lines.Last() as ExprLine;
+                var lastopc = (BitVecExpr)last.Opcode;
+
+                var tgt = solver.MkBV(components.Keys.OrderBy(x => x).ToList().IndexOf(SynthOpc.And), lastopc.SortSize);
+                s.Add(solver.MkEq(lastopc, tgt));
+            }
+
+            var rng = new SeededRandom();
+            var constraints = new List<BoolExpr>();
+            var points = new HashSet<ResultVectorKey>();
+            while (true)
+            {
+                bool boolean = false;
+                if (boolean)
+                {
+                    s.Add(GetBooleanEquivalenceConstraint(before, after, symbols));
+                }
+
+                else
+                {
+                    // Evaluate the expression on 8 random IO points
+                    for (var _ = 0; _ < 1000; _++)
+                    {
+                        var keys = Enumerable.Range(0, symbols.Length)
+                            .Select(x => rng.GetRandUlong())
+                            .ToArray();
+
+                        points.Add(new ResultVectorKey(keys));
+
+                        var bvPoints = keys
+                            .Select(x => solver.MkBV(rng.GetRandUlong(), (before as BitVecExpr).SortSize))
+                            .ToArray();
+
+
+                        var subBefore = before.Substitute(symbols, bvPoints);
+                        var subAfter = after.Substitute(symbols, bvPoints);
+                        constraints.Add(solver.MkEq(subBefore, subAfter));
+                    }
+
+                    var and = solver.MkAnd(constraints.ToArray());
+                    s.Add(and);
+
+                }
+
+                var check = s.Check();
+                if (check == Status.UNSATISFIABLE)
+                {
+                    Debugger.Break();
+                }
+
+                sw.Stop();
+                Console.WriteLine($"Took {sw.ElapsedMilliseconds}ms");
+
+                var model = s.Model;
+                var from = new List<Expr>();
+                var to = new List<Expr>();
+                foreach (var decl in model.Decls)
+                {
+                    if (decl.Arity == 0)
+                    {
+                        from.Add(solver.MkConst(decl));
+                        to.Add(model.ConstInterp(decl));
+                    }
+                }
+
+                var result = after.Substitute(from.ToArray(), to.ToArray()).Simplify();
+                Console.WriteLine("\n\n" + result.Simplify());
+                Console.WriteLine("");
+
+                var equiv = ProveEquivalence(before, result) == Status.UNSATISFIABLE;
+                Console.WriteLine($"Equivalent: {equiv}");
+
+                foreach (var decl in model.Decls)
+                {
+                    if (decl.Arity == 0)
+                        Console.WriteLine($"{decl.Name} = {model.ConstInterp(decl)}");
+                }
+
+                Debugger.Break();
+            }
+        }
+
+        private BoolExpr GetEquivalenceConstraint(Expr[] symbols, Expr before, Expr after)
+        {
+            var forall = solver.MkForall(symbols, solver.MkEq(before, after));
+            return forall;
+        }
+
+        private Status ProveEquivalence(Expr a, Expr b)
+        {
+            var s = solver.MkSolver();
+            s.Add(solver.MkNot(solver.MkEq(a, b)));
+            var check = s.Check();
+            return check;
+        }
+
+        private BoolExpr GetBooleanEquivalenceConstraint(Expr before, Expr after, Expr[] symbols)
+        {
+            var rand = new Random();
+
+            var constraints = new List<BoolExpr>();
+            long combinationCount = 1L << symbols.Length;
+
+            for (long i = 0; i < combinationCount; i++)
+            {
+                var values = new Expr[symbols.Length];
+                for (int j = 0; j < symbols.Length; j++)
+                {
+                    var zero = (ulong)rand.NextInt64();
+                    var one = (ulong)rand.NextInt64();
+
+                    bool isSet = ((i >> j) & 1) == 1;
+                    var sort = ((BitVecExpr)symbols[j]).SortSize;
+                    values[j] = isSet ? solver.MkBV(one, sort) : solver.MkBV(zero, sort);
+                }
+
+                var subBefore = before.Substitute(symbols, values);
+                var subAfter = after.Substitute(symbols, values);
+
+                constraints.Add(solver.MkEq(subBefore, subAfter));
+            }
+
+            return solver.MkAnd(constraints.ToArray());
+        }
+
     }
 }
