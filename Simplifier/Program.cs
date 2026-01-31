@@ -276,7 +276,9 @@ inputText = "a|b|c|d|e|f|g";
 
 inputText = "~(a|b|c|d|e|f|g)";
 
+inputText = "~(a|b|c|d|e|f|g)";
 
+//inputText = "~(a|b|c)";
 
 //inputText = "(x0^x1^x2^x3)&(x3|(x4|x5&x6))";
 

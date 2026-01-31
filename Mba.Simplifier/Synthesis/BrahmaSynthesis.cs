@@ -89,7 +89,9 @@ namespace Mba.Simplifier.Synthesis
             new(SynthOpc.Constant),
 
             new(SynthOpc.Not),
+            //new(SynthOpc.And),
             new(SynthOpc.Or),
+            //new(SynthOpc.Xor),
         };
 
         public BrahmaSynthesis(AstCtx ctx, AstIdx idx)
@@ -293,8 +295,9 @@ namespace Mba.Simplifier.Synthesis
         }
 
         private Component GetComponent(SynthOpc opc)
-            => components.Single(x => x.Opcode == opc);
+            => components.SingleOrDefault(x => x.Opcode == opc);
 
+  
         private BoolExpr GetProgramConstraints(IReadOnlyList<Line> lines)
         {
             var constraints = new List<BoolExpr>();
@@ -305,7 +308,7 @@ namespace Mba.Simplifier.Synthesis
 
                 var line = (ExprLine)lines[i];
 
-                // Enforce that a < b
+                // Enforce that operands are defined before they are used
                 var op0 = line.Op0;
                 var op1 = line.Op1;
                 var w0 = BvWidth(i);
@@ -321,12 +324,32 @@ namespace Mba.Simplifier.Synthesis
                 constraints.Add(solver.MkBVULT(op0, lineNumber));
                 constraints.Add(solver.MkBVULT(op1, lineNumber));
 
+                // Enforce that unary operations do not care about their child
+                var notComponent = GetComponent(SynthOpc.Not);
+                if (notComponent != null)
+                {
+                    var isUnary = solver.MkEq(line.Opcode, solver.MkBV(notComponent.Data.Index, line.Opcode.SortSize));
 
-                var isUnary = solver.MkEq(line.Opcode, solver.MkBV(GetComponent(SynthOpc.Not).Data.Index, line.Opcode.SortSize));
+                    var zeroOp = solver.MkEq(op1, solver.MkBV(0, op1.SortSize));
 
-                var zeroOp = solver.MkEq(op1, solver.MkBV(0, op1.SortSize));
+                    constraints.Add(solver.MkImplies(isUnary, zeroOp));
+                }
 
-                constraints.Add(solver.MkImplies(isUnary, zeroOp));
+                bool sortAssociativeOps = false;
+                if (sortAssociativeOps)
+                {
+                    var associativeOps = components.Where(x => x.Opcode.IsAssociative());
+                    foreach (var component in associativeOps)
+                    {
+                        var isAssociative = solver.MkEq(line.Opcode, solver.MkBV(component.Data.Index, line.Opcode.SortSize));
+                        //var sorted = solver.MkBVULE(op0, op1);
+
+                        var sorted = solver.MkBVUGE(op0, op1);
+
+                        constraints.Add(solver.MkImplies(isAssociative, sorted));
+
+                    }
+                }
 
                 /*
 
