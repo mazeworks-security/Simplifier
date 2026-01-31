@@ -49,7 +49,7 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 5;
+        private readonly int numInstructions = 6;
 
 
         private bool usesTruthOperator = false;
@@ -95,7 +95,7 @@ namespace Mba.Simplifier.Synthesis
             new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
-            //new(SynthOpc.Xor),
+            new(SynthOpc.Xor),
 
             new(SynthOpc.Add),
         };
@@ -108,14 +108,14 @@ namespace Mba.Simplifier.Synthesis
             };
 
             components = components.OrderBy(x => x.Opcode).ToList();
-            for(int i = 0; i < components.Count; i++)
+            for (int i = 0; i < components.Count; i++)
             {
                 components[i] = new(components[i].Opcode, new(i));
             }
 
             usesTruthOperator = components.Any(x => x.Opcode == SynthOpc.TruthTable);
 
-            
+
 
 
             this.ctx = ctx;
@@ -140,7 +140,7 @@ namespace Mba.Simplifier.Synthesis
             var lines = GetLines();
 
             int li = 0;
-            foreach(var line in lines)
+            foreach (var line in lines)
             {
                 if (line is not ExprLine exprLine)
                 {
@@ -154,9 +154,24 @@ namespace Mba.Simplifier.Synthesis
 
             var after = GetExpression(lines);
 
-            after = after.Simplify();
+            //after = after.Simplify();
 
             var symbols = lines.Where(x => x is VarLine).Select(x => (x as VarLine).Symbol).ToArray();
+
+
+            //      var tactics = solver.AndThen(
+            //solver.MkTactic("simplify"),
+            //solver.MkTactic("propagate-values"),
+            //solver.MkTactic("simplify"),
+            //solver.MkTactic("elim-uncnstr"),
+            //solver.MkTactic("qe-light"),
+            //solver.MkTactic("simplify"),
+            //solver.MkTactic("elim-uncnstr"),
+            //solver.MkTactic("reduce-args"),
+            //solver.MkTactic("qe-light"),
+            //solver.MkTactic("smt")
+            //);
+
 
             var s = solver.MkSolver();
             var constraints = GetProgramConstraints(lines);
@@ -259,7 +274,7 @@ namespace Mba.Simplifier.Synthesis
                 else
                     select = LinearSelect((BitVecExpr)exprLine.Opcode, candidates);
 
-                var selectS = select.Simplify();
+                //var selectS = select.Simplify();
 
                 exprs.Add(select);
             }
@@ -325,7 +340,7 @@ namespace Mba.Simplifier.Synthesis
                 BoolExpr condition = solver.MkEq(index, solver.MkBV(i, index.SortSize));
                 result = (BitVecExpr)solver.MkITE(condition, (Expr)options[i], result);
             }
-          
+
             return result;
         }
 
@@ -360,7 +375,7 @@ namespace Mba.Simplifier.Synthesis
         private Component GetComponent(SynthOpc opc)
             => components.SingleOrDefault(x => x.Opcode == opc);
 
-  
+
         private BoolExpr GetProgramConstraints(IReadOnlyList<Line> lines)
         {
             int allocatedConstants = 0;
@@ -390,16 +405,34 @@ namespace Mba.Simplifier.Synthesis
                 constraints.Add(solver.MkBVULT(op1, lineNumber));
 
                 // If the instruction has one operand, set the 2nd operand to zero.
-                if (HasComponent(SynthOpc.Not))
+                bool pruneUnaryOperands = true;
+                if (pruneUnaryOperands)
                 {
-                    var notComponent = GetComponent(SynthOpc.Not);
-                    var isUnary = solver.MkEq(line.Opcode, solver.MkBV(notComponent.Data.Index, line.Opcode.SortSize));
+                    if (HasComponent(SynthOpc.Not))
+                    {
+                        var notComponent = GetComponent(SynthOpc.Not);
+                        var isUnary = solver.MkEq(line.Opcode, solver.MkBV(notComponent.Data.Index, line.Opcode.SortSize));
 
-                    var zeroOp = solver.MkEq(op1, solver.MkBV(0, op1.SortSize));
+                        var zeroOp = solver.MkEq(op1, solver.MkBV(0, op1.SortSize));
 
-                    constraints.Add(solver.MkImplies(isUnary, zeroOp));
+                        constraints.Add(solver.MkImplies(isUnary, zeroOp));
+                    }
                 }
 
+                // If the instruction is a constant, assert that both operands are equal to zero.
+                bool pruneConstantOperands = true;
+                if (pruneConstantOperands)
+                {
+                    if (HasComponent(SynthOpc.Constant) && allocatedConstants < maxConstants)
+                    {
+                        var constComponent = GetComponent(SynthOpc.Constant);
+                        var isConstant = solver.MkEq(line.Opcode, solver.MkBV(constComponent.Data.Index, line.Opcode.SortSize));
+
+                        var zeroOp = solver.MkAnd(solver.MkEq(op0, solver.MkBV(0, op0.SortSize)), solver.MkEq(op1, solver.MkBV(0, op1.SortSize)));
+
+                        constraints.Add(solver.MkImplies(isConstant, zeroOp));
+                    }
+                }
                 // Sort operands of commutative operators
                 // Rewrite add(b, a) as add(a, b)
                 // NOT has a overlapping constraint, basically asserting that op1 >= op0
@@ -425,7 +458,7 @@ namespace Mba.Simplifier.Synthesis
                 if (pruneIdempotentOps)
                 {
                     var idempotentOps = components.Where(x => x.Opcode.IsIdempotent());
-                    foreach(var component in idempotentOps)
+                    foreach (var component in idempotentOps)
                     {
                         var isIdempotent = solver.MkEq(line.Opcode, solver.MkBV(component.Data.Index, line.Opcode.SortSize));
 
@@ -440,7 +473,7 @@ namespace Mba.Simplifier.Synthesis
                 bool pruneCommonSubexp = false;
                 if (pruneCommonSubexp)
                 {
-                    for(int j = i + 1; j < lines.Count; j++)
+                    for (int j = i + 1; j < lines.Count; j++)
                     {
                         var l0 = lines[i] as ExprLine;
                         var l1 = lines[j] as ExprLine;
@@ -456,12 +489,12 @@ namespace Mba.Simplifier.Synthesis
 
                         var sameOpcode = solver.MkEq(l0.Opcode, l1.Opcode);
 
-       
+
                         var sameOp0 = solver.MkEq(l0.Op0, l1.Op0);
                         var sameOp1 = solver.MkEq(l0.Op1, l1.Op1);
 
                         var sameOperands = solver.MkAnd(sameOp0, sameOp1);
-                        
+
                         // TODO: Commutative matching
                         // (a+b) == (b+a)
 
@@ -472,10 +505,10 @@ namespace Mba.Simplifier.Synthesis
 
                 // Assert that every instructions is used at least once
                 bool useAllSteps = false;
-                if(useAllSteps && i != lines.Count - 1)
+                if (useAllSteps && i != lines.Count - 1)
                 {
                     var usageConditions = new List<BoolExpr>();
-                    for(int k = i + 1; k < lines.Count; k++)
+                    for (int k = i + 1; k < lines.Count; k++)
                     {
                         var k0 = (lines[k] as ExprLine).Op0;
                         var k1 = (lines[k] as ExprLine).Op1;
@@ -490,7 +523,7 @@ namespace Mba.Simplifier.Synthesis
                     constraints.Add(solver.MkOr(usageConditions));
                 }
 
-                if(allocatedConstants < maxConstants)
+                if (allocatedConstants < maxConstants)
                 {
                     allocatedConstants++;
                 }
@@ -522,6 +555,15 @@ namespace Mba.Simplifier.Synthesis
         private void CEGIS(Solver s, Expr[] symbols, Expr before, Expr after, IReadOnlyList<Line> lines)
         {
             Console.WriteLine("Beginning cegis");
+
+            // Define 'after' as a function to avoid AST explosion during substitution
+            var funcName = "synth_func";
+            var domain = symbols.Select(x => x.Sort).ToArray();
+            //var synthFunc = solver.MkRecFuncDecl(solver.MkSymbol(funcName), domain, after.Sort);
+            var synthFunc = solver.MkRecFuncDecl(funcName, domain, after.Sort);
+            solver.AddRecDef(synthFunc, symbols, after);
+
+
             var sw = Stopwatch.StartNew();
 
             // Optionally force the last opcode to be something
@@ -531,8 +573,8 @@ namespace Mba.Simplifier.Synthesis
                 var last = lines.Last() as ExprLine;
                 var lastopc = (BitVecExpr)last.Opcode;
 
-               // var tgt = solver.MkBV(components.OrderBy(x => x).ToList().IndexOf(SynthOpc.And), lastopc.SortSize);
-               // s.Add(solver.MkEq(lastopc, tgt));
+                // var tgt = solver.MkBV(components.OrderBy(x => x).ToList().IndexOf(SynthOpc.And), lastopc.SortSize);
+                // s.Add(solver.MkEq(lastopc, tgt));
             }
 
             var rng = new SeededRandom();
@@ -549,7 +591,7 @@ namespace Mba.Simplifier.Synthesis
                 else
                 {
                     // Evaluate the expression on 8 random IO points
-                    for (var _ = 0; _ < 1000; _++)
+                    for (var _ = 0; _ < 10; _++)
                     {
                         var keys = Enumerable.Range(0, symbols.Length)
                             .Select(x => rng.GetRandUlong())
@@ -562,8 +604,8 @@ namespace Mba.Simplifier.Synthesis
                             .ToArray();
 
 
-                        var subBefore = before.Substitute(symbols, bvPoints);
-                        var subAfter = after.Substitute(symbols, bvPoints);
+                        var subBefore = before.Substitute(symbols, bvPoints).Simplify();
+                        var subAfter = solver.MkApp(synthFunc, bvPoints);
                         constraints.Add(solver.MkEq(subBefore, subAfter));
                     }
 
@@ -628,6 +670,7 @@ namespace Mba.Simplifier.Synthesis
 
         public static void ExportSmtToFile(Context ctx, Solver solver, string filePath)
         {
+
             // Ensure the solver is in a state that reflects all constraints
             // (Z3 Solver.ToString() produces SMT-LIB v2 formatted output)
             string smtString = solver.ToString();
