@@ -2,6 +2,7 @@
 using Mba.Simplifier.Fuzzing;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
+using Mba.Utility;
 using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
@@ -34,7 +35,7 @@ namespace Mba.Simplifier.Synthesis
 
     public abstract record Line();
     public record VarLine(int Index, Expr Symbol) : Line();
-    public record ExprLine(Expr Opcode, Expr Op0, Expr Op1, Expr TruthTable) : Line();
+    public record ExprLine(BitVecExpr Opcode, BitVecExpr Op0, BitVecExpr Op1, Expr TruthTable) : Line();
 
     public class BrahmaSynthesis
     {
@@ -46,7 +47,7 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 13;
+        private readonly int numInstructions = 14;
 
 
         private bool usesTruthOperator = false;
@@ -67,11 +68,15 @@ namespace Mba.Simplifier.Synthesis
             */
 
         
-
+            
            // { SynthOpc.Add, 2},
+            { SynthOpc.Not, 2},
+            //{ SynthOpc.And, 2},
+            { SynthOpc.Or, 2},
+            //{ SynthOpc.Xor, 2},
             
 
-            { SynthOpc.TruthTable, 2}
+            //{ SynthOpc.TruthTable, 2}
 
         };
 
@@ -111,15 +116,18 @@ namespace Mba.Simplifier.Synthesis
 
             var symbols = lines.Where(x => x is VarLine).Select(x => (x as VarLine).Symbol).ToArray();
 
-            CEGIS(symbols, before, after, lines);
+            var s = solver.MkSolver();
+            var constraints = GetProgramConstraints(lines);
+            //s.Add(constraints);
+     
+
+            CEGIS(s, symbols, before, after, lines);
 
             Debugger.Break();
         }
 
         private IReadOnlyList<Line> GetLines()
         {
-
-
             // For each instruction, we need a variable representing the opcode, and a variable representing the operands.
             var opcodeCount = components.Count + 1;
 
@@ -196,6 +204,7 @@ namespace Mba.Simplifier.Synthesis
                     candidates.Add(expr);
                 }
 
+                
                 var select = ConditionalSelect((BitVecExpr)exprLine.Opcode, candidates, 0);
 
                 var selectS = select.Simplify();
@@ -262,12 +271,52 @@ namespace Mba.Simplifier.Synthesis
             return solver.MkITE(icmp, op0, op1);
         }
 
+        private BoolExpr GetProgramConstraints(IReadOnlyList<Line> lines)
+        {
+            var constraints = new List<BoolExpr>();
+            for(int i = 0; i < lines.Count; i++)
+            {
+                if (lines[i] is VarLine)
+                    continue;
+
+                var line = (ExprLine)lines[i];
+
+                // Enforce that a < b
+                var op0 = line.Op0;
+                var op1 = line.Op1;
+                var w0 = BvWidth(i);
+                var w1 = op0.SortSize;
+                if (w0 > w1)
+                {
+                    op0 = solver.MkZeroExt((uint)w0 - w1, op0);
+                    op1 = solver.MkZeroExt((uint)w0 - w1, op1);
+
+                    //Debugger.Break();
+                }
+                var lineNumber = solver.MkBV((uint)i, (uint)w0);
+                constraints.Add(solver.MkBVULT(op0, lineNumber));
+                constraints.Add(solver.MkBVULT(op1, lineNumber));
+
+                /*
+
+                // If the current line number is a power of two, the operands will always be used below it.
+                if (BitOperations.PopCount((uint)i) == 1)
+                    continue;
+
+                // Assert that each operand is defined before it's used
+                var lineNumber = solver.MkBV(i, line.Op0.SortSize);
+                constraints.Add(solver.MkBVULT(line.Op0, lineNumber));
+                constraints.Add(solver.MkBVULT(line.Op1, lineNumber));
+                */
+            }
+
+            return solver.MkAnd(constraints);
+        }
 
 
-        private void CEGIS(Expr[] symbols, Expr before, Expr after, IReadOnlyList<Line> lines)
+        private void CEGIS(Solver s, Expr[] symbols, Expr before, Expr after, IReadOnlyList<Line> lines)
         {
             var sw = Stopwatch.StartNew();
-            var s = solver.MkSolver();
 
             // Optionally force the last opcode to be something
             bool constrainLastOpcode = false;
