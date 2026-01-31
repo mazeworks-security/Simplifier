@@ -286,7 +286,8 @@ inputText = "~(a|b|c|d|e|f|g)";
 // 14 operators, 6000ms synthesis time with operators AND,OR,NOT
 inputText = "~(a|b|c|d|e|f|g)";
 
-inputText = "(((x|a)+y)^y)";
+// 6 operators, 2500ms synth time, with operators NOT, AND, OR, XOR, ADD
+//inputText = "(((x|a)+y)^y)";
 
 //inputText = "~(a|b|c)";
 

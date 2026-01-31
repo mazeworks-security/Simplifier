@@ -50,7 +50,7 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 6;
+        private readonly int numInstructions = 14;
 
 
         private bool usesTruthOperator = false;
@@ -137,6 +137,19 @@ namespace Mba.Simplifier.Synthesis
             var before = translator.Translate(idx);
 
             var lines = GetLines();
+
+            int li = 0;
+            foreach(var line in lines)
+            {
+                if (line is not ExprLine exprLine)
+                {
+                    li++;
+                    continue;
+                }
+                Console.WriteLine($"{exprLine.Opcode.SortSize}({exprLine.Op0.SortSize}, {exprLine.Op1.SortSize}) with {li} operands to choose from");
+                li++;
+            }
+
 
             var after = GetExpression(lines);
 
