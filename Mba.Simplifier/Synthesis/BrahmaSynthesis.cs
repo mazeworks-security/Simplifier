@@ -95,8 +95,8 @@ namespace Mba.Simplifier.Synthesis
         {
             new(SynthOpc.Constant),
 
-            new(SynthOpc.Not),
-            new(SynthOpc.And),
+            //new(SynthOpc.Not),
+            //new(SynthOpc.And),
             new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
