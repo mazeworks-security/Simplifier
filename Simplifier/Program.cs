@@ -319,6 +319,12 @@ inputText = "(((x|1111)+y)^y) >> 4";
 // minimum number of instructions is 6
 inputText = "((x ^ 60) * ((82 - (x * (x ^ 60)))))";
 
+inputText = "(((3*a)^2)*(1 + (1 - a*((3*a)^2))))*(1 + (1 - a*((3*a)^2))*(1 - a*((3*a)^2)))";
+
+inputText = "(((3*a)^2)*(1 + (1 - a*((3*a)^2))))*(1 + (1 - a*((3*a)^2))*(1 - a*((3*a)^2)))";
+
+inputText = "(((3*x)^2)*(1 + (1 - x*((3*x)^2))))*(1 + (1 - x*((3*x)^2))*(1 - x*((3*x)^2)))";
+
 //inputText = "(RSI + RBP) & 0xFFFFFFFF ";
 
 //inputText = "x >> 2";

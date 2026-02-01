@@ -55,7 +55,7 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        //
+        // 7 is optimal for 8-bit modular inverse
         private readonly int numInstructions = 7;
 
 
@@ -63,7 +63,9 @@ namespace Mba.Simplifier.Synthesis
         private const int TRUTHVARS = 2;
         private const uint TRUTHSIZE = 1u << TRUTHVARS;
 
-        private int maxConstants = 2;
+        private int maxConstants = 3;
+
+        private uint opcodeBitsize = uint.MaxValue;
 
 
         /*
@@ -221,7 +223,7 @@ namespace Mba.Simplifier.Synthesis
                 lines.Add(new VarLine(i, translator.cache[inputs[i]]));
 
             // Each instruction gets assigned its own line.
-            var opcodeBitsize = BvWidth(components.Count - 1);
+            opcodeBitsize = (uint)BvWidth(components.Count - 1);
             //var opcodeBitsize = GetBitsNeeded(32);
 
             int allocatedConstants = 0;
@@ -436,6 +438,36 @@ namespace Mba.Simplifier.Synthesis
             var constraints = new List<BoolExpr>();
             for (int i = 0; i < lines.Count; i++)
             {
+
+                // Assert that every instructions is used at least once
+                bool useAllSteps = true;
+                if (useAllSteps && i != lines.Count - 1)
+                {
+                    var usageConditions = new List<BoolExpr>();
+                    for (int k = i + 1; k < lines.Count; k++)
+                    {
+                        // Skip if this line is not an instruction
+                        if (lines[k] is not ExprLine casted)
+                            continue;
+
+                        var k0 = (lines[k] as ExprLine).Op0;
+                        var k1 = (lines[k] as ExprLine).Op1;
+
+                        // Add constraint: If the instruction has one or more operands, operands[0] == curr
+                        var used0 = solver.MkEq(k0, solver.MkBV(i, k0.SortSize));
+                        var oneOperand = AtleastNOperands(lines[k] as ExprLine, 1);
+                        usageConditions.Add(solver.MkAnd(oneOperand, used0));
+
+                        // Repeat for the two input case
+                        var used1 = solver.MkEq(k1, solver.MkBV(i, k1.SortSize));
+                        var twoOperand = AtleastNOperands(lines[k] as ExprLine, 2);
+                        usageConditions.Add(solver.MkAnd(twoOperand, used1));
+                    }
+
+                    // Constraint: This instruction has at least one use.
+                    constraints.Add(solver.MkOr(usageConditions));
+                }
+
                 if (lines[i] is VarLine)
                     continue;
 
@@ -598,7 +630,7 @@ namespace Mba.Simplifier.Synthesis
                         }
 
                         // Compute whether the operand is equal to one of the constants
-                        var isConstantOperand = solver.MkOr(constConstraints);
+                        var isConstantOperand = constConstraints.Count == 1 ? constConstraints.Single() : solver.MkOr(constConstraints);
 
                         if (operandIdx == 1 && HasComponent(SynthOpc.Not))
                         {
@@ -654,26 +686,6 @@ namespace Mba.Simplifier.Synthesis
                     }
                 }
 
-                // Assert that every instructions is used at least once
-                bool useAllSteps = false;
-                if (useAllSteps && i != lines.Count - 1)
-                {
-                    var usageConditions = new List<BoolExpr>();
-                    for (int k = i + 1; k < lines.Count; k++)
-                    {
-                        var k0 = (lines[k] as ExprLine).Op0;
-                        var k1 = (lines[k] as ExprLine).Op1;
-                        var used0 = solver.MkEq(k0, solver.MkBV(i, k0.SortSize));
-                        usageConditions.Add(used0);
-
-                        // We should
-                        var used1 = solver.MkEq(k1, solver.MkBV(i, k1.SortSize));
-                        usageConditions.Add(used1);
-                    }
-
-                    constraints.Add(solver.MkOr(usageConditions));
-                }
-
                 if (allocatedConstants < maxConstants)
                 {
                     allocatedConstants++;
@@ -705,6 +717,33 @@ namespace Mba.Simplifier.Synthesis
             return solver.MkAnd(constraints);
         }
 
+        // Return a constraint that the line has atleast one operand
+        private BoolExpr AtleastNOperands(ExprLine line, int n)
+        {
+            List<BoolExpr> constraints = new();
+
+            var zeroComponents = components.Select(x => x.Opcode).Where(x => x.GetOperandCount() < n).ToList();
+            if (zeroComponents.Count == 0)
+                return solver.MkTrue();
+
+            foreach(var c in zeroComponents)
+                constraints.Add(solver.MkNot(IsComponent(line, c)));
+            if (constraints.Count == 1)
+                return constraints.Single();
+            return solver.MkAnd(constraints);
+
+        }
+
+        private BoolExpr IsComponent(ExprLine line, SynthOpc component)
+        {
+            return solver.MkEq(line.Opcode, GetComponentIndexBv(component));
+        }
+
+        private BitVecExpr GetComponentIndexBv(SynthOpc opc)
+        {
+            return solver.MkBV(GetComponent(opc).Data.Index, opcodeBitsize);
+        }
+
 
         private void CEGIS(Solver s, Expr[] symbols, Expr before, Expr after, IReadOnlyList<Line> lines)
         {
@@ -720,7 +759,7 @@ namespace Mba.Simplifier.Synthesis
 
             var sw = Stopwatch.StartNew();
 
-            uint costWidth = 5;
+            uint costWidth = 6;
             var componentCosts = components.Select(x => (Expr)solver.MkBV(x.Opcode.GetCost(), costWidth)).ToList();
             //var lineOpcodes = lines.Where(x => x is ExprLine).Select(x => (x as ExprLine).Opcode).ToArray();
 
@@ -736,8 +775,9 @@ namespace Mba.Simplifier.Synthesis
 
             // best known cost is 8
             //s.Add(solver.MkBVULT(costSum, solver.MkBV(14, costWidth)));
+            //s.Add(solver.MkBVULT(costSum, solver.MkBV(32, costWidth)));
 
-            s.Add(solver.MkEq(costSum, solver.MkBV(7, costWidth)));
+            //s.Add(solver.MkEq(costSum, solver.MkBV(60, costWidth)));
 
 
             // Optionally force the last opcode to be something
@@ -774,7 +814,7 @@ namespace Mba.Simplifier.Synthesis
             else
             {
 
-                var inputCombinations = new ulong[7, 2]
+                var inputCombinations = new ulong[4, 2]
                 {
                     //{ 5555555555555555, ~0x5555555555555555ul },
                     /*
@@ -825,7 +865,9 @@ namespace Mba.Simplifier.Synthesis
                      { 131, 0 },
                      { 128, 0 },
                     */
-
+                        
+                    // 8-bit optimal synthesis:
+                    /*
                       { 255, 0 },
                       { 131, 0 },
                       { 119, 0 },
@@ -834,6 +876,16 @@ namespace Mba.Simplifier.Synthesis
                       { 253, 0},
                       { 131, 0},
                       { 249, 0}
+                    */
+
+                      { 65535, 0 },
+
+                      { 27785, 0},
+                      //{ 64765, 0},
+                      //{ 64003, 0},
+                      //{ 27785, 0},
+                       { 3, 0},
+                       { 46661, 0 }
                       //{ 0, 0 },
                     //  { 0, 0 },
                 };
@@ -916,8 +968,9 @@ namespace Mba.Simplifier.Synthesis
 
                 var w = ctx.GetWidth(idx);
                 var programAst = new List<AstIdx>();
-                foreach(var line in lines)
+                for(int li = 0; li < lines.Count; li++)
                 {
+                    var line = lines[li];
                     // Variables get added immediately.
                     if (line is VarLine varLine)
                     {
@@ -927,8 +980,23 @@ namespace Mba.Simplifier.Synthesis
 
                     var exprLine = (ExprLine)line;
                     var opcode = (BitVecNum)model.Eval(exprLine.Opcode);
-                    var op0 = programAst[((BitVecNum)model.Eval(exprLine.Op0)).Int];
-                    var op1 = programAst[((BitVecNum)model.Eval(exprLine.Op1)).Int];
+
+                    var op0Value = model.Eval(exprLine.Op0);
+                    var op1Value = model.Eval(exprLine.Op1);
+                    if (op0Value is not BitVecNum && opcode.Int != GetComponent(SynthOpc.Constant).Data.Index)
+                    {
+                        programAst.Add(ctx.Symbol($"ILLEGAL{li}", w));
+                        continue;
+                    }
+
+                    if (op1Value is not BitVecNum && opcode.Int != GetComponent(SynthOpc.Constant).Data.Index && opcode.Int != GetComponent(SynthOpc.Not).Data.Index)
+                    {
+                        programAst.Add(ctx.Symbol($"ILLEGAL{li}", w));
+                        continue;
+                    }
+
+                    var op0 = programAst[((BitVecNum)op0Value).Int];
+                    var op1 = programAst[((BitVecNum)op1Value).Int];
                     var constData = model.Eval(exprLine.ConstantData);
                     //var truthTable = (BitVecNum)model.Eval(exprLine.TruthTable);
 
