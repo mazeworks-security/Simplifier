@@ -57,7 +57,7 @@ namespace Mba.Simplifier.Synthesis
 
         // Config:
         // 7 is optimal for 8-bit modular inverse
-        private readonly int numInstructions = 9;
+        private readonly int numInstructions = 7;
 
 
         private bool usesTruthOperator = false;
@@ -100,7 +100,7 @@ namespace Mba.Simplifier.Synthesis
         {
             new(SynthOpc.Constant),
 
-            new(SynthOpc.Not),
+            //new(SynthOpc.Not),
             //new(SynthOpc.And),
             //new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
@@ -558,8 +558,8 @@ namespace Mba.Simplifier.Synthesis
                 // Sort operands of commutative operators
                 // Rewrite add(b, a) as add(a, b)
                 // NOT has a overlapping constraint, basically asserting that op1 >= op0
-                bool sortAssociativeOps = true;
-                if (sortAssociativeOps)
+                bool sortCommutativeOps = true;
+                if (sortCommutativeOps)
                 {
                     
                     /*
@@ -605,6 +605,9 @@ namespace Mba.Simplifier.Synthesis
 
 
                 }
+
+                // TODO: Constant position elimination. Constants cannot be allocated after the first instruction.
+                // Actually.. sorting solves this
 
                 // Idempotency elimination: Do not allow (a&a), (a|a), (a^a)
                 // TODO: ~(~a))
@@ -683,6 +686,84 @@ namespace Mba.Simplifier.Synthesis
                 }
 
             skip:
+
+                // If you have two instructions that do not depend on each other:
+                // %0 = c+d
+                // %1 = a&b
+                // sort them by their operands:
+                // %0 = a&b
+                // %1 = c+d
+                bool pruneAdjacentSymmetry = true;
+                if (pruneAdjacentSymmetry && i+1 < lines.Count)
+                {
+                    var next = lines[i + 1] as ExprLine;
+
+                    // TODO: If we have more 12 or more components, we probably want to use a different encoding.
+                    List<BoolExpr> dependencyConstraints = new List<BoolExpr>();
+                    foreach(var component in components)
+                    {
+                        var count = component.Opcode.GetOperandCount();
+                        if (count == 0)
+                            continue;
+
+                        var isOpcode = IsComponent(next, component);
+                        var diff0 = Different(next.Op0, solver.MkBV(i, next.Op0.SortSize));
+                        if (count == 1)
+                        {
+                            // Assert that the this instruction does not use the other.
+                            dependencyConstraints.Add(solver.MkImplies(isOpcode, diff0));
+                            continue;
+                        }
+
+                        Debug.Assert(count == 2);
+                        var diff1 = Different(next.Op1, solver.MkBV(i, next.Op0.SortSize));
+                        dependencyConstraints.Add(solver.MkImplies(isOpcode, solver.MkAnd(diff0, diff1)));
+                    }
+
+                    // If this instruction could be a constant, disable the opcode based sorting logic and instead apply a special canonicalization:
+                    if (allocatedConstants < maxConstants)
+                    //if (false)
+                    {
+                        // If either operand is a constant, treat them as dependent. We'll handle with special logic
+                        var const0 = IsComponent(line, SynthOpc.Constant);
+                        var const1 = IsComponent(next, SynthOpc.Constant);
+                        var anyConstants = solver.MkOr(const0, const1);
+                        dependencyConstraints.Add(anyConstants);
+
+                        // Rewrite:
+                        // %0 = a+b
+                        // %1 = 1111
+                        // 
+                        // to:
+                        // %0 = 1111
+                        // %1 = a+b
+                        var sortConstant = solver.MkAnd(const1, solver.MkNot(const0));
+                        constraints.Add(solver.MkNot(sortConstant));
+                    }
+
+
+                    // Most expensive instructions are at the top of the list.. e.g. 0==div, because of the encoding we chose.
+                    // So we want to sort opcodes in descending order. AND, XOR, etc are assigned the largest opcodes.
+                    var depends = solver.MkOr(dependencyConstraints);
+                    var sortOpcode = solver.MkBVUGE(line.Opcode, next.Opcode);
+                    constraints.Add(solver.MkImplies(solver.MkNot(depends), sortOpcode));
+
+                    // Tie breaker: Operands
+                    var tie = solver.MkAnd(solver.MkNot(depends), solver.MkEq(line.Opcode, next.Opcode));
+
+                    // TODO: You have a very global encoding when you should instead be doing a local encoding. This encoding is bad for unit propagation.
+                    // Prefer many implies over one big imply
+                    var zextBy = next.Op0.SortSize - line.Op0.SortSize;
+                    var args0 = new BitVecExpr[] { line.Op0, line.Op1 }.Select(x => zextBy == 0 ? x : solver.MkZeroExt(zextBy, x)).ToArray();
+                    var args1 = new BitVecExpr[] { next.Op0, next.Op1 };
+
+                    var (j, k) = (args0[0], args0[1]);
+                    var (jNext, kNext) = (args1[0], args1[1]);
+                    var smaller = solver.MkOr(solver.MkBVULT(j, jNext), solver.MkAnd(solver.MkEq(j, jNext), solver.MkBVULT(k, kNext)));
+                    constraints.Add(solver.MkImplies(tie, smaller));
+
+                    //solver.MkImplies(sortConstant,);
+                }
 
                 // CSE (common subexpression elimination)
                 // Assert that no two lines are identical
@@ -860,7 +941,7 @@ namespace Mba.Simplifier.Synthesis
             //s.Add(solver.MkBVULT(costSum, solver.MkBV(14, costWidth)));
             //s.Add(solver.MkBVULT(costSum, solver.MkBV(32, costWidth)));
 
-            //s.Add(solver.MkEq(costSum, solver.MkBV(60, costWidth)));
+            s.Add(solver.MkEq(costSum, solver.MkBV(8, costWidth)));
 
 
             // Optionally force the last opcode to be something
@@ -1008,7 +1089,7 @@ namespace Mba.Simplifier.Synthesis
 
             }
 
-
+            var total = Stopwatch.StartNew();
             while (true)
             {
                 bool export = false;
@@ -1027,6 +1108,7 @@ namespace Mba.Simplifier.Synthesis
                 var check = s.Check();
                 if (check == Status.UNSATISFIABLE)
                 {
+                    Console.WriteLine($"No solution. Took {total.ElapsedMilliseconds}");
                     Debugger.Break();
                 }
 
@@ -1125,7 +1207,7 @@ namespace Mba.Simplifier.Synthesis
                 if (equiv)
                 {
 
-                    Console.WriteLine("done");
+                    Console.WriteLine($"Done. Solved in {total.ElapsedMilliseconds}ms");
                     Console.ReadLine();
                     Debugger.Break();
                 }
