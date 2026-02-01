@@ -1,4 +1,5 @@
-﻿using Mba.Simplifier.Bindings;
+﻿using Mba.Ast;
+using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Fuzzing;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
@@ -31,13 +32,15 @@ namespace Mba.Simplifier.Synthesis
         Add,
         Mul,
 
+        Lshr,
+
         // Special
         TruthTable,
     }
 
     public abstract record Line();
     public record VarLine(int Index, Expr Symbol) : Line();
-    public record ExprLine(BitVecExpr Opcode, BitVecExpr Op0, BitVecExpr Op1, Expr TruthTable, Expr ConstantData) : Line();
+    public record ExprLine(BitVecExpr Opcode, BitVecExpr Op0, BitVecExpr Op1, Expr TruthTable, BitVecExpr ConstantData) : Line();
 
     public class BrahmaSynthesis
     {
@@ -49,7 +52,7 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
-        private readonly int numInstructions = 14;
+        private readonly int numInstructions = 7;
 
 
         private bool usesTruthOperator = false;
@@ -88,16 +91,18 @@ namespace Mba.Simplifier.Synthesis
 
         List<Component> components = new List<Component>()
         {
-            //new(SynthOpc.Constant),
+            new(SynthOpc.Constant),
 
-            new(SynthOpc.Not),
-            new(SynthOpc.And),
+            //new(SynthOpc.Not),
+            //new(SynthOpc.And),
             new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
-            //new(SynthOpc.Xor),
+            new(SynthOpc.Xor),
 
-           // new(SynthOpc.Add),
+            new(SynthOpc.Add),
+
+            new(SynthOpc.Lshr),
         };
 
         public BrahmaSynthesis(AstCtx ctx, AstIdx idx)
@@ -212,6 +217,22 @@ namespace Mba.Simplifier.Synthesis
                     truthTable = solver.MkBVConst($"{i}_tt", TRUTHSIZE);
 
                 BitVecExpr constant = solver.MkBV(0, ctx.GetWidth(idx));
+                if (HasComponent(SynthOpc.Lshr))
+                {
+                    // Compute the minimum number of bits necessary to fit the shift
+                    var shiftByWidth = BvWidth(ctx.GetWidth(idx));
+
+                    var shiftBy = solver.MkBVConst($"{i}_shift", (uint)shiftByWidth);
+                    if (shiftBy.SortSize < constant.SortSize)
+                        shiftBy = solver.MkZeroExt(constant.SortSize - shiftBy.SortSize, shiftBy);
+
+
+                    var lshrComponent = GetComponent(SynthOpc.Lshr);
+                    var isLshr = solver.MkEq(opcode, solver.MkBV(lshrComponent.Data.Index, opcode.SortSize));
+
+                    constant = (BitVecExpr)solver.MkITE(isLshr, shiftBy, constant);
+                }
+
                 if (allocatedConstants < maxConstants)
                 {
                     constant = solver.MkBVConst($"{i}_const", ctx.GetWidth(idx));
@@ -262,6 +283,8 @@ namespace Mba.Simplifier.Synthesis
                         SynthOpc.Add => solver.MkBVAdd(op0, op1),
                         SynthOpc.TruthTable => TruthTableToExpr((BitVecExpr)exprLine.TruthTable, op0, op1),
                         SynthOpc.Constant => exprLine.ConstantData,
+                        SynthOpc.Lshr => solver.MkBVLSHR(op0, exprLine.ConstantData), // TODO: Assert that op1 is a constant
+
                         _ => throw new InvalidOperationException()
                     };
                     candidates.Add(expr);
@@ -418,6 +441,23 @@ namespace Mba.Simplifier.Synthesis
                         constraints.Add(solver.MkImplies(isUnary, zeroOp));
                     }
                 }
+
+
+                bool pruneLshrConstants = false;
+                if (pruneLshrConstants)
+                {
+                    if (HasComponent(SynthOpc.Lshr))
+                    {
+                        var lshrComponent = GetComponent(SynthOpc.Lshr);
+                        var isLshr = solver.MkEq(line.Opcode, solver.MkBV(lshrComponent.Data.Index, line.Opcode.SortSize));
+
+                        var cdata = line.ConstantData;
+                        var boundedConstant = solver.MkBVULT(cdata, solver.MkBV(cdata.SortSize, cdata.SortSize));
+
+                        constraints.Add(solver.MkImplies(isLshr, boundedConstant));
+                    }
+                }
+
 
                 // If the instruction is a constant, assert that both operands are equal to zero.
                 bool pruneConstantOperands = true;
@@ -587,7 +627,8 @@ namespace Mba.Simplifier.Synthesis
             var getEquivOnPointsConstraint = (BitVecNum[] bvPoints) =>
             {
                 var subBefore = before.Substitute(symbols, bvPoints).Simplify();
-                var subAfter = solver.MkApp(synthFunc, bvPoints);
+                //var subAfter = solver.MkApp(synthFunc, bvPoints);
+                var subAfter = after.Substitute(symbols, bvPoints);
                 return solver.MkEq(subBefore, subAfter);
             };
 
@@ -599,12 +640,32 @@ namespace Mba.Simplifier.Synthesis
 
             else
             {
-                // Evaluate the expression on 8 random IO points
-                for (var _ = 0; _ < 100; _++)
+                /*
+                var inputCombinations = new ulong[9, 2]
                 {
+                    //{ 5555555555555555, ~0x5555555555555555ul },
+                    {  0x5555555555555555, 0xAAAAAAAAAAAAAAA },
+                    { 0x5555555555555555, 0xCCCCCCCCCCCCCCC },
+                    { 0xAAAAAAAAAAAAAAA, 0xCCCCCCCCCCCCCCC },
+                    { 0x1555555555555554, 0xAAAAAAAAAAAAAAA},
+                    { 0x9E3779B97F4A7C15, 0xBF58476D1CE4E5B9},
+                    { 0x1555555555555554, 0xAAAAAAAAAAAAAAA},
+                    { rng.GetRandUlong(), rng.GetRandUlong()},
+                    { ulong.MaxValue, ulong.MaxValue },
+                     {  0, 0}
+                };
+                */
+
+                // Evaluate the expression on 8 random IO points
+                for (var _ = 0; _ < 5; _++)
+                {
+
+
                     var keys = Enumerable.Range(0, symbols.Length)
                         .Select(x => rng.GetRandUlong())
                         .ToArray();
+
+                    // keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
 
                     points.Add(new ResultVectorKey(keys));
 
@@ -665,7 +726,7 @@ namespace Mba.Simplifier.Synthesis
                 }
 
                 var result = after.Substitute(from.ToArray(), to.ToArray()).Simplify();
-                Console.WriteLine("\n\n" + result.Simplify());
+                Console.WriteLine("\n\nExpr: \n" + result.Simplify());
                 Console.WriteLine("");
 
                 var equivSolver = solver.MkSolver();
@@ -694,7 +755,7 @@ namespace Mba.Simplifier.Synthesis
                     Console.WriteLine("");
                 }
             }
-            
+
         }
 
         public static void ExportSmtToFile(Context ctx, Solver solver, string filePath)
