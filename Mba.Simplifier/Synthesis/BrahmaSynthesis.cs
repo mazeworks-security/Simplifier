@@ -21,12 +21,12 @@ namespace Mba.Simplifier.Synthesis
 
     public enum SynthOpc
     {
-        Constant,
         // Boolean
-        Not,
         And,
         Or,
         Xor,
+
+        Not,
 
         // Arithmetic
         Add,
@@ -36,6 +36,8 @@ namespace Mba.Simplifier.Synthesis
 
         // Special
         TruthTable,
+
+        Constant,
     }
 
     public abstract record Line();
@@ -93,8 +95,8 @@ namespace Mba.Simplifier.Synthesis
         {
             new(SynthOpc.Constant),
 
-            //new(SynthOpc.Not),
-            //new(SynthOpc.And),
+            new(SynthOpc.Not),
+            new(SynthOpc.And),
             new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
@@ -113,6 +115,12 @@ namespace Mba.Simplifier.Synthesis
             };
 
             components = components.OrderBy(x => x.Opcode).ToList();
+
+            // The `SynthOpc` enum has the simplest components at top.
+            // Because of how we encode our MUX tree, we want the most complex components to be at the top.
+            // Short version: Components are described as an N-bit bit-vector. Sometimes the number of components is not a power of 2 and there are padding values. 3-bit vector with 6 possible values leaves 2 padding choices. We default padding choices to the simplest component.
+            //components.Reverse();
+
             for (int i = 0; i < components.Count; i++)
             {
                 components[i] = new(components[i].Opcode, new(i));
@@ -142,7 +150,7 @@ namespace Mba.Simplifier.Synthesis
 
             var before = translator.Translate(idx);
 
-            var lines = GetLines();
+            var (lines, shiftVariables) = GetLines();
 
             int li = 0;
             foreach (var line in lines)
@@ -179,7 +187,7 @@ namespace Mba.Simplifier.Synthesis
 
 
             var s = solver.MkSolver();
-            var constraints = GetProgramConstraints(lines);
+            var constraints = GetProgramConstraints(lines, shiftVariables);
             s.Add(constraints);
 
 
@@ -188,9 +196,10 @@ namespace Mba.Simplifier.Synthesis
             Debugger.Break();
         }
 
-        private IReadOnlyList<Line> GetLines()
+        private (IReadOnlyList<Line>, List<BitVecExpr> shiftVariables) GetLines()
         {
             var lines = new List<Line>();
+            var shiftVariables = new List<BitVecExpr>();
 
             // Each variable gets assigned its own line
             for (int i = 0; i < inputs.Count; i++)
@@ -223,6 +232,7 @@ namespace Mba.Simplifier.Synthesis
                     var shiftByWidth = BvWidth(ctx.GetWidth(idx));
 
                     var shiftBy = solver.MkBVConst($"{i}_shift", (uint)shiftByWidth);
+                    shiftVariables.Add(shiftBy);
                     if (shiftBy.SortSize < constant.SortSize)
                         shiftBy = solver.MkZeroExt(constant.SortSize - shiftBy.SortSize, shiftBy);
 
@@ -242,7 +252,7 @@ namespace Mba.Simplifier.Synthesis
 
                 lines.Add(new ExprLine(opcode, op0, op1, truthTable, constant));
             }
-            return lines;
+            return (lines, shiftVariables);
         }
 
         public static int BvWidth(int maxValue)
@@ -399,7 +409,7 @@ namespace Mba.Simplifier.Synthesis
             => components.SingleOrDefault(x => x.Opcode == opc);
 
 
-        private BoolExpr GetProgramConstraints(IReadOnlyList<Line> lines)
+        private BoolExpr GetProgramConstraints(IReadOnlyList<Line> lines, List<BitVecExpr> shiftVariables)
         {
             int allocatedConstants = 0;
 
@@ -427,6 +437,14 @@ namespace Mba.Simplifier.Synthesis
                 constraints.Add(solver.MkBVULT(op0, lineNumber));
                 constraints.Add(solver.MkBVULT(op1, lineNumber));
 
+                var opcodeBitsize = BvWidth(components.Count);
+                var opc = line.Opcode;
+                if (opc.SortSize < opcodeBitsize)
+                    opc = solver.MkZeroExt((uint)opcodeBitsize - opc.SortSize, opc);
+
+                // Eliminate padding bits
+                constraints.Add(solver.MkBVULT(opc, solver.MkBV((uint)components.Count, (uint)opcodeBitsize)));
+
                 // If the instruction has one operand, set the 2nd operand to zero.
                 bool pruneUnaryOperands = true;
                 if (pruneUnaryOperands)
@@ -443,7 +461,7 @@ namespace Mba.Simplifier.Synthesis
                 }
 
 
-                bool pruneLshrConstants = false;
+                bool pruneLshrConstants = true;
                 if (pruneLshrConstants)
                 {
                     if (HasComponent(SynthOpc.Lshr))
@@ -455,6 +473,17 @@ namespace Mba.Simplifier.Synthesis
                         var boundedConstant = solver.MkBVULT(cdata, solver.MkBV(cdata.SortSize, cdata.SortSize));
 
                         constraints.Add(solver.MkImplies(isLshr, boundedConstant));
+
+
+                        var shiftVar = shiftVariables[i - lines.Count(x => x is VarLine)];
+                        var zeroOp = solver.MkEq(shiftVar, solver.MkBV(0, shiftVar.SortSize));
+                        constraints.Add(solver.MkImplies(solver.MkNot(isLshr), zeroOp));
+
+                        //Debugger.Break();
+
+
+                        // TODO: If this is not a constant or a shift, constraint the constant to be zero.
+                       // var zeroOp = solver.MkEq(cdata, solver.MkBV(0, op1.SortSize));
                     }
                 }
 
@@ -640,10 +669,11 @@ namespace Mba.Simplifier.Synthesis
 
             else
             {
-                /*
-                var inputCombinations = new ulong[9, 2]
+
+                var inputCombinations = new ulong[5, 2]
                 {
                     //{ 5555555555555555, ~0x5555555555555555ul },
+                    /*
                     {  0x5555555555555555, 0xAAAAAAAAAAAAAAA },
                     { 0x5555555555555555, 0xCCCCCCCCCCCCCCC },
                     { 0xAAAAAAAAAAAAAAA, 0xCCCCCCCCCCCCCCC },
@@ -651,13 +681,38 @@ namespace Mba.Simplifier.Synthesis
                     { 0x9E3779B97F4A7C15, 0xBF58476D1CE4E5B9},
                     { 0x1555555555555554, 0xAAAAAAAAAAAAAAA},
                     { rng.GetRandUlong(), rng.GetRandUlong()},
-                    { ulong.MaxValue, ulong.MaxValue },
-                     {  0, 0}
+                    */
+
+                    // 8-bit
+                    
+                    { 40, 64 }, // Maximize ones in output
+                     {  160, 89}, // Maximize zeroes in output
+                     { 128, 232}, // Max match of 0x55 pattern
+                     { 8, 244},  // Max match of 0xAA pattern
+                     { 95, 31}, // Max input hamming distance
+                    
+
+                    // 16-bit
+                    /*
+                    { 65535, 0},
+                    { 64435, 1100},
+                    { 256, 59555 },
+                    { 256, 22511},
+                    { 61687, 48984},
+                    */
+
+                    //{ 12128012135207198639, 6318731938502352976   },
+                    //{ 2117123840593055747, 16329620233116495869  },
+
+
+                    
+
+
+                    //  { 0, 0 },
                 };
-                */
 
                 // Evaluate the expression on 8 random IO points
-                for (var _ = 0; _ < 5; _++)
+                for (var _ = 0; _ < inputCombinations.GetLength(0); _++)
                 {
 
 
@@ -665,12 +720,12 @@ namespace Mba.Simplifier.Synthesis
                         .Select(x => rng.GetRandUlong())
                         .ToArray();
 
-                    // keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
+                    keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
 
                     points.Add(new ResultVectorKey(keys));
 
                     var bvPoints = keys
-                        .Select(x => solver.MkBV(rng.GetRandUlong(), (before as BitVecExpr).SortSize))
+                        .Select(x => solver.MkBV(x, (before as BitVecExpr).SortSize))
                         .ToArray();
 
 
@@ -729,6 +784,45 @@ namespace Mba.Simplifier.Synthesis
                 Console.WriteLine("\n\nExpr: \n" + result.Simplify());
                 Console.WriteLine("");
 
+                var w = ctx.GetWidth(idx);
+                var programAst = new List<AstIdx>();
+                foreach(var line in lines)
+                {
+                    // Variables get added immediately.
+                    if (line is VarLine varLine)
+                    {
+                        programAst.Add(inputs[varLine.Index]);
+                        continue;
+                    }
+
+                    var exprLine = (ExprLine)line;
+                    var opcode = (BitVecNum)model.Eval(exprLine.Opcode);
+                    var op0 = programAst[((BitVecNum)model.Eval(exprLine.Op0)).Int];
+                    var op1 = programAst[((BitVecNum)model.Eval(exprLine.Op1)).Int];
+                    var constData = (BitVecNum)model.Eval(exprLine.ConstantData);
+                    //var truthTable = (BitVecNum)model.Eval(exprLine.TruthTable);
+
+                    //SynthOpc opc = components[opcode.Int].Opcode;
+                    SynthOpc opc = opcode.Int >= components.Count ? components.Last().Opcode : components[opcode.Int].Opcode;
+                    AstIdx node = opc switch
+                    {
+                        SynthOpc.Constant => ctx.Constant(constData.UInt64, w),
+                        SynthOpc.Not => ctx.Neg(op0), // Neg() is actually bvnot in my IR
+                        SynthOpc.And => ctx.And(op0, op1),
+                        SynthOpc.Or => ctx.Or(op0, op1),
+                        SynthOpc.Xor => ctx.Xor(op0, op1),
+                        SynthOpc.Add => ctx.Add(op0, op1),
+                        SynthOpc.Mul => ctx.Mul(op0, op1),
+                        SynthOpc.Lshr => ctx.Lshr(op0, ctx.Constant(constData.UInt64, w)),
+                        SynthOpc.TruthTable => throw new NotImplementedException(),
+                    };
+
+                    programAst.Add(node);
+
+                }
+
+                Console.WriteLine($"MBA Expr: \n{ctx.GetAstString(programAst.Last())}\n\n");
+
                 var equivSolver = solver.MkSolver();
                 var equiv = ProveEquivalence(equivSolver, before, result) == Status.UNSATISFIABLE;
                 Console.WriteLine($"Equivalent: {equiv}");
@@ -757,6 +851,8 @@ namespace Mba.Simplifier.Synthesis
             }
 
         }
+
+       
 
         public static void ExportSmtToFile(Context ctx, Solver solver, string filePath)
         {
