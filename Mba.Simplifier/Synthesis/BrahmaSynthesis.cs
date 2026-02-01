@@ -30,6 +30,7 @@ namespace Mba.Simplifier.Synthesis
 
         // Arithmetic
         Add,
+        Sub,
         Mul,
 
         Lshr,
@@ -54,6 +55,7 @@ namespace Mba.Simplifier.Synthesis
         private readonly Z3Translator translator;
 
         // Config:
+        //
         private readonly int numInstructions = 7;
 
 
@@ -61,7 +63,7 @@ namespace Mba.Simplifier.Synthesis
         private const int TRUTHVARS = 2;
         private const uint TRUTHSIZE = 1u << TRUTHVARS;
 
-        private int maxConstants = 1;
+        private int maxConstants = 2;
 
 
         /*
@@ -97,14 +99,16 @@ namespace Mba.Simplifier.Synthesis
 
             //new(SynthOpc.Not),
             //new(SynthOpc.And),
-            new(SynthOpc.Or),
+            //new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
             new(SynthOpc.Xor),
 
             new(SynthOpc.Add),
+            new(SynthOpc.Sub),
+            new(SynthOpc.Mul),
 
-            new(SynthOpc.Lshr),
+            //new(SynthOpc.Lshr),
         };
 
         public BrahmaSynthesis(AstCtx ctx, AstIdx idx)
@@ -119,7 +123,8 @@ namespace Mba.Simplifier.Synthesis
             // The `SynthOpc` enum has the simplest components at top.
             // Because of how we encode our MUX tree, we want the most complex components to be at the top.
             // Short version: Components are described as an N-bit bit-vector. Sometimes the number of components is not a power of 2 and there are padding values. 3-bit vector with 6 possible values leaves 2 padding choices. We default padding choices to the simplest component.
-            //components.Reverse();
+            // Reverse does make things way faster
+            components.Reverse();
 
             for (int i = 0; i < components.Count; i++)
             {
@@ -150,7 +155,7 @@ namespace Mba.Simplifier.Synthesis
 
             var before = translator.Translate(idx);
 
-            var (lines, shiftVariables) = GetLines();
+            var (lines, shiftVariables, constantVariables) = GetLines();
 
             int li = 0;
             foreach (var line in lines)
@@ -188,6 +193,15 @@ namespace Mba.Simplifier.Synthesis
 
             var s = solver.MkSolver();
             var constraints = GetProgramConstraints(lines, shiftVariables);
+
+            // Optionally hardcode constants
+            /*
+            var c0 = constantVariables[0];
+            var c1 = constantVariables[1];
+            s.Add(solver.MkEq(c0, solver.MkBV(60, 8)));
+            s.Add(solver.MkEq(c1, solver.MkBV(82, 8)));
+            */
+
             s.Add(constraints);
 
 
@@ -196,10 +210,11 @@ namespace Mba.Simplifier.Synthesis
             Debugger.Break();
         }
 
-        private (IReadOnlyList<Line>, List<BitVecExpr> shiftVariables) GetLines()
+        private (IReadOnlyList<Line>, List<BitVecExpr> shiftVariables, List<BitVecExpr> constantVariables) GetLines()
         {
             var lines = new List<Line>();
             var shiftVariables = new List<BitVecExpr>();
+            var constantVariables = new List<BitVecExpr>();
 
             // Each variable gets assigned its own line
             for (int i = 0; i < inputs.Count; i++)
@@ -246,13 +261,16 @@ namespace Mba.Simplifier.Synthesis
                 if (allocatedConstants < maxConstants)
                 {
                     constant = solver.MkBVConst($"{i}_const", ctx.GetWidth(idx));
+
+                    constantVariables.Add(constant);
+
                     allocatedConstants++;
                 }
 
 
                 lines.Add(new ExprLine(opcode, op0, op1, truthTable, constant));
             }
-            return (lines, shiftVariables);
+            return (lines, shiftVariables, constantVariables);
         }
 
         public static int BvWidth(int maxValue)
@@ -291,6 +309,8 @@ namespace Mba.Simplifier.Synthesis
                         SynthOpc.Or => solver.MkBVOR(op0, op1),
                         SynthOpc.Xor => solver.MkBVXOR(op0, op1),
                         SynthOpc.Add => solver.MkBVAdd(op0, op1),
+                        SynthOpc.Sub => solver.MkBVSub(op0, op1),
+                        SynthOpc.Mul => solver.MkBVMul(op0, op1),
                         SynthOpc.TruthTable => TruthTableToExpr((BitVecExpr)exprLine.TruthTable, op0, op1),
                         SynthOpc.Constant => exprLine.ConstantData,
                         SynthOpc.Lshr => solver.MkBVLSHR(op0, exprLine.ConstantData), // TODO: Assert that op1 is a constant
@@ -638,6 +658,25 @@ namespace Mba.Simplifier.Synthesis
 
             var sw = Stopwatch.StartNew();
 
+            uint costWidth = 5;
+            var componentCosts = components.Select(x => (Expr)solver.MkBV(x.Opcode.GetCost(), costWidth)).ToList();
+            //var lineOpcodes = lines.Where(x => x is ExprLine).Select(x => (x as ExprLine).Opcode).ToArray();
+
+            var costSum = (BitVecExpr)solver.MkBV(0, costWidth);
+            foreach(var line in lines)
+            {
+                if (line is not ExprLine exprLine)
+                    continue;
+
+                var cost = (BitVecExpr)LinearSelect(exprLine.Opcode, componentCosts);
+                costSum = solver.MkBVAdd(costSum, cost);
+            }
+
+            // 13 was the previous best?
+            // 8 is the best known cost for 8-bit mod inv
+            s.Add(solver.MkBVULT(costSum, solver.MkBV(14, costWidth)));
+
+
             // Optionally force the last opcode to be something
             bool constrainLastOpcode = false;
             if (constrainLastOpcode)
@@ -655,6 +694,8 @@ namespace Mba.Simplifier.Synthesis
 
             var getEquivOnPointsConstraint = (BitVecNum[] bvPoints) =>
             {
+                Debug.Assert(bvPoints.All(x => (x.UInt64 % 2) == 1));
+
                 var subBefore = before.Substitute(symbols, bvPoints).Simplify();
                 //var subAfter = solver.MkApp(synthFunc, bvPoints);
                 var subAfter = after.Substitute(symbols, bvPoints);
@@ -670,7 +711,7 @@ namespace Mba.Simplifier.Synthesis
             else
             {
 
-                var inputCombinations = new ulong[5, 2]
+                var inputCombinations = new ulong[7, 2]
                 {
                     //{ 5555555555555555, ~0x5555555555555555ul },
                     /*
@@ -684,13 +725,13 @@ namespace Mba.Simplifier.Synthesis
                     */
 
                     // 8-bit
-                    
+                    /*
                     { 40, 64 }, // Maximize ones in output
                      {  160, 89}, // Maximize zeroes in output
                      { 128, 232}, // Max match of 0x55 pattern
                      { 8, 244},  // Max match of 0xAA pattern
                      { 95, 31}, // Max input hamming distance
-                    
+                    */
 
                     // 16-bit
                     /*
@@ -704,12 +745,39 @@ namespace Mba.Simplifier.Synthesis
                     //{ 12128012135207198639, 6318731938502352976   },
                     //{ 2117123840593055747, 16329620233116495869  },
 
+                    // 8-bit modular inverse
+                    /*
+                    { 253, 0 },
+                    { 3, 0 },
+                    { 131, 0 },
+                    */
 
-                    
 
+                    // 8-bit modular inverse (considering even inputs too)
+                    // This hand picked input combination allows us to find a solution instantly
+                    /*
+                     { 188, 0 },
+                     { 255, 0 },
+                     { 2, 0 },
+                     { 131, 0 },
+                     { 128, 0 },
+                    */
 
+                      { 255, 0 },
+                      { 131, 0 },
+                      { 119, 0 },
+                      { 3, 171 },
+
+                      { 253, 0},
+                      { 131, 0},
+                      { 249, 0},
+
+                      //{ 17, 0}
+                      //{ 0, 0 },
                     //  { 0, 0 },
                 };
+
+
 
                 // Evaluate the expression on 8 random IO points
                 for (var _ = 0; _ < inputCombinations.GetLength(0); _++)
@@ -720,7 +788,8 @@ namespace Mba.Simplifier.Synthesis
                         .Select(x => rng.GetRandUlong())
                         .ToArray();
 
-                    keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
+                    //keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
+                    keys = new ulong[] { inputCombinations[_, 0] };
 
                     points.Add(new ResultVectorKey(keys));
 
@@ -746,7 +815,7 @@ namespace Mba.Simplifier.Synthesis
 
             while (true)
             {
-                bool export = false;
+                bool export = true;
                 if (export)
                 {
 
@@ -799,21 +868,22 @@ namespace Mba.Simplifier.Synthesis
                     var opcode = (BitVecNum)model.Eval(exprLine.Opcode);
                     var op0 = programAst[((BitVecNum)model.Eval(exprLine.Op0)).Int];
                     var op1 = programAst[((BitVecNum)model.Eval(exprLine.Op1)).Int];
-                    var constData = (BitVecNum)model.Eval(exprLine.ConstantData);
+                    var constData = model.Eval(exprLine.ConstantData);
                     //var truthTable = (BitVecNum)model.Eval(exprLine.TruthTable);
 
                     //SynthOpc opc = components[opcode.Int].Opcode;
                     SynthOpc opc = opcode.Int >= components.Count ? components.Last().Opcode : components[opcode.Int].Opcode;
                     AstIdx node = opc switch
                     {
-                        SynthOpc.Constant => ctx.Constant(constData.UInt64, w),
+                        SynthOpc.Constant => ctx.Constant((constData as BitVecNum).UInt64, w),
                         SynthOpc.Not => ctx.Neg(op0), // Neg() is actually bvnot in my IR
                         SynthOpc.And => ctx.And(op0, op1),
                         SynthOpc.Or => ctx.Or(op0, op1),
                         SynthOpc.Xor => ctx.Xor(op0, op1),
                         SynthOpc.Add => ctx.Add(op0, op1),
+                        SynthOpc.Sub => ctx.Sub(op0, op1),
                         SynthOpc.Mul => ctx.Mul(op0, op1),
-                        SynthOpc.Lshr => ctx.Lshr(op0, ctx.Constant(constData.UInt64, w)),
+                        SynthOpc.Lshr => ctx.Lshr(op0, ctx.Constant((constData as BitVecNum).UInt64, w)),
                         SynthOpc.TruthTable => throw new NotImplementedException(),
                     };
 
@@ -823,7 +893,14 @@ namespace Mba.Simplifier.Synthesis
 
                 Console.WriteLine($"MBA Expr: \n{ctx.GetAstString(programAst.Last())}\n\n");
 
+                Console.WriteLine($"MBA DAG: \n{DagFormatter.Format(ctx, programAst.Last())}\n\n");
+
+                Console.WriteLine($"With cost: {model.Eval(costSum)}\n");
+
                 var equivSolver = solver.MkSolver();
+
+                equivSolver.Add(solver.MkEq(solver.MkExtract(0, 0, symbols[0] as BitVecExpr), solver.MkBV(1, 1)));
+
                 var equiv = ProveEquivalence(equivSolver, before, result) == Status.UNSATISFIABLE;
                 Console.WriteLine($"Equivalent: {equiv}");
 
@@ -843,7 +920,12 @@ namespace Mba.Simplifier.Synthesis
 
                 else
                 {
+
+
                     var bvPoints = symbols.Select(x => (BitVecNum)equivSolver.Model.Eval(x)).ToArray();
+
+                    Console.WriteLine($"Not equivalent on inputs: {String.Join(", ", bvPoints.Select(x => x.UInt64))}");
+
                     var constraint = getEquivOnPointsConstraint(bvPoints);
                     s.Add(constraint);
                     Console.WriteLine("");

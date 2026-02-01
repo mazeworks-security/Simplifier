@@ -315,6 +315,10 @@ inputText = "(((x|y)+y)^y) >> 4";
 
 inputText = "(((x|1111)+y)^y) >> 4";
 
+// Tool has a really hard time synthesizing this
+// minimum number of instructions is 6
+inputText = "((x ^ 60) * ((82 - (x * (x ^ 60)))))";
+
 //inputText = "(RSI + RBP) & 0xFFFFFFFF ";
 
 //inputText = "x >> 2";

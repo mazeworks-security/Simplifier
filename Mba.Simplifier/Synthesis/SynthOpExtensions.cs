@@ -26,5 +26,22 @@ namespace Mba.Simplifier.Synthesis
                 _ => false,
             };
         }
+
+        public static int GetCost(this SynthOpc opc)
+        {
+            return opc switch
+            {
+                SynthOpc.And => 1,
+                SynthOpc.Or => 1,
+                SynthOpc.Xor => 1,
+                SynthOpc.Not => 1,
+                SynthOpc.Add => 1,
+                SynthOpc.Sub => 1,
+                SynthOpc.Mul => 3,
+                SynthOpc.Lshr => 1,
+                SynthOpc.TruthTable => 1,
+                SynthOpc.Constant => 0,
+            };
+        }
     }
 }
