@@ -11,6 +11,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
@@ -57,7 +58,7 @@ namespace Mba.Simplifier.Synthesis
 
         // Config:
         // 7 is optimal for 8-bit modular inverse
-        private readonly int numInstructions = 6;
+        private readonly int numInstructions = 8;
 
 
         private bool usesTruthOperator = false;
@@ -536,7 +537,7 @@ namespace Mba.Simplifier.Synthesis
 
 
                         // TODO: If this is not a constant or a shift, constraint the constant to be zero.
-                       // var zeroOp = solver.MkEq(cdata, solver.MkBV(0, op1.SortSize));
+                        // var zeroOp = solver.MkEq(cdata, solver.MkBV(0, op1.SortSize));
                     }
                 }
 
@@ -561,7 +562,7 @@ namespace Mba.Simplifier.Synthesis
                 bool sortCommutativeOps = false;
                 if (sortCommutativeOps)
                 {
-                    
+
                     /*
                     var isAssociative = new List<BoolExpr>();
                     var ac = components.Where(x => x.Opcode.IsCommutative()).ToList();
@@ -584,7 +585,7 @@ namespace Mba.Simplifier.Synthesis
                     constraints.Add(solver.MkImplies(isAssociative, sorted));
                     */
 
-                    
+
                     // This encoding is actually better than all of the other encodings..
                     // Many imply statements are better than one big implies statement I guess
                     var associativeOps = components.Where(x => x.Opcode.IsCommutative());
@@ -598,8 +599,8 @@ namespace Mba.Simplifier.Synthesis
 
                         constraints.Add(solver.MkImplies(isAssociative, sorted));
                     }
-                    
-                    
+
+
 
 
 
@@ -644,7 +645,7 @@ namespace Mba.Simplifier.Synthesis
                     // Otherwise there are some constants, and one of the children could possibly be a constant.
                     var operandConstraints = new List<BoolExpr>();
                     //for(int i = 0; i < operands.Count; i++)
-                    for(int operandIdx = 0; operandIdx < operands.Count; operandIdx++)
+                    for (int operandIdx = 0; operandIdx < operands.Count; operandIdx++)
                     {
                         // Cases:
                         //  - 0 variables(Constant)
@@ -655,7 +656,7 @@ namespace Mba.Simplifier.Synthesis
 
                         // Create a boolean constraint that checks whether the operand is a  constant
                         var constConstraints = new List<BoolExpr>();
-                        foreach(var constIndex in constIndices)
+                        foreach (var constIndex in constIndices)
                         {
                             // Check whether the line could be a constant (is it within the range of instructions where we allow constants)
                             var isOperandInConstantRange = solver.MkEq(operand, solver.MkBV(constIndex, operand.SortSize));
@@ -695,13 +696,13 @@ namespace Mba.Simplifier.Synthesis
                 // %0 = a&b
                 // %1 = c+d
                 bool pruneAdjacentSymmetry = true;
-                if (pruneAdjacentSymmetry && i+1 < lines.Count)
+                if (pruneAdjacentSymmetry && i + 1 < lines.Count)
                 {
                     var next = lines[i + 1] as ExprLine;
 
                     // TODO: If we have more 12 or more components, we probably want to use a different encoding.
                     List<BoolExpr> dependencyConstraints = new List<BoolExpr>();
-                    foreach(var component in components)
+                    foreach (var component in components)
                     {
                         var count = component.Opcode.GetOperandCount();
                         if (count == 0)
@@ -723,7 +724,6 @@ namespace Mba.Simplifier.Synthesis
 
                     // If this instruction could be a constant, disable the opcode based sorting logic and instead apply a special canonicalization:
                     if (allocatedConstants < maxConstants)
-                    //if (false)
                     {
                         // If either operand is a constant, treat them as dependent. We'll handle with special logic
                         var const0 = IsComponent(line, SynthOpc.Constant);
@@ -740,6 +740,10 @@ namespace Mba.Simplifier.Synthesis
                         // %1 = a+b
                         var sortConstant = solver.MkAnd(const1, solver.MkNot(const0));
                         constraints.Add(solver.MkNot(sortConstant));
+
+
+                        var bothConst = solver.MkAnd(const0, const1);
+                        constraints.Add(solver.MkImplies(bothConst, solver.MkBVULT(line.ConstantData, next.ConstantData)));
                     }
 
 
@@ -786,9 +790,9 @@ namespace Mba.Simplifier.Synthesis
 
                         // Having the same opcode implies that at least one operand is different
                         // Though we need to imply conditionally check the number of operands.
-      
 
-                        foreach(var component in components)
+
+                        foreach (var component in components)
                         {
                             var count = component.Opcode.GetOperandCount();
                             if (count == 0)
@@ -814,7 +818,7 @@ namespace Mba.Simplifier.Synthesis
                             var diff1 = Different(l0.Op1, l1.Op1);
                             constraints.Add(solver.MkImplies(sameOpcode, solver.MkOr(diff0, diff1)));
                         }
-                        
+
                         /*
                         var sameOp0 = solver.MkEq(l0.Op0, l1.Op0);
                         var sameOp1 = solver.MkEq(l0.Op1, l1.Op1);
@@ -827,7 +831,7 @@ namespace Mba.Simplifier.Synthesis
                         var identical = solver.MkAnd(sameOpcode, sameOperands);
                         constraints.Add(solver.MkNot(identical));
                         */
-                        
+
                     }
                 }
 
@@ -930,7 +934,7 @@ namespace Mba.Simplifier.Synthesis
             //var lineOpcodes = lines.Where(x => x is ExprLine).Select(x => (x as ExprLine).Opcode).ToArray();
 
             var costSum = (BitVecExpr)solver.MkBV(0, costWidth);
-            foreach(var line in lines)
+            foreach (var line in lines)
             {
                 if (line is not ExprLine exprLine)
                     continue;
@@ -1132,18 +1136,21 @@ namespace Mba.Simplifier.Synthesis
                 }
 
                 var result = after.Substitute(from.ToArray(), to.ToArray()).Simplify();
-                Console.WriteLine("\n\nExpr: \n" + result.Simplify());
-                Console.WriteLine("");
+                //Console.WriteLine("\n\nExpr: \n" + result.Simplify());
+                //Console.WriteLine("");
 
                 var w = ctx.GetWidth(idx);
                 var programAst = new List<AstIdx>();
-                for(int li = 0; li < lines.Count; li++)
+                List<BitVecExpr> z3ProgramAst = new List<BitVecExpr>();
+
+                for (int li = 0; li < lines.Count; li++)
                 {
                     var line = lines[li];
                     // Variables get added immediately.
                     if (line is VarLine varLine)
                     {
                         programAst.Add(inputs[varLine.Index]);
+                        z3ProgramAst.Add((BitVecExpr)symbols[varLine.Index]);
                         continue;
                     }
 
@@ -1154,23 +1161,31 @@ namespace Mba.Simplifier.Synthesis
                     var op1Value = model.Eval(exprLine.Op1);
                     if (op0Value is not BitVecNum && opcode.Int != GetComponent(SynthOpc.Constant).Data.Index)
                     {
+                        throw new InvalidOperationException();
                         programAst.Add(ctx.Symbol($"ILLEGAL{li}", w));
                         continue;
                     }
 
                     if (op1Value is not BitVecNum && opcode.Int != GetComponent(SynthOpc.Constant).Data.Index && opcode.Int != GetComponent(SynthOpc.Not).Data.Index)
                     {
+                        throw new InvalidOperationException();
                         programAst.Add(ctx.Symbol($"ILLEGAL{li}", w));
                         continue;
                     }
 
                     var op0 = programAst[((BitVecNum)op0Value).Int];
                     var op1 = programAst[((BitVecNum)op1Value).Int];
+                    var op0Z3 = z3ProgramAst[((BitVecNum)op0Value).Int];
+                    var op1Z3 = z3ProgramAst[((BitVecNum)op1Value).Int];
                     var constData = model.Eval(exprLine.ConstantData);
                     //var truthTable = (BitVecNum)model.Eval(exprLine.TruthTable);
 
+
                     //SynthOpc opc = components[opcode.Int].Opcode;
                     SynthOpc opc = opcode.Int >= components.Count ? components.Last().Opcode : components[opcode.Int].Opcode;
+
+
+                    Console.WriteLine($"v{li} = {opc}");
                     AstIdx node = opc switch
                     {
                         SynthOpc.Constant => ctx.Constant((constData as BitVecNum).UInt64, w),
@@ -1179,15 +1194,37 @@ namespace Mba.Simplifier.Synthesis
                         SynthOpc.Or => ctx.Or(op0, op1),
                         SynthOpc.Xor => ctx.Xor(op0, op1),
                         SynthOpc.Add => ctx.Add(op0, op1),
+                        // Note: My IR does not have a subtract operator. `a-b` becomes `a + -1*b`. This may cause weird printed output but is fine otherwise.
                         SynthOpc.Sub => ctx.Sub(op0, op1),
                         SynthOpc.Mul => ctx.Mul(op0, op1),
                         SynthOpc.Lshr => ctx.Lshr(op0, ctx.Constant((constData as BitVecNum).UInt64, w)),
                         SynthOpc.TruthTable => throw new NotImplementedException(),
                     };
 
+
+
+                    BitVecExpr z3Node = opc switch
+                    {
+                        SynthOpc.Constant => solver.MkBV((constData as BitVecNum).UInt64, (uint)w),
+                        SynthOpc.Not => solver.MkBVNot(op0Z3), // Neg() is actually bvnot in my IR
+                        SynthOpc.And => solver.MkBVAND(op0Z3, op1Z3),
+                        SynthOpc.Or => solver.MkBVOR(op0Z3, op1Z3),
+                        SynthOpc.Xor => solver.MkBVXOR(op0Z3, op1Z3),
+                        SynthOpc.Add => solver.MkBVAdd(op0Z3, op1Z3),
+                        // Note: My IR does not have a subtract operator. `a-b` becomes `a + -1*b`. This may cause weird printed output but is fine otherwise.
+                        SynthOpc.Sub => solver.MkBVSub(op0Z3, op1Z3),
+                        SynthOpc.Mul => solver.MkBVMul(op0Z3, op1Z3),
+                        //SynthOpc.Lshr => solver.MkBVLSHR(op0Z3, ctx.Constant((constData as BitVecNum).UInt64, w)),
+                        SynthOpc.TruthTable => throw new NotImplementedException(),
+                    };
+
+
                     programAst.Add(node);
+                    z3ProgramAst.Add(z3Node);
 
                 }
+
+                result = z3ProgramAst.Last();
 
                 Console.WriteLine($"MBA Expr: \n{ctx.GetAstString(programAst.Last())}\n\n");
 
@@ -1218,6 +1255,8 @@ namespace Mba.Simplifier.Synthesis
 
                 else
                 {
+                    Generalize(symbols, before, result);
+
                     var bvPoints = symbols.Select(x => (BitVecNum)equivSolver.Model.Eval(x)).ToArray();
                     var constraint = getEquivOnPointsConstraint(bvPoints);
                     s.Add(constraint);
@@ -1225,9 +1264,95 @@ namespace Mba.Simplifier.Synthesis
                 }
             }
 
+            // TODO Idea: Sort constants by their value
         }
 
-       
+        // Implements generalization of cegis(T)
+        // (1). 
+        private void Generalize(Expr[] symbols, Expr before, Expr candidateExpression)
+        {
+            // Collect all constants in the candidate expression
+            var constants = new HashSet<Expr>();
+            var newConstants = new List<Expr>();
+
+            // Recursive function to traverse the AST and find constants
+            void CollectConstants(Expr e)
+            {
+                /*
+                if (e is BitVecNum && e.Args.Length == 0 && e.Sort.SortKind == Z3_sort_kind.Z3_BV_SORT)
+                {
+                    // It's a bitvector constant
+                    constants.Add(e);
+                    newConstants.Add(solver.MkConst($"c{newConstants.Count}", e.Sort)); // Create symbolic variable
+                }
+                else
+                {
+                    foreach (var arg in e.Args)
+                        CollectConstants(arg);
+                }
+                */
+
+                if (e.ASTKind == Z3_ast_kind.Z3_NUMERAL_AST)
+                {
+                    if (constants.Add((BitVecNum)e))
+                        newConstants.Add(solver.MkBVConst($"HOLE{newConstants.Count}", (e as BitVecNum).SortSize));
+                    return;
+                }
+
+                if (e.ASTKind != Z3_ast_kind.Z3_APP_AST)
+                    throw new InvalidOperationException();
+
+                foreach (var child in e.Args)
+                {
+                    CollectConstants(child);
+                }
+
+            }
+            CollectConstants(candidateExpression);
+
+            if (constants.Count == 0)
+                return;
+
+
+
+            // Substitute original constants with symbolic variables
+            var generalizedExpression = candidateExpression.Substitute(constants.ToArray(), newConstants.ToArray());
+
+            // forall inputs, exists constants, generalizedExpression(inputs, constants) == before(inputs)
+            // But here we want: exists constants . forall inputs . generalizedExpression == before
+
+            // We want to find IF there exist constants such that for all inputs, they are equal.
+            // If so, we found a solution!
+
+            // However, this is expensive.
+            // Generalization typically used to prune search space.
+            // If NO constants exist such that they are equal, we can block this *structure*.
+
+            // exists C . forall X . P(X, C) == S(X)
+            // C = newConstants
+            // X = symbols
+
+            var equality = solver.MkEq(generalizedExpression, before);
+            var forallX = solver.MkForall(symbols, equality);
+
+            var genSolver = solver.MkSolver();
+            genSolver.Add(forallX);
+
+            var res = genSolver.Check();
+            if (res == Status.SATISFIABLE)
+            {
+                Console.WriteLine("Generlization found a solution!");
+                Debugger.Break();
+            }
+            else
+            {
+                Debugger.Break();
+            }
+
+            //  Debugger.Break();
+        }
+
+
 
         public static void ExportSmtToFile(Context ctx, Solver solver, string filePath)
         {
