@@ -737,6 +737,8 @@ namespace Mba.Simplifier.Synthesis
             // best known cost is 8
             //s.Add(solver.MkBVULT(costSum, solver.MkBV(14, costWidth)));
 
+            s.Add(solver.MkEq(costSum, solver.MkBV(7, costWidth)));
+
 
             // Optionally force the last opcode to be something
             bool constrainLastOpcode = false;
