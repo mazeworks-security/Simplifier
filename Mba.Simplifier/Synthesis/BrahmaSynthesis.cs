@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -56,7 +57,7 @@ namespace Mba.Simplifier.Synthesis
 
         // Config:
         // 7 is optimal for 8-bit modular inverse
-        private readonly int numInstructions = 7;
+        private readonly int numInstructions = 9;
 
 
         private bool usesTruthOperator = false;
@@ -99,7 +100,7 @@ namespace Mba.Simplifier.Synthesis
         {
             new(SynthOpc.Constant),
 
-            //new(SynthOpc.Not),
+            new(SynthOpc.Not),
             //new(SynthOpc.And),
             //new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
@@ -382,29 +383,29 @@ namespace Mba.Simplifier.Synthesis
             if (n == 1)
                 return options[0];
 
-            var casted = options.Select(x => (BitVecExpr)x).ToList();
+            var casted = options.Select(x => x).ToList();
 
             if (n > 12)
                 return PrunedSelect(index, casted);
 
 
-            BitVecExpr result = (BitVecExpr)options[n - 1];
+            var result = options[n - 1];
 
             for (int i = n - 2; i >= 0; i--)
             {
                 BoolExpr condition = solver.MkEq(index, solver.MkBV(i, index.SortSize));
-                result = (BitVecExpr)solver.MkITE(condition, (Expr)options[i], result);
+                result = solver.MkITE(condition, (Expr)options[i], result);
             }
 
             return result;
         }
 
-        public BitVecExpr PrunedSelect(BitVecExpr index, List<BitVecExpr> options)
+        public Expr PrunedSelect(BitVecExpr index, List<Expr> options)
         {
             return BuildPrunedTree(solver, index, options, 0, options.Count);
         }
 
-        private static BitVecExpr BuildPrunedTree(Context ctx, BitVecExpr index, List<BitVecExpr> options, int offset, int count)
+        private static Expr BuildPrunedTree(Context ctx, BitVecExpr index, List<Expr> options, int offset, int count)
         {
             if (count == 1) return options[offset];
 
@@ -417,10 +418,10 @@ namespace Mba.Simplifier.Synthesis
             BoolExpr condition = ctx.MkEq(condBit, ctx.MkBV(1, 1));
 
             // Visit next branch of the tree
-            BitVecExpr lowResult = BuildPrunedTree(ctx, index, options, offset, splitSize);
-            BitVecExpr highResult = BuildPrunedTree(ctx, index, options, offset + splitSize, rightCount);
+            var lowResult = BuildPrunedTree(ctx, index, options, offset, splitSize);
+            var highResult = BuildPrunedTree(ctx, index, options, offset + splitSize, rightCount);
 
-            return (BitVecExpr)ctx.MkITE(condition, highResult, lowResult);
+            return ctx.MkITE(condition, highResult, lowResult);
         }
 
 
@@ -557,20 +558,52 @@ namespace Mba.Simplifier.Synthesis
                 // Sort operands of commutative operators
                 // Rewrite add(b, a) as add(a, b)
                 // NOT has a overlapping constraint, basically asserting that op1 >= op0
-                bool sortAssociativeOps = false;
+                bool sortAssociativeOps = true;
                 if (sortAssociativeOps)
                 {
-                    var associativeOps = components.Where(x => x.Opcode.IsAssociative());
+                    
+                    /*
+                    var isAssociative = new List<BoolExpr>();
+                    var ac = components.Where(x => x.Opcode.IsCommutative()).ToList();
+                    foreach (var component in ac)
+                    {
+                        isAssociative.Add(IsComponent(line, component.Opcode));
+                    }
+
+                    var sorted = solver.MkBVULE(op0, op1);
+                    constraints.Add(solver.MkImplies(solver.MkOr(isAssociative), sorted));
+                    */
+
+                    // Alternative encoding that is for some reason not faster
+                    /*
+                    var decisions = components.Select(x => (Expr)solver.MkBool(x.Opcode.IsAssociative())).ToList();
+                    var isAssociative = (BoolExpr)LinearSelect(line.Opcode, decisions);
+
+                    //var sorted = solver.MkBVULE(op0, op1);
+                    var sorted = solver.MkBVUGE(op0, op1);
+                    constraints.Add(solver.MkImplies(isAssociative, sorted));
+                    */
+
+                    
+                    // This encoding is actually better than all of the other encodings..
+                    // Many imply statements are better than one big implies statement I guess
+                    var associativeOps = components.Where(x => x.Opcode.IsCommutative());
                     foreach (var component in associativeOps)
                     {
                         var isAssociative = solver.MkEq(line.Opcode, solver.MkBV(component.Data.Index, line.Opcode.SortSize));
-                        //var sorted = solver.MkBVULE(op0, op1);
+                        // Ascending order is apparently faster despite the unary operand optimization thing
+                        var sorted = solver.MkBVULE(op0, op1);
 
-                        var sorted = solver.MkBVUGE(op0, op1);
+                        //var sorted = solver.MkBVUGE(op0, op1);
 
                         constraints.Add(solver.MkImplies(isAssociative, sorted));
-
                     }
+                    
+                    
+
+
+
+
                 }
 
                 // Idempotency elimination: Do not allow (a&a), (a|a), (a^a)
@@ -653,7 +686,7 @@ namespace Mba.Simplifier.Synthesis
 
                 // CSE (common subexpression elimination)
                 // Assert that no two lines are identical
-                bool pruneCommonSubexp = false;
+                bool pruneCommonSubexp = true;
                 if (pruneCommonSubexp)
                 {
                     for (int j = i + 1; j < lines.Count; j++)
@@ -669,10 +702,38 @@ namespace Mba.Simplifier.Synthesis
                         }
 
 
+                        // Having the same opcode implies that at least one operand is different
+                        // Though we need to imply conditionally check the number of operands.
+      
 
-                        var sameOpcode = solver.MkEq(l0.Opcode, l1.Opcode);
+                        foreach(var component in components)
+                        {
+                            var count = component.Opcode.GetOperandCount();
+                            if (count == 0)
+                                continue;
+
+                            var sameOpcode = solver.MkEq(l0.Opcode, l1.Opcode);
+
+                            // Change the implication to "we have the same opcode and the opcode == this"
+                            sameOpcode = solver.MkAnd(sameOpcode, IsComponent(line, component));
+
+                            // For a unary operation, assert that the operands are different if they have the same opcode.
+                            if (count == 1)
+                            {
+
+                                constraints.Add(solver.MkImplies(sameOpcode, Different(l0.Op0, l1.Op0)));
+                                continue;
+                            }
 
 
+                            // Otherwise there are 2 operands.
+                            Debug.Assert(count == 2);
+                            var diff0 = Different(l0.Op0, l1.Op0);
+                            var diff1 = Different(l0.Op1, l1.Op1);
+                            constraints.Add(solver.MkImplies(sameOpcode, solver.MkOr(diff0, diff1)));
+                        }
+                        
+                        /*
                         var sameOp0 = solver.MkEq(l0.Op0, l1.Op0);
                         var sameOp1 = solver.MkEq(l0.Op1, l1.Op1);
 
@@ -683,6 +744,8 @@ namespace Mba.Simplifier.Synthesis
 
                         var identical = solver.MkAnd(sameOpcode, sameOperands);
                         constraints.Add(solver.MkNot(identical));
+                        */
+                        
                     }
                 }
 
@@ -717,6 +780,9 @@ namespace Mba.Simplifier.Synthesis
             return solver.MkAnd(constraints);
         }
 
+        private BoolExpr Different(Expr a, Expr b)
+            => solver.MkNot(solver.MkEq(a, b));
+
         // Return a constraint that the line has atleast one operand
         private BoolExpr AtleastNOperands(ExprLine line, int n)
         {
@@ -726,18 +792,35 @@ namespace Mba.Simplifier.Synthesis
             if (zeroComponents.Count == 0)
                 return solver.MkTrue();
 
-            foreach(var c in zeroComponents)
+            foreach (var c in zeroComponents)
                 constraints.Add(solver.MkNot(IsComponent(line, c)));
             if (constraints.Count == 1)
                 return constraints.Single();
             return solver.MkAnd(constraints);
+        }
 
+        private BoolExpr ExactlyNOperands(ExprLine line, int n)
+        {
+            List<BoolExpr> constraints = new();
+
+            var zeroComponents = components.Select(x => x.Opcode).Where(x => x.GetOperandCount() == n).ToList();
+            if (zeroComponents.Count == 0)
+                return solver.MkTrue();
+
+            foreach (var c in zeroComponents)
+                constraints.Add((IsComponent(line, c)));
+            if (constraints.Count == 1)
+                return constraints.Single();
+            return solver.MkAnd(constraints);
         }
 
         private BoolExpr IsComponent(ExprLine line, SynthOpc component)
         {
             return solver.MkEq(line.Opcode, GetComponentIndexBv(component));
         }
+
+        private BoolExpr IsComponent(ExprLine line, Component component)
+            => IsComponent(line, component.Opcode);
 
         private BitVecExpr GetComponentIndexBv(SynthOpc opc)
         {
@@ -928,7 +1011,7 @@ namespace Mba.Simplifier.Synthesis
 
             while (true)
             {
-                bool export = true;
+                bool export = false;
                 if (export)
                 {
 

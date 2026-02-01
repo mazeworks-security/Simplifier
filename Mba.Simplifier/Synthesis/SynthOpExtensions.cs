@@ -8,12 +8,13 @@ namespace Mba.Simplifier.Synthesis
 {
     public static class SynthOpExtensions
     {
-        public static bool IsAssociative(this SynthOpc opc)
+        public static bool IsCommutative(this SynthOpc opc)
         {
             return opc switch
             {
                 SynthOpc.And or SynthOpc.Or or SynthOpc.Xor or SynthOpc.Add or SynthOpc.Mul => true,
-                _ => false,
+                SynthOpc.Not or SynthOpc.Sub or SynthOpc.Lshr or SynthOpc.TruthTable or SynthOpc.Constant => false,
+                _ => throw new NotImplementedException(),
             };
         }
 
