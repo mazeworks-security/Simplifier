@@ -57,7 +57,7 @@ namespace Mba.Simplifier.Synthesis
 
         // Config:
         // 7 is optimal for 8-bit modular inverse
-        private readonly int numInstructions = 7;
+        private readonly int numInstructions = 6;
 
 
         private bool usesTruthOperator = false;
@@ -102,7 +102,7 @@ namespace Mba.Simplifier.Synthesis
 
             //new(SynthOpc.Not),
             //new(SynthOpc.And),
-            //new(SynthOpc.Or),
+            new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
             new(SynthOpc.Xor),
@@ -558,7 +558,7 @@ namespace Mba.Simplifier.Synthesis
                 // Sort operands of commutative operators
                 // Rewrite add(b, a) as add(a, b)
                 // NOT has a overlapping constraint, basically asserting that op1 >= op0
-                bool sortCommutativeOps = true;
+                bool sortCommutativeOps = false;
                 if (sortCommutativeOps)
                 {
                     
@@ -625,6 +625,7 @@ namespace Mba.Simplifier.Synthesis
                     }
                 }
 
+                // Theres a bug with the current const folding encoding
                 // 1 + 2 => 3
                 // Assert that at least one operand of a boolean must not be constant
                 // For each 2 variable operator, get both operands
@@ -911,6 +912,7 @@ namespace Mba.Simplifier.Synthesis
 
         private void CEGIS(Solver s, Expr[] symbols, Expr before, Expr after, IReadOnlyList<Line> lines)
         {
+            bool minv = false;
             Console.WriteLine("Beginning cegis");
 
             // Define 'after' as a function to avoid AST explosion during substitution
@@ -941,7 +943,7 @@ namespace Mba.Simplifier.Synthesis
             //s.Add(solver.MkBVULT(costSum, solver.MkBV(14, costWidth)));
             //s.Add(solver.MkBVULT(costSum, solver.MkBV(32, costWidth)));
 
-            s.Add(solver.MkEq(costSum, solver.MkBV(8, costWidth)));
+            //s.Add(solver.MkEq(costSum, solver.MkBV(8, costWidth)));
 
 
             // Optionally force the last opcode to be something
@@ -961,7 +963,8 @@ namespace Mba.Simplifier.Synthesis
 
             var getEquivOnPointsConstraint = (BitVecNum[] bvPoints) =>
             {
-                Debug.Assert(bvPoints.All(x => (x.UInt64 % 2) == 1));
+                if (minv)
+                    Debug.Assert(bvPoints.All(x => (x.UInt64 % 2) == 1));
 
                 var subBefore = before.Substitute(symbols, bvPoints).Simplify();
                 //var subAfter = solver.MkApp(synthFunc, bvPoints);
@@ -1057,7 +1060,7 @@ namespace Mba.Simplifier.Synthesis
 
 
                 // Evaluate the expression on 8 random IO points
-                for (var _ = 0; _ < inputCombinations.GetLength(0); _++)
+                for (var _ = 0; _ < 1; _++)
                 {
 
 
@@ -1066,7 +1069,8 @@ namespace Mba.Simplifier.Synthesis
                         .ToArray();
 
                     //keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
-                    keys = new ulong[] { inputCombinations[_, 0] };
+                    if (minv)
+                        keys = new ulong[] { inputCombinations[_, 0] };
 
                     points.Add(new ResultVectorKey(keys));
 

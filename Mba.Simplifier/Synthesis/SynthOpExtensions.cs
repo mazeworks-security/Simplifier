@@ -23,7 +23,7 @@ namespace Mba.Simplifier.Synthesis
         {
             return opc switch
             {
-                SynthOpc.And or SynthOpc.Xor or SynthOpc.Xor => true,
+                SynthOpc.And or SynthOpc.Xor or SynthOpc.Xor or SynthOpc.Or => true,
                 _ => false,
             };
         }
