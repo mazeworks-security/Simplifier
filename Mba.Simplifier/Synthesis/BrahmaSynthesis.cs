@@ -15,6 +15,7 @@ using System.Linq.Expressions;
 using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Mba.Simplifier.Synthesis
 {
@@ -65,7 +66,7 @@ namespace Mba.Simplifier.Synthesis
         private const int TRUTHVARS = 2;
         private const uint TRUTHSIZE = 1u << TRUTHVARS;
 
-        private int maxConstants = 3;
+        private int maxConstants = 2;
 
         private uint opcodeBitsize = uint.MaxValue;
 
@@ -109,7 +110,7 @@ namespace Mba.Simplifier.Synthesis
             new(SynthOpc.Xor),
 
             new(SynthOpc.Add),
-            new(SynthOpc.Sub),
+            //new(SynthOpc.Sub),
             new(SynthOpc.Mul),
 
             //new(SynthOpc.Lshr),
@@ -689,6 +690,65 @@ namespace Mba.Simplifier.Synthesis
 
             skip:
 
+                // Only allow multiplication if one operand is a constant
+                bool forceConstMultiply = false;
+                if (forceConstMultiply)
+                {
+                    var constComponent = GetComponent(SynthOpc.Constant);
+                    var operands = new List<BitVecExpr>() { line.Op0, line.Op1 };
+
+                    // Get the indices of all possible previous constants
+                    var constIndices = Enumerable.Range(lines.Count(x => x is VarLine), maxConstants).TakeWhile(x => x < i).ToList();
+                    // Skip if there are no constants before this instruction
+                    if (constIndices.Count == 0)
+                        goto skip2;
+
+                    // Otherwise there are some constants, and one of the children could possibly be a constant.
+                    var operandConstraints = new List<BoolExpr>();
+                    //for(int i = 0; i < operands.Count; i++)
+                    for (int operandIdx = 0; operandIdx < operands.Count; operandIdx++)
+                    {
+                        // Cases:
+                        //  - 0 variables(Constant)
+                        //  - 1 variable(Not, Neg, Lshr)
+                        //  - 2 variable(And, Add, Or, Xor)
+
+                        var operand = operands[operandIdx];
+
+                        // Create a boolean constraint that checks whether the operand is a  constant
+                        var constConstraints = new List<BoolExpr>();
+                        foreach (var constIndex in constIndices)
+                        {
+                            // Check whether the line could be a constant (is it within the range of instructions where we allow constants)
+                            var isOperandInConstantRange = solver.MkEq(operand, solver.MkBV(constIndex, operand.SortSize));
+
+                            var constOpc = (lines[constIndex] as ExprLine).Opcode;
+                            var isConstantOpcode = solver.MkEq(constOpc, solver.MkBV(constComponent.Data.Index, constOpc.SortSize));
+
+                            constConstraints.Add(solver.MkAnd(isOperandInConstantRange, isConstantOpcode));
+                        }
+
+                        // Compute whether the operand is equal to one of the constants
+                        var isConstantOperand = constConstraints.Count == 1 ? constConstraints.Single() : solver.MkOr(constConstraints);
+                        operandConstraints.Add(isConstantOperand);
+                    }
+
+                    // Enforce that multiplication is only allowed if one operand is a constant
+                    var anyConstOperand = solver.MkOr(operandConstraints);
+                    constraints.Add(solver.MkImplies(IsComponent(line, SynthOpc.Mul), anyConstOperand));
+
+                    /*
+                    // If either operand is a constant, treat them as dependent. We'll handle with special logic
+                    var const0 = IsComponent(line.Op0, SynthOpc.Constant);
+                    var const1 = IsComponent(next, SynthOpc.Constant);
+                    var anyConstants = solver.MkOr(const0, const1);
+                    dependencyConstraints.Add(anyConstants);
+                    */
+                }
+
+            skip2:
+
+
                 // If you have two instructions that do not depend on each other:
                 // %0 = c+d
                 // %1 = a&b
@@ -949,6 +1009,8 @@ namespace Mba.Simplifier.Synthesis
 
             //s.Add(solver.MkEq(costSum, solver.MkBV(8, costWidth)));
 
+            //s.Add(solver.MkEq(costSum, solver.MkBV(0, costWidth)));
+
 
             // Optionally force the last opcode to be something
             bool constrainLastOpcode = false;
@@ -1048,7 +1110,8 @@ namespace Mba.Simplifier.Synthesis
                       { 131, 0},
                       { 249, 0}
                     */
-
+                        
+                        /*
                       { 65535, 0 },
 
                       { 27785, 0},
@@ -1057,6 +1120,13 @@ namespace Mba.Simplifier.Synthesis
                       //{ 27785, 0},
                        { 3, 0},
                        { 46661, 0 }
+                        */
+
+                    { 65535, 0 },
+                    { 64509, 1026  },
+                    { 64384, 12437 },
+                    { 64256, 61119 },
+                    //{ 20521, 43908 },
                       //{ 0, 0 },
                     //  { 0, 0 },
                 };
@@ -1064,7 +1134,8 @@ namespace Mba.Simplifier.Synthesis
 
 
                 // Evaluate the expression on 8 random IO points
-                for (var _ = 0; _ < 1; _++)
+                // for (var _ = 0; _ < 1; _++)
+                for (var _ = 0; _ < inputCombinations.GetLength(0); _++)
                 {
 
 
@@ -1072,9 +1143,9 @@ namespace Mba.Simplifier.Synthesis
                         .Select(x => rng.GetRandUlong())
                         .ToArray();
 
-                    //keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
-                    if (minv)
-                        keys = new ulong[] { inputCombinations[_, 0] };
+                    keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
+                    //if (minv)
+                    //    keys = new ulong[] { inputCombinations[_, 0] };
 
                     points.Add(new ResultVectorKey(keys));
 
@@ -1100,7 +1171,7 @@ namespace Mba.Simplifier.Synthesis
             var total = Stopwatch.StartNew();
             while (true)
             {
-                bool export = false;
+                bool export = true;
                 if (export)
                 {
 
@@ -1143,6 +1214,7 @@ namespace Mba.Simplifier.Synthesis
                 var programAst = new List<AstIdx>();
                 List<BitVecExpr> z3ProgramAst = new List<BitVecExpr>();
 
+                Dictionary<Expr, Expr> bannedModel = new();
                 for (int li = 0; li < lines.Count; li++)
                 {
                     var line = lines[li];
@@ -1184,6 +1256,30 @@ namespace Mba.Simplifier.Synthesis
                     //SynthOpc opc = components[opcode.Int].Opcode;
                     SynthOpc opc = opcode.Int >= components.Count ? components.Last().Opcode : components[opcode.Int].Opcode;
 
+                    // We ban this opcode assignment
+                    bannedModel[exprLine.Opcode] = opcode;
+
+                    switch(opc)
+                    {
+                        case SynthOpc.Constant:
+                            // For constants we don't actually care about their assignments... 
+                            break;
+                        case SynthOpc.Not:
+                            bannedModel[exprLine.Op0] = op0Value;
+                            break;
+                        case SynthOpc.And:
+                        case SynthOpc.Or:
+                        case SynthOpc.Xor:
+                        case SynthOpc.Add:
+                        case SynthOpc.Sub:
+                        case SynthOpc.Mul:
+                            bannedModel[exprLine.Op0] = op0Value;
+                            bannedModel[exprLine.Op1] = op0Value;
+                            break;
+                        default:
+                            throw new InvalidOperationException("Fail");
+                    }
+
 
                     Console.WriteLine($"v{li} = {opc}");
                     AstIdx node = opc switch
@@ -1201,7 +1297,7 @@ namespace Mba.Simplifier.Synthesis
                         SynthOpc.TruthTable => throw new NotImplementedException(),
                     };
 
-
+           
 
                     BitVecExpr z3Node = opc switch
                     {
@@ -1255,7 +1351,13 @@ namespace Mba.Simplifier.Synthesis
 
                 else
                 {
-                    Generalize(symbols, before, result);
+                    var generalized = Generalize(symbols, before, result);
+                    if(!generalized)
+                    {
+                        var generalizedStructureBan = solver.MkAnd(bannedModel.Select(x => solver.MkEq(x.Key, x.Value)));
+                        s.Add(solver.MkNot(generalizedStructureBan));
+                        //Debugger.Break();
+                    }
 
                     var bvPoints = symbols.Select(x => (BitVecNum)equivSolver.Model.Eval(x)).ToArray();
                     var constraint = getEquivOnPointsConstraint(bvPoints);
@@ -1269,7 +1371,7 @@ namespace Mba.Simplifier.Synthesis
 
         // Implements generalization of cegis(T)
         // (1). 
-        private void Generalize(Expr[] symbols, Expr before, Expr candidateExpression)
+        private bool Generalize(Expr[] symbols, Expr before, Expr candidateExpression)
         {
             // Collect all constants in the candidate expression
             var constants = new HashSet<Expr>();
@@ -1311,7 +1413,7 @@ namespace Mba.Simplifier.Synthesis
             CollectConstants(candidateExpression);
 
             if (constants.Count == 0)
-                return;
+                return false;
 
 
 
@@ -1343,9 +1445,11 @@ namespace Mba.Simplifier.Synthesis
             {
                 Console.WriteLine("Generlization found a solution!");
                 Debugger.Break();
+                return true;
             }
             else
             {
+                return false;
                 Debugger.Break();
             }
 

@@ -42,6 +42,8 @@ namespace Mba.Simplifier.Synthesis
 
         public static int GetCost(this SynthOpc opc)
         {
+            //return opc == SynthOpc.Mul ? 1 : 0;
+
             return opc switch
             {
                 SynthOpc.And => 1,
