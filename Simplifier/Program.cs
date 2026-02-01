@@ -16,7 +16,7 @@ using System.Diagnostics;
 
 bool printUsage = false;
 bool onlyLinear = true;
-uint bitWidth = 64;
+uint bitWidth = 1;
 bool useEqsat = false;
 bool proveEquivalence = true;
 string inputText = "a ? b : c ";
@@ -328,6 +328,8 @@ inputText = "(((3*x)^2)*(1 + (1 - x*((3*x)^2))))*(1 + (1 - x*((3*x)^2))*(1 - x*(
 // inputText = "2^((((x|1111)+y)^y))";
 
 inputText = "32443*((((x|1111)+y)^y))";
+
+//inputText = "~(a|b|c|d|e|f|g)";
 
 //inputText = "(((x|1111)+y)^y)";
 
