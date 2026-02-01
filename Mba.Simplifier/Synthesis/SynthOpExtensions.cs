@@ -27,6 +27,18 @@ namespace Mba.Simplifier.Synthesis
             };
         }
 
+        public static int GetOperandCount(this SynthOpc opc)
+        {
+            return opc switch
+            {
+                SynthOpc.And or SynthOpc.Or or SynthOpc.Xor or SynthOpc.Add or SynthOpc.Sub or SynthOpc.Mul => 2,
+                SynthOpc.Not => 1,
+                SynthOpc.Lshr => 1, // TODO: In the future this may have two operands.
+                SynthOpc.TruthTable => throw new NotImplementedException(),
+                SynthOpc.Constant => 0,
+            };
+        }
+
         public static int GetCost(this SynthOpc opc)
         {
             return opc switch

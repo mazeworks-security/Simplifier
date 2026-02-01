@@ -557,6 +557,68 @@ namespace Mba.Simplifier.Synthesis
                     }
                 }
 
+                // 1 + 2 => 3
+                // Assert that at least one operand of a boolean must not be constant
+                // For each 2 variable operator, get both operands
+                bool constFold = true;
+                if (constFold && maxConstants > 0 && HasComponent(SynthOpc.Constant))
+                {
+                    var constComponent = GetComponent(SynthOpc.Constant);
+                    var operands = new List<BitVecExpr>() { line.Op0, line.Op1 };
+
+                    // Get the indices of all possible previous constants
+                    var constIndices = Enumerable.Range(lines.Count(x => x is VarLine), maxConstants).TakeWhile(x => x < i).ToList();
+                    // Skip if there are no constants before this instruction
+                    if (constIndices.Count == 0)
+                        goto skip;
+
+                    // Otherwise there are some constants, and one of the children could possibly be a constant.
+                    var operandConstraints = new List<BoolExpr>();
+                    //for(int i = 0; i < operands.Count; i++)
+                    for(int operandIdx = 0; operandIdx < operands.Count; operandIdx++)
+                    {
+                        // Cases:
+                        //  - 0 variables(Constant)
+                        //  - 1 variable(Not, Neg, Lshr)
+                        //  - 2 variable(And, Add, Or, Xor)
+
+                        var operand = operands[operandIdx];
+
+                        // Create a boolean constraint that checks whether the operand is a  constant
+                        var constConstraints = new List<BoolExpr>();
+                        foreach(var constIndex in constIndices)
+                        {
+                            // Check whether the line could be a constant (is it within the range of instructions where we allow constants)
+                            var isOperandInConstantRange = solver.MkEq(operand, solver.MkBV(constIndex, operand.SortSize));
+
+                            var constOpc = (lines[constIndex] as ExprLine).Opcode;
+                            var isConstantOpcode = solver.MkEq(constOpc, solver.MkBV(constComponent.Data.Index, constOpc.SortSize));
+
+                            constConstraints.Add(solver.MkAnd(isOperandInConstantRange, isConstantOpcode));
+                        }
+
+                        // Compute whether the operand is equal to one of the constants
+                        var isConstantOperand = solver.MkOr(constConstraints);
+
+                        if (operandIdx == 1 && HasComponent(SynthOpc.Not))
+                        {
+                            var notComponent = GetComponent(SynthOpc.Not);
+                            var isUnary = solver.MkEq(line.Opcode, solver.MkBV(notComponent.Data.Index, line.Opcode.SortSize));
+                            isConstantOperand = (BoolExpr)solver.MkITE(isUnary, solver.MkTrue(), isConstantOperand);
+                        }
+
+                        operandConstraints.Add(isConstantOperand);
+                    }
+
+                    // Implies: If this expression is not a constant, it must have at least one non constant operand
+                    var allConstantOperands = solver.MkAnd(operandConstraints);
+                    var isConstant = solver.MkEq(line.Opcode, solver.MkBV(constComponent.Data.Index, line.Opcode.SortSize));
+                    constraints.Add(solver.MkImplies(solver.MkNot(isConstant), solver.MkNot(allConstantOperands)));
+
+                }
+
+            skip:
+
                 // CSE (common subexpression elimination)
                 // Assert that no two lines are identical
                 bool pruneCommonSubexp = false;
@@ -672,9 +734,8 @@ namespace Mba.Simplifier.Synthesis
                 costSum = solver.MkBVAdd(costSum, cost);
             }
 
-            // 13 was the previous best?
-            // 8 is the best known cost for 8-bit mod inv
-            s.Add(solver.MkBVULT(costSum, solver.MkBV(14, costWidth)));
+            // best known cost is 8
+            //s.Add(solver.MkBVULT(costSum, solver.MkBV(14, costWidth)));
 
 
             // Optionally force the last opcode to be something
@@ -770,9 +831,7 @@ namespace Mba.Simplifier.Synthesis
 
                       { 253, 0},
                       { 131, 0},
-                      { 249, 0},
-
-                      //{ 17, 0}
+                      { 249, 0}
                       //{ 0, 0 },
                     //  { 0, 0 },
                 };
@@ -920,12 +979,7 @@ namespace Mba.Simplifier.Synthesis
 
                 else
                 {
-
-
                     var bvPoints = symbols.Select(x => (BitVecNum)equivSolver.Model.Eval(x)).ToArray();
-
-                    Console.WriteLine($"Not equivalent on inputs: {String.Join(", ", bvPoints.Select(x => x.UInt64))}");
-
                     var constraint = getEquivOnPointsConstraint(bvPoints);
                     s.Add(constraint);
                     Console.WriteLine("");
