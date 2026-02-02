@@ -275,11 +275,20 @@ namespace Mba.Simplifier.Synth
         public Term MkBvValue(Sort sort, ulong value)
             => Wrap(BitwuzlaNative.bitwuzla_mk_bv_value_uint64(native, sort, value));
 
+        public Term MkBvValue(ulong size, ulong value)
+            => Wrap(MkBvValue(MkBvSort(size), value));
+
+        public Term MkBvValue(ulong size, long value)
+            => Wrap(MkBvValue(MkBvSort(size), value));
+
         public Term MkBvValue(Sort sort, long value)
             => Wrap(BitwuzlaNative.bitwuzla_mk_bv_value_int64(native, sort, value));
 
         public Term MkConst(Sort sort, string symbol = null)
            => Wrap(BitwuzlaNative.bitwuzla_mk_const(native, sort, symbol));
+
+        public Term MkBvConst(ulong width, string name)
+            => Wrap(MkConst(MkBvSort(width), name));
 
         public Term MkVar(Sort sort, string symbol = null)
            => Wrap(BitwuzlaNative.bitwuzla_mk_var(native, sort, symbol));
@@ -315,12 +324,12 @@ namespace Mba.Simplifier.Synth
     /// <summary>
     /// High-level wrapper for the Bitwuzla Solver.
     /// </summary>
-    public class Solver : IDisposable
+    public class BvSolver : IDisposable
     {
         private readonly Bitwuzla.Bitwuzla native;
         private readonly TermManager tm;
 
-        public Solver(TermManager tm, Options options = null)
+        public BvSolver(TermManager tm, Options options = null)
         {
             this.tm = tm;
             native = BitwuzlaNative.bitwuzla_new(tm.native, options?.native);

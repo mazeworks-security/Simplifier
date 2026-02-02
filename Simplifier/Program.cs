@@ -7,6 +7,7 @@ using Mba.Simplifier.Interpreter;
 using Mba.Simplifier.Jit;
 using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Pipeline;
+using Mba.Simplifier.Synth;
 using Mba.Simplifier.Synthesis;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
@@ -386,7 +387,7 @@ bool useNewDsl = false;
 if(useNewDsl)
 {
     var dsl = DslParser.ParseDsl(File.ReadAllText("DSL/simplification.rules"));
-    var backend = new NewEggBackend(dsl);
+    var backend = new NewEggBackend(dsl);   
     backend.Generate();
     Debugger.Break();
 }
@@ -450,7 +451,7 @@ if (inputText == null || printUsage)
 // For now we only support integer widths of up to 64 bits.
 const int maxWidth = 64;
 if (bitWidth > maxWidth)
-    throw new InvalidOperationException($"Received bit width {bitWidth}, which is greater than the max width {maxWidth}  ");
+    throw new InvalidOperationException($"Received bit width {bitWidth}, which is greater than the max width {maxWidth}    ");
 
 var ctx = new AstCtx();
 AstIdx.ctx = ctx;
@@ -464,10 +465,17 @@ var barrr = LinearSimplifier.Run(ctx.GetWidth(id), ctx, id, false, true);
 Console.WriteLine(ctx.GetAstString(barrr));
 
 
-bool brahma = true;
+bool brahma = false;
 if(brahma)
 {
     new BrahmaSynthesis(ctx, id).Run();
+}
+
+bool useNew = true;
+if (useNew)
+{
+    var synthesizer = new BvSynthesis(ctx, id);
+    synthesizer.Run();
 }
 
 //new DagRuleSynthesis(ctx).Run(id);

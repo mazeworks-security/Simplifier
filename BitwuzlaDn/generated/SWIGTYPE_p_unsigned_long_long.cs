@@ -21,7 +21,7 @@ public class SWIGTYPE_p_unsigned_long_long {
     swigCPtr = new global::System.Runtime.InteropServices.HandleRef(null, global::System.IntPtr.Zero);
   }
 
-  internal static global::System.Runtime.InteropServices.HandleRef getCPtr(SWIGTYPE_p_unsigned_long_long obj) {
+  internal static global::System.Runtime.InteropServices.HandleRef getCPtr(SWIGTYPE_p_unsigned_long_long obj) { 
     return (obj == null) ? new global::System.Runtime.InteropServices.HandleRef(null, global::System.IntPtr.Zero) : obj.swigCPtr;
   }
 }
