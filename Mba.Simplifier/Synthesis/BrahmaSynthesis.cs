@@ -102,9 +102,9 @@ namespace Mba.Simplifier.Synthesis
         {
             new(SynthOpc.Constant),
 
-            new(SynthOpc.Not),
+            //new(SynthOpc.Not),
             new(SynthOpc.And),
-            new(SynthOpc.Or),
+            //new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
             new(SynthOpc.Xor),
@@ -460,12 +460,12 @@ namespace Mba.Simplifier.Synthesis
                         // Add constraint: If the instruction has one or more operands, operands[0] == curr
                         var used0 = solver.MkEq(k0, solver.MkBV(i, k0.SortSize));
                         var oneOperand = AtleastNOperands(lines[k] as ExprLine, 1);
-                        usageConditions.Add(solver.MkAnd(oneOperand, used0));
+                        usageConditions.Add(And(oneOperand, used0));
 
                         // Repeat for the two input case
                         var used1 = solver.MkEq(k1, solver.MkBV(i, k1.SortSize));
                         var twoOperand = AtleastNOperands(lines[k] as ExprLine, 2);
-                        usageConditions.Add(solver.MkAnd(twoOperand, used1));
+                        usageConditions.Add(And(twoOperand, used1));
                     }
 
                     // Constraint: This instruction has at least one use.
@@ -553,7 +553,7 @@ namespace Mba.Simplifier.Synthesis
                         var constComponent = GetComponent(SynthOpc.Constant);
                         var isConstant = solver.MkEq(line.Opcode, solver.MkBV(constComponent.Data.Index, line.Opcode.SortSize));
 
-                        var zeroOp = solver.MkAnd(solver.MkEq(op0, solver.MkBV(0, op0.SortSize)), solver.MkEq(op1, solver.MkBV(0, op1.SortSize)));
+                        var zeroOp = And(solver.MkEq(op0, solver.MkBV(0, op0.SortSize)), solver.MkEq(op1, solver.MkBV(0, op1.SortSize)));
 
                         constraints.Add(solver.MkImplies(isConstant, zeroOp));
                     }
@@ -668,7 +668,7 @@ namespace Mba.Simplifier.Synthesis
                             var constOpc = (lines[constIndex] as ExprLine).Opcode;
                             var isConstantOpcode = solver.MkEq(constOpc, solver.MkBV(constComponent.Data.Index, constOpc.SortSize));
 
-                            constConstraints.Add(solver.MkAnd(isOperandInConstantRange, isConstantOpcode));
+                            constConstraints.Add(And(isOperandInConstantRange, isConstantOpcode));
                         }
 
                         // Compute whether the operand is equal to one of the constants
@@ -685,7 +685,7 @@ namespace Mba.Simplifier.Synthesis
                     }
 
                     // Implies: If this expression is not a constant, it must have at least one non constant operand
-                    var allConstantOperands = solver.MkAnd(operandConstraints);
+                    var allConstantOperands = And(operandConstraints);
                     var isConstant = solver.MkEq(line.Opcode, solver.MkBV(constComponent.Data.Index, line.Opcode.SortSize));
                     constraints.Add(solver.MkImplies(solver.MkNot(isConstant), solver.MkNot(allConstantOperands)));
 
@@ -728,7 +728,7 @@ namespace Mba.Simplifier.Synthesis
                             var constOpc = (lines[constIndex] as ExprLine).Opcode;
                             var isConstantOpcode = solver.MkEq(constOpc, solver.MkBV(constComponent.Data.Index, constOpc.SortSize));
 
-                            constConstraints.Add(solver.MkAnd(isOperandInConstantRange, isConstantOpcode));
+                            constConstraints.Add(And(isOperandInConstantRange, isConstantOpcode));
                         }
 
                         // Compute whether the operand is equal to one of the constants
@@ -782,7 +782,7 @@ namespace Mba.Simplifier.Synthesis
 
                         Debug.Assert(count == 2);
                         var diff1 = Different(next.Op1, solver.MkBV(i, next.Op0.SortSize));
-                        dependencyConstraints.Add(solver.MkImplies(isOpcode, solver.MkAnd(diff0, diff1)));
+                        dependencyConstraints.Add(solver.MkImplies(isOpcode, And(diff0, diff1)));
                     }
 
                     // If this instruction could be a constant, disable the opcode based sorting logic and instead apply a special canonicalization:
@@ -801,11 +801,11 @@ namespace Mba.Simplifier.Synthesis
                         // to:
                         // %0 = 1111
                         // %1 = a+b
-                        var sortConstant = solver.MkAnd(const1, solver.MkNot(const0));
+                        var sortConstant = And(const1, solver.MkNot(const0));
                         constraints.Add(solver.MkNot(sortConstant));
 
 
-                        var bothConst = solver.MkAnd(const0, const1);
+                        var bothConst = And(const0, const1);
                         constraints.Add(solver.MkImplies(bothConst, solver.MkBVULT(line.ConstantData, next.ConstantData)));
                     }
 
@@ -817,7 +817,7 @@ namespace Mba.Simplifier.Synthesis
                     constraints.Add(solver.MkImplies(solver.MkNot(depends), sortOpcode));
 
                     // Tie breaker: Operands
-                    var tie = solver.MkAnd(solver.MkNot(depends), solver.MkEq(line.Opcode, next.Opcode));
+                    var tie = And(solver.MkNot(depends), solver.MkEq(line.Opcode, next.Opcode));
 
                     // TODO: You have a very global encoding when you should instead be doing a local encoding. This encoding is bad for unit propagation.
                     // Prefer many implies over one big imply
@@ -827,7 +827,7 @@ namespace Mba.Simplifier.Synthesis
 
                     var (j, k) = (args0[0], args0[1]);
                     var (jNext, kNext) = (args1[0], args1[1]);
-                    var smaller = solver.MkOr(solver.MkBVULT(j, jNext), solver.MkAnd(solver.MkEq(j, jNext), solver.MkBVULT(k, kNext)));
+                    var smaller = solver.MkOr(solver.MkBVULT(j, jNext), And(solver.MkEq(j, jNext), solver.MkBVULT(k, kNext)));
                     constraints.Add(solver.MkImplies(tie, smaller));
 
                     //solver.MkImplies(sortConstant,);
@@ -864,7 +864,7 @@ namespace Mba.Simplifier.Synthesis
                             var sameOpcode = solver.MkEq(l0.Opcode, l1.Opcode);
 
                             // Change the implication to "we have the same opcode and the opcode == this"
-                            sameOpcode = solver.MkAnd(sameOpcode, IsComponent(line, component));
+                            sameOpcode = And(sameOpcode, IsComponent(line, component));
 
                             // For a unary operation, assert that the operands are different if they have the same opcode.
                             if (count == 1)
@@ -926,7 +926,7 @@ namespace Mba.Simplifier.Synthesis
                 */
             }
 
-            return solver.MkAnd(constraints);
+            return And(constraints);
         }
 
         private BoolExpr Different(Expr a, Expr b)
@@ -945,7 +945,7 @@ namespace Mba.Simplifier.Synthesis
                 constraints.Add(solver.MkNot(IsComponent(line, c)));
             if (constraints.Count == 1)
                 return constraints.Single();
-            return solver.MkAnd(constraints);
+            return And(constraints);
         }
 
         private BoolExpr ExactlyNOperands(ExprLine line, int n)
@@ -960,7 +960,7 @@ namespace Mba.Simplifier.Synthesis
                 constraints.Add((IsComponent(line, c)));
             if (constraints.Count == 1)
                 return constraints.Single();
-            return solver.MkAnd(constraints);
+            return And(constraints);
         }
 
         private BoolExpr IsComponent(ExprLine line, SynthOpc component)
@@ -990,8 +990,7 @@ namespace Mba.Simplifier.Synthesis
             solver.AddRecDef(synthFunc, symbols, after);
 
 
-            var sw = Stopwatch.StartNew();
-
+       
             uint costWidth = 6;
             var componentCosts = components.Select(x => (Expr)solver.MkBV(x.Opcode.GetCost(), costWidth)).ToList();
             //var lineOpcodes = lines.Where(x => x is ExprLine).Select(x => (x as ExprLine).Opcode).ToArray();
@@ -1050,7 +1049,7 @@ namespace Mba.Simplifier.Synthesis
             else
             {
 
-                var inputCombinations = new ulong[5, 2]
+                var inputCombinations = new ulong[1, 2]
                 {
                     //{ 5555555555555555, ~0x5555555555555555ul },
                     /*
@@ -1132,6 +1131,7 @@ namespace Mba.Simplifier.Synthesis
                     { 64256, 61119 },
                     */
 
+                    /*
                     { 4, 248 },
                     { 168, 21 },
                     { 224, 18 },
@@ -1140,6 +1140,14 @@ namespace Mba.Simplifier.Synthesis
 
                     //{ 20521, 43908 },
                       { 70, 178 },
+                    */
+
+                    { 12162971962868221805, 6283772110841329810  },
+                    //{ 12162971954278319982, 6283772119431231633  },
+                    //{ 2939599917423341567, 0  },
+                    //{ 12162971954278319982, 6283772119431231633 },
+                    //{ 12162971962868015873, 0 },
+
                     //  { 0, 0 },
                 };
 
@@ -1147,8 +1155,8 @@ namespace Mba.Simplifier.Synthesis
 
                 // Evaluate the expression on 8 random IO points
                 // for (var _ = 0; _ < 1; _++)
-                //for (var _ = 0; _ < inputCombinations.GetLength(0); _++)
-                for (var _ = 0; _ < 1; _++)
+                for (var _ = 0; _ < inputCombinations.GetLength(0); _++)
+                //for (var _ = 0; _ < 1; _++)
                 {
 
 
@@ -1156,162 +1164,7 @@ namespace Mba.Simplifier.Synthesis
                         .Select(x => rng.GetRandUlong())
                         .ToArray();
 
-                    //keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
-                    //if (minv)
-                    //    keys = new ulong[] { inputCombinations[_, 0] };
-
-                    /*
-                    if (_ == 0)
-                        keys = new ulong[] { 0, 1, 0, 0, 0, 1, 0 };
-                    if (_ == 1)
-                        keys = new ulong[] { 1, 0, 1, 1, 0, 1, 1 };
-                    if (_ == 2)
-                    {
-                        keys = new ulong[] { 1, 0, 1, 0, 1, 1, 0 };
-                    }
-
-                    if (_ == 3)
-                    {
-                        keys = new ulong[] { 0, 1, 1, 0, 1, 1, 1 };
-                    }
-
-                    if (_ == 4)
-                    {
-                        keys = new ulong[] { 1, 1, 1, 1, 1, 1, 1 };
-                    }
-
-                    if (_ == 5)
-                    {
-                        keys = new ulong[] { 0, 0, 0, 0, 0, 0, 0 };
-                    }
-
-                    if (_ == 6)
-                    {
-                        keys = new ulong[] { 0, 1, 0, 0, 0, 0, 1 };
-                    }
-
-                    if (_ == 6)
-                    {
-                        keys = new ulong[] { 0, 1, 1, 1, 0, 0, 0 };
-                    }
-
-                    if (_ == 7)
-                    {
-                        keys = new ulong[] { 0, 1, 0, 0, 1, 1, 0 };
-                    }
-
-                    if (_ == 8)
-                    {
-                        keys = new ulong[] { 0, 1, 1, 0, 1, 1, 0 };
-                    }
-
-                    if (_ == 9)
-                    {
-                        keys = new ulong[] { 1, 1, 1, 0, 0, 0, 1 };
-                    }
-
-                    if (_ == 10)
-                    {
-                        keys = new ulong[] { 1, 1, 1, 0, 0, 0, 1 };
-                    }
-
-                    if (_ == 11)
-                    {
-                        keys = new ulong[] { 1, 1, 1, 0, 0, 0, 1 };
-                    }
-                    */
-
-                    /*
-                    if (_ == 0)
-                    {
-                        keys = new ulong[] { 1, 0, 0, 0, 0, 0, 1 };
-                    }
-
-                    if (_ == 1)
-                    {
-                        keys = new ulong[] { 0, 1, 1, 0, 0, 1, 1 };
-                    }
-
-                    if (_ == 2)
-                    {
-                        keys = new ulong[] { 1, 0, 0, 0, 0, 1, 1 };
-                    }
-                    */
-
-
-                    /*
-                    if (_ == 0)
-                    {
-                        keys = new ulong[] { 0, 0, 0, 0, 0, 0, 0 };
-                    }
-
-                    if (_ == 1)
-                    {
-                        keys = new ulong[] { 1, 1, 1, 1, 1, 1, 1 };
-                    }
-
-
-                    if (_ == 2)
-                    {
-                        keys = new ulong[] { 1, 0, 0, 0, 0, 0, 0 };
-                    }
-
-
-                    if (_ == 3)
-                    {
-                        keys = new ulong[] { 0, 1, 0, 0, 0, 0, 0 };
-                    }
-
-
-                    if (_ == 4)
-                    {
-                        keys = new ulong[] { 0, 0, 1, 0, 0, 0, 0 };
-                    }
-
-
-                    if (_ == 5)
-                    {
-                        keys = new ulong[] { 0, 0, 0, 1, 0, 0, 0 };
-                    }
-
-
-                    if (_ == 6)
-                    {
-                        keys = new ulong[] { 0, 0, 0, 0, 1, 0, 0 };
-                    }
-
-
-                    if (_ == 7)
-                    {
-                        keys = new ulong[] { 0, 0, 0, 0, 0, 1, 0 };
-                    }
-
-
-                    if (_ == 8)
-                    {
-                        keys = new ulong[] { 0, 0, 0, 0, 0, 0, 1 };
-                    }
-                    */
-
-                    /*
-                    if (_ == 9)
-                    {
-                        keys = new ulong[] { 1, 1, 0, 0, 0, 0, 0 };
-                    }
-
-                    if (_ == 10)
-                    {
-                        keys = new ulong[] { 1, 1, 1, 0, 0, 0, 0 };
-                    }
-
-                    if (_ == 11)
-                    {
-                        keys = new ulong[] { 1, 1, 1, 1, 0, 0, 0 };
-                    }
-
-                    */
-
-
+                    keys = new ulong[] { inputCombinations[_, 0] };
 
                     points.Add(new ResultVectorKey(keys));
 
@@ -1329,7 +1182,7 @@ namespace Mba.Simplifier.Synthesis
 
                 }
 
-                var and = solver.MkAnd(constraints.ToArray());
+                var and = And(constraints.ToArray());
                 s.Add(and);
 
             }
@@ -1339,6 +1192,8 @@ namespace Mba.Simplifier.Synthesis
 
             var iii = 0;
             var total = Stopwatch.StartNew();
+            var sw = Stopwatch.StartNew();
+
             while (true)
             {
                 bool export = true;
@@ -1363,6 +1218,7 @@ namespace Mba.Simplifier.Synthesis
 
                 sw.Stop();
                 Console.WriteLine($"Took {sw.ElapsedMilliseconds}ms");
+                sw = Stopwatch.StartNew();
 
                 var model = s.Model;
                 var from = new List<Expr>();
@@ -1535,7 +1391,7 @@ namespace Mba.Simplifier.Synthesis
                     var generalized = Generalize(symbols, before, result);
                     if (generalized == false)
                     {
-                        var generalizedStructureBan = solver.MkAnd(bannedModel.Select(x => solver.MkEq(x.Key, x.Value)));
+                        var generalizedStructureBan = And(bannedModel.Select(x => solver.MkEq(x.Key, x.Value)));
                         s.Add(solver.MkNot(generalizedStructureBan));
                         //Debugger.Break();
                     }
@@ -1809,8 +1665,29 @@ namespace Mba.Simplifier.Synthesis
                 constraints.Add(solver.MkEq(subBefore, subAfter));
             }
 
-            return solver.MkAnd(constraints.ToArray());
+            return And(constraints.ToArray());
         }
 
+        private BoolExpr And(params BoolExpr[] t)
+            => And(t.AsEnumerable());
+
+        // Solver wrappers
+        private BoolExpr And(IEnumerable<BoolExpr> t)
+        {
+            if (t.Count() == 1)
+                return t.Single();
+            return solver.MkAnd(t);
+        }
+
+        private BoolExpr Or(params BoolExpr[] t)
+       => Or(t.AsEnumerable());
+
+        // Solver wrappers
+        private BoolExpr Or(IEnumerable<BoolExpr> t)
+        {
+            if (t.Count() == 1)
+                return t.Single();
+            return solver.MkOr(t);
+        }
     }
 }

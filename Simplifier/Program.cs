@@ -16,7 +16,7 @@ using System.Diagnostics;
 
 bool printUsage = false;
 bool onlyLinear = true;
-uint bitWidth = 8;
+uint bitWidth = 32;
 bool useEqsat = false;
 bool proveEquivalence = true;
 string inputText = "a ? b : c ";
@@ -340,7 +340,9 @@ inputText = "(a|b|c|d|e|f|g)";
 inputText = "(171^((a+23)^(b)))^((((a|1111)+b)^b))";
 
 
-inputText = "15795372935317283107 + parameter0 + -(34359717887 & parameter0 ^ 9511600802393731071)";
+inputText = "15795372935317283107 + x + -(34359717887 & x ^ 9511600802393731071)";
+
+inputText = "15795372935317283107 + x + (34359717887 & x ^ 9511600802393731071)";
 
 //inputText = "(((x|1111)+y)^y)";
 
