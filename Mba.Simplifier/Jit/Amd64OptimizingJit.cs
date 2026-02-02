@@ -181,7 +181,7 @@ namespace Mba.Simplifier.Interpreter
         public Amd64OptimizingJit(AstCtx ctx)
         {
             this.ctx = ctx;
-            seen = new AuxInfoStorage(ctx);
+            seen = new MapInfoStorage();
         }
 
         public unsafe void Compile(AstIdx idx, IReadOnlyList<AstIdx> variables, nint pagePtr, bool useIcedBackend = false)

@@ -66,7 +66,7 @@ namespace Mba.Simplifier.Synthesis
         private const int TRUTHVARS = 2;
         private const uint TRUTHSIZE = 1u << TRUTHVARS;
 
-        private int maxConstants = 2;
+        private int maxConstants = 3;
 
         private uint opcodeBitsize = uint.MaxValue;
 
@@ -102,16 +102,16 @@ namespace Mba.Simplifier.Synthesis
         {
             new(SynthOpc.Constant),
 
-            //new(SynthOpc.Not),
-            //new(SynthOpc.And),
+            new(SynthOpc.Not),
+            new(SynthOpc.And),
             new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
             new(SynthOpc.Xor),
 
             new(SynthOpc.Add),
-            //new(SynthOpc.Sub),
-            new(SynthOpc.Mul),
+            new(SynthOpc.Sub),
+            //new(SynthOpc.Mul),
 
             //new(SynthOpc.Lshr),
         };
@@ -439,6 +439,7 @@ namespace Mba.Simplifier.Synthesis
             int allocatedConstants = 0;
 
             var constraints = new List<BoolExpr>();
+
             for (int i = 0; i < lines.Count; i++)
             {
 
@@ -560,7 +561,9 @@ namespace Mba.Simplifier.Synthesis
                 // Sort operands of commutative operators
                 // Rewrite add(b, a) as add(a, b)
                 // NOT has a overlapping constraint, basically asserting that op1 >= op0
-                bool sortCommutativeOps = false;
+                // TODO: I think this needs to take other synthesis constraints into account?
+                // TODO: Need to implement associative sorting too. Would prune the search space further
+                bool sortCommutativeOps = true;
                 if (sortCommutativeOps)
                 {
 
@@ -691,8 +694,8 @@ namespace Mba.Simplifier.Synthesis
             skip:
 
                 // Only allow multiplication if one operand is a constant
-                bool forceConstMultiply = false;
-                if (forceConstMultiply)
+                bool forceConstMultiply = true;
+                if (HasComponent(SynthOpc.Mul) && forceConstMultiply)
                 {
                     var constComponent = GetComponent(SynthOpc.Constant);
                     var operands = new List<BitVecExpr>() { line.Op0, line.Op1 };
@@ -783,7 +786,7 @@ namespace Mba.Simplifier.Synthesis
                     }
 
                     // If this instruction could be a constant, disable the opcode based sorting logic and instead apply a special canonicalization:
-                    if (allocatedConstants < maxConstants)
+                    if (HasComponent(SynthOpc.Constant) && allocatedConstants < maxConstants)
                     {
                         // If either operand is a constant, treat them as dependent. We'll handle with special logic
                         var const0 = IsComponent(line, SynthOpc.Constant);
@@ -1047,7 +1050,7 @@ namespace Mba.Simplifier.Synthesis
             else
             {
 
-                var inputCombinations = new ulong[4, 2]
+                var inputCombinations = new ulong[5, 2]
                 {
                     //{ 5555555555555555, ~0x5555555555555555ul },
                     /*
@@ -1122,12 +1125,21 @@ namespace Mba.Simplifier.Synthesis
                        { 46661, 0 }
                         */
 
+                    /*
                     { 65535, 0 },
                     { 64509, 1026  },
                     { 64384, 12437 },
                     { 64256, 61119 },
+                    */
+
+                    { 4, 248 },
+                    { 168, 21 },
+                    { 224, 18 },
+                    { 52, 211 },
+                    //{ 105, 80 },
+
                     //{ 20521, 43908 },
-                      //{ 0, 0 },
+                      { 70, 178 },
                     //  { 0, 0 },
                 };
 
@@ -1135,7 +1147,8 @@ namespace Mba.Simplifier.Synthesis
 
                 // Evaluate the expression on 8 random IO points
                 // for (var _ = 0; _ < 1; _++)
-                for (var _ = 0; _ < inputCombinations.GetLength(0); _++)
+                //for (var _ = 0; _ < inputCombinations.GetLength(0); _++)
+                for (var _ = 0; _ < 1; _++)
                 {
 
 
@@ -1143,9 +1156,162 @@ namespace Mba.Simplifier.Synthesis
                         .Select(x => rng.GetRandUlong())
                         .ToArray();
 
-                    keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
+                    //keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
                     //if (minv)
                     //    keys = new ulong[] { inputCombinations[_, 0] };
+
+                    /*
+                    if (_ == 0)
+                        keys = new ulong[] { 0, 1, 0, 0, 0, 1, 0 };
+                    if (_ == 1)
+                        keys = new ulong[] { 1, 0, 1, 1, 0, 1, 1 };
+                    if (_ == 2)
+                    {
+                        keys = new ulong[] { 1, 0, 1, 0, 1, 1, 0 };
+                    }
+
+                    if (_ == 3)
+                    {
+                        keys = new ulong[] { 0, 1, 1, 0, 1, 1, 1 };
+                    }
+
+                    if (_ == 4)
+                    {
+                        keys = new ulong[] { 1, 1, 1, 1, 1, 1, 1 };
+                    }
+
+                    if (_ == 5)
+                    {
+                        keys = new ulong[] { 0, 0, 0, 0, 0, 0, 0 };
+                    }
+
+                    if (_ == 6)
+                    {
+                        keys = new ulong[] { 0, 1, 0, 0, 0, 0, 1 };
+                    }
+
+                    if (_ == 6)
+                    {
+                        keys = new ulong[] { 0, 1, 1, 1, 0, 0, 0 };
+                    }
+
+                    if (_ == 7)
+                    {
+                        keys = new ulong[] { 0, 1, 0, 0, 1, 1, 0 };
+                    }
+
+                    if (_ == 8)
+                    {
+                        keys = new ulong[] { 0, 1, 1, 0, 1, 1, 0 };
+                    }
+
+                    if (_ == 9)
+                    {
+                        keys = new ulong[] { 1, 1, 1, 0, 0, 0, 1 };
+                    }
+
+                    if (_ == 10)
+                    {
+                        keys = new ulong[] { 1, 1, 1, 0, 0, 0, 1 };
+                    }
+
+                    if (_ == 11)
+                    {
+                        keys = new ulong[] { 1, 1, 1, 0, 0, 0, 1 };
+                    }
+                    */
+
+                    /*
+                    if (_ == 0)
+                    {
+                        keys = new ulong[] { 1, 0, 0, 0, 0, 0, 1 };
+                    }
+
+                    if (_ == 1)
+                    {
+                        keys = new ulong[] { 0, 1, 1, 0, 0, 1, 1 };
+                    }
+
+                    if (_ == 2)
+                    {
+                        keys = new ulong[] { 1, 0, 0, 0, 0, 1, 1 };
+                    }
+                    */
+
+
+                    /*
+                    if (_ == 0)
+                    {
+                        keys = new ulong[] { 0, 0, 0, 0, 0, 0, 0 };
+                    }
+
+                    if (_ == 1)
+                    {
+                        keys = new ulong[] { 1, 1, 1, 1, 1, 1, 1 };
+                    }
+
+
+                    if (_ == 2)
+                    {
+                        keys = new ulong[] { 1, 0, 0, 0, 0, 0, 0 };
+                    }
+
+
+                    if (_ == 3)
+                    {
+                        keys = new ulong[] { 0, 1, 0, 0, 0, 0, 0 };
+                    }
+
+
+                    if (_ == 4)
+                    {
+                        keys = new ulong[] { 0, 0, 1, 0, 0, 0, 0 };
+                    }
+
+
+                    if (_ == 5)
+                    {
+                        keys = new ulong[] { 0, 0, 0, 1, 0, 0, 0 };
+                    }
+
+
+                    if (_ == 6)
+                    {
+                        keys = new ulong[] { 0, 0, 0, 0, 1, 0, 0 };
+                    }
+
+
+                    if (_ == 7)
+                    {
+                        keys = new ulong[] { 0, 0, 0, 0, 0, 1, 0 };
+                    }
+
+
+                    if (_ == 8)
+                    {
+                        keys = new ulong[] { 0, 0, 0, 0, 0, 0, 1 };
+                    }
+                    */
+
+                    /*
+                    if (_ == 9)
+                    {
+                        keys = new ulong[] { 1, 1, 0, 0, 0, 0, 0 };
+                    }
+
+                    if (_ == 10)
+                    {
+                        keys = new ulong[] { 1, 1, 1, 0, 0, 0, 0 };
+                    }
+
+                    if (_ == 11)
+                    {
+                        keys = new ulong[] { 1, 1, 1, 1, 0, 0, 0 };
+                    }
+
+                    */
+
+
 
                     points.Add(new ResultVectorKey(keys));
 
@@ -1168,6 +1334,10 @@ namespace Mba.Simplifier.Synthesis
 
             }
 
+
+            var skeletons = new List<Expr>();
+
+            var iii = 0;
             var total = Stopwatch.StartNew();
             while (true)
             {
@@ -1259,7 +1429,7 @@ namespace Mba.Simplifier.Synthesis
                     // We ban this opcode assignment
                     bannedModel[exprLine.Opcode] = opcode;
 
-                    switch(opc)
+                    switch (opc)
                     {
                         case SynthOpc.Constant:
                             // For constants we don't actually care about their assignments... 
@@ -1297,7 +1467,7 @@ namespace Mba.Simplifier.Synthesis
                         SynthOpc.TruthTable => throw new NotImplementedException(),
                     };
 
-           
+
 
                     BitVecExpr z3Node = opc switch
                     {
@@ -1330,7 +1500,8 @@ namespace Mba.Simplifier.Synthesis
 
                 var equivSolver = solver.MkSolver();
 
-                equivSolver.Add(solver.MkEq(solver.MkExtract(0, 0, symbols[0] as BitVecExpr), solver.MkBV(1, 1)));
+                ///// ??????????????????? aint no way
+                //equivSolver.Add(solver.MkEq(solver.MkExtract(0, 0, symbols[0] as BitVecExpr), solver.MkBV(1, 1)));
 
                 var equiv = ProveEquivalence(equivSolver, before, result) == Status.UNSATISFIABLE;
                 Console.WriteLine($"Equivalent: {equiv}");
@@ -1341,6 +1512,7 @@ namespace Mba.Simplifier.Synthesis
                         Console.WriteLine($"{decl.Name} = {model.ConstInterp(decl)}");
                 }
 
+
                 if (equiv)
                 {
 
@@ -1349,24 +1521,141 @@ namespace Mba.Simplifier.Synthesis
                     Debugger.Break();
                 }
 
+               
+
                 else
                 {
+
+
+                    skeletons.Add(result);
+
+
+
+
                     var generalized = Generalize(symbols, before, result);
-                    if(!generalized)
+                    if (generalized == false)
                     {
                         var generalizedStructureBan = solver.MkAnd(bannedModel.Select(x => solver.MkEq(x.Key, x.Value)));
                         s.Add(solver.MkNot(generalizedStructureBan));
                         //Debugger.Break();
                     }
 
+                    // Synthesize an input combination that makes all previous skeletons not equal to `before`.
+                    if (false)
+                    {
+
+
+
+                        var cands = new List<BitVecNum[]>();
+
+                        int best = 0;
+                        Model bestModel = null;
+                        while (true)
+                        {
+                            BitVecExpr sum = solver.MkBV(0, 16);
+                            var skeletonSolver = solver.MkSolver();
+                            foreach (var skel in skeletons)
+                            {
+                                var notEq = solver.MkNot(solver.MkEq(skel, before));
+                                // skeletonSolver.Add(notEq);
+
+                                sum = solver.MkBVAdd(sum, (BitVecExpr)solver.MkITE(notEq, solver.MkBV(1, 16), solver.MkBV(0, 16)));
+                            }
+
+                            skeletonSolver.Add(solver.MkBVUGT(sum, solver.MkBV(best, 16)));
+
+                            skeletonSolver.Add(solver.MkNot(solver.MkEq(result, before)));
+
+
+                            var status = skeletonSolver.Check();
+                            if (status == Status.UNSATISFIABLE)
+                                break;
+
+                            bestModel = skeletonSolver.Model;
+                            best = (skeletonSolver.Model.Eval(sum) as BitVecNum).Int;
+                            var bi = symbols.Select(x => (bestModel.Eval(x) as BitVecNum)).ToArray();
+                            cands.Add(bi);
+                        }
+
+                        Console.WriteLine($"Num not equivalent: {best} with skeleton count {skeletons.Count} and cand list {cands.Count}");
+                        //Console.WriteLine();
+
+                        /*
+                        var bestInputs = (iii % 3) switch
+                        {
+                            0 => cands.First(),
+                            1 => cands[cands.Count / 2],
+                            2 => cands[cands.Count],
+                        };
+                        */
+
+                        if (cands.Count > 3)
+                        {
+                            cands = new()
+                            {
+                                cands.First(),
+                                cands[cands.Count / 2],
+                                cands[cands.Count],
+                            };
+                        }
+
+                        iii++;
+
+                        //var bestInputs = symbols.Select(x => (bestModel.Eval(x) as BitVecNum)).ToArray();
+                       
+
+                        /*
+                        var optimizer = solver.MkOptimize();
+
+                        
+
+                        foreach (var skel in skeletons)
+                        {
+                            var notEq = solver.MkNot(solver.MkEq(skel, before));
+                            optimizer.AssertSoft(notEq, 1, "grp");
+                        }
+
+                        if (optimizer.Check() == Status.SATISFIABLE)
+                        {
+                            var skelModel = optimizer.Model;
+                            var skelInputs = symbols.Select(x => skelModel.Eval(x) as BitVecNum).Select(x => x.UInt64).ToArray();
+                            Console.WriteLine($"Found input distinguishing loop skeletons: {string.Join(", ", skelInputs)}");
+
+                            var bvInputs = skelInputs.Select(x => solver.MkBV(x, (before as BitVecExpr).SortSize)).ToArray();
+                            var cs = getEquivOnPointsConstraint(bvInputs);
+                            s.Add(cs);
+                        }
+
+                        else
+                        {
+                            var bvPoints = symbols.Select(x => (BitVecNum)equivSolver.Model.Eval(x)).ToArray();
+                            var constraint = getEquivOnPointsConstraint(bvPoints);
+                            s.Add(constraint);
+                        }
+                        */
+
+                        /*
+                        foreach (var bestInputs in cands)
+                        {
+                            var modelToUse = (best > 0 && bestModel != null) ? bestModel : equivSolver.Model;
+                            var bvPoints = symbols.Select(x => (BitVecNum)modelToUse.Eval(x)).ToArray();
+                            var constraint = getEquivOnPointsConstraint(bestInputs);
+                            s.Add(constraint);
+                        }
+                        */
+                    }
+
                     var bvPoints = symbols.Select(x => (BitVecNum)equivSolver.Model.Eval(x)).ToArray();
                     var constraint = getEquivOnPointsConstraint(bvPoints);
                     s.Add(constraint);
+
+
                     Console.WriteLine("");
                 }
             }
 
-            // TODO Idea: Sort constants by their value
+            // TODO Idea: Sort constants by their value? Maybe
+            // Ban ~(~x))
         }
 
         // Implements generalization of cegis(T)
@@ -1444,8 +1733,13 @@ namespace Mba.Simplifier.Synthesis
             if (res == Status.SATISFIABLE)
             {
                 Console.WriteLine("Generlization found a solution!");
+
                 Debugger.Break();
+                Console.WriteLine("IGNORING GOOD SOLUTION FORNOW");
                 return true;
+
+                //Debugger.Break();
+                //return true;
             }
             else
             {
