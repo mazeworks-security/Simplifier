@@ -22,7 +22,10 @@ namespace Mba.Simplifier.Synth
 
     public record ComponentData(int MaxUsers = -1);
 
-    // Component: Group of opcodes, addition metadata
+    // A component is a group of opcodes
+    // E.g. {add, sub} can be a single component,
+    // or {neg, and, or, xor}
+    // Alternatively you can put all operations into a single component.
     public class SynthComponent
     {
         private readonly ComponentData data;
@@ -40,6 +43,37 @@ namespace Mba.Simplifier.Synth
             this.opcodes = opcodes;
         }
     }
+
+    public class SynthOperand
+    {
+        // Boolean variable indicating whether the first operand is a constant
+        public Term IsConstant { get; }
+
+        // The index of the operand. This can be an index into lines[] or constants[].
+        public Term Index { get; }
+
+        public SynthOperand(Term isConstant, Term index)
+        {
+            IsConstant = isConstant;
+            Index = index;
+        }
+    }
+
+    public class SynthLine
+    {
+        // Gets or sets whether the line is a symbol or instruction
+        public bool IsSymbol { get; set; }
+
+        // Index of the component
+        public Term ComponentIndex { get; set; }
+
+        // Which opcode was picked for the component
+        public Term ComponentOpcode { get; set; }
+
+        // The operands of the line.
+        public SynthOperand[] Operands { get; set; }
+    }
+
 
     public class BvSynthesis
     {
