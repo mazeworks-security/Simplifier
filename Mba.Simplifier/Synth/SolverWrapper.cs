@@ -291,8 +291,6 @@ namespace Mba.Simplifier.Synth
         public Term MkBvConst(string name, ulong width)
             => Wrap(MkConst(MkBvSort(width), name));
 
-        public Term MkBv(string name, ulong width)
-          => MkBvConst(name, width);
 
 
         public Term MkBvConst(string name, int width)
@@ -303,6 +301,11 @@ namespace Mba.Simplifier.Synth
 
         public Term MkVar(Sort sort, string symbol = null)
            => Wrap(BitwuzlaNative.bitwuzla_mk_var(native, sort, symbol));
+
+        public Term MkIte(params Term[] children)
+        {
+            return MkTerm(BitwuzlaKind.BITWUZLA_KIND_ITE, children);
+        }
 
         public unsafe Term MkTerm(BitwuzlaKind kind, params Term[] children)
         {

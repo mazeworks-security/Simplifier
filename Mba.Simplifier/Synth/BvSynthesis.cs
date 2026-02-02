@@ -210,11 +210,17 @@ namespace Mba.Simplifier.Synth
                             SynthOpc.Add => (op0 + op1),
                             SynthOpc.Sub => (op0 - op1),
                             SynthOpc.Mul => (op0 * op1),
-
                             _ => throw new InvalidOperationException()
                         };
+
+                        terms.Add(term);
                     }
+
+                    componentChoices.Add(LinearSelect(line.ComponentOpcode, terms));
                 }
+
+                var select = LinearSelect(line.ComponentIndex, componentChoices);
+                exprs.Add(select);
             }
 
             return null;
