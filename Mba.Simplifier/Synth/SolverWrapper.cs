@@ -291,6 +291,16 @@ namespace Mba.Simplifier.Synth
         public Term MkBvConst(string name, ulong width)
             => Wrap(MkConst(MkBvSort(width), name));
 
+        public Term MkBv(string name, ulong width)
+          => MkBvConst(name, width);
+
+
+        public Term MkBvConst(string name, int width)
+           => Wrap(MkConst(MkBvSort((ulong)width), name));
+
+        public Term MkBoolConst(string name)
+         => Wrap(MkConst(MkBoolSort(), name));
+
         public Term MkVar(Sort sort, string symbol = null)
            => Wrap(BitwuzlaNative.bitwuzla_mk_var(native, sort, symbol));
 

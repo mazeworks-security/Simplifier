@@ -1,9 +1,13 @@
-﻿using Mba.Simplifier.Bindings;
+﻿using Bitwuzla;
+using Mba.Simplifier.Bindings;
+using Mba.Simplifier.Synthesis;
 using Mba.Simplifier.Utility;
+using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -18,7 +22,8 @@ namespace Mba.Simplifier.Synth
         int NumInstructions, 
 
         // Maximum number of allowed constants
-        int maxConstants);
+        int MaxConstants
+        );
 
     public record ComponentData(int MaxUsers = -1);
 
@@ -28,19 +33,19 @@ namespace Mba.Simplifier.Synth
     // Alternatively you can put all operations into a single component.
     public class SynthComponent
     {
-        private readonly ComponentData data;
-        private readonly SynthOpc[] opcodes;
+        public ComponentData Data { get; }
+        public SynthOpc[] Opcodes { get; }
 
         public SynthComponent(ComponentData data, params SynthOpc[] opcodes)
         {
-            this.data = data;
-            this.opcodes = opcodes;
+            Data = data;
+            Opcodes = opcodes;
         }
 
         public SynthComponent(params SynthOpc[] opcodes)
         {
-            this.data = new ComponentData();
-            this.opcodes = opcodes;
+            Data = new ComponentData();
+            Opcodes = opcodes;
         }
     }
 
@@ -56,6 +61,11 @@ namespace Mba.Simplifier.Synth
         {
             IsConstant = isConstant;
             Index = index;
+        }
+
+        public override string ToString()
+        {
+            return $"(IsConstant: {IsConstant}) (Index: {Index})";
         }
     }
 
@@ -74,7 +84,6 @@ namespace Mba.Simplifier.Synth
         public SynthOperand[] Operands { get; set; }
     }
 
-
     public class BvSynthesis
     {
         private readonly SynthConfig config;
@@ -88,11 +97,35 @@ namespace Mba.Simplifier.Synth
         // Input variables
         private Term[] symbols;
 
+        // Get the index of the first instruction in lines
+        public int FirstInstIdx => symbols.Length;
+
+        // Get the max number of operands that one instruction may contain.
+        public int MaxArity => config.Components.Max(x => x.Opcodes.Max(x => x.GetOperandCount()));
+
+        IReadOnlyList<SynthComponent> components;
+
+        private List<SynthLine> lines;
+
+        private List<Term> constants;
+
+        private readonly int w;
+
+        private readonly uint componentIndexSize;
+
+        private readonly uint componentOpcodeSize;
+
         public BvSynthesis(SynthConfig config, AstCtx mbaCtx, AstIdx mbaIdx)
         {
             this.config = config;
             this.mbaCtx = mbaCtx;
             this.mbaIdx = mbaIdx;
+            this.components = config.Components;
+            w = mbaCtx.GetWidth(mbaIdx);
+
+            // Get the minimum size bitvector needed to store the component index and component opcode
+            componentIndexSize = (uint)BvWidth(components.Count - 1);
+            componentOpcodeSize = (uint)BvWidth(components.Max(x => x.Opcodes.Length) - 1);
         }
 
         public void Run()
@@ -101,16 +134,135 @@ namespace Mba.Simplifier.Synth
             groundTruth = translator.Translate(mbaIdx);
             symbols = mbaCtx.CollectVariables(mbaIdx).Select(x => translator.Translate(x)).ToArray();
 
-            CreateSkeleton();
-            Debugger.Break();
+            lines = GetLines();
+            constants = Enumerable.Repeat(0, config.MaxConstants).Select(x => ctx.MkBvConst($"const{x}", w)).ToList();
 
-            var x = ctx.MkBvConst("x", 8);
+            var skeleton = GetSkeleton();
+
+
+
             Debugger.Break();
         }
 
-        private void CreateSkeleton()
+        private List<SynthLine> GetLines()
         {
+            var lines = new List<SynthLine>();
 
+            // Each variable gets a dedicated line
+            for (int i = 0; i < symbols.Length; i++)
+                lines.Add(new() { IsSymbol = true});
+
+
+
+            for (int lineIndex = lines.Count; lineIndex < config.NumInstructions; lineIndex++)
+            {
+                var line = new SynthLine();
+                line.IsSymbol = false;
+                line.ComponentIndex = components.Count == 1 ? ctx.MkBvValue(0, 1) : ctx.MkBvConst($"compIdx{lineIndex}", componentIndexSize);
+                line.ComponentOpcode = ctx.MkBvConst($"compCode{lineIndex}", componentOpcodeSize);
+                line.Operands = new SynthOperand[MaxArity];
+                var operandBitsize = BvWidth(Math.Max(lineIndex - 1, config.MaxConstants - 1));
+                for (int i = 0; i < MaxArity; i++)
+                {
+                    var isConstant = config.MaxConstants == 0 ? ctx.MkFalse() : ctx.MkBoolConst($"{lineIndex}_op{i}Const");
+                    var operandIndex = ctx.MkBvConst($"{lineIndex}_op{i}", operandBitsize);
+                    var operand = new SynthOperand(isConstant, operandIndex);
+                    line.Operands[i] = operand;
+                }
+
+                lines.Add(line);
+            }
+
+            return lines;
+        }
+
+        private Term GetSkeleton()
+        {
+            var exprs = new List<Term>();
+            for(int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+            {
+                // The first N lines are symbols
+                var line = lines[lineIndex];
+                if (line.IsSymbol)
+                {
+                    exprs.Add(symbols[lineIndex]);
+                    continue;
+                }
+
+                // Select all of the operands
+                var operands = line.Operands.Select(x => SelectOperand(x, exprs));
+                var op0 = operands.ElementAtOrDefault(0);
+                var op1 = operands.ElementAtOrDefault(1);
+
+                // Need to get the opcode choices first.
+                var componentChoices = new List<Term>();
+                foreach(var component in components)
+                {
+                    List<Term> terms = new();
+                    foreach(var opcode in component.Opcodes)
+                    {
+                        var term = opcode switch
+                        {
+                            SynthOpc.Not => ~op0,
+                            SynthOpc.And => (op0 & op1),
+                            SynthOpc.Or => (op0 | op1),
+                            SynthOpc.Xor => (op0 ^ op1),
+                            SynthOpc.Add => (op0 + op1),
+                            SynthOpc.Sub => (op0 - op1),
+                            SynthOpc.Mul => (op0 * op1),
+
+                            _ => throw new InvalidOperationException()
+                        };
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private Term SelectOperand(SynthOperand operand, List<Term> prev)
+        {
+            var constSelect = LinearSelect(operand.Index, constants);
+            var operandSelect = LinearSelect(operand.Index, prev);
+            return ctx.MkIte(operand.IsConstant, constSelect, operandSelect);
+        }
+
+        private Term LinearSelect(Term index, List<Term> options)
+        {
+            var n = options.Count;
+
+            if (n == 0)
+                throw new InvalidOperationException();
+            if (n == 1)
+                return options[0];
+
+            // TODO: If n > 12, use the `PrunedTree` algorithm from your old version
+            if (n > 12)
+                Debugger.Break();
+
+            var result = options[n - 1];
+
+            for (int i = n - 2; i >= 0; i--)
+            {
+                var condition = index == ctx.MkBvValue(i, index.Sort.BvSize);
+                result = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_ITE, condition, options[i], result);
+            }
+
+            return result;
+        }
+
+        // Get the minimum number of bits needed to fit an integer that ranges from 0..N (inclusive)
+        public static int BvWidth(int maxValue)
+        {
+            if (maxValue == 0)
+                return 1;
+
+            return BitOperations.Log2((uint)maxValue) + 1;
+        }
+
+        private Term GetComponentIdxBv(SynthComponent component)
+        {
+            return null;
         }
     }
 
