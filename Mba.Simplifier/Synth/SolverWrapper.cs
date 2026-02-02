@@ -144,16 +144,6 @@ namespace Mba.Simplifier.Synth
 
         public override string ToString() => BitwuzlaNative.bitwuzla_term_to_string(native);
 
-        public override bool Equals(object obj)
-        {
-            if (obj is Term other)
-                return BitwuzlaNative.bitwuzla_term_is_equal_sort(native, other.native); // Are they equal terms? No dedicated term equal func in C API? 
-            // C API uses pointer equality for terms usually or explicit equal function.
-            // Actually terms are uniqueified, so pointer equality might be enough if SWIG preserves identity?
-            // SWIG wraps pointers. If handles are same, objects are same.
-            return false;
-        }
-
         public override int GetHashCode() => (int)BitwuzlaNative.bitwuzla_term_hash(native);
 
         public void Dispose()
@@ -177,20 +167,7 @@ namespace Mba.Simplifier.Synth
         public static Term operator ==(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_EQUAL, a, b);
         public static Term operator !=(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_DISTINCT, a, b);
 
-        // Helper to get manager back? The C API doesn't mention getting manager from term easily?
-        // Actually C API doesn't seem to store manager in term struct explicitly accessible.
-        // We might need to store it in C# wrapper or assume usage Context.
-        // Wait, bitwuzla_term_get_bitwuzla? No.
-        // bitwuzla_term_manager_new returns the manager.
-        // But term creation requires manager.
-        // The operators need the manager to create new terms.
-        // If we can't get manager from term, operators are hard.
-        // C API: bitwuzla.h doesn't seem to have bitwuzla_term_get_manager.
-        // BUT, terms are created from a manager.
-        // For now, I will assume we can't implement operators without referencing the manager manually, 
-        // UNLESS we attach the manager to the Term wrapper.
 
-        // I'll add a Manager property to Term and propagate it.
         public TermManager Manager { get; internal set; }
     }
 
@@ -241,8 +218,6 @@ namespace Mba.Simplifier.Synth
                 throw new ArgumentException("At least one child required", nameof(children));
 
             int len = children.Length;
-            // Use stackalloc for small arrays to avoid GC pinning, or fallback to pinning if large?
-            // Terms are usually small trees.
             IntPtr* ptrs = stackalloc IntPtr[len];
             for (int i = 0; i < len; i++)
             {
@@ -281,7 +256,7 @@ namespace Mba.Simplifier.Synth
 
         public void ConfigureTerminator(IntPtr terminatorState)
         {
-            // Omitted for simplicity
+            // TODO
         }
 
         public void Push(ulong nlevels = 1)
