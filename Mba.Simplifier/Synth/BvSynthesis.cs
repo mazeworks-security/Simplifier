@@ -1,4 +1,5 @@
 ﻿using Mba.Simplifier.Bindings;
+using Mba.Simplifier.Utility;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,22 +9,101 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.Synth
 {
+    // Synthesis configuration
+    public record SynthConfig(
+        // List of all synthesis components and their metadata
+        IReadOnlyList<SynthComponent> Components, 
+
+        // Exact number of instructions
+        int NumInstructions, 
+
+        // Maximum number of allowed constants
+        int maxConstants);
+
+    public record ComponentData(int MaxUsers = -1);
+
+    // Component: Group of opcodes, addition metadata
+    public class SynthComponent
+    {
+        private readonly ComponentData data;
+        private readonly SynthOpc[] opcodes;
+
+        public SynthComponent(ComponentData data, params SynthOpc[] opcodes)
+        {
+            this.data = data;
+            this.opcodes = opcodes;
+        }
+
+        public SynthComponent(params SynthOpc[] opcodes)
+        {
+            this.data = new ComponentData();
+            this.opcodes = opcodes;
+        }
+    }
+
     public class BvSynthesis
     {
+        private readonly SynthConfig config;
+
         private readonly AstCtx mbaCtx;
         private readonly AstIdx mbaIdx;
         private TermManager ctx = new();
 
-        public BvSynthesis(AstCtx mbaCtx, AstIdx mbaIdx)
+        // Original input expression
+        private Term groundTruth;
+        // Input variables
+        private Term[] symbols;
+
+        public BvSynthesis(SynthConfig config, AstCtx mbaCtx, AstIdx mbaIdx)
         {
+            this.config = config;
             this.mbaCtx = mbaCtx;
             this.mbaIdx = mbaIdx;
         }
 
         public void Run()
         {
-            var x = ctx.MkBvConst(8, "x");
+            var translator = new BitwuzlaTranslator(mbaCtx, ctx);
+            groundTruth = translator.Translate(mbaIdx);
+            symbols = mbaCtx.CollectVariables(mbaIdx).Select(x => translator.Translate(x)).ToArray();
+
+            CreateSkeleton();
             Debugger.Break();
+
+            var x = ctx.MkBvConst("x", 8);
+            Debugger.Break();
+        }
+
+        private void CreateSkeleton()
+        {
+
+        }
+    }
+
+    public class SynthTests
+    {
+        public static void P0()
+        {
+            var (ctx, idx) = Parse("(a&b) + c", 8);
+
+            var components = new List<SynthComponent>()
+            {
+                new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                new(SynthOpc.Add, SynthOpc.Sub),
+            };
+
+            var config = new SynthConfig(components, 5, 1);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+        private static (AstCtx Ctx, AstIdx Idx) Parse(string text, uint width)
+        {
+            var ctx = new AstCtx();
+            AstIdx.ctx = ctx;
+            var parsed = RustAstParser.Parse(ctx, text, width);
+            return (ctx, parsed);
         }
     }
 }

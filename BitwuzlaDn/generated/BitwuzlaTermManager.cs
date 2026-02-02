@@ -37,14 +37,11 @@ public class BitwuzlaTermManager : global::System.IDisposable {
       if (swigCPtr.Handle != global::System.IntPtr.Zero) {
         if (swigCMemOwn) {
           swigCMemOwn = false;
-          BitwuzlaNativePINVOKE.delete_BitwuzlaTermManager(swigCPtr);
+          throw new global::System.MethodAccessException("C++ destructor does not have public access");
         }
         swigCPtr = new global::System.Runtime.InteropServices.HandleRef(null, global::System.IntPtr.Zero);
       }
     }
-  }
-
-  public BitwuzlaTermManager() : this(BitwuzlaNativePINVOKE.new_BitwuzlaTermManager(), true) {
   }
 
 }

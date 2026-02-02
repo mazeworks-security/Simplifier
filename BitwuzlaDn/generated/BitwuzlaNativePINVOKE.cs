@@ -193,42 +193,6 @@ public unsafe class BitwuzlaNativePINVOKE {
   }
 
 
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_new_Bitwuzla")]
-  public static extern global::System.IntPtr new_Bitwuzla();
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_delete_Bitwuzla")]
-  public static extern void delete_Bitwuzla(global::System.Runtime.InteropServices.HandleRef jarg1);
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_new_BitwuzlaOptions")]
-  public static extern global::System.IntPtr new_BitwuzlaOptions();
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_delete_BitwuzlaOptions")]
-  public static extern void delete_BitwuzlaOptions(global::System.Runtime.InteropServices.HandleRef jarg1);
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_new_BitwuzlaTermManager")]
-  public static extern global::System.IntPtr new_BitwuzlaTermManager();
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_delete_BitwuzlaTermManager")]
-  public static extern void delete_BitwuzlaTermManager(global::System.Runtime.InteropServices.HandleRef jarg1);
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_new_BitwuzlaSort")]
-  public static extern global::System.IntPtr new_BitwuzlaSort();
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_delete_BitwuzlaSort")]
-  public static extern void delete_BitwuzlaSort(global::System.Runtime.InteropServices.HandleRef jarg1);
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_new_BitwuzlaTerm")]
-  public static extern global::System.IntPtr new_BitwuzlaTerm();
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_delete_BitwuzlaTerm")]
-  public static extern void delete_BitwuzlaTerm(global::System.Runtime.InteropServices.HandleRef jarg1);
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_new_BitwuzlaResultStruct")]
-  public static extern global::System.IntPtr new_BitwuzlaResultStruct();
-
-  [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_delete_BitwuzlaResultStruct")]
-  public static extern void delete_BitwuzlaResultStruct(global::System.Runtime.InteropServices.HandleRef jarg1);
-
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_copyright")]
   public static extern string bitwuzla_copyright();
 
@@ -383,46 +347,46 @@ public unsafe class BitwuzlaNativePINVOKE {
   public static extern void delete_StringValue(global::System.Runtime.InteropServices.HandleRef jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_options_new")]
-  public static extern global::System.IntPtr bitwuzla_options_new();
+  public static extern IntPtr bitwuzla_options_new();
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_options_delete")]
-  public static extern void bitwuzla_options_delete(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern void bitwuzla_options_delete(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_options_set_diagnostic_output_stream")]
-  public static extern void bitwuzla_options_set_diagnostic_output_stream(global::System.Runtime.InteropServices.HandleRef jarg1, string jarg2);
+  public static extern void bitwuzla_options_set_diagnostic_output_stream(IntPtr jarg1, string jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_option_is_valid")]
-  public static extern bool bitwuzla_option_is_valid(global::System.Runtime.InteropServices.HandleRef jarg1, string jarg2);
+  public static extern bool bitwuzla_option_is_valid(IntPtr jarg1, string jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_option_is_numeric")]
-  public static extern bool bitwuzla_option_is_numeric(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2);
+  public static extern bool bitwuzla_option_is_numeric(IntPtr jarg1, int jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_option_is_mode")]
-  public static extern bool bitwuzla_option_is_mode(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2);
+  public static extern bool bitwuzla_option_is_mode(IntPtr jarg1, int jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_option_is_string")]
-  public static extern bool bitwuzla_option_is_string(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2);
+  public static extern bool bitwuzla_option_is_string(IntPtr jarg1, int jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_set_option")]
-  public static extern void bitwuzla_set_option(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, ulong jarg3);
+  public static extern void bitwuzla_set_option(IntPtr jarg1, int jarg2, ulong jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_set_option_mode")]
-  public static extern void bitwuzla_set_option_mode(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, string jarg3);
+  public static extern void bitwuzla_set_option_mode(IntPtr jarg1, int jarg2, string jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_set_option_string")]
-  public static extern void bitwuzla_set_option_string(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, string jarg3);
+  public static extern void bitwuzla_set_option_string(IntPtr jarg1, int jarg2, string jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_option")]
-  public static extern ulong bitwuzla_get_option(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2);
+  public static extern ulong bitwuzla_get_option(IntPtr jarg1, int jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_option_mode")]
-  public static extern string bitwuzla_get_option_mode(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2);
+  public static extern string bitwuzla_get_option_mode(IntPtr jarg1, int jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_option_string")]
-  public static extern string bitwuzla_get_option_string(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2);
+  public static extern string bitwuzla_get_option_string(IntPtr jarg1, int jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_option_info")]
-  public static extern void bitwuzla_get_option_info(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
+  public static extern void bitwuzla_get_option_info(IntPtr jarg1, int jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_result_to_string")]
   public static extern string bitwuzla_result_to_string(int jarg1);
@@ -434,430 +398,430 @@ public unsafe class BitwuzlaNativePINVOKE {
   public static extern string bitwuzla_kind_to_string(int jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_hash")]
-  public static extern uint bitwuzla_sort_hash(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern uint bitwuzla_sort_hash(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_copy")]
-  public static extern global::System.IntPtr bitwuzla_sort_copy(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_sort_copy(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_release")]
-  public static extern void bitwuzla_sort_release(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern void bitwuzla_sort_release(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_bv_get_size")]
-  public static extern ulong bitwuzla_sort_bv_get_size(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern ulong bitwuzla_sort_bv_get_size(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_fp_get_exp_size")]
-  public static extern ulong bitwuzla_sort_fp_get_exp_size(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern ulong bitwuzla_sort_fp_get_exp_size(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_fp_get_sig_size")]
-  public static extern ulong bitwuzla_sort_fp_get_sig_size(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern ulong bitwuzla_sort_fp_get_sig_size(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_array_get_index")]
-  public static extern global::System.IntPtr bitwuzla_sort_array_get_index(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_sort_array_get_index(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_array_get_element")]
-  public static extern global::System.IntPtr bitwuzla_sort_array_get_element(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_sort_array_get_element(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_fun_get_domain_sorts")]
-  public static extern global::System.IntPtr bitwuzla_sort_fun_get_domain_sorts(global::System.Runtime.InteropServices.HandleRef jarg1, nuint* jarg2);
+  public static extern global::System.IntPtr bitwuzla_sort_fun_get_domain_sorts(IntPtr jarg1, nuint* jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_fun_get_codomain")]
-  public static extern global::System.IntPtr bitwuzla_sort_fun_get_codomain(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_sort_fun_get_codomain(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_fun_get_arity")]
-  public static extern ulong bitwuzla_sort_fun_get_arity(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern ulong bitwuzla_sort_fun_get_arity(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_get_uninterpreted_symbol")]
-  public static extern string bitwuzla_sort_get_uninterpreted_symbol(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern string bitwuzla_sort_get_uninterpreted_symbol(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_is_array")]
-  public static extern bool bitwuzla_sort_is_array(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_sort_is_array(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_is_bool")]
-  public static extern bool bitwuzla_sort_is_bool(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_sort_is_bool(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_is_bv")]
-  public static extern bool bitwuzla_sort_is_bv(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_sort_is_bv(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_is_fp")]
-  public static extern bool bitwuzla_sort_is_fp(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_sort_is_fp(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_is_fun")]
-  public static extern bool bitwuzla_sort_is_fun(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_sort_is_fun(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_is_rm")]
-  public static extern bool bitwuzla_sort_is_rm(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_sort_is_rm(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_is_uninterpreted")]
-  public static extern bool bitwuzla_sort_is_uninterpreted(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_sort_is_uninterpreted(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_to_string")]
-  public static extern string bitwuzla_sort_to_string(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern string bitwuzla_sort_to_string(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_sort_print")]
-  public static extern void bitwuzla_sort_print(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern void bitwuzla_sort_print(IntPtr jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_hash")]
-  public static extern uint bitwuzla_term_hash(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern uint bitwuzla_term_hash(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_copy")]
-  public static extern global::System.IntPtr bitwuzla_term_copy(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_term_copy(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_release")]
-  public static extern void bitwuzla_term_release(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern void bitwuzla_term_release(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_get_kind")]
-  public static extern int bitwuzla_term_get_kind(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern int bitwuzla_term_get_kind(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_get_children")]
-  public static extern global::System.IntPtr bitwuzla_term_get_children(global::System.Runtime.InteropServices.HandleRef jarg1, nuint* jarg2);
+  public static extern global::System.IntPtr bitwuzla_term_get_children(IntPtr jarg1, nuint* jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_get_indices")]
-  public static extern ulong* bitwuzla_term_get_indices(global::System.Runtime.InteropServices.HandleRef jarg1, nuint* jarg2);
+  public static extern ulong* bitwuzla_term_get_indices(IntPtr jarg1, nuint* jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_indexed")]
-  public static extern bool bitwuzla_term_is_indexed(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_indexed(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_get_sort")]
-  public static extern global::System.IntPtr bitwuzla_term_get_sort(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_term_get_sort(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_array_get_index_sort")]
-  public static extern global::System.IntPtr bitwuzla_term_array_get_index_sort(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_term_array_get_index_sort(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_array_get_element_sort")]
-  public static extern global::System.IntPtr bitwuzla_term_array_get_element_sort(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_term_array_get_element_sort(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_fun_get_domain_sorts")]
-  public static extern global::System.IntPtr bitwuzla_term_fun_get_domain_sorts(global::System.Runtime.InteropServices.HandleRef jarg1, nuint* jarg2);
+  public static extern global::System.IntPtr bitwuzla_term_fun_get_domain_sorts(IntPtr jarg1, nuint* jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_fun_get_codomain_sort")]
-  public static extern global::System.IntPtr bitwuzla_term_fun_get_codomain_sort(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_term_fun_get_codomain_sort(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_bv_get_size")]
-  public static extern ulong bitwuzla_term_bv_get_size(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern ulong bitwuzla_term_bv_get_size(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_fp_get_exp_size")]
-  public static extern ulong bitwuzla_term_fp_get_exp_size(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern ulong bitwuzla_term_fp_get_exp_size(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_fp_get_sig_size")]
-  public static extern ulong bitwuzla_term_fp_get_sig_size(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern ulong bitwuzla_term_fp_get_sig_size(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_fun_get_arity")]
-  public static extern ulong bitwuzla_term_fun_get_arity(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern ulong bitwuzla_term_fun_get_arity(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_get_symbol")]
-  public static extern string bitwuzla_term_get_symbol(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern string bitwuzla_term_get_symbol(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_equal_sort")]
-  public static extern bool bitwuzla_term_is_equal_sort(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern bool bitwuzla_term_is_equal_sort(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_array")]
-  public static extern bool bitwuzla_term_is_array(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_array(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_const")]
-  public static extern bool bitwuzla_term_is_const(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_const(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_fun")]
-  public static extern bool bitwuzla_term_is_fun(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_fun(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_var")]
-  public static extern bool bitwuzla_term_is_var(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_var(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_value")]
-  public static extern bool bitwuzla_term_is_value(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_value(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_bv_value")]
-  public static extern bool bitwuzla_term_is_bv_value(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_bv_value(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_fp_value")]
-  public static extern bool bitwuzla_term_is_fp_value(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_fp_value(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_rm_value")]
-  public static extern bool bitwuzla_term_is_rm_value(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_rm_value(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_bool")]
-  public static extern bool bitwuzla_term_is_bool(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_bool(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_bv")]
-  public static extern bool bitwuzla_term_is_bv(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_bv(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_fp")]
-  public static extern bool bitwuzla_term_is_fp(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_fp(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_rm")]
-  public static extern bool bitwuzla_term_is_rm(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_rm(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_uninterpreted")]
-  public static extern bool bitwuzla_term_is_uninterpreted(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_uninterpreted(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_true")]
-  public static extern bool bitwuzla_term_is_true(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_true(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_false")]
-  public static extern bool bitwuzla_term_is_false(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_false(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_bv_value_zero")]
-  public static extern bool bitwuzla_term_is_bv_value_zero(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_bv_value_zero(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_bv_value_one")]
-  public static extern bool bitwuzla_term_is_bv_value_one(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_bv_value_one(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_bv_value_ones")]
-  public static extern bool bitwuzla_term_is_bv_value_ones(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_bv_value_ones(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_bv_value_min_signed")]
-  public static extern bool bitwuzla_term_is_bv_value_min_signed(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_bv_value_min_signed(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_bv_value_max_signed")]
-  public static extern bool bitwuzla_term_is_bv_value_max_signed(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_bv_value_max_signed(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_fp_value_pos_zero")]
-  public static extern bool bitwuzla_term_is_fp_value_pos_zero(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_fp_value_pos_zero(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_fp_value_neg_zero")]
-  public static extern bool bitwuzla_term_is_fp_value_neg_zero(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_fp_value_neg_zero(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_fp_value_pos_inf")]
-  public static extern bool bitwuzla_term_is_fp_value_pos_inf(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_fp_value_pos_inf(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_fp_value_neg_inf")]
-  public static extern bool bitwuzla_term_is_fp_value_neg_inf(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_fp_value_neg_inf(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_fp_value_nan")]
-  public static extern bool bitwuzla_term_is_fp_value_nan(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_fp_value_nan(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_rm_value_rna")]
-  public static extern bool bitwuzla_term_is_rm_value_rna(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_rm_value_rna(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_rm_value_rne")]
-  public static extern bool bitwuzla_term_is_rm_value_rne(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_rm_value_rne(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_rm_value_rtn")]
-  public static extern bool bitwuzla_term_is_rm_value_rtn(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_rm_value_rtn(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_rm_value_rtp")]
-  public static extern bool bitwuzla_term_is_rm_value_rtp(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_rm_value_rtp(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_is_rm_value_rtz")]
-  public static extern bool bitwuzla_term_is_rm_value_rtz(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_is_rm_value_rtz(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_value_get_bool")]
-  public static extern bool bitwuzla_term_value_get_bool(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern bool bitwuzla_term_value_get_bool(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_value_get_str")]
-  public static extern string bitwuzla_term_value_get_str(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern string bitwuzla_term_value_get_str(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_value_get_str_fmt")]
-  public static extern string bitwuzla_term_value_get_str_fmt(global::System.Runtime.InteropServices.HandleRef jarg1, byte jarg2);
+  public static extern string bitwuzla_term_value_get_str_fmt(IntPtr jarg1, byte jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_value_get_fp_ieee")]
-  public static extern void bitwuzla_term_value_get_fp_ieee(global::System.Runtime.InteropServices.HandleRef jarg1, byte** jarg2, byte** jarg3, byte** jarg4, byte jarg5);
+  public static extern void bitwuzla_term_value_get_fp_ieee(IntPtr jarg1, byte** jarg2, byte** jarg3, byte** jarg4, byte jarg5);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_value_get_rm")]
-  public static extern int bitwuzla_term_value_get_rm(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern int bitwuzla_term_value_get_rm(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_to_string")]
-  public static extern string bitwuzla_term_to_string(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern string bitwuzla_term_to_string(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_to_string_fmt")]
-  public static extern string bitwuzla_term_to_string_fmt(global::System.Runtime.InteropServices.HandleRef jarg1, byte jarg2);
+  public static extern string bitwuzla_term_to_string_fmt(IntPtr jarg1, byte jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_fp_value_to_real_string")]
-  public static extern string bitwuzla_term_fp_value_to_real_string(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern string bitwuzla_term_fp_value_to_real_string(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_print")]
-  public static extern void bitwuzla_term_print(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern void bitwuzla_term_print(IntPtr jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_print_fmt")]
-  public static extern void bitwuzla_term_print_fmt(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, byte jarg3);
+  public static extern void bitwuzla_term_print_fmt(IntPtr jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, byte jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_new")]
-  public static extern global::System.IntPtr bitwuzla_new(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_new(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_delete")]
-  public static extern void bitwuzla_delete(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern void bitwuzla_delete(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_set_termination_callback")]
-  public static extern void bitwuzla_set_termination_callback(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, void* jarg3);
+  public static extern void bitwuzla_set_termination_callback(IntPtr jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, void* jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_termination_callback_state")]
-  public static extern void* bitwuzla_get_termination_callback_state(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern void* bitwuzla_get_termination_callback_state(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_set_abort_callback")]
   public static extern void bitwuzla_set_abort_callback(global::System.Runtime.InteropServices.HandleRef jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_push")]
-  public static extern void bitwuzla_push(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2);
+  public static extern void bitwuzla_push(IntPtr jarg1, ulong jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_pop")]
-  public static extern void bitwuzla_pop(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2);
+  public static extern void bitwuzla_pop(IntPtr jarg1, ulong jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_assert")]
-  public static extern void bitwuzla_assert(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern void bitwuzla_assert(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_assertions")]
-  public static extern global::System.IntPtr bitwuzla_get_assertions(global::System.Runtime.InteropServices.HandleRef jarg1, nuint* jarg2);
+  public static extern global::System.IntPtr bitwuzla_get_assertions(IntPtr jarg1, nuint* jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_is_unsat_assumption")]
-  public static extern bool bitwuzla_is_unsat_assumption(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern bool bitwuzla_is_unsat_assumption(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_unsat_assumptions")]
-  public static extern global::System.IntPtr bitwuzla_get_unsat_assumptions(global::System.Runtime.InteropServices.HandleRef jarg1, nuint* jarg2);
+  public static extern global::System.IntPtr bitwuzla_get_unsat_assumptions(IntPtr jarg1, nuint* jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_unsat_core")]
-  public static extern global::System.IntPtr bitwuzla_get_unsat_core(global::System.Runtime.InteropServices.HandleRef jarg1, nuint* jarg2);
+  public static extern global::System.IntPtr bitwuzla_get_unsat_core(IntPtr jarg1, nuint* jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_simplify")]
-  public static extern void bitwuzla_simplify(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern void bitwuzla_simplify(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_simplify_term")]
-  public static extern global::System.IntPtr bitwuzla_simplify_term(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_simplify_term(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_check_sat")]
-  public static extern int bitwuzla_check_sat(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern int bitwuzla_check_sat(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_check_sat_assuming")]
-  public static extern int bitwuzla_check_sat_assuming(global::System.Runtime.InteropServices.HandleRef jarg1, uint jarg2, IntPtr* jarg3);
+  public static extern int bitwuzla_check_sat_assuming(IntPtr jarg1, uint jarg2, IntPtr* jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_value")]
-  public static extern global::System.IntPtr bitwuzla_get_value(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_get_value(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_print_formula")]
-  public static extern void bitwuzla_print_formula(global::System.Runtime.InteropServices.HandleRef jarg1, string jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, byte jarg4);
+  public static extern void bitwuzla_print_formula(IntPtr jarg1, string jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, byte jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_print_unsat_core")]
-  public static extern void bitwuzla_print_unsat_core(global::System.Runtime.InteropServices.HandleRef jarg1, string jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, byte jarg4);
+  public static extern void bitwuzla_print_unsat_core(IntPtr jarg1, string jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, byte jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_statistics")]
-  public static extern void bitwuzla_get_statistics(global::System.Runtime.InteropServices.HandleRef jarg1, byte*** jarg2, byte*** jarg3, nuint* jarg4);
+  public static extern void bitwuzla_get_statistics(IntPtr jarg1, byte*** jarg2, byte*** jarg3, nuint* jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_get_term_mgr")]
-  public static extern global::System.IntPtr bitwuzla_get_term_mgr(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_get_term_mgr(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_manager_new")]
-  public static extern global::System.IntPtr bitwuzla_term_manager_new();
+  public static extern IntPtr bitwuzla_term_manager_new();
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_manager_delete")]
-  public static extern void bitwuzla_term_manager_delete(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern void bitwuzla_term_manager_delete(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_term_manager_release")]
-  public static extern void bitwuzla_term_manager_release(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern void bitwuzla_term_manager_release(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_array_sort")]
-  public static extern global::System.IntPtr bitwuzla_mk_array_sort(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
+  public static extern IntPtr bitwuzla_mk_array_sort(IntPtr jarg1, IntPtr jarg2, IntPtr jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_bool_sort")]
-  public static extern global::System.IntPtr bitwuzla_mk_bool_sort(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_mk_bool_sort(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_bv_sort")]
-  public static extern global::System.IntPtr bitwuzla_mk_bv_sort(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2);
+  public static extern IntPtr bitwuzla_mk_bv_sort(IntPtr jarg1, ulong jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_fp_sort")]
-  public static extern global::System.IntPtr bitwuzla_mk_fp_sort(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2, ulong jarg3);
+  public static extern IntPtr bitwuzla_mk_fp_sort(IntPtr jarg1, ulong jarg2, ulong jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_fun_sort")]
-  public static extern global::System.IntPtr bitwuzla_mk_fun_sort(global::System.Runtime.InteropServices.HandleRef jarg1, ulong jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, global::System.Runtime.InteropServices.HandleRef jarg4);
+  public static extern IntPtr bitwuzla_mk_fun_sort(IntPtr jarg1, ulong jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, IntPtr jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_rm_sort")]
-  public static extern global::System.IntPtr bitwuzla_mk_rm_sort(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_mk_rm_sort(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_uninterpreted_sort")]
-  public static extern global::System.IntPtr bitwuzla_mk_uninterpreted_sort(global::System.Runtime.InteropServices.HandleRef jarg1, string jarg2);
+  public static extern IntPtr bitwuzla_mk_uninterpreted_sort(IntPtr jarg1, string jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_true")]
-  public static extern global::System.IntPtr bitwuzla_mk_true(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_mk_true(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_false")]
-  public static extern global::System.IntPtr bitwuzla_mk_false(global::System.Runtime.InteropServices.HandleRef jarg1);
+  public static extern IntPtr bitwuzla_mk_false(IntPtr jarg1);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_bv_zero")]
-  public static extern global::System.IntPtr bitwuzla_mk_bv_zero(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_mk_bv_zero(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_bv_one")]
-  public static extern global::System.IntPtr bitwuzla_mk_bv_one(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_mk_bv_one(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_bv_ones")]
-  public static extern global::System.IntPtr bitwuzla_mk_bv_ones(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_mk_bv_ones(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_bv_min_signed")]
-  public static extern global::System.IntPtr bitwuzla_mk_bv_min_signed(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_mk_bv_min_signed(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_bv_max_signed")]
-  public static extern global::System.IntPtr bitwuzla_mk_bv_max_signed(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_mk_bv_max_signed(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_fp_pos_zero")]
-  public static extern global::System.IntPtr bitwuzla_mk_fp_pos_zero(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_mk_fp_pos_zero(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_fp_neg_zero")]
-  public static extern global::System.IntPtr bitwuzla_mk_fp_neg_zero(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_mk_fp_neg_zero(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_fp_pos_inf")]
-  public static extern global::System.IntPtr bitwuzla_mk_fp_pos_inf(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_mk_fp_pos_inf(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_fp_neg_inf")]
-  public static extern global::System.IntPtr bitwuzla_mk_fp_neg_inf(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_mk_fp_neg_inf(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_fp_nan")]
-  public static extern global::System.IntPtr bitwuzla_mk_fp_nan(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2);
+  public static extern IntPtr bitwuzla_mk_fp_nan(IntPtr jarg1, IntPtr jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_bv_value")]
-  public static extern global::System.IntPtr bitwuzla_mk_bv_value(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, string jarg3, byte jarg4);
+  public static extern IntPtr bitwuzla_mk_bv_value(IntPtr jarg1, IntPtr jarg2, string jarg3, byte jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_bv_value_uint64")]
-  public static extern global::System.IntPtr bitwuzla_mk_bv_value_uint64(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, ulong jarg3);
+  public static extern IntPtr bitwuzla_mk_bv_value_uint64(IntPtr jarg1, IntPtr jarg2, ulong jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_bv_value_int64")]
-  public static extern global::System.IntPtr bitwuzla_mk_bv_value_int64(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, long jarg3);
+  public static extern IntPtr bitwuzla_mk_bv_value_int64(IntPtr jarg1, IntPtr jarg2, long jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_fp_value")]
-  public static extern global::System.IntPtr bitwuzla_mk_fp_value(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, global::System.Runtime.InteropServices.HandleRef jarg4);
+  public static extern IntPtr bitwuzla_mk_fp_value(IntPtr jarg1, IntPtr jarg2, IntPtr jarg3, IntPtr jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_fp_from_real")]
-  public static extern global::System.IntPtr bitwuzla_mk_fp_from_real(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, string jarg4);
+  public static extern IntPtr bitwuzla_mk_fp_from_real(IntPtr jarg1, IntPtr jarg2, IntPtr jarg3, string jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_fp_from_rational")]
-  public static extern global::System.IntPtr bitwuzla_mk_fp_from_rational(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, string jarg4, string jarg5);
+  public static extern IntPtr bitwuzla_mk_fp_from_rational(IntPtr jarg1, IntPtr jarg2, IntPtr jarg3, string jarg4, string jarg5);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_rm_value")]
-  public static extern global::System.IntPtr bitwuzla_mk_rm_value(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2);
+  public static extern IntPtr bitwuzla_mk_rm_value(IntPtr jarg1, int jarg2);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_term1")]
-  public static extern global::System.IntPtr bitwuzla_mk_term1(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
+  public static extern IntPtr bitwuzla_mk_term1(IntPtr jarg1, int jarg2, IntPtr jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_term2")]
-  public static extern global::System.IntPtr bitwuzla_mk_term2(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, global::System.Runtime.InteropServices.HandleRef jarg4);
+  public static extern IntPtr bitwuzla_mk_term2(IntPtr jarg1, int jarg2, IntPtr jarg3, IntPtr jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_term3")]
-  public static extern global::System.IntPtr bitwuzla_mk_term3(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, global::System.Runtime.InteropServices.HandleRef jarg4, global::System.Runtime.InteropServices.HandleRef jarg5);
+  public static extern IntPtr bitwuzla_mk_term3(IntPtr jarg1, int jarg2, IntPtr jarg3, IntPtr jarg4, IntPtr jarg5);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_term")]
-  public static extern global::System.IntPtr bitwuzla_mk_term(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, uint jarg3, IntPtr* jarg4);
+  public static extern IntPtr bitwuzla_mk_term(IntPtr jarg1, int jarg2, uint jarg3, IntPtr* jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_term1_indexed1")]
-  public static extern global::System.IntPtr bitwuzla_mk_term1_indexed1(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, ulong jarg4);
+  public static extern IntPtr bitwuzla_mk_term1_indexed1(IntPtr jarg1, int jarg2, IntPtr jarg3, ulong jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_term1_indexed2")]
-  public static extern global::System.IntPtr bitwuzla_mk_term1_indexed2(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, ulong jarg4, ulong jarg5);
+  public static extern IntPtr bitwuzla_mk_term1_indexed2(IntPtr jarg1, int jarg2, IntPtr jarg3, ulong jarg4, ulong jarg5);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_term2_indexed1")]
-  public static extern global::System.IntPtr bitwuzla_mk_term2_indexed1(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, global::System.Runtime.InteropServices.HandleRef jarg4, ulong jarg5);
+  public static extern IntPtr bitwuzla_mk_term2_indexed1(IntPtr jarg1, int jarg2, IntPtr jarg3, IntPtr jarg4, ulong jarg5);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_term2_indexed2")]
-  public static extern global::System.IntPtr bitwuzla_mk_term2_indexed2(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, global::System.Runtime.InteropServices.HandleRef jarg3, global::System.Runtime.InteropServices.HandleRef jarg4, ulong jarg5, ulong jarg6);
+  public static extern IntPtr bitwuzla_mk_term2_indexed2(IntPtr jarg1, int jarg2, IntPtr jarg3, IntPtr jarg4, ulong jarg5, ulong jarg6);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_term_indexed")]
-  public static extern global::System.IntPtr bitwuzla_mk_term_indexed(global::System.Runtime.InteropServices.HandleRef jarg1, int jarg2, uint jarg3, IntPtr* jarg4, uint jarg5, ulong* jarg6);
+  public static extern IntPtr bitwuzla_mk_term_indexed(IntPtr jarg1, int jarg2, uint jarg3, IntPtr* jarg4, uint jarg5, ulong* jarg6);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_const")]
-  public static extern global::System.IntPtr bitwuzla_mk_const(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, string jarg3);
+  public static extern IntPtr bitwuzla_mk_const(IntPtr jarg1, IntPtr jarg2, string jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_const_array")]
-  public static extern global::System.IntPtr bitwuzla_mk_const_array(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, global::System.Runtime.InteropServices.HandleRef jarg3);
+  public static extern IntPtr bitwuzla_mk_const_array(IntPtr jarg1, IntPtr jarg2, IntPtr jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_mk_var")]
-  public static extern global::System.IntPtr bitwuzla_mk_var(global::System.Runtime.InteropServices.HandleRef jarg1, global::System.Runtime.InteropServices.HandleRef jarg2, string jarg3);
+  public static extern IntPtr bitwuzla_mk_var(IntPtr jarg1, IntPtr jarg2, string jarg3);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_substitute_term")]
-  public static extern global::System.IntPtr bitwuzla_substitute_term(global::System.Runtime.InteropServices.HandleRef jarg1, uint jarg2, IntPtr* jarg3, IntPtr* jarg4);
+  public static extern IntPtr bitwuzla_substitute_term(IntPtr jarg1, uint jarg2, IntPtr* jarg3, IntPtr* jarg4);
 
   [global::System.Runtime.InteropServices.DllImport("Bitwuzla", EntryPoint="CSharp_Bitwuzla_bitwuzla_substitute_terms")]
   public static extern void bitwuzla_substitute_terms(uint jarg1, IntPtr* jarg2, uint jarg3, IntPtr* jarg4, IntPtr* jarg5);

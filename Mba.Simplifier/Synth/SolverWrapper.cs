@@ -181,6 +181,7 @@ namespace Mba.Simplifier.Synth
         public static Term operator +(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_ADD, a, b);
         public static Term operator -(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_SUB, a, b);
         public static Term operator *(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_MUL, a, b);
+        public static Term operator >>(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_SHR, a, b);
         public static Term operator /(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UDIV, a, b); 
         public static Term operator %(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UREM, a, b);
         public static Term operator -(Term t) => t.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_NEG, t);
@@ -275,10 +276,10 @@ namespace Mba.Simplifier.Synth
         public Term MkBvValue(Sort sort, ulong value)
             => Wrap(BitwuzlaNative.bitwuzla_mk_bv_value_uint64(native, sort, value));
 
-        public Term MkBvValue(ulong size, ulong value)
+        public Term MkBvValue(ulong value, ulong size)
             => Wrap(MkBvValue(MkBvSort(size), value));
 
-        public Term MkBvValue(ulong size, long value)
+        public Term MkBvValue(long value, ulong size)
             => Wrap(MkBvValue(MkBvSort(size), value));
 
         public Term MkBvValue(Sort sort, long value)
@@ -287,7 +288,7 @@ namespace Mba.Simplifier.Synth
         public Term MkConst(Sort sort, string symbol = null)
            => Wrap(BitwuzlaNative.bitwuzla_mk_const(native, sort, symbol));
 
-        public Term MkBvConst(ulong width, string name)
+        public Term MkBvConst(string name, ulong width)
             => Wrap(MkConst(MkBvSort(width), name));
 
         public Term MkVar(Sort sort, string symbol = null)
@@ -304,6 +305,8 @@ namespace Mba.Simplifier.Synth
             {
                 ptrs[i] = BitwuzlaTerm.getCPtr(children[i].native).Handle;
             }
+
+            //return Wrap(BitwuzlaNative.bitwuzla_mk_term2(native, kind, children[0], children[1]));
 
             return Wrap(BitwuzlaNative.bitwuzla_mk_term(native, kind, (uint)len, ptrs));
         }
@@ -326,7 +329,7 @@ namespace Mba.Simplifier.Synth
     /// </summary>
     public class BvSolver : IDisposable
     {
-        private readonly Bitwuzla.Bitwuzla native;
+        private readonly Bitwuzla.BitwuzlaSolver native;
         private readonly TermManager tm;
 
         public BvSolver(TermManager tm, Options options = null)

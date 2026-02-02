@@ -474,8 +474,10 @@ if(brahma)
 bool useNew = true;
 if (useNew)
 {
-    var synthesizer = new BvSynthesis(ctx, id);
-    synthesizer.Run();
+    SynthTests.P0();
+    Debugger.Break();
+    //var synthesizer = new BvSynthesis(ctx, id);
+    //synthesizer.Run();
 }
 
 //new DagRuleSynthesis(ctx).Run(id);

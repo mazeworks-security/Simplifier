@@ -27,68 +27,67 @@ public unsafe class BitwuzlaNative {
   }
 
   public static BitwuzlaOptions bitwuzla_options_new() {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_options_new();
-    BitwuzlaOptions ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaOptions(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_options_new();
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaOptions(cPtr, true);
   }
 
   public static void bitwuzla_options_delete(BitwuzlaOptions options) {
-    BitwuzlaNativePINVOKE.bitwuzla_options_delete(BitwuzlaOptions.getCPtr(options));
+    BitwuzlaNativePINVOKE.bitwuzla_options_delete(BitwuzlaOptions.getCPtr(options).Handle);
   }
 
   public static void bitwuzla_options_set_diagnostic_output_stream(BitwuzlaOptions options, string filename) {
-    BitwuzlaNativePINVOKE.bitwuzla_options_set_diagnostic_output_stream(BitwuzlaOptions.getCPtr(options), filename);
+    BitwuzlaNativePINVOKE.bitwuzla_options_set_diagnostic_output_stream(BitwuzlaOptions.getCPtr(options).Handle, filename);
   }
 
   public static bool bitwuzla_option_is_valid(BitwuzlaOptions options, string name) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_option_is_valid(BitwuzlaOptions.getCPtr(options), name);
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_option_is_valid(BitwuzlaOptions.getCPtr(options).Handle, name);
     return ret;
   }
 
   public static bool bitwuzla_option_is_numeric(BitwuzlaOptions options, BitwuzlaOption option) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_option_is_numeric(BitwuzlaOptions.getCPtr(options), (int)option);
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_option_is_numeric(BitwuzlaOptions.getCPtr(options).Handle, (int)option);
     return ret;
   }
 
   public static bool bitwuzla_option_is_mode(BitwuzlaOptions options, BitwuzlaOption option) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_option_is_mode(BitwuzlaOptions.getCPtr(options), (int)option);
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_option_is_mode(BitwuzlaOptions.getCPtr(options).Handle, (int)option);
     return ret;
   }
 
   public static bool bitwuzla_option_is_string(BitwuzlaOptions options, BitwuzlaOption option) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_option_is_string(BitwuzlaOptions.getCPtr(options), (int)option);
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_option_is_string(BitwuzlaOptions.getCPtr(options).Handle, (int)option);
     return ret;
   }
 
   public static void bitwuzla_set_option(BitwuzlaOptions options, BitwuzlaOption option, ulong val) {
-    BitwuzlaNativePINVOKE.bitwuzla_set_option(BitwuzlaOptions.getCPtr(options), (int)option, val);
+    BitwuzlaNativePINVOKE.bitwuzla_set_option(BitwuzlaOptions.getCPtr(options).Handle, (int)option, val);
   }
 
   public static void bitwuzla_set_option_mode(BitwuzlaOptions options, BitwuzlaOption option, string val) {
-    BitwuzlaNativePINVOKE.bitwuzla_set_option_mode(BitwuzlaOptions.getCPtr(options), (int)option, val);
+    BitwuzlaNativePINVOKE.bitwuzla_set_option_mode(BitwuzlaOptions.getCPtr(options).Handle, (int)option, val);
   }
 
   public static void bitwuzla_set_option_string(BitwuzlaOptions options, BitwuzlaOption option, string val) {
-    BitwuzlaNativePINVOKE.bitwuzla_set_option_string(BitwuzlaOptions.getCPtr(options), (int)option, val);
+    BitwuzlaNativePINVOKE.bitwuzla_set_option_string(BitwuzlaOptions.getCPtr(options).Handle, (int)option, val);
   }
 
   public static ulong bitwuzla_get_option(BitwuzlaOptions options, BitwuzlaOption option) {
-    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_get_option(BitwuzlaOptions.getCPtr(options), (int)option);
+    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_get_option(BitwuzlaOptions.getCPtr(options).Handle, (int)option);
     return ret;
   }
 
   public static string bitwuzla_get_option_mode(BitwuzlaOptions options, BitwuzlaOption option) {
-    string ret = BitwuzlaNativePINVOKE.bitwuzla_get_option_mode(BitwuzlaOptions.getCPtr(options), (int)option);
+    string ret = BitwuzlaNativePINVOKE.bitwuzla_get_option_mode(BitwuzlaOptions.getCPtr(options).Handle, (int)option);
     return ret;
   }
 
   public static string bitwuzla_get_option_string(BitwuzlaOptions options, BitwuzlaOption option) {
-    string ret = BitwuzlaNativePINVOKE.bitwuzla_get_option_string(BitwuzlaOptions.getCPtr(options), (int)option);
+    string ret = BitwuzlaNativePINVOKE.bitwuzla_get_option_string(BitwuzlaOptions.getCPtr(options).Handle, (int)option);
     return ret;
   }
 
   public static void bitwuzla_get_option_info(BitwuzlaOptions options, BitwuzlaOption option, BitwuzlaOptionInfo info) {
-    BitwuzlaNativePINVOKE.bitwuzla_get_option_info(BitwuzlaOptions.getCPtr(options), (int)option, BitwuzlaOptionInfo.getCPtr(info));
+    BitwuzlaNativePINVOKE.bitwuzla_get_option_info(BitwuzlaOptions.getCPtr(options).Handle, (int)option, BitwuzlaOptionInfo.getCPtr(info));
   }
 
   public static string bitwuzla_result_to_string(BitwuzlaResult result) {
@@ -107,748 +106,695 @@ public unsafe class BitwuzlaNative {
   }
 
   public static uint bitwuzla_sort_hash(BitwuzlaSort sort) {
-    uint ret = BitwuzlaNativePINVOKE.bitwuzla_sort_hash(BitwuzlaSort.getCPtr(sort));
+    uint ret = BitwuzlaNativePINVOKE.bitwuzla_sort_hash(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static BitwuzlaSort bitwuzla_sort_copy(BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_sort_copy(BitwuzlaSort.getCPtr(sort));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_sort_copy(BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static void bitwuzla_sort_release(BitwuzlaSort sort) {
-    BitwuzlaNativePINVOKE.bitwuzla_sort_release(BitwuzlaSort.getCPtr(sort));
+    BitwuzlaNativePINVOKE.bitwuzla_sort_release(BitwuzlaSort.getCPtr(sort).Handle);
   }
 
   public static ulong bitwuzla_sort_bv_get_size(BitwuzlaSort sort) {
-    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_sort_bv_get_size(BitwuzlaSort.getCPtr(sort));
+    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_sort_bv_get_size(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static ulong bitwuzla_sort_fp_get_exp_size(BitwuzlaSort sort) {
-    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_sort_fp_get_exp_size(BitwuzlaSort.getCPtr(sort));
+    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_sort_fp_get_exp_size(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static ulong bitwuzla_sort_fp_get_sig_size(BitwuzlaSort sort) {
-    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_sort_fp_get_sig_size(BitwuzlaSort.getCPtr(sort));
+    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_sort_fp_get_sig_size(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static BitwuzlaSort bitwuzla_sort_array_get_index(BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_sort_array_get_index(BitwuzlaSort.getCPtr(sort));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_sort_array_get_index(BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static BitwuzlaSort bitwuzla_sort_array_get_element(BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_sort_array_get_element(BitwuzlaSort.getCPtr(sort));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_sort_array_get_element(BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static SWIGTYPE_p_p_bitwuzla_sort_t bitwuzla_sort_fun_get_domain_sorts(BitwuzlaSort sort, nuint* size) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_sort_fun_get_domain_sorts(BitwuzlaSort.getCPtr(sort), (nuint*)size);
+    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_sort_fun_get_domain_sorts(BitwuzlaSort.getCPtr(sort).Handle, (nuint*)size);
     SWIGTYPE_p_p_bitwuzla_sort_t ret = (cPtr == global::System.IntPtr.Zero) ? null : new SWIGTYPE_p_p_bitwuzla_sort_t(cPtr, false);
     return ret;
   }
 
   public static BitwuzlaSort bitwuzla_sort_fun_get_codomain(BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_sort_fun_get_codomain(BitwuzlaSort.getCPtr(sort));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_sort_fun_get_codomain(BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static ulong bitwuzla_sort_fun_get_arity(BitwuzlaSort sort) {
-    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_sort_fun_get_arity(BitwuzlaSort.getCPtr(sort));
+    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_sort_fun_get_arity(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static string bitwuzla_sort_get_uninterpreted_symbol(BitwuzlaSort sort) {
-    string ret = BitwuzlaNativePINVOKE.bitwuzla_sort_get_uninterpreted_symbol(BitwuzlaSort.getCPtr(sort));
+    string ret = BitwuzlaNativePINVOKE.bitwuzla_sort_get_uninterpreted_symbol(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static bool bitwuzla_sort_is_array(BitwuzlaSort sort) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_array(BitwuzlaSort.getCPtr(sort));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_array(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static bool bitwuzla_sort_is_bool(BitwuzlaSort sort) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_bool(BitwuzlaSort.getCPtr(sort));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_bool(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static bool bitwuzla_sort_is_bv(BitwuzlaSort sort) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_bv(BitwuzlaSort.getCPtr(sort));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_bv(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static bool bitwuzla_sort_is_fp(BitwuzlaSort sort) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_fp(BitwuzlaSort.getCPtr(sort));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_fp(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static bool bitwuzla_sort_is_fun(BitwuzlaSort sort) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_fun(BitwuzlaSort.getCPtr(sort));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_fun(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static bool bitwuzla_sort_is_rm(BitwuzlaSort sort) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_rm(BitwuzlaSort.getCPtr(sort));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_rm(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static bool bitwuzla_sort_is_uninterpreted(BitwuzlaSort sort) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_uninterpreted(BitwuzlaSort.getCPtr(sort));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_sort_is_uninterpreted(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static string bitwuzla_sort_to_string(BitwuzlaSort sort) {
-    string ret = BitwuzlaNativePINVOKE.bitwuzla_sort_to_string(BitwuzlaSort.getCPtr(sort));
+    string ret = BitwuzlaNativePINVOKE.bitwuzla_sort_to_string(BitwuzlaSort.getCPtr(sort).Handle);
     return ret;
   }
 
   public static void bitwuzla_sort_print(BitwuzlaSort sort, SWIGTYPE_p_FILE file) {
-    BitwuzlaNativePINVOKE.bitwuzla_sort_print(BitwuzlaSort.getCPtr(sort), SWIGTYPE_p_FILE.getCPtr(file));
+    BitwuzlaNativePINVOKE.bitwuzla_sort_print(BitwuzlaSort.getCPtr(sort).Handle, SWIGTYPE_p_FILE.getCPtr(file));
   }
 
   public static uint bitwuzla_term_hash(BitwuzlaTerm term) {
-    uint ret = BitwuzlaNativePINVOKE.bitwuzla_term_hash(BitwuzlaTerm.getCPtr(term));
+    uint ret = BitwuzlaNativePINVOKE.bitwuzla_term_hash(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static BitwuzlaTerm bitwuzla_term_copy(BitwuzlaTerm term) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_copy(BitwuzlaTerm.getCPtr(term));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_copy(BitwuzlaTerm.getCPtr(term).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static void bitwuzla_term_release(BitwuzlaTerm term) {
-    BitwuzlaNativePINVOKE.bitwuzla_term_release(BitwuzlaTerm.getCPtr(term));
+    BitwuzlaNativePINVOKE.bitwuzla_term_release(BitwuzlaTerm.getCPtr(term).Handle);
   }
 
   public static BitwuzlaKind bitwuzla_term_get_kind(BitwuzlaTerm term) {
-    BitwuzlaKind ret = (BitwuzlaKind)BitwuzlaNativePINVOKE.bitwuzla_term_get_kind(BitwuzlaTerm.getCPtr(term));
+    BitwuzlaKind ret = (BitwuzlaKind)BitwuzlaNativePINVOKE.bitwuzla_term_get_kind(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static SWIGTYPE_p_p_bitwuzla_term_t bitwuzla_term_get_children(BitwuzlaTerm term, nuint* size) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_get_children(BitwuzlaTerm.getCPtr(term), (nuint*)size);
+    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_get_children(BitwuzlaTerm.getCPtr(term).Handle, (nuint*)size);
     SWIGTYPE_p_p_bitwuzla_term_t ret = (cPtr == global::System.IntPtr.Zero) ? null : new SWIGTYPE_p_p_bitwuzla_term_t(cPtr, false);
     return ret;
   }
 
-  public static ulong* bitwuzla_term_get_indices(BitwuzlaTerm term, nuint* size) { return BitwuzlaNativePINVOKE.bitwuzla_term_get_indices(BitwuzlaTerm.getCPtr(term), (nuint*)size); }
+  public static ulong* bitwuzla_term_get_indices(BitwuzlaTerm term, nuint* size) { return BitwuzlaNativePINVOKE.bitwuzla_term_get_indices(BitwuzlaTerm.getCPtr(term).Handle, (nuint*)size); }
 
   public static bool bitwuzla_term_is_indexed(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_indexed(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_indexed(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static BitwuzlaSort bitwuzla_term_get_sort(BitwuzlaTerm term) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_get_sort(BitwuzlaTerm.getCPtr(term));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_get_sort(BitwuzlaTerm.getCPtr(term).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static BitwuzlaSort bitwuzla_term_array_get_index_sort(BitwuzlaTerm term) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_array_get_index_sort(BitwuzlaTerm.getCPtr(term));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_array_get_index_sort(BitwuzlaTerm.getCPtr(term).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static BitwuzlaSort bitwuzla_term_array_get_element_sort(BitwuzlaTerm term) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_array_get_element_sort(BitwuzlaTerm.getCPtr(term));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_array_get_element_sort(BitwuzlaTerm.getCPtr(term).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static SWIGTYPE_p_p_bitwuzla_sort_t bitwuzla_term_fun_get_domain_sorts(BitwuzlaTerm term, nuint* size) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_fun_get_domain_sorts(BitwuzlaTerm.getCPtr(term), (nuint*)size);
+    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_fun_get_domain_sorts(BitwuzlaTerm.getCPtr(term).Handle, (nuint*)size);
     SWIGTYPE_p_p_bitwuzla_sort_t ret = (cPtr == global::System.IntPtr.Zero) ? null : new SWIGTYPE_p_p_bitwuzla_sort_t(cPtr, false);
     return ret;
   }
 
   public static BitwuzlaSort bitwuzla_term_fun_get_codomain_sort(BitwuzlaTerm term) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_fun_get_codomain_sort(BitwuzlaTerm.getCPtr(term));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_fun_get_codomain_sort(BitwuzlaTerm.getCPtr(term).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static ulong bitwuzla_term_bv_get_size(BitwuzlaTerm term) {
-    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_term_bv_get_size(BitwuzlaTerm.getCPtr(term));
+    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_term_bv_get_size(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static ulong bitwuzla_term_fp_get_exp_size(BitwuzlaTerm term) {
-    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_term_fp_get_exp_size(BitwuzlaTerm.getCPtr(term));
+    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_term_fp_get_exp_size(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static ulong bitwuzla_term_fp_get_sig_size(BitwuzlaTerm term) {
-    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_term_fp_get_sig_size(BitwuzlaTerm.getCPtr(term));
+    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_term_fp_get_sig_size(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static ulong bitwuzla_term_fun_get_arity(BitwuzlaTerm term) {
-    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_term_fun_get_arity(BitwuzlaTerm.getCPtr(term));
+    ulong ret = BitwuzlaNativePINVOKE.bitwuzla_term_fun_get_arity(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static string bitwuzla_term_get_symbol(BitwuzlaTerm term) {
-    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_get_symbol(BitwuzlaTerm.getCPtr(term));
+    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_get_symbol(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_equal_sort(BitwuzlaTerm term0, BitwuzlaTerm term1) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_equal_sort(BitwuzlaTerm.getCPtr(term0), BitwuzlaTerm.getCPtr(term1));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_equal_sort(BitwuzlaTerm.getCPtr(term0).Handle, BitwuzlaTerm.getCPtr(term1).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_array(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_array(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_array(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_const(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_const(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_const(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_fun(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fun(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fun(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_var(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_var(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_var(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_value(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_value(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_value(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_bv_value(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_fp_value(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_rm_value(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_bool(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bool(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bool(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_bv(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_fp(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_rm(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_uninterpreted(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_uninterpreted(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_uninterpreted(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_true(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_true(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_true(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_false(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_false(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_false(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_bv_value_zero(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value_zero(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value_zero(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_bv_value_one(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value_one(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value_one(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_bv_value_ones(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value_ones(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value_ones(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_bv_value_min_signed(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value_min_signed(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value_min_signed(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_bv_value_max_signed(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value_max_signed(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_bv_value_max_signed(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_fp_value_pos_zero(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value_pos_zero(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value_pos_zero(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_fp_value_neg_zero(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value_neg_zero(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value_neg_zero(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_fp_value_pos_inf(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value_pos_inf(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value_pos_inf(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_fp_value_neg_inf(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value_neg_inf(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value_neg_inf(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_fp_value_nan(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value_nan(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_fp_value_nan(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_rm_value_rna(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value_rna(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value_rna(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_rm_value_rne(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value_rne(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value_rne(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_rm_value_rtn(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value_rtn(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value_rtn(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_rm_value_rtp(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value_rtp(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value_rtp(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_is_rm_value_rtz(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value_rtz(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_is_rm_value_rtz(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static bool bitwuzla_term_value_get_bool(BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_value_get_bool(BitwuzlaTerm.getCPtr(term));
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_term_value_get_bool(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static string bitwuzla_term_value_get_str(BitwuzlaTerm term) {
-    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_value_get_str(BitwuzlaTerm.getCPtr(term));
+    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_value_get_str(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static string bitwuzla_term_value_get_str_fmt(BitwuzlaTerm term, byte base_) {
-    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_value_get_str_fmt(BitwuzlaTerm.getCPtr(term), base_);
+    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_value_get_str_fmt(BitwuzlaTerm.getCPtr(term).Handle, base_);
     return ret;
   }
 
   public static void bitwuzla_term_value_get_fp_ieee(BitwuzlaTerm term, byte** sign, byte** exponent, byte** significand, byte base_) {
-    BitwuzlaNativePINVOKE.bitwuzla_term_value_get_fp_ieee(BitwuzlaTerm.getCPtr(term), (byte**)sign, (byte**)exponent, (byte**)significand, base_);
+    BitwuzlaNativePINVOKE.bitwuzla_term_value_get_fp_ieee(BitwuzlaTerm.getCPtr(term).Handle, (byte**)sign, (byte**)exponent, (byte**)significand, base_);
   }
 
   public static BitwuzlaRoundingMode bitwuzla_term_value_get_rm(BitwuzlaTerm term) {
-    BitwuzlaRoundingMode ret = (BitwuzlaRoundingMode)BitwuzlaNativePINVOKE.bitwuzla_term_value_get_rm(BitwuzlaTerm.getCPtr(term));
+    BitwuzlaRoundingMode ret = (BitwuzlaRoundingMode)BitwuzlaNativePINVOKE.bitwuzla_term_value_get_rm(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static string bitwuzla_term_to_string(BitwuzlaTerm term) {
-    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_to_string(BitwuzlaTerm.getCPtr(term));
+    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_to_string(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static string bitwuzla_term_to_string_fmt(BitwuzlaTerm term, byte base_) {
-    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_to_string_fmt(BitwuzlaTerm.getCPtr(term), base_);
+    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_to_string_fmt(BitwuzlaTerm.getCPtr(term).Handle, base_);
     return ret;
   }
 
   public static string bitwuzla_term_fp_value_to_real_string(BitwuzlaTerm term) {
-    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_fp_value_to_real_string(BitwuzlaTerm.getCPtr(term));
+    string ret = BitwuzlaNativePINVOKE.bitwuzla_term_fp_value_to_real_string(BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
   public static void bitwuzla_term_print(BitwuzlaTerm term, SWIGTYPE_p_FILE file) {
-    BitwuzlaNativePINVOKE.bitwuzla_term_print(BitwuzlaTerm.getCPtr(term), SWIGTYPE_p_FILE.getCPtr(file));
+    BitwuzlaNativePINVOKE.bitwuzla_term_print(BitwuzlaTerm.getCPtr(term).Handle, SWIGTYPE_p_FILE.getCPtr(file));
   }
 
   public static void bitwuzla_term_print_fmt(BitwuzlaTerm term, SWIGTYPE_p_FILE file, byte base_) {
-    BitwuzlaNativePINVOKE.bitwuzla_term_print_fmt(BitwuzlaTerm.getCPtr(term), SWIGTYPE_p_FILE.getCPtr(file), base_);
+    BitwuzlaNativePINVOKE.bitwuzla_term_print_fmt(BitwuzlaTerm.getCPtr(term).Handle, SWIGTYPE_p_FILE.getCPtr(file), base_);
   }
 
-  public static Bitwuzla bitwuzla_new(BitwuzlaTermManager tm, BitwuzlaOptions options) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_new(BitwuzlaTermManager.getCPtr(tm), BitwuzlaOptions.getCPtr(options));
-    Bitwuzla ret = (cPtr == global::System.IntPtr.Zero) ? null : new Bitwuzla(cPtr, false);
-    return ret;
+  public static BitwuzlaSolver bitwuzla_new(BitwuzlaTermManager tm, BitwuzlaOptions options) {
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_new(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaOptions.getCPtr(options).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSolver(cPtr, true);
   }
 
-  public static void bitwuzla_delete(Bitwuzla bitwuzla) {
-    BitwuzlaNativePINVOKE.bitwuzla_delete(Bitwuzla.getCPtr(bitwuzla));
+  public static void bitwuzla_delete(BitwuzlaSolver bitwuzla) {
+    BitwuzlaNativePINVOKE.bitwuzla_delete(BitwuzlaSolver.getCPtr(bitwuzla).Handle);
   }
 
-  public static void bitwuzla_set_termination_callback(Bitwuzla bitwuzla, SWIGTYPE_p_f_p_void__int fun, void* state) {
-    BitwuzlaNativePINVOKE.bitwuzla_set_termination_callback(Bitwuzla.getCPtr(bitwuzla), SWIGTYPE_p_f_p_void__int.getCPtr(fun), (void*)state);
+  public static void bitwuzla_set_termination_callback(BitwuzlaSolver bitwuzla, SWIGTYPE_p_f_p_void__int fun, void* state) {
+    BitwuzlaNativePINVOKE.bitwuzla_set_termination_callback(BitwuzlaSolver.getCPtr(bitwuzla).Handle, SWIGTYPE_p_f_p_void__int.getCPtr(fun), (void*)state);
   }
 
-  public static void* bitwuzla_get_termination_callback_state(Bitwuzla bitwuzla) { return BitwuzlaNativePINVOKE.bitwuzla_get_termination_callback_state(Bitwuzla.getCPtr(bitwuzla)); }
+  public static void* bitwuzla_get_termination_callback_state(BitwuzlaSolver bitwuzla) { return BitwuzlaNativePINVOKE.bitwuzla_get_termination_callback_state(BitwuzlaSolver.getCPtr(bitwuzla).Handle); }
 
   public static void bitwuzla_set_abort_callback(SWIGTYPE_p_f_p_q_const__char__void fun) {
     BitwuzlaNativePINVOKE.bitwuzla_set_abort_callback(SWIGTYPE_p_f_p_q_const__char__void.getCPtr(fun));
   }
 
-  public static void bitwuzla_push(Bitwuzla bitwuzla, ulong nlevels) {
-    BitwuzlaNativePINVOKE.bitwuzla_push(Bitwuzla.getCPtr(bitwuzla), nlevels);
+  public static void bitwuzla_push(BitwuzlaSolver bitwuzla, ulong nlevels) {
+    BitwuzlaNativePINVOKE.bitwuzla_push(BitwuzlaSolver.getCPtr(bitwuzla).Handle, nlevels);
   }
 
-  public static void bitwuzla_pop(Bitwuzla bitwuzla, ulong nlevels) {
-    BitwuzlaNativePINVOKE.bitwuzla_pop(Bitwuzla.getCPtr(bitwuzla), nlevels);
+  public static void bitwuzla_pop(BitwuzlaSolver bitwuzla, ulong nlevels) {
+    BitwuzlaNativePINVOKE.bitwuzla_pop(BitwuzlaSolver.getCPtr(bitwuzla).Handle, nlevels);
   }
 
-  public static void bitwuzla_assert(Bitwuzla bitwuzla, BitwuzlaTerm term) {
-    BitwuzlaNativePINVOKE.bitwuzla_assert(Bitwuzla.getCPtr(bitwuzla), BitwuzlaTerm.getCPtr(term));
+  public static void bitwuzla_assert(BitwuzlaSolver bitwuzla, BitwuzlaTerm term) {
+    BitwuzlaNativePINVOKE.bitwuzla_assert(BitwuzlaSolver.getCPtr(bitwuzla).Handle, BitwuzlaTerm.getCPtr(term).Handle);
   }
 
-  public static SWIGTYPE_p_p_bitwuzla_term_t bitwuzla_get_assertions(Bitwuzla bitwuzla, nuint* size) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_get_assertions(Bitwuzla.getCPtr(bitwuzla), (nuint*)size);
+  public static SWIGTYPE_p_p_bitwuzla_term_t bitwuzla_get_assertions(BitwuzlaSolver bitwuzla, nuint* size) {
+    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_get_assertions(BitwuzlaSolver.getCPtr(bitwuzla).Handle, (nuint*)size);
     SWIGTYPE_p_p_bitwuzla_term_t ret = (cPtr == global::System.IntPtr.Zero) ? null : new SWIGTYPE_p_p_bitwuzla_term_t(cPtr, false);
     return ret;
   }
 
-  public static bool bitwuzla_is_unsat_assumption(Bitwuzla bitwuzla, BitwuzlaTerm term) {
-    bool ret = BitwuzlaNativePINVOKE.bitwuzla_is_unsat_assumption(Bitwuzla.getCPtr(bitwuzla), BitwuzlaTerm.getCPtr(term));
+  public static bool bitwuzla_is_unsat_assumption(BitwuzlaSolver bitwuzla, BitwuzlaTerm term) {
+    bool ret = BitwuzlaNativePINVOKE.bitwuzla_is_unsat_assumption(BitwuzlaSolver.getCPtr(bitwuzla).Handle, BitwuzlaTerm.getCPtr(term).Handle);
     return ret;
   }
 
-  public static SWIGTYPE_p_p_bitwuzla_term_t bitwuzla_get_unsat_assumptions(Bitwuzla bitwuzla, nuint* size) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_get_unsat_assumptions(Bitwuzla.getCPtr(bitwuzla), (nuint*)size);
+  public static SWIGTYPE_p_p_bitwuzla_term_t bitwuzla_get_unsat_assumptions(BitwuzlaSolver bitwuzla, nuint* size) {
+    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_get_unsat_assumptions(BitwuzlaSolver.getCPtr(bitwuzla).Handle, (nuint*)size);
     SWIGTYPE_p_p_bitwuzla_term_t ret = (cPtr == global::System.IntPtr.Zero) ? null : new SWIGTYPE_p_p_bitwuzla_term_t(cPtr, false);
     return ret;
   }
 
-  public static SWIGTYPE_p_p_bitwuzla_term_t bitwuzla_get_unsat_core(Bitwuzla bitwuzla, nuint* size) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_get_unsat_core(Bitwuzla.getCPtr(bitwuzla), (nuint*)size);
+  public static SWIGTYPE_p_p_bitwuzla_term_t bitwuzla_get_unsat_core(BitwuzlaSolver bitwuzla, nuint* size) {
+    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_get_unsat_core(BitwuzlaSolver.getCPtr(bitwuzla).Handle, (nuint*)size);
     SWIGTYPE_p_p_bitwuzla_term_t ret = (cPtr == global::System.IntPtr.Zero) ? null : new SWIGTYPE_p_p_bitwuzla_term_t(cPtr, false);
     return ret;
   }
 
-  public static void bitwuzla_simplify(Bitwuzla bitwuzla) {
-    BitwuzlaNativePINVOKE.bitwuzla_simplify(Bitwuzla.getCPtr(bitwuzla));
+  public static void bitwuzla_simplify(BitwuzlaSolver bitwuzla) {
+    BitwuzlaNativePINVOKE.bitwuzla_simplify(BitwuzlaSolver.getCPtr(bitwuzla).Handle);
   }
 
-  public static BitwuzlaTerm bitwuzla_simplify_term(Bitwuzla bitwuzla, BitwuzlaTerm term) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_simplify_term(Bitwuzla.getCPtr(bitwuzla), BitwuzlaTerm.getCPtr(term));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
+  public static BitwuzlaTerm bitwuzla_simplify_term(BitwuzlaSolver bitwuzla, BitwuzlaTerm term) {
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_simplify_term(BitwuzlaSolver.getCPtr(bitwuzla).Handle, BitwuzlaTerm.getCPtr(term).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
+  }
+
+  public static BitwuzlaResult bitwuzla_check_sat(BitwuzlaSolver bitwuzla) {
+    BitwuzlaResult ret = (BitwuzlaResult)BitwuzlaNativePINVOKE.bitwuzla_check_sat(BitwuzlaSolver.getCPtr(bitwuzla).Handle);
     return ret;
   }
 
-  public static BitwuzlaResult bitwuzla_check_sat(Bitwuzla bitwuzla) {
-    BitwuzlaResult ret = (BitwuzlaResult)BitwuzlaNativePINVOKE.bitwuzla_check_sat(Bitwuzla.getCPtr(bitwuzla));
+  public static BitwuzlaResult bitwuzla_check_sat_assuming(BitwuzlaSolver bitwuzla, uint argc, IntPtr* args) {
+    BitwuzlaResult ret = (BitwuzlaResult)BitwuzlaNativePINVOKE.bitwuzla_check_sat_assuming(BitwuzlaSolver.getCPtr(bitwuzla).Handle, argc, (IntPtr*)args);
     return ret;
   }
 
-  public static BitwuzlaResult bitwuzla_check_sat_assuming(Bitwuzla bitwuzla, uint argc, IntPtr* args) {
-    BitwuzlaResult ret = (BitwuzlaResult)BitwuzlaNativePINVOKE.bitwuzla_check_sat_assuming(Bitwuzla.getCPtr(bitwuzla), argc, (IntPtr*)args);
-    return ret;
+  public static BitwuzlaTerm bitwuzla_get_value(BitwuzlaSolver bitwuzla, BitwuzlaTerm term) {
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_get_value(BitwuzlaSolver.getCPtr(bitwuzla).Handle, BitwuzlaTerm.getCPtr(term).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
-  public static BitwuzlaTerm bitwuzla_get_value(Bitwuzla bitwuzla, BitwuzlaTerm term) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_get_value(Bitwuzla.getCPtr(bitwuzla), BitwuzlaTerm.getCPtr(term));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+  public static void bitwuzla_print_formula(BitwuzlaSolver bitwuzla, string format, SWIGTYPE_p_FILE file, byte base_) {
+    BitwuzlaNativePINVOKE.bitwuzla_print_formula(BitwuzlaSolver.getCPtr(bitwuzla).Handle, format, SWIGTYPE_p_FILE.getCPtr(file), base_);
   }
 
-  public static void bitwuzla_print_formula(Bitwuzla bitwuzla, string format, SWIGTYPE_p_FILE file, byte base_) {
-    BitwuzlaNativePINVOKE.bitwuzla_print_formula(Bitwuzla.getCPtr(bitwuzla), format, SWIGTYPE_p_FILE.getCPtr(file), base_);
+  public static void bitwuzla_print_unsat_core(BitwuzlaSolver bitwuzla, string format, SWIGTYPE_p_FILE file, byte base_) {
+    BitwuzlaNativePINVOKE.bitwuzla_print_unsat_core(BitwuzlaSolver.getCPtr(bitwuzla).Handle, format, SWIGTYPE_p_FILE.getCPtr(file), base_);
   }
 
-  public static void bitwuzla_print_unsat_core(Bitwuzla bitwuzla, string format, SWIGTYPE_p_FILE file, byte base_) {
-    BitwuzlaNativePINVOKE.bitwuzla_print_unsat_core(Bitwuzla.getCPtr(bitwuzla), format, SWIGTYPE_p_FILE.getCPtr(file), base_);
+  public static void bitwuzla_get_statistics(BitwuzlaSolver bitwuzla, byte*** keys, byte*** values, nuint* size) {
+    BitwuzlaNativePINVOKE.bitwuzla_get_statistics(BitwuzlaSolver.getCPtr(bitwuzla).Handle, (byte***)keys, (byte***)values, (nuint*)size);
   }
 
-  public static void bitwuzla_get_statistics(Bitwuzla bitwuzla, byte*** keys, byte*** values, nuint* size) {
-    BitwuzlaNativePINVOKE.bitwuzla_get_statistics(Bitwuzla.getCPtr(bitwuzla), (byte***)keys, (byte***)values, (nuint*)size);
-  }
-
-  public static BitwuzlaTermManager bitwuzla_get_term_mgr(Bitwuzla bitwuzla) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_get_term_mgr(Bitwuzla.getCPtr(bitwuzla));
-    BitwuzlaTermManager ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTermManager(cPtr, false);
-    return ret;
+  public static BitwuzlaTermManager bitwuzla_get_term_mgr(BitwuzlaSolver bitwuzla) {
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_get_term_mgr(BitwuzlaSolver.getCPtr(bitwuzla).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTermManager(cPtr, true);
   }
 
   public static BitwuzlaTermManager bitwuzla_term_manager_new() {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_manager_new();
-    BitwuzlaTermManager ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTermManager(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_manager_new();
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTermManager(cPtr, true);
   }
 
   public static void bitwuzla_term_manager_delete(BitwuzlaTermManager tm) {
-    BitwuzlaNativePINVOKE.bitwuzla_term_manager_delete(BitwuzlaTermManager.getCPtr(tm));
+    BitwuzlaNativePINVOKE.bitwuzla_term_manager_delete(BitwuzlaTermManager.getCPtr(tm).Handle);
   }
 
   public static void bitwuzla_term_manager_release(BitwuzlaTermManager tm) {
-    BitwuzlaNativePINVOKE.bitwuzla_term_manager_release(BitwuzlaTermManager.getCPtr(tm));
+    BitwuzlaNativePINVOKE.bitwuzla_term_manager_release(BitwuzlaTermManager.getCPtr(tm).Handle);
   }
 
   public static BitwuzlaSort bitwuzla_mk_array_sort(BitwuzlaTermManager tm, BitwuzlaSort index, BitwuzlaSort element) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_array_sort(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(index), BitwuzlaSort.getCPtr(element));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_array_sort(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(index).Handle, BitwuzlaSort.getCPtr(element).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static BitwuzlaSort bitwuzla_mk_bool_sort(BitwuzlaTermManager tm) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bool_sort(BitwuzlaTermManager.getCPtr(tm));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bool_sort(BitwuzlaTermManager.getCPtr(tm).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static BitwuzlaSort bitwuzla_mk_bv_sort(BitwuzlaTermManager tm, ulong size) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_sort(BitwuzlaTermManager.getCPtr(tm), size);
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_sort(BitwuzlaTermManager.getCPtr(tm).Handle, size);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static BitwuzlaSort bitwuzla_mk_fp_sort(BitwuzlaTermManager tm, ulong exp_size, ulong sig_size) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_sort(BitwuzlaTermManager.getCPtr(tm), exp_size, sig_size);
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_sort(BitwuzlaTermManager.getCPtr(tm).Handle, exp_size, sig_size);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static BitwuzlaSort bitwuzla_mk_fun_sort(BitwuzlaTermManager tm, ulong arity, SWIGTYPE_p_p_bitwuzla_sort_t domain, BitwuzlaSort codomain) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fun_sort(BitwuzlaTermManager.getCPtr(tm), arity, SWIGTYPE_p_p_bitwuzla_sort_t.getCPtr(domain), BitwuzlaSort.getCPtr(codomain));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fun_sort(BitwuzlaTermManager.getCPtr(tm).Handle, arity, SWIGTYPE_p_p_bitwuzla_sort_t.getCPtr(domain), BitwuzlaSort.getCPtr(codomain).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static BitwuzlaSort bitwuzla_mk_rm_sort(BitwuzlaTermManager tm) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_rm_sort(BitwuzlaTermManager.getCPtr(tm));
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_rm_sort(BitwuzlaTermManager.getCPtr(tm).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static BitwuzlaSort bitwuzla_mk_uninterpreted_sort(BitwuzlaTermManager tm, string symbol) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_uninterpreted_sort(BitwuzlaTermManager.getCPtr(tm), symbol);
-    BitwuzlaSort ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_uninterpreted_sort(BitwuzlaTermManager.getCPtr(tm).Handle, symbol);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_true(BitwuzlaTermManager tm) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_true(BitwuzlaTermManager.getCPtr(tm));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_true(BitwuzlaTermManager.getCPtr(tm).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_false(BitwuzlaTermManager tm) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_false(BitwuzlaTermManager.getCPtr(tm));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_false(BitwuzlaTermManager.getCPtr(tm).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_bv_zero(BitwuzlaTermManager tm, BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_zero(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_zero(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_bv_one(BitwuzlaTermManager tm, BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_one(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_one(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_bv_ones(BitwuzlaTermManager tm, BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_ones(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_ones(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_bv_min_signed(BitwuzlaTermManager tm, BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_min_signed(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_min_signed(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_bv_max_signed(BitwuzlaTermManager tm, BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_max_signed(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_max_signed(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_fp_pos_zero(BitwuzlaTermManager tm, BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_pos_zero(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_pos_zero(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_fp_neg_zero(BitwuzlaTermManager tm, BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_neg_zero(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_neg_zero(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_fp_pos_inf(BitwuzlaTermManager tm, BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_pos_inf(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_pos_inf(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_fp_neg_inf(BitwuzlaTermManager tm, BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_neg_inf(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_neg_inf(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_fp_nan(BitwuzlaTermManager tm, BitwuzlaSort sort) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_nan(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_nan(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_bv_value(BitwuzlaTermManager tm, BitwuzlaSort sort, string value, byte base_) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_value(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort), value, base_);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_value(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle, value, base_);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_bv_value_uint64(BitwuzlaTermManager tm, BitwuzlaSort sort, ulong value) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_value_uint64(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort), value);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_value_uint64(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle, value);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_bv_value_int64(BitwuzlaTermManager tm, BitwuzlaSort sort, long value) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_value_int64(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort), value);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_value_int64(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle, value);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_fp_value(BitwuzlaTermManager tm, BitwuzlaTerm bv_sign, BitwuzlaTerm bv_exponent, BitwuzlaTerm bv_significand) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_value(BitwuzlaTermManager.getCPtr(tm), BitwuzlaTerm.getCPtr(bv_sign), BitwuzlaTerm.getCPtr(bv_exponent), BitwuzlaTerm.getCPtr(bv_significand));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_value(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaTerm.getCPtr(bv_sign).Handle, BitwuzlaTerm.getCPtr(bv_exponent).Handle, BitwuzlaTerm.getCPtr(bv_significand).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_fp_from_real(BitwuzlaTermManager tm, BitwuzlaSort sort, BitwuzlaTerm rm, string real) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_from_real(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort), BitwuzlaTerm.getCPtr(rm), real);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_from_real(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle, BitwuzlaTerm.getCPtr(rm).Handle, real);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_fp_from_rational(BitwuzlaTermManager tm, BitwuzlaSort sort, BitwuzlaTerm rm, string num, string den) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_from_rational(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort), BitwuzlaTerm.getCPtr(rm), num, den);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_fp_from_rational(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle, BitwuzlaTerm.getCPtr(rm).Handle, num, den);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_rm_value(BitwuzlaTermManager tm, BitwuzlaRoundingMode rm) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_rm_value(BitwuzlaTermManager.getCPtr(tm), (int)rm);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_rm_value(BitwuzlaTermManager.getCPtr(tm).Handle, (int)rm);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_term1(BitwuzlaTermManager tm, BitwuzlaKind kind, BitwuzlaTerm arg) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term1(BitwuzlaTermManager.getCPtr(tm), (int)kind, BitwuzlaTerm.getCPtr(arg));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term1(BitwuzlaTermManager.getCPtr(tm).Handle, (int)kind, BitwuzlaTerm.getCPtr(arg).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_term2(BitwuzlaTermManager tm, BitwuzlaKind kind, BitwuzlaTerm arg0, BitwuzlaTerm arg1) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term2(BitwuzlaTermManager.getCPtr(tm), (int)kind, BitwuzlaTerm.getCPtr(arg0), BitwuzlaTerm.getCPtr(arg1));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term2(BitwuzlaTermManager.getCPtr(tm).Handle, (int)kind, BitwuzlaTerm.getCPtr(arg0).Handle, BitwuzlaTerm.getCPtr(arg1).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_term3(BitwuzlaTermManager tm, BitwuzlaKind kind, BitwuzlaTerm arg0, BitwuzlaTerm arg1, BitwuzlaTerm arg2) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term3(BitwuzlaTermManager.getCPtr(tm), (int)kind, BitwuzlaTerm.getCPtr(arg0), BitwuzlaTerm.getCPtr(arg1), BitwuzlaTerm.getCPtr(arg2));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term3(BitwuzlaTermManager.getCPtr(tm).Handle, (int)kind, BitwuzlaTerm.getCPtr(arg0).Handle, BitwuzlaTerm.getCPtr(arg1).Handle, BitwuzlaTerm.getCPtr(arg2).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_term(BitwuzlaTermManager tm, BitwuzlaKind kind, uint argc, IntPtr* args) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term(BitwuzlaTermManager.getCPtr(tm), (int)kind, argc, (IntPtr*)args);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term(BitwuzlaTermManager.getCPtr(tm).Handle, (int)kind, argc, (IntPtr*)args);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_term1_indexed1(BitwuzlaTermManager tm, BitwuzlaKind kind, BitwuzlaTerm arg, ulong idx) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term1_indexed1(BitwuzlaTermManager.getCPtr(tm), (int)kind, BitwuzlaTerm.getCPtr(arg), idx);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term1_indexed1(BitwuzlaTermManager.getCPtr(tm).Handle, (int)kind, BitwuzlaTerm.getCPtr(arg).Handle, idx);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_term1_indexed2(BitwuzlaTermManager tm, BitwuzlaKind kind, BitwuzlaTerm arg, ulong idx0, ulong idx1) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term1_indexed2(BitwuzlaTermManager.getCPtr(tm), (int)kind, BitwuzlaTerm.getCPtr(arg), idx0, idx1);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term1_indexed2(BitwuzlaTermManager.getCPtr(tm).Handle, (int)kind, BitwuzlaTerm.getCPtr(arg).Handle, idx0, idx1);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_term2_indexed1(BitwuzlaTermManager tm, BitwuzlaKind kind, BitwuzlaTerm arg0, BitwuzlaTerm arg1, ulong idx) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term2_indexed1(BitwuzlaTermManager.getCPtr(tm), (int)kind, BitwuzlaTerm.getCPtr(arg0), BitwuzlaTerm.getCPtr(arg1), idx);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term2_indexed1(BitwuzlaTermManager.getCPtr(tm).Handle, (int)kind, BitwuzlaTerm.getCPtr(arg0).Handle, BitwuzlaTerm.getCPtr(arg1).Handle, idx);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_term2_indexed2(BitwuzlaTermManager tm, BitwuzlaKind kind, BitwuzlaTerm arg0, BitwuzlaTerm arg1, ulong idx0, ulong idx1) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term2_indexed2(BitwuzlaTermManager.getCPtr(tm), (int)kind, BitwuzlaTerm.getCPtr(arg0), BitwuzlaTerm.getCPtr(arg1), idx0, idx1);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term2_indexed2(BitwuzlaTermManager.getCPtr(tm).Handle, (int)kind, BitwuzlaTerm.getCPtr(arg0).Handle, BitwuzlaTerm.getCPtr(arg1).Handle, idx0, idx1);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_term_indexed(BitwuzlaTermManager tm, BitwuzlaKind kind, uint argc, IntPtr* args, uint idxc, ulong* idxs) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term_indexed(BitwuzlaTermManager.getCPtr(tm), (int)kind, argc, (IntPtr*)args, idxc, (ulong*)idxs);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_term_indexed(BitwuzlaTermManager.getCPtr(tm).Handle, (int)kind, argc, (IntPtr*)args, idxc, (ulong*)idxs);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_const(BitwuzlaTermManager tm, BitwuzlaSort sort, string symbol) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_const(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort), symbol);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_const(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle, symbol);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_const_array(BitwuzlaTermManager tm, BitwuzlaSort sort, BitwuzlaTerm value) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_const_array(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort), BitwuzlaTerm.getCPtr(value));
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_const_array(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle, BitwuzlaTerm.getCPtr(value).Handle);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_mk_var(BitwuzlaTermManager tm, BitwuzlaSort sort, string symbol) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_var(BitwuzlaTermManager.getCPtr(tm), BitwuzlaSort.getCPtr(sort), symbol);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_var(BitwuzlaTermManager.getCPtr(tm).Handle, BitwuzlaSort.getCPtr(sort).Handle, symbol);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static BitwuzlaTerm bitwuzla_substitute_term(BitwuzlaTerm term, uint map_size, IntPtr* map_keys, IntPtr* map_values) {
-    global::System.IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_substitute_term(BitwuzlaTerm.getCPtr(term), map_size, (IntPtr*)map_keys, (IntPtr*)map_values);
-    BitwuzlaTerm ret = (cPtr == global::System.IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, false);
-    return ret;
+    IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_substitute_term(BitwuzlaTerm.getCPtr(term).Handle, map_size, (IntPtr*)map_keys, (IntPtr*)map_values);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTerm(cPtr, true);
   }
 
   public static void bitwuzla_substitute_terms(uint terms_size, IntPtr* terms, uint map_size, IntPtr* map_keys, IntPtr* map_values) {
