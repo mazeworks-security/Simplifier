@@ -154,18 +154,90 @@ namespace Mba.Simplifier.Synth
         public static implicit operator BitwuzlaTerm(Term term) => term.native;
         public static implicit operator Term(BitwuzlaTerm native) => new Term(native);
 
+        // Helper to lift C# primitives to Terms using the context of an existing term
+        private static Term Lift(Term context, long value) => context.Manager.MkBvValue(context.Sort, value);
+        private static Term Lift(Term context, ulong value) => context.Manager.MkBvValue(context.Sort, value);
+        private static Term Lift(Term context, bool value) => value ? context.Manager.MkTrue() : context.Manager.MkFalse();
+
         // Operators
         public static Term operator ~(Term t) => t.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_NOT, t);
-        public static Term operator &(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_AND, a, b);
-        public static Term operator |(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_OR, a, b);
-        public static Term operator ^(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_XOR, a, b);
+
+        public static Term operator &(Term a, Term b)
+        {
+            if (a.Sort.IsBool && b.Sort.IsBool) return a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_AND, a, b);
+            return a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_AND, a, b);
+        }
+        public static Term operator |(Term a, Term b)
+        {
+            if (a.Sort.IsBool && b.Sort.IsBool) return a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_OR, a, b);
+            return a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_OR, a, b);
+        }
+        public static Term operator ^(Term a, Term b)
+        {
+            if (a.Sort.IsBool && b.Sort.IsBool) return a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_XOR, a, b);
+            return a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_XOR, a, b);
+        }
+
         public static Term operator +(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_ADD, a, b);
         public static Term operator -(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_SUB, a, b);
-        public static Term operator *(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_MUL, a, b); // Note: BV_MUL, check signedness
+        public static Term operator *(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_MUL, a, b);
+        public static Term operator /(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UDIV, a, b); 
+        public static Term operator %(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UREM, a, b);
         public static Term operator -(Term t) => t.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_NEG, t);
 
         public static Term operator ==(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_EQUAL, a, b);
         public static Term operator !=(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_DISTINCT, a, b);
+
+        // Integer/Long Overloads
+        public static Term operator &(Term a, long b) => a & Lift(a, b);
+        public static Term operator &(long a, Term b) => Lift(b, a) & b;
+        public static Term operator |(Term a, long b) => a | Lift(a, b);
+        public static Term operator |(long a, Term b) => Lift(b, a) | b;
+        public static Term operator ^(Term a, long b) => a ^ Lift(a, b);
+        public static Term operator ^(long a, Term b) => Lift(b, a) ^ b;
+        public static Term operator +(Term a, long b) => a + Lift(a, b);
+        public static Term operator +(long a, Term b) => Lift(b, a) + b;
+        public static Term operator -(Term a, long b) => a - Lift(a, b);
+        public static Term operator -(long a, Term b) => Lift(b, a) - b;
+        public static Term operator *(Term a, long b) => a * Lift(a, b);
+        public static Term operator *(long a, Term b) => Lift(b, a) * b;
+
+        public static Term operator ==(Term a, long b) => a == Lift(a, b);
+        public static Term operator ==(long a, Term b) => Lift(b, a) == b;
+        public static Term operator !=(Term a, long b) => a != Lift(a, b);
+        public static Term operator !=(long a, Term b) => Lift(b, a) != b;
+
+        // Ulong Overloads
+        public static Term operator &(Term a, ulong b) => a & Lift(a, b);
+        public static Term operator &(ulong a, Term b) => Lift(b, a) & b;
+        public static Term operator |(Term a, ulong b) => a | Lift(a, b);
+        public static Term operator |(ulong a, Term b) => Lift(b, a) | b;
+        public static Term operator ^(Term a, ulong b) => a ^ Lift(a, b);
+        public static Term operator ^(ulong a, Term b) => Lift(b, a) ^ b;
+        public static Term operator +(Term a, ulong b) => a + Lift(a, b);
+        public static Term operator +(ulong a, Term b) => Lift(b, a) + b;
+        public static Term operator -(Term a, ulong b) => a - Lift(a, b);
+        public static Term operator -(ulong a, Term b) => Lift(b, a) - b;
+        public static Term operator *(Term a, ulong b) => a * Lift(a, b);
+        public static Term operator *(ulong a, Term b) => Lift(b, a) * b;
+
+        public static Term operator ==(Term a, ulong b) => a == Lift(a, b);
+        public static Term operator ==(ulong a, Term b) => Lift(b, a) == b;
+        public static Term operator !=(Term a, ulong b) => a != Lift(a, b);
+        public static Term operator !=(ulong a, Term b) => Lift(b, a) != b;
+
+        // Bool Overloads
+        public static Term operator &(Term a, bool b) => a & Lift(a, b);
+        public static Term operator &(bool a, Term b) => Lift(b, a) & b;
+        public static Term operator |(Term a, bool b) => a | Lift(a, b);
+        public static Term operator |(bool a, Term b) => Lift(b, a) | b;
+        public static Term operator ^(Term a, bool b) => a ^ Lift(a, b);
+        public static Term operator ^(bool a, Term b) => Lift(b, a) ^ b;
+
+        public static Term operator ==(Term a, bool b) => a == Lift(a, b);
+        public static Term operator ==(bool a, Term b) => Lift(b, a) == b;
+        public static Term operator !=(Term a, bool b) => a != Lift(a, b);
+        public static Term operator !=(bool a, Term b) => Lift(b, a) != b;
 
 
         public TermManager Manager { get; internal set; }
