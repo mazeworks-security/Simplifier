@@ -50,11 +50,11 @@ namespace Mba.Simplifier.Synthesis
 
     public class BrahmaSynthesis
     {
-        private readonly AstCtx ctx;
-        private readonly AstIdx idx;
-        private readonly List<AstIdx> inputs;
+        private readonly AstCtx mbaCtx;
+        private readonly AstIdx mbaIdx;
+        private readonly List<AstIdx> mbaInputs;
 
-        private readonly Context solver;
+        private readonly Context ctx;
         private readonly Z3Translator translator;
 
         // Config:
@@ -141,13 +141,13 @@ namespace Mba.Simplifier.Synthesis
 
 
 
-            this.ctx = ctx;
-            this.idx = idx;
-            inputs = ctx.CollectVariables(idx);
+            this.mbaCtx = ctx;
+            this.mbaIdx = idx;
+            mbaInputs = ctx.CollectVariables(idx);
 
-            solver = new();
-            solver.PrintMode = Z3_ast_print_mode.Z3_PRINT_LOW_LEVEL;
-            translator = new Z3Translator(ctx, solver);
+            this.ctx = new();
+            this.ctx.PrintMode = Z3_ast_print_mode.Z3_PRINT_LOW_LEVEL;
+            translator = new Z3Translator(ctx, this.ctx);
         }
 
         // Ideas:
@@ -158,7 +158,7 @@ namespace Mba.Simplifier.Synthesis
         public void Run()
         {
 
-            var before = translator.Translate(idx);
+            var before = translator.Translate(mbaIdx);
 
             var (lines, shiftVariables, constantVariables) = GetLines();
 
@@ -196,7 +196,7 @@ namespace Mba.Simplifier.Synthesis
             //);
 
 
-            var s = solver.MkSolver();
+            var s = ctx.MkSolver();
             var constraints = GetProgramConstraints(lines, shiftVariables);
 
             // Optionally hardcode constants
@@ -222,8 +222,8 @@ namespace Mba.Simplifier.Synthesis
             var constantVariables = new List<BitVecExpr>();
 
             // Each variable gets assigned its own line
-            for (int i = 0; i < inputs.Count; i++)
-                lines.Add(new VarLine(i, translator.cache[inputs[i]]));
+            for (int i = 0; i < mbaInputs.Count; i++)
+                lines.Add(new VarLine(i, translator.cache[mbaInputs[i]]));
 
             // Each instruction gets assigned its own line.
             opcodeBitsize = (uint)BvWidth(components.Count - 1);
@@ -233,39 +233,39 @@ namespace Mba.Simplifier.Synthesis
             for (int i = lines.Count; i < numInstructions; i++)
             {
                 // Choose the opcode
-                var opcode = solver.MkBVConst($"code{i}", (uint)opcodeBitsize);
+                var opcode = ctx.MkBVConst($"code{i}", (uint)opcodeBitsize);
 
                 // Choose the operands
                 var operandBitsize = BvWidth(i - 1);
                 //Console.WriteLine($"Got {other} bits needed for operands of line {i} with lz {BitOperations.LeadingZeroCount((ulong)i)}");
-                var op0 = solver.MkBVConst($"{i}_op0", (uint)operandBitsize);
-                var op1 = solver.MkBVConst($"{i}_op1", (uint)operandBitsize);
+                var op0 = ctx.MkBVConst($"{i}_op0", (uint)operandBitsize);
+                var op1 = ctx.MkBVConst($"{i}_op1", (uint)operandBitsize);
 
                 Expr truthTable = null;
                 if (usesTruthOperator)
-                    truthTable = solver.MkBVConst($"{i}_tt", TRUTHSIZE);
+                    truthTable = ctx.MkBVConst($"{i}_tt", TRUTHSIZE);
 
-                BitVecExpr constant = solver.MkBV(0, ctx.GetWidth(idx));
+                BitVecExpr constant = ctx.MkBV(0, mbaCtx.GetWidth(mbaIdx));
                 if (HasComponent(SynthOpc.Lshr))
                 {
                     // Compute the minimum number of bits necessary to fit the shift
-                    var shiftByWidth = BvWidth(ctx.GetWidth(idx));
+                    var shiftByWidth = BvWidth(mbaCtx.GetWidth(mbaIdx));
 
-                    var shiftBy = solver.MkBVConst($"{i}_shift", (uint)shiftByWidth);
+                    var shiftBy = ctx.MkBVConst($"{i}_shift", (uint)shiftByWidth);
                     shiftVariables.Add(shiftBy);
                     if (shiftBy.SortSize < constant.SortSize)
-                        shiftBy = solver.MkZeroExt(constant.SortSize - shiftBy.SortSize, shiftBy);
+                        shiftBy = ctx.MkZeroExt(constant.SortSize - shiftBy.SortSize, shiftBy);
 
 
                     var lshrComponent = GetComponent(SynthOpc.Lshr);
-                    var isLshr = solver.MkEq(opcode, solver.MkBV(lshrComponent.Data.Index, opcode.SortSize));
+                    var isLshr = ctx.MkEq(opcode, ctx.MkBV(lshrComponent.Data.Index, opcode.SortSize));
 
-                    constant = (BitVecExpr)solver.MkITE(isLshr, shiftBy, constant);
+                    constant = (BitVecExpr)ctx.MkITE(isLshr, shiftBy, constant);
                 }
 
                 if (allocatedConstants < maxConstants)
                 {
-                    constant = solver.MkBVConst($"{i}_const", ctx.GetWidth(idx));
+                    constant = ctx.MkBVConst($"{i}_const", mbaCtx.GetWidth(mbaIdx));
 
                     constantVariables.Add(constant);
 
@@ -309,16 +309,16 @@ namespace Mba.Simplifier.Synthesis
                 {
                     var expr = opc.Opcode switch
                     {
-                        SynthOpc.Not => solver.MkBVNot(op0),
-                        SynthOpc.And => solver.MkBVAND(op0, op1),
-                        SynthOpc.Or => solver.MkBVOR(op0, op1),
-                        SynthOpc.Xor => solver.MkBVXOR(op0, op1),
-                        SynthOpc.Add => solver.MkBVAdd(op0, op1),
-                        SynthOpc.Sub => solver.MkBVSub(op0, op1),
-                        SynthOpc.Mul => solver.MkBVMul(op0, op1),
+                        SynthOpc.Not => ctx.MkBVNot(op0),
+                        SynthOpc.And => ctx.MkBVAND(op0, op1),
+                        SynthOpc.Or => ctx.MkBVOR(op0, op1),
+                        SynthOpc.Xor => ctx.MkBVXOR(op0, op1),
+                        SynthOpc.Add => ctx.MkBVAdd(op0, op1),
+                        SynthOpc.Sub => ctx.MkBVSub(op0, op1),
+                        SynthOpc.Mul => ctx.MkBVMul(op0, op1),
                         SynthOpc.TruthTable => TruthTableToExpr((BitVecExpr)exprLine.TruthTable, op0, op1),
                         SynthOpc.Constant => exprLine.ConstantData,
-                        SynthOpc.Lshr => solver.MkBVLSHR(op0, exprLine.ConstantData), // TODO: Assert that op1 is a constant
+                        SynthOpc.Lshr => ctx.MkBVLSHR(op0, exprLine.ConstantData), // TODO: Assert that op1 is a constant
 
                         _ => throw new InvalidOperationException()
                     };
@@ -352,12 +352,12 @@ namespace Mba.Simplifier.Synthesis
         }
 
         private BitVecExpr BitwiseMux(BitVecExpr cond, BitVecExpr onTrue, BitVecExpr onFalse)
-            => solver.MkBVOR(solver.MkBVAND(cond, onTrue), solver.MkBVAND(solver.MkBVNot(cond), onFalse));
+            => ctx.MkBVOR(ctx.MkBVAND(cond, onTrue), ctx.MkBVAND(ctx.MkBVNot(cond), onFalse));
 
         private BitVecExpr GetMask(uint width, uint index, BitVecExpr tableBv)
         {
-            var bit = solver.MkExtract(index, index, tableBv);
-            return (BitVecExpr)solver.MkITE(solver.MkEq(bit, solver.MkBV(1, 1)), solver.MkBV(ulong.MaxValue, width), solver.MkBV(0, width));
+            var bit = ctx.MkExtract(index, index, tableBv);
+            return (BitVecExpr)ctx.MkITE(ctx.MkEq(bit, ctx.MkBV(1, 1)), ctx.MkBV(ulong.MaxValue, width), ctx.MkBV(0, width));
         }
 
         private Expr SelectOperand(Expr selector, List<Expr> exprs)
@@ -369,11 +369,11 @@ namespace Mba.Simplifier.Synthesis
         {
             Debug.Assert(elements.Count == 3);
 
-            var b0 = solver.MkExtract(0, 0, index);
-            var b1 = solver.MkExtract(1, 1, index);
+            var b0 = ctx.MkExtract(0, 0, index);
+            var b1 = ctx.MkExtract(1, 1, index);
 
-            var lowerHalf = solver.MkITE(solver.MkEq(b0, solver.MkBV(1, 1)), elements[1], elements[0]);
-            return solver.MkITE(solver.MkEq(b1, solver.MkBV(1, 1)), elements[2], lowerHalf);
+            var lowerHalf = ctx.MkITE(ctx.MkEq(b0, ctx.MkBV(1, 1)), elements[1], elements[0]);
+            return ctx.MkITE(ctx.MkEq(b1, ctx.MkBV(1, 1)), elements[2], lowerHalf);
         }
 
         // Given a symbolic index and a list of N values, pick the ith value
@@ -395,8 +395,8 @@ namespace Mba.Simplifier.Synthesis
 
             for (int i = n - 2; i >= 0; i--)
             {
-                BoolExpr condition = solver.MkEq(index, solver.MkBV(i, index.SortSize));
-                result = solver.MkITE(condition, (Expr)options[i], result);
+                BoolExpr condition = ctx.MkEq(index, ctx.MkBV(i, index.SortSize));
+                result = ctx.MkITE(condition, (Expr)options[i], result);
             }
 
             return result;
@@ -404,7 +404,7 @@ namespace Mba.Simplifier.Synthesis
 
         public Expr PrunedSelect(BitVecExpr index, List<Expr> options)
         {
-            return BuildPrunedTree(solver, index, options, 0, options.Count);
+            return BuildPrunedTree(ctx, index, options, 0, options.Count);
         }
 
         private static Expr BuildPrunedTree(Context ctx, BitVecExpr index, List<Expr> options, int offset, int count)
@@ -458,18 +458,18 @@ namespace Mba.Simplifier.Synthesis
                         var k1 = (lines[k] as ExprLine).Op1;
 
                         // Add constraint: If the instruction has one or more operands, operands[0] == curr
-                        var used0 = solver.MkEq(k0, solver.MkBV(i, k0.SortSize));
+                        var used0 = ctx.MkEq(k0, ctx.MkBV(i, k0.SortSize));
                         var oneOperand = AtleastNOperands(lines[k] as ExprLine, 1);
                         usageConditions.Add(And(oneOperand, used0));
 
                         // Repeat for the two input case
-                        var used1 = solver.MkEq(k1, solver.MkBV(i, k1.SortSize));
+                        var used1 = ctx.MkEq(k1, ctx.MkBV(i, k1.SortSize));
                         var twoOperand = AtleastNOperands(lines[k] as ExprLine, 2);
                         usageConditions.Add(And(twoOperand, used1));
                     }
 
                     // Constraint: This instruction has at least one use.
-                    constraints.Add(solver.MkOr(usageConditions));
+                    constraints.Add(ctx.MkOr(usageConditions));
                 }
 
                 if (lines[i] is VarLine)
@@ -484,22 +484,22 @@ namespace Mba.Simplifier.Synthesis
                 var w1 = op0.SortSize;
                 if (w0 > w1)
                 {
-                    op0 = solver.MkZeroExt((uint)w0 - w1, op0);
-                    op1 = solver.MkZeroExt((uint)w0 - w1, op1);
+                    op0 = ctx.MkZeroExt((uint)w0 - w1, op0);
+                    op1 = ctx.MkZeroExt((uint)w0 - w1, op1);
 
                     //Debugger.Break();
                 }
-                var lineNumber = solver.MkBV((uint)i, (uint)w0);
-                constraints.Add(solver.MkBVULT(op0, lineNumber));
-                constraints.Add(solver.MkBVULT(op1, lineNumber));
+                var lineNumber = ctx.MkBV((uint)i, (uint)w0);
+                constraints.Add(ctx.MkBVULT(op0, lineNumber));
+                constraints.Add(ctx.MkBVULT(op1, lineNumber));
 
                 var opcodeBitsize = BvWidth(components.Count);
                 var opc = line.Opcode;
                 if (opc.SortSize < opcodeBitsize)
-                    opc = solver.MkZeroExt((uint)opcodeBitsize - opc.SortSize, opc);
+                    opc = ctx.MkZeroExt((uint)opcodeBitsize - opc.SortSize, opc);
 
                 // Eliminate padding bits
-                constraints.Add(solver.MkBVULT(opc, solver.MkBV((uint)components.Count, (uint)opcodeBitsize)));
+                constraints.Add(ctx.MkBVULT(opc, ctx.MkBV((uint)components.Count, (uint)opcodeBitsize)));
 
                 // If the instruction has one operand, set the 2nd operand to zero.
                 bool pruneUnaryOperands = true;
@@ -508,11 +508,11 @@ namespace Mba.Simplifier.Synthesis
                     if (HasComponent(SynthOpc.Not))
                     {
                         var notComponent = GetComponent(SynthOpc.Not);
-                        var isUnary = solver.MkEq(line.Opcode, solver.MkBV(notComponent.Data.Index, line.Opcode.SortSize));
+                        var isUnary = ctx.MkEq(line.Opcode, ctx.MkBV(notComponent.Data.Index, line.Opcode.SortSize));
 
-                        var zeroOp = solver.MkEq(op1, solver.MkBV(0, op1.SortSize));
+                        var zeroOp = ctx.MkEq(op1, ctx.MkBV(0, op1.SortSize));
 
-                        constraints.Add(solver.MkImplies(isUnary, zeroOp));
+                        constraints.Add(ctx.MkImplies(isUnary, zeroOp));
                     }
                 }
 
@@ -523,17 +523,17 @@ namespace Mba.Simplifier.Synthesis
                     if (HasComponent(SynthOpc.Lshr))
                     {
                         var lshrComponent = GetComponent(SynthOpc.Lshr);
-                        var isLshr = solver.MkEq(line.Opcode, solver.MkBV(lshrComponent.Data.Index, line.Opcode.SortSize));
+                        var isLshr = ctx.MkEq(line.Opcode, ctx.MkBV(lshrComponent.Data.Index, line.Opcode.SortSize));
 
                         var cdata = line.ConstantData;
-                        var boundedConstant = solver.MkBVULT(cdata, solver.MkBV(cdata.SortSize, cdata.SortSize));
+                        var boundedConstant = ctx.MkBVULT(cdata, ctx.MkBV(cdata.SortSize, cdata.SortSize));
 
-                        constraints.Add(solver.MkImplies(isLshr, boundedConstant));
+                        constraints.Add(ctx.MkImplies(isLshr, boundedConstant));
 
 
                         var shiftVar = shiftVariables[i - lines.Count(x => x is VarLine)];
-                        var zeroOp = solver.MkEq(shiftVar, solver.MkBV(0, shiftVar.SortSize));
-                        constraints.Add(solver.MkImplies(solver.MkNot(isLshr), zeroOp));
+                        var zeroOp = ctx.MkEq(shiftVar, ctx.MkBV(0, shiftVar.SortSize));
+                        constraints.Add(ctx.MkImplies(ctx.MkNot(isLshr), zeroOp));
 
                         //Debugger.Break();
 
@@ -551,11 +551,11 @@ namespace Mba.Simplifier.Synthesis
                     if (HasComponent(SynthOpc.Constant) && allocatedConstants < maxConstants)
                     {
                         var constComponent = GetComponent(SynthOpc.Constant);
-                        var isConstant = solver.MkEq(line.Opcode, solver.MkBV(constComponent.Data.Index, line.Opcode.SortSize));
+                        var isConstant = ctx.MkEq(line.Opcode, ctx.MkBV(constComponent.Data.Index, line.Opcode.SortSize));
 
-                        var zeroOp = And(solver.MkEq(op0, solver.MkBV(0, op0.SortSize)), solver.MkEq(op1, solver.MkBV(0, op1.SortSize)));
+                        var zeroOp = And(ctx.MkEq(op0, ctx.MkBV(0, op0.SortSize)), ctx.MkEq(op1, ctx.MkBV(0, op1.SortSize)));
 
-                        constraints.Add(solver.MkImplies(isConstant, zeroOp));
+                        constraints.Add(ctx.MkImplies(isConstant, zeroOp));
                     }
                 }
                 // Sort operands of commutative operators
@@ -595,13 +595,13 @@ namespace Mba.Simplifier.Synthesis
                     var associativeOps = components.Where(x => x.Opcode.IsCommutative());
                     foreach (var component in associativeOps)
                     {
-                        var isAssociative = solver.MkEq(line.Opcode, solver.MkBV(component.Data.Index, line.Opcode.SortSize));
+                        var isAssociative = ctx.MkEq(line.Opcode, ctx.MkBV(component.Data.Index, line.Opcode.SortSize));
                         // Ascending order is apparently faster despite the unary operand optimization thing
-                        var sorted = solver.MkBVULE(op0, op1);
+                        var sorted = ctx.MkBVULE(op0, op1);
 
                         //var sorted = solver.MkBVUGE(op0, op1);
 
-                        constraints.Add(solver.MkImplies(isAssociative, sorted));
+                        constraints.Add(ctx.MkImplies(isAssociative, sorted));
                     }
 
 
@@ -622,11 +622,11 @@ namespace Mba.Simplifier.Synthesis
                     var idempotentOps = components.Where(x => x.Opcode.IsIdempotent());
                     foreach (var component in idempotentOps)
                     {
-                        var isIdempotent = solver.MkEq(line.Opcode, solver.MkBV(component.Data.Index, line.Opcode.SortSize));
+                        var isIdempotent = ctx.MkEq(line.Opcode, ctx.MkBV(component.Data.Index, line.Opcode.SortSize));
 
-                        var zeroOp = solver.MkNot(solver.MkEq(line.Op0, line.Op1));
+                        var zeroOp = ctx.MkNot(ctx.MkEq(line.Op0, line.Op1));
 
-                        constraints.Add(solver.MkImplies(isIdempotent, zeroOp));
+                        constraints.Add(ctx.MkImplies(isIdempotent, zeroOp));
                     }
                 }
 
@@ -663,22 +663,22 @@ namespace Mba.Simplifier.Synthesis
                         foreach (var constIndex in constIndices)
                         {
                             // Check whether the line could be a constant (is it within the range of instructions where we allow constants)
-                            var isOperandInConstantRange = solver.MkEq(operand, solver.MkBV(constIndex, operand.SortSize));
+                            var isOperandInConstantRange = ctx.MkEq(operand, ctx.MkBV(constIndex, operand.SortSize));
 
                             var constOpc = (lines[constIndex] as ExprLine).Opcode;
-                            var isConstantOpcode = solver.MkEq(constOpc, solver.MkBV(constComponent.Data.Index, constOpc.SortSize));
+                            var isConstantOpcode = ctx.MkEq(constOpc, ctx.MkBV(constComponent.Data.Index, constOpc.SortSize));
 
                             constConstraints.Add(And(isOperandInConstantRange, isConstantOpcode));
                         }
 
                         // Compute whether the operand is equal to one of the constants
-                        var isConstantOperand = constConstraints.Count == 1 ? constConstraints.Single() : solver.MkOr(constConstraints);
+                        var isConstantOperand = constConstraints.Count == 1 ? constConstraints.Single() : ctx.MkOr(constConstraints);
 
                         if (operandIdx == 1 && HasComponent(SynthOpc.Not))
                         {
                             var notComponent = GetComponent(SynthOpc.Not);
-                            var isUnary = solver.MkEq(line.Opcode, solver.MkBV(notComponent.Data.Index, line.Opcode.SortSize));
-                            isConstantOperand = (BoolExpr)solver.MkITE(isUnary, solver.MkTrue(), isConstantOperand);
+                            var isUnary = ctx.MkEq(line.Opcode, ctx.MkBV(notComponent.Data.Index, line.Opcode.SortSize));
+                            isConstantOperand = (BoolExpr)ctx.MkITE(isUnary, ctx.MkTrue(), isConstantOperand);
                         }
 
                         operandConstraints.Add(isConstantOperand);
@@ -686,8 +686,8 @@ namespace Mba.Simplifier.Synthesis
 
                     // Implies: If this expression is not a constant, it must have at least one non constant operand
                     var allConstantOperands = And(operandConstraints);
-                    var isConstant = solver.MkEq(line.Opcode, solver.MkBV(constComponent.Data.Index, line.Opcode.SortSize));
-                    constraints.Add(solver.MkImplies(solver.MkNot(isConstant), solver.MkNot(allConstantOperands)));
+                    var isConstant = ctx.MkEq(line.Opcode, ctx.MkBV(constComponent.Data.Index, line.Opcode.SortSize));
+                    constraints.Add(ctx.MkImplies(ctx.MkNot(isConstant), ctx.MkNot(allConstantOperands)));
 
                 }
 
@@ -723,22 +723,22 @@ namespace Mba.Simplifier.Synthesis
                         foreach (var constIndex in constIndices)
                         {
                             // Check whether the line could be a constant (is it within the range of instructions where we allow constants)
-                            var isOperandInConstantRange = solver.MkEq(operand, solver.MkBV(constIndex, operand.SortSize));
+                            var isOperandInConstantRange = ctx.MkEq(operand, ctx.MkBV(constIndex, operand.SortSize));
 
                             var constOpc = (lines[constIndex] as ExprLine).Opcode;
-                            var isConstantOpcode = solver.MkEq(constOpc, solver.MkBV(constComponent.Data.Index, constOpc.SortSize));
+                            var isConstantOpcode = ctx.MkEq(constOpc, ctx.MkBV(constComponent.Data.Index, constOpc.SortSize));
 
                             constConstraints.Add(And(isOperandInConstantRange, isConstantOpcode));
                         }
 
                         // Compute whether the operand is equal to one of the constants
-                        var isConstantOperand = constConstraints.Count == 1 ? constConstraints.Single() : solver.MkOr(constConstraints);
+                        var isConstantOperand = constConstraints.Count == 1 ? constConstraints.Single() : ctx.MkOr(constConstraints);
                         operandConstraints.Add(isConstantOperand);
                     }
 
                     // Enforce that multiplication is only allowed if one operand is a constant
-                    var anyConstOperand = solver.MkOr(operandConstraints);
-                    constraints.Add(solver.MkImplies(IsComponent(line, SynthOpc.Mul), anyConstOperand));
+                    var anyConstOperand = ctx.MkOr(operandConstraints);
+                    constraints.Add(ctx.MkImplies(IsComponent(line, SynthOpc.Mul), anyConstOperand));
 
                     /*
                     // If either operand is a constant, treat them as dependent. We'll handle with special logic
@@ -772,17 +772,17 @@ namespace Mba.Simplifier.Synthesis
                             continue;
 
                         var isOpcode = IsComponent(next, component);
-                        var diff0 = Different(next.Op0, solver.MkBV(i, next.Op0.SortSize));
+                        var diff0 = Different(next.Op0, ctx.MkBV(i, next.Op0.SortSize));
                         if (count == 1)
                         {
                             // Assert that the this instruction does not use the other.
-                            dependencyConstraints.Add(solver.MkImplies(isOpcode, diff0));
+                            dependencyConstraints.Add(ctx.MkImplies(isOpcode, diff0));
                             continue;
                         }
 
                         Debug.Assert(count == 2);
-                        var diff1 = Different(next.Op1, solver.MkBV(i, next.Op0.SortSize));
-                        dependencyConstraints.Add(solver.MkImplies(isOpcode, And(diff0, diff1)));
+                        var diff1 = Different(next.Op1, ctx.MkBV(i, next.Op0.SortSize));
+                        dependencyConstraints.Add(ctx.MkImplies(isOpcode, And(diff0, diff1)));
                     }
 
                     // If this instruction could be a constant, disable the opcode based sorting logic and instead apply a special canonicalization:
@@ -791,7 +791,7 @@ namespace Mba.Simplifier.Synthesis
                         // If either operand is a constant, treat them as dependent. We'll handle with special logic
                         var const0 = IsComponent(line, SynthOpc.Constant);
                         var const1 = IsComponent(next, SynthOpc.Constant);
-                        var anyConstants = solver.MkOr(const0, const1);
+                        var anyConstants = ctx.MkOr(const0, const1);
                         dependencyConstraints.Add(anyConstants);
 
                         // Rewrite:
@@ -801,34 +801,34 @@ namespace Mba.Simplifier.Synthesis
                         // to:
                         // %0 = 1111
                         // %1 = a+b
-                        var sortConstant = And(const1, solver.MkNot(const0));
-                        constraints.Add(solver.MkNot(sortConstant));
+                        var sortConstant = And(const1, ctx.MkNot(const0));
+                        constraints.Add(ctx.MkNot(sortConstant));
 
 
                         var bothConst = And(const0, const1);
-                        constraints.Add(solver.MkImplies(bothConst, solver.MkBVULT(line.ConstantData, next.ConstantData)));
+                        constraints.Add(ctx.MkImplies(bothConst, ctx.MkBVULT(line.ConstantData, next.ConstantData)));
                     }
 
 
                     // Most expensive instructions are at the top of the list.. e.g. 0==div, because of the encoding we chose.
                     // So we want to sort opcodes in descending order. AND, XOR, etc are assigned the largest opcodes.
-                    var depends = solver.MkOr(dependencyConstraints);
-                    var sortOpcode = solver.MkBVUGE(line.Opcode, next.Opcode);
-                    constraints.Add(solver.MkImplies(solver.MkNot(depends), sortOpcode));
+                    var depends = ctx.MkOr(dependencyConstraints);
+                    var sortOpcode = ctx.MkBVUGE(line.Opcode, next.Opcode);
+                    constraints.Add(ctx.MkImplies(ctx.MkNot(depends), sortOpcode));
 
                     // Tie breaker: Operands
-                    var tie = And(solver.MkNot(depends), solver.MkEq(line.Opcode, next.Opcode));
+                    var tie = And(ctx.MkNot(depends), ctx.MkEq(line.Opcode, next.Opcode));
 
                     // TODO: You have a very global encoding when you should instead be doing a local encoding. This encoding is bad for unit propagation.
                     // Prefer many implies over one big imply
                     var zextBy = next.Op0.SortSize - line.Op0.SortSize;
-                    var args0 = new BitVecExpr[] { line.Op0, line.Op1 }.Select(x => zextBy == 0 ? x : solver.MkZeroExt(zextBy, x)).ToArray();
+                    var args0 = new BitVecExpr[] { line.Op0, line.Op1 }.Select(x => zextBy == 0 ? x : ctx.MkZeroExt(zextBy, x)).ToArray();
                     var args1 = new BitVecExpr[] { next.Op0, next.Op1 };
 
                     var (j, k) = (args0[0], args0[1]);
                     var (jNext, kNext) = (args1[0], args1[1]);
-                    var smaller = solver.MkOr(solver.MkBVULT(j, jNext), And(solver.MkEq(j, jNext), solver.MkBVULT(k, kNext)));
-                    constraints.Add(solver.MkImplies(tie, smaller));
+                    var smaller = ctx.MkOr(ctx.MkBVULT(j, jNext), And(ctx.MkEq(j, jNext), ctx.MkBVULT(k, kNext)));
+                    constraints.Add(ctx.MkImplies(tie, smaller));
 
                     //solver.MkImplies(sortConstant,);
                 }
@@ -845,8 +845,8 @@ namespace Mba.Simplifier.Synthesis
                         var lw0 = l1.Op0.SortSize - l0.Op0.SortSize;
                         if (lw0 > 0)
                         {
-                            var ext0 = solver.MkZeroExt(lw0, l0.Op0);
-                            var ext1 = solver.MkZeroExt(lw0, l0.Op1);
+                            var ext0 = ctx.MkZeroExt(lw0, l0.Op0);
+                            var ext1 = ctx.MkZeroExt(lw0, l0.Op1);
                             l0 = new ExprLine(l0.Opcode, ext0, ext1, l0.TruthTable, l0.ConstantData);
                         }
 
@@ -861,7 +861,7 @@ namespace Mba.Simplifier.Synthesis
                             if (count == 0)
                                 continue;
 
-                            var sameOpcode = solver.MkEq(l0.Opcode, l1.Opcode);
+                            var sameOpcode = ctx.MkEq(l0.Opcode, l1.Opcode);
 
                             // Change the implication to "we have the same opcode and the opcode == this"
                             sameOpcode = And(sameOpcode, IsComponent(line, component));
@@ -870,7 +870,7 @@ namespace Mba.Simplifier.Synthesis
                             if (count == 1)
                             {
 
-                                constraints.Add(solver.MkImplies(sameOpcode, Different(l0.Op0, l1.Op0)));
+                                constraints.Add(ctx.MkImplies(sameOpcode, Different(l0.Op0, l1.Op0)));
                                 continue;
                             }
 
@@ -879,7 +879,7 @@ namespace Mba.Simplifier.Synthesis
                             Debug.Assert(count == 2);
                             var diff0 = Different(l0.Op0, l1.Op0);
                             var diff1 = Different(l0.Op1, l1.Op1);
-                            constraints.Add(solver.MkImplies(sameOpcode, solver.MkOr(diff0, diff1)));
+                            constraints.Add(ctx.MkImplies(sameOpcode, ctx.MkOr(diff0, diff1)));
                         }
 
                         /*
@@ -908,7 +908,7 @@ namespace Mba.Simplifier.Synthesis
                     if (HasComponent(SynthOpc.Constant))
                     {
                         var constComponent = GetComponent(SynthOpc.Constant);
-                        var notConstant = solver.MkNot(solver.MkEq(line.Opcode, solver.MkBV(constComponent.Data.Index, line.Opcode.SortSize)));
+                        var notConstant = ctx.MkNot(ctx.MkEq(line.Opcode, ctx.MkBV(constComponent.Data.Index, line.Opcode.SortSize)));
                         constraints.Add(notConstant);
                     }
                 }
@@ -930,7 +930,7 @@ namespace Mba.Simplifier.Synthesis
         }
 
         private BoolExpr Different(Expr a, Expr b)
-            => solver.MkNot(solver.MkEq(a, b));
+            => ctx.MkNot(ctx.MkEq(a, b));
 
         // Return a constraint that the line has atleast one operand
         private BoolExpr AtleastNOperands(ExprLine line, int n)
@@ -939,10 +939,10 @@ namespace Mba.Simplifier.Synthesis
 
             var zeroComponents = components.Select(x => x.Opcode).Where(x => x.GetOperandCount() < n).ToList();
             if (zeroComponents.Count == 0)
-                return solver.MkTrue();
+                return ctx.MkTrue();
 
             foreach (var c in zeroComponents)
-                constraints.Add(solver.MkNot(IsComponent(line, c)));
+                constraints.Add(ctx.MkNot(IsComponent(line, c)));
             if (constraints.Count == 1)
                 return constraints.Single();
             return And(constraints);
@@ -954,7 +954,7 @@ namespace Mba.Simplifier.Synthesis
 
             var zeroComponents = components.Select(x => x.Opcode).Where(x => x.GetOperandCount() == n).ToList();
             if (zeroComponents.Count == 0)
-                return solver.MkTrue();
+                return ctx.MkTrue();
 
             foreach (var c in zeroComponents)
                 constraints.Add((IsComponent(line, c)));
@@ -965,7 +965,7 @@ namespace Mba.Simplifier.Synthesis
 
         private BoolExpr IsComponent(ExprLine line, SynthOpc component)
         {
-            return solver.MkEq(line.Opcode, GetComponentIndexBv(component));
+            return ctx.MkEq(line.Opcode, GetComponentIndexBv(component));
         }
 
         private BoolExpr IsComponent(ExprLine line, Component component)
@@ -973,7 +973,7 @@ namespace Mba.Simplifier.Synthesis
 
         private BitVecExpr GetComponentIndexBv(SynthOpc opc)
         {
-            return solver.MkBV(GetComponent(opc).Data.Index, opcodeBitsize);
+            return ctx.MkBV(GetComponent(opc).Data.Index, opcodeBitsize);
         }
 
 
@@ -986,23 +986,23 @@ namespace Mba.Simplifier.Synthesis
             var funcName = "synth_func";
             var domain = symbols.Select(x => x.Sort).ToArray();
             //var synthFunc = solver.MkRecFuncDecl(solver.MkSymbol(funcName), domain, after.Sort);
-            var synthFunc = solver.MkRecFuncDecl(funcName, domain, after.Sort);
-            solver.AddRecDef(synthFunc, symbols, after);
+            var synthFunc = ctx.MkRecFuncDecl(funcName, domain, after.Sort);
+            ctx.AddRecDef(synthFunc, symbols, after);
 
 
        
             uint costWidth = 6;
-            var componentCosts = components.Select(x => (Expr)solver.MkBV(x.Opcode.GetCost(), costWidth)).ToList();
+            var componentCosts = components.Select(x => (Expr)ctx.MkBV(x.Opcode.GetCost(), costWidth)).ToList();
             //var lineOpcodes = lines.Where(x => x is ExprLine).Select(x => (x as ExprLine).Opcode).ToArray();
 
-            var costSum = (BitVecExpr)solver.MkBV(0, costWidth);
+            var costSum = (BitVecExpr)ctx.MkBV(0, costWidth);
             foreach (var line in lines)
             {
                 if (line is not ExprLine exprLine)
                     continue;
 
                 var cost = (BitVecExpr)LinearSelect(exprLine.Opcode, componentCosts);
-                costSum = solver.MkBVAdd(costSum, cost);
+                costSum = ctx.MkBVAdd(costSum, cost);
             }
 
             // best known cost is 8
@@ -1037,7 +1037,7 @@ namespace Mba.Simplifier.Synthesis
                 var subBefore = before.Substitute(symbols, bvPoints).Simplify();
                 //var subAfter = solver.MkApp(synthFunc, bvPoints);
                 var subAfter = after.Substitute(symbols, bvPoints);
-                return solver.MkEq(subBefore, subAfter);
+                return ctx.MkEq(subBefore, subAfter);
             };
 
             bool boolean = false;
@@ -1169,7 +1169,7 @@ namespace Mba.Simplifier.Synthesis
                     points.Add(new ResultVectorKey(keys));
 
                     var bvPoints = keys
-                        .Select(x => solver.MkBV(x, (before as BitVecExpr).SortSize))
+                        .Select(x => ctx.MkBV(x, (before as BitVecExpr).SortSize))
                         .ToArray();
 
 
@@ -1201,7 +1201,7 @@ namespace Mba.Simplifier.Synthesis
                 {
 
                     Console.WriteLine("Exporting");
-                    ExportSmtToFile(solver, s, @"C:\Users\colton\Downloads\Bitwuzla\your_problem.smt2");
+                    ExportSmtToFile(ctx, s, @"C:\Users\colton\Downloads\Bitwuzla\your_problem.smt2");
 
                     //Console.WriteLine("Exported");
                     //Console.ReadLine();
@@ -1227,7 +1227,7 @@ namespace Mba.Simplifier.Synthesis
                 {
                     if (decl.Arity == 0)
                     {
-                        from.Add(solver.MkConst(decl));
+                        from.Add(ctx.MkConst(decl));
                         to.Add(model.ConstInterp(decl));
                     }
                 }
@@ -1236,7 +1236,7 @@ namespace Mba.Simplifier.Synthesis
                 //Console.WriteLine("\n\nExpr: \n" + result.Simplify());
                 //Console.WriteLine("");
 
-                var w = ctx.GetWidth(idx);
+                var w = mbaCtx.GetWidth(mbaIdx);
                 var programAst = new List<AstIdx>();
                 List<BitVecExpr> z3ProgramAst = new List<BitVecExpr>();
 
@@ -1247,7 +1247,7 @@ namespace Mba.Simplifier.Synthesis
                     // Variables get added immediately.
                     if (line is VarLine varLine)
                     {
-                        programAst.Add(inputs[varLine.Index]);
+                        programAst.Add(mbaInputs[varLine.Index]);
                         z3ProgramAst.Add((BitVecExpr)symbols[varLine.Index]);
                         continue;
                     }
@@ -1260,14 +1260,14 @@ namespace Mba.Simplifier.Synthesis
                     if (op0Value is not BitVecNum && opcode.Int != GetComponent(SynthOpc.Constant).Data.Index)
                     {
                         throw new InvalidOperationException();
-                        programAst.Add(ctx.Symbol($"ILLEGAL{li}", w));
+                        programAst.Add(mbaCtx.Symbol($"ILLEGAL{li}", w));
                         continue;
                     }
 
                     if (op1Value is not BitVecNum && opcode.Int != GetComponent(SynthOpc.Constant).Data.Index && opcode.Int != GetComponent(SynthOpc.Not).Data.Index)
                     {
                         throw new InvalidOperationException();
-                        programAst.Add(ctx.Symbol($"ILLEGAL{li}", w));
+                        programAst.Add(mbaCtx.Symbol($"ILLEGAL{li}", w));
                         continue;
                     }
 
@@ -1310,16 +1310,16 @@ namespace Mba.Simplifier.Synthesis
                     Console.WriteLine($"v{li} = {opc}");
                     AstIdx node = opc switch
                     {
-                        SynthOpc.Constant => ctx.Constant((constData as BitVecNum).UInt64, w),
-                        SynthOpc.Not => ctx.Neg(op0), // Neg() is actually bvnot in my IR
-                        SynthOpc.And => ctx.And(op0, op1),
-                        SynthOpc.Or => ctx.Or(op0, op1),
-                        SynthOpc.Xor => ctx.Xor(op0, op1),
-                        SynthOpc.Add => ctx.Add(op0, op1),
+                        SynthOpc.Constant => mbaCtx.Constant((constData as BitVecNum).UInt64, w),
+                        SynthOpc.Not => mbaCtx.Neg(op0), // Neg() is actually bvnot in my IR
+                        SynthOpc.And => mbaCtx.And(op0, op1),
+                        SynthOpc.Or => mbaCtx.Or(op0, op1),
+                        SynthOpc.Xor => mbaCtx.Xor(op0, op1),
+                        SynthOpc.Add => mbaCtx.Add(op0, op1),
                         // Note: My IR does not have a subtract operator. `a-b` becomes `a + -1*b`. This may cause weird printed output but is fine otherwise.
-                        SynthOpc.Sub => ctx.Sub(op0, op1),
-                        SynthOpc.Mul => ctx.Mul(op0, op1),
-                        SynthOpc.Lshr => ctx.Lshr(op0, ctx.Constant((constData as BitVecNum).UInt64, w)),
+                        SynthOpc.Sub => mbaCtx.Sub(op0, op1),
+                        SynthOpc.Mul => mbaCtx.Mul(op0, op1),
+                        SynthOpc.Lshr => mbaCtx.Lshr(op0, mbaCtx.Constant((constData as BitVecNum).UInt64, w)),
                         SynthOpc.TruthTable => throw new NotImplementedException(),
                     };
 
@@ -1327,15 +1327,15 @@ namespace Mba.Simplifier.Synthesis
 
                     BitVecExpr z3Node = opc switch
                     {
-                        SynthOpc.Constant => solver.MkBV((constData as BitVecNum).UInt64, (uint)w),
-                        SynthOpc.Not => solver.MkBVNot(op0Z3), // Neg() is actually bvnot in my IR
-                        SynthOpc.And => solver.MkBVAND(op0Z3, op1Z3),
-                        SynthOpc.Or => solver.MkBVOR(op0Z3, op1Z3),
-                        SynthOpc.Xor => solver.MkBVXOR(op0Z3, op1Z3),
-                        SynthOpc.Add => solver.MkBVAdd(op0Z3, op1Z3),
+                        SynthOpc.Constant => ctx.MkBV((constData as BitVecNum).UInt64, (uint)w),
+                        SynthOpc.Not => ctx.MkBVNot(op0Z3), // Neg() is actually bvnot in my IR
+                        SynthOpc.And => ctx.MkBVAND(op0Z3, op1Z3),
+                        SynthOpc.Or => ctx.MkBVOR(op0Z3, op1Z3),
+                        SynthOpc.Xor => ctx.MkBVXOR(op0Z3, op1Z3),
+                        SynthOpc.Add => ctx.MkBVAdd(op0Z3, op1Z3),
                         // Note: My IR does not have a subtract operator. `a-b` becomes `a + -1*b`. This may cause weird printed output but is fine otherwise.
-                        SynthOpc.Sub => solver.MkBVSub(op0Z3, op1Z3),
-                        SynthOpc.Mul => solver.MkBVMul(op0Z3, op1Z3),
+                        SynthOpc.Sub => ctx.MkBVSub(op0Z3, op1Z3),
+                        SynthOpc.Mul => ctx.MkBVMul(op0Z3, op1Z3),
                         //SynthOpc.Lshr => solver.MkBVLSHR(op0Z3, ctx.Constant((constData as BitVecNum).UInt64, w)),
                         SynthOpc.TruthTable => throw new NotImplementedException(),
                     };
@@ -1348,13 +1348,13 @@ namespace Mba.Simplifier.Synthesis
 
                 result = z3ProgramAst.Last();
 
-                Console.WriteLine($"MBA Expr: \n{ctx.GetAstString(programAst.Last())}\n\n");
+                Console.WriteLine($"MBA Expr: \n{mbaCtx.GetAstString(programAst.Last())}\n\n");
 
-                Console.WriteLine($"MBA DAG: \n{DagFormatter.Format(ctx, programAst.Last())}\n\n");
+                Console.WriteLine($"MBA DAG: \n{DagFormatter.Format(mbaCtx, programAst.Last())}\n\n");
 
                 Console.WriteLine($"With cost: {model.Eval(costSum)}\n");
 
-                var equivSolver = solver.MkSolver();
+                var equivSolver = ctx.MkSolver();
 
                 ///// ??????????????????? aint no way
                 //equivSolver.Add(solver.MkEq(solver.MkExtract(0, 0, symbols[0] as BitVecExpr), solver.MkBV(1, 1)));
@@ -1391,8 +1391,8 @@ namespace Mba.Simplifier.Synthesis
                     var generalized = Generalize(symbols, before, result);
                     if (generalized == false)
                     {
-                        var generalizedStructureBan = And(bannedModel.Select(x => solver.MkEq(x.Key, x.Value)));
-                        s.Add(solver.MkNot(generalizedStructureBan));
+                        var generalizedStructureBan = And(bannedModel.Select(x => ctx.MkEq(x.Key, x.Value)));
+                        s.Add(ctx.MkNot(generalizedStructureBan));
                         //Debugger.Break();
                     }
 
@@ -1408,19 +1408,19 @@ namespace Mba.Simplifier.Synthesis
                         Model bestModel = null;
                         while (true)
                         {
-                            BitVecExpr sum = solver.MkBV(0, 16);
-                            var skeletonSolver = solver.MkSolver();
+                            BitVecExpr sum = ctx.MkBV(0, 16);
+                            var skeletonSolver = ctx.MkSolver();
                             foreach (var skel in skeletons)
                             {
-                                var notEq = solver.MkNot(solver.MkEq(skel, before));
+                                var notEq = ctx.MkNot(ctx.MkEq(skel, before));
                                 // skeletonSolver.Add(notEq);
 
-                                sum = solver.MkBVAdd(sum, (BitVecExpr)solver.MkITE(notEq, solver.MkBV(1, 16), solver.MkBV(0, 16)));
+                                sum = ctx.MkBVAdd(sum, (BitVecExpr)ctx.MkITE(notEq, ctx.MkBV(1, 16), ctx.MkBV(0, 16)));
                             }
 
-                            skeletonSolver.Add(solver.MkBVUGT(sum, solver.MkBV(best, 16)));
+                            skeletonSolver.Add(ctx.MkBVUGT(sum, ctx.MkBV(best, 16)));
 
-                            skeletonSolver.Add(solver.MkNot(solver.MkEq(result, before)));
+                            skeletonSolver.Add(ctx.MkNot(ctx.MkEq(result, before)));
 
 
                             var status = skeletonSolver.Check();
@@ -1542,7 +1542,7 @@ namespace Mba.Simplifier.Synthesis
                 if (e.ASTKind == Z3_ast_kind.Z3_NUMERAL_AST)
                 {
                     if (constants.Add((BitVecNum)e))
-                        newConstants.Add(solver.MkBVConst($"HOLE{newConstants.Count}", (e as BitVecNum).SortSize));
+                        newConstants.Add(ctx.MkBVConst($"HOLE{newConstants.Count}", (e as BitVecNum).SortSize));
                     return;
                 }
 
@@ -1579,10 +1579,10 @@ namespace Mba.Simplifier.Synthesis
             // C = newConstants
             // X = symbols
 
-            var equality = solver.MkEq(generalizedExpression, before);
-            var forallX = solver.MkForall(symbols, equality);
+            var equality = ctx.MkEq(generalizedExpression, before);
+            var forallX = ctx.MkForall(symbols, equality);
 
-            var genSolver = solver.MkSolver();
+            var genSolver = ctx.MkSolver();
             genSolver.Add(forallX);
 
             var res = genSolver.Check();
@@ -1628,13 +1628,13 @@ namespace Mba.Simplifier.Synthesis
 
         private BoolExpr GetEquivalenceConstraint(Expr[] symbols, Expr before, Expr after)
         {
-            var forall = solver.MkForall(symbols, solver.MkEq(before, after));
+            var forall = ctx.MkForall(symbols, ctx.MkEq(before, after));
             return forall;
         }
 
         private Status ProveEquivalence(Solver s, Expr a, Expr b)
         {
-            s.Add(solver.MkNot(solver.MkEq(a, b)));
+            s.Add(ctx.MkNot(ctx.MkEq(a, b)));
             var check = s.Check();
             return check;
         }
@@ -1656,13 +1656,13 @@ namespace Mba.Simplifier.Synthesis
 
                     bool isSet = ((i >> j) & 1) == 1;
                     var sort = ((BitVecExpr)symbols[j]).SortSize;
-                    values[j] = isSet ? solver.MkBV(one, sort) : solver.MkBV(zero, sort);
+                    values[j] = isSet ? ctx.MkBV(one, sort) : ctx.MkBV(zero, sort);
                 }
 
                 var subBefore = before.Substitute(symbols, values);
                 var subAfter = after.Substitute(symbols, values);
 
-                constraints.Add(solver.MkEq(subBefore, subAfter));
+                constraints.Add(ctx.MkEq(subBefore, subAfter));
             }
 
             return And(constraints.ToArray());
@@ -1676,7 +1676,7 @@ namespace Mba.Simplifier.Synthesis
         {
             if (t.Count() == 1)
                 return t.Single();
-            return solver.MkAnd(t);
+            return ctx.MkAnd(t);
         }
 
         private BoolExpr Or(params BoolExpr[] t)
@@ -1687,7 +1687,7 @@ namespace Mba.Simplifier.Synthesis
         {
             if (t.Count() == 1)
                 return t.Single();
-            return solver.MkOr(t);
+            return ctx.MkOr(t);
         }
     }
 }
