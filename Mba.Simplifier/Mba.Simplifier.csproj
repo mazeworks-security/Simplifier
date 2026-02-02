@@ -27,6 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Bitwuzla\Bitwuzla.csproj" />
     <ProjectReference Include="..\MSiMBA\Mba.Common\Mba.Common.csproj" />
     <ProjectReference Include="..\MSiMBA\Mba.FFI\Mba.FFI.vcxproj" />
   </ItemGroup>

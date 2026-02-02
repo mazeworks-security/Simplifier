@@ -170,7 +170,7 @@ namespace Mba.Simplifier.Synthesis
                     li++;
                     continue;
                 }
-                Console.WriteLine($"{exprLine.Opcode.SortSize}({exprLine.Op0.SortSize}, {exprLine.Op1.SortSize}) with {li} operands to choose from");
+                Console.WriteLine($"{exprLine.Opcode.SortSize}({exprLine.Op0.SortSize}, {exprLine.Op1.SortSize}) with {li} operands to choose from ");
                 li++;
             }
 

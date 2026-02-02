@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	<AssemblyName>BitwuzlaDn</AssemblyName>
     <RootNamespace>Bitwuzla</RootNamespace>
   </PropertyGroup>
 
@@ -12,7 +13,7 @@
     <None Include="libBitwuzla.so" Condition="Exists('libBitwuzla.so')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="Bitwuzla.dll" Condition="Exists('Bitwuzla.dll')">
+    <None Include="Bitwuzla.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
