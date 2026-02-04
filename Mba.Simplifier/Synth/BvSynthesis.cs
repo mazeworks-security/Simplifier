@@ -1,6 +1,7 @@
 ﻿using Bitwuzla;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Fuzzing;
+using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Synthesis;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
@@ -332,8 +333,11 @@ namespace Mba.Simplifier.Synth
         private List<Term> GetProgramConstraints()
         {
             var constraints = new List<Term>();
-            //AddAcyclicConstraints(constraints);
+            AddAcyclicConstraints(constraints);
             //AddPruningConstraints(constraints);
+            constraints.Add(constants.Single() == 1);
+
+
             return constraints;
         }
 
@@ -421,7 +425,7 @@ namespace Mba.Simplifier.Synth
         {
             // Randomly evaluate the expression on N points and assert its equivalence
             var rng = new SeededRandom();
-            int NUMINPUTS = 3;
+            int NUMINPUTS = 8;
             for(int i = 0; i < NUMINPUTS; i++)
             {
                 var values = Enumerable.Range(0, symbols.Length)
@@ -433,6 +437,9 @@ namespace Mba.Simplifier.Synth
 
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
+            //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION, true);
+            //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_BV_SIZE, 32);
+            //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, 32);
 
             var s = new BvSolver(ctx, options);
 
@@ -468,9 +475,10 @@ namespace Mba.Simplifier.Synth
 
 
                 var temp = new BvSolver(ctx);
-                temp.Assert(~(groundTruth == ourSolution));
+                temp.Assert(~(groundTruth == cegisSolution));
                 Console.WriteLine($"Equiv: {temp.CheckSat()}");
 
+                Debugger.Break();
                 // Otherwise we found a solution.
             }
         }
@@ -693,15 +701,16 @@ namespace Mba.Simplifier.Synth
         }
 
 
-        public static void P5()
+        // P14 from brahma
+        public static void P14()
         {
-            //var (ctx, idx) = Parse("((x&y) + (((x^y)) >> 1))", 8);
+            var (ctx, idx) = Parse("((x&y) + (((x^y)) >> 1))", 64);
 
             //var (ctx, idx) = Parse("(x^y)", 8);
 
             //var (ctx, idx) = Parse("(((x^y)) & a)", 8); // fails with 4/5 comps
 
-            var (ctx, idx) = Parse("(((x^y)) & z)", 8);
+            //var (ctx, idx) = Parse("(((x^y)) & z)", 8);
 
             var components = new List<SynthComponent>()
             {
@@ -709,12 +718,40 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.Add, SynthOpc.Sub),
 
                 //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Add, SynthOpc.Not),
-                new(SynthOpc.And, SynthOpc.Xor),
+                new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Add),
+                //new(SynthOpc.And, SynthOpc.Xor),
 
             };
 
-            var config = new SynthConfig(components, 6, 0);
+            var config = new SynthConfig(components, 6, 1);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+        public static void P15()
+        {
+            var (ctx, idx) = Parse("((x | (x^y)) - (((x^y)) >> 1))", 64);
+
+
+            //var (ctx, idx) = Parse("(x^y)", 8);
+
+            //var (ctx, idx) = Parse("(((x^y)) & a)", 8); // fails with 4/5 comps
+
+            //var (ctx, idx) = Parse("(((x^y)) & z)", 8);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.Add, SynthOpc.Sub),
+
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Add),
+                //new(SynthOpc.And, SynthOpc.Xor),
+
+            };
+
+            var config = new SynthConfig(components, 8, 1);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
