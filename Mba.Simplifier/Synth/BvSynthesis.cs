@@ -8,6 +8,7 @@ using Mba.Utility;
 using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
@@ -154,7 +155,7 @@ namespace Mba.Simplifier.Synth
         {
             // Get a list of lines
             lines = GetLines();
-            constants = Enumerable.Repeat(0, config.MaxConstants).Select(x => ctx.MkBvConst($"const{x}", w)).ToList();
+            constants = Enumerable.Range(0, config.MaxConstants).Select(x => ctx.MkBvConst($"const{x}", w)).ToList();
 
             // Get the skeleton expression
             var skeleton = GetSkeleton();
@@ -334,8 +335,7 @@ namespace Mba.Simplifier.Synth
         {
             var constraints = new List<Term>();
             AddAcyclicConstraints(constraints);
-            //AddPruningConstraints(constraints);
-            constraints.Add(constants.Single() == 1);
+            AddPruningConstraints(constraints);
 
 
             return constraints;
@@ -361,30 +361,80 @@ namespace Mba.Simplifier.Synth
 
         private void AddPruningConstraints(List<Term> constraints)
         {
+            // Sort constants
+            for(int i = 1; i < constants.Count; i++)
+            {
+                //constraints.Add(constants[i] > constants[i - 1]);
+            }
+
             // Constrain each opcode to be less than its maximum
             for (int i = FirstInstIdx; i < lines.Count; i++)
             {
                 var line = lines[i];
-                foreach(var component in components)
+
+
+                // Both operands should not be constant.
+                constraints.Add(~And(line.Operands.Select(x => x.IsConstant)));
+
+                
+                /*
+                continue;
+
+                var isMul = line.ComponentOpcode == components.Single().Opcodes.IndexOf(SynthOpc.Mul);
+                var isXor = line.ComponentOpcode == components.Single().Opcodes.IndexOf(SynthOpc.Xor);
+                var isLshr = line.ComponentOpcode == components.Single().Opcodes.IndexOf(SynthOpc.Lshr);
+
+                constraints.Add(Implies(isLshr, line.Operands[1].IsConstant));
+
+                if (i == lines.Count - 3)
                 {
-                    var isComponent = IsComponent(line, component);
-                    /*
-                     * if (component.Opcodes.Length == 4)
-                        continue;
-                    var implies = Implies(isComponent, line.ComponentOpcode <= (uint)(component.Opcodes.Length - 1));
-                    constraints.Add(implies);
-                    */
+                    constraints.Add(isMul);
+                    constraints.Add(line.Operands[1].IsConstant);
+                    constraints.Add(line.Operands[1].Index == constants.Count - 1);
+                }
 
-                    // Both of these ideas actually degrade performance
-                    //var implies = Implies(isComponent, line.ComponentOpcode <= (uint)(component.Opcodes.Length - 1));
-                    //constraints.Add(implies);
+                else
+                {
+                    constraints.Add(~isMul);
+                }
 
-                    //var implies = Implies(isComponent, ctx.MkZext(1, line.ComponentOpcode) < (uint)component.Opcodes.Length);
-                    //constraints.Add(implies);
+                if(i == 2)
+                {
+                    constraints.Add(isXor);
+                }
+                */
 
-                    for (int opcodeIndex = 0; opcodeIndex < component.Opcodes.Length; opcodeIndex++)
+
+                    foreach (var component in components)
                     {
-                        var opc = component.Opcodes[opcodeIndex];
+                        var isComponent = IsComponent(line, component);
+                        /*
+                         * if (component.Opcodes.Length == 4)
+                            continue;
+                        var implies = Implies(isComponent, line.ComponentOpcode <= (uint)(component.Opcodes.Length - 1));
+                        constraints.Add(implies);
+                        */
+
+                        // Both of these ideas actually degrade performance
+                        //var implies = Implies(isComponent, line.ComponentOpcode <= (uint)(component.Opcodes.Length - 1));
+                        //constraints.Add(implies);
+
+                        //var implies = Implies(isComponent, ctx.MkZext(1, line.ComponentOpcode) < (uint)component.Opcodes.Length);
+                        //constraints.Add(implies);
+
+
+                        for (int opcodeIndex = 0; opcodeIndex < component.Opcodes.Length; opcodeIndex++)
+                        {
+                            var opc = component.Opcodes[opcodeIndex];
+
+
+                        /*
+                        var isUnary = line.ComponentOpcode == opcodeIndex;
+                        if (opc.IsCommutative())
+                        {
+                            constraints.Add(Implies(isUnary, line.Operands[0].Index < line.Operands[1].Index));
+                        }
+                        */
 
                         /*
                         var isUnary = isComponent & line.ComponentOpcode == opcodeIndex;
@@ -403,14 +453,14 @@ namespace Mba.Simplifier.Synth
                         constraints.Add(Implies(isUnary, line.Operands[1].IsConstant == false));
                         */
 
-                        //if (!opc.IsIdempotent())
-                        //    continue;
+                        if (!opc.IsIdempotent())
+                            continue;
 
                         //var isIdempotent = line.ComponentOpcode == opcodeIndex;
                         //constraints.Add(Implies(isIdempotent, line.Operands[0].Index != line.Operands[1].Index));
                     }
 
-                }
+                    }
             }
         }
 
@@ -423,14 +473,15 @@ namespace Mba.Simplifier.Synth
         // https://www.kroening.com/papers/cav2018-synthesis.pdf
         private void CegisT(List<Term> constraints, Term skeleton)
         {
-            // Randomly evaluate the expression on N points and assert its equivalence
+            // Randomly evaluate the expression on N initial points and assert its equivalence
             var rng = new SeededRandom();
-            int NUMINPUTS = 8;
-            for(int i = 0; i < NUMINPUTS; i++)
+            int NUMSAMPLES = 4;
+            for(int i = 0; i < NUMSAMPLES; i++)
             {
                 var values = Enumerable.Range(0, symbols.Length)
                     .Select(x => ctx.MkBvValue(rng.GetRandUlong() & ModuloReducer.GetMask((uint)symbols[x].Sort.BvSize), symbols[x].Sort.BvSize))
                     .ToArray();
+
                 var constraint = GetBehavioralConstraint(skeleton, values);
                 constraints.Add(constraint);
             }
@@ -438,8 +489,8 @@ namespace Mba.Simplifier.Synth
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
             //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION, true);
-            //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_BV_SIZE, 32);
-            //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, 32);
+            //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_BV_SIZE, 16);
+            //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
 
             var s = new BvSolver(ctx, options);
 
@@ -470,15 +521,33 @@ namespace Mba.Simplifier.Synth
                     Console.WriteLine($"Found solution. Took {totalTime.ElapsedMilliseconds}ms");
                 }
 
+                // Ask the solver for a fitting solution
+                var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
 
-                var (ourSolution, cegisSolution) = SolutionToExpr(s);
-
-
-                var temp = new BvSolver(ctx);
+                // Yield the solution if its equivalent
+                var temp = new BvSolver(ctx, options);
                 temp.Assert(~(groundTruth == cegisSolution));
-                Console.WriteLine($"Equiv: {temp.CheckSat()}");
+                var isEquiv = temp.CheckSat() == Result.Unsat;
+                if(isEquiv)
+                {
+                    Console.WriteLine("Solved");
+                    Debugger.Break();
+                }
 
-                Debugger.Break();
+                var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants);
+                Debug.Assert(generalizedSolution is null);
+
+                s.Assert(generalizedBan);
+                var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
+                s.Assert(GetBehavioralConstraint(skeleton, vs));
+
+                //Console.WriteLine($"Equiv: {temp.CheckSat()}");
+                //foreach(var symbol in symbols)
+                //{
+                //    Console.WriteLine($"Invalid input: {ctx.GetIntegerValue(temp.GetValue(symbol))}");
+                //}
+
+                //Debugger.Break();
                 // Otherwise we found a solution.
             }
         }
@@ -491,7 +560,7 @@ namespace Mba.Simplifier.Synth
             return before == after;
         }
 
-        private (AstIdx ourSolution, Term cegisSolution) SolutionToExpr(BvSolver s)
+        private (AstIdx ourSolution, Term cegisSolution, List<Term> constants) SolutionToExpr(BvSolver s)
         {
             // Compute the list of constant terms
             List<Term> cegisConstants = new();
@@ -531,6 +600,9 @@ namespace Mba.Simplifier.Synth
 
                 var index = (int)ctx.GetIntegerValue(s.GetValue(line.ComponentIndex));
                 var opcode = ctx.GetIntegerValue(s.GetValue(line.ComponentOpcode));
+                if (opcode >= (ulong)components[index].Opcodes.Length)
+                    opcode = (ulong)components[index].Opcodes.Length - 1;
+
                 var cegisOperands = new List<Term>();
                 var ourOperands = new List<AstIdx>();
                 foreach(var operand in line.Operands)
@@ -569,9 +641,77 @@ namespace Mba.Simplifier.Synth
                 cegisNodes.Add(cegisNode);
             }
 
-            Debugger.Break();
-            return (ourNodes.Last(), cegisNodes.Last());
+            //Debugger.Break();
+            return (ourNodes.Last(), cegisNodes.Last(), cegisConstants);
         }
+
+        private (Term generalizedSolution, Term generalizedConstraints) Generalize(BvSolver oldModel, Term candidate, List<Term> cegisConstants)
+        {
+            // Replace the constants with symbolic holes
+            var skeleton = ctx.SubstituteTerm(candidate, cegisConstants.ToArray(), constants.ToArray());
+
+
+            var options = new Options();
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
+            var solver = new BvSolver(ctx, options);
+ 
+
+            // Instantiate new quantifier variables.
+            var quantVars = new List<Term>();
+            for(int i = 0; i < symbols.Length; i++)
+            {
+                var v = ctx.MkVar(symbols[i].Sort, mbaCtx.GetSymbolName(mbaVariables[i]));
+                solver.Assert(symbols[i] == v);
+                quantVars.Add(v);
+            }
+
+            var equality = groundTruth == skeleton;
+            var concat = quantVars.Append(equality).ToArray();
+            var forall = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_FORALL, concat);
+
+
+            solver.Assert(forall);
+
+            var res = solver.CheckSat();
+            if (res == Result.Sat)
+                Debugger.Break();
+
+            // Otherwise this solution is impossible.
+            List<Term> structureVars = new();
+            foreach(var line in lines)
+            {
+                if (line.IsSymbol)
+                    continue;
+
+                structureVars.Add(line.ComponentIndex);
+                structureVars.Add(line.ComponentOpcode);
+                foreach(var operand in line.Operands)
+                {
+                    structureVars.Add(operand.Index);
+                    structureVars.Add(operand.IsConstant);
+                }
+            }
+
+            List<Term> structureConstraints = new(); 
+            foreach(var svar in structureVars)
+            {
+                var eval = oldModel.GetValue(svar);
+                if (eval.Kind != BitwuzlaKind.BITWUZLA_KIND_VALUE)
+                    Debugger.Break();
+
+                if (eval.Sort.IsBv)
+                    structureConstraints.Add(svar == ctx.GetIntegerValue(eval));
+                else
+                    structureConstraints.Add(svar == ctx.GetBoolValue(eval));
+            }
+
+            //Debugger.Break();
+
+
+            return (null, ~And(structureConstraints));
+        }
+
+
 
         private Term Implies(Term a, Term b)
             => ctx.MkImplies(a, b);
@@ -701,6 +841,30 @@ namespace Mba.Simplifier.Synth
         }
 
 
+        public static void P5()
+        {
+            //var (ctx, idx) = Parse("(171^((a+23)^(b)))^((((a|1111)+b)^b))", 8);
+
+            // Works with 7 components and 3 constants. 500ms
+            var (ctx, idx) = Parse("(((a+23)^(b)))^((((a|1111)+b)))", 8);
+
+            //var (ctx, idx) = Parse("(((a+23423434)^(b)))^((((a|432324234)+b)))^343433", 8);
+
+            var components = new List<SynthComponent>()
+            {
+                // new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Sub),
+                new(SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add),
+
+            };
+
+            var config = new SynthConfig(components, 7, 3);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+
+
         // P14 from brahma
         public static void P14()
         {
@@ -731,7 +895,7 @@ namespace Mba.Simplifier.Synth
 
         public static void P15()
         {
-            var (ctx, idx) = Parse("((x | (x^y)) - (((x^y)) >> 1))", 64);
+            var (ctx, idx) = Parse("((x | (x^y)) - (((x^y)) >> 1))", 8);
 
 
             //var (ctx, idx) = Parse("(x^y)", 8);
@@ -756,6 +920,37 @@ namespace Mba.Simplifier.Synth
 
             synth.Run();
         }
+
+        public static void P22()
+        {
+            // This formula might be wrong
+            var (ctx, idx) = Parse("(((((v ^ (v >> 1)) ^ ((v ^ (v >> 1)) >> 2)) & 0x11111111) * 0x11111111) >> 28) & 1", 32);
+
+
+            //var (ctx, idx) = Parse("(x^y)", 8);
+
+            //var (ctx, idx) = Parse("(((x^y)) & a)", 8); // fails with 4/5 comps
+
+            //var (ctx, idx) = Parse("(((x^y)) & z)", 8);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.Add, SynthOpc.Sub),
+
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                // new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Mul),
+                new(SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Mul, SynthOpc.And),
+                //new(SynthOpc.And, SynthOpc.Xor),
+
+            };
+
+            var config = new SynthConfig(components, 9, 4);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
 
 
         private static (AstCtx Ctx, AstIdx Idx) Parse(string text, uint width)

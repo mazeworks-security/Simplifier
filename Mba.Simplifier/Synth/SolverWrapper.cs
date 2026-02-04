@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection.Metadata.Ecma335;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -194,6 +195,8 @@ namespace Mba.Simplifier.Synth
         public static Term operator %(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UREM, a, b);
         public static Term operator -(Term t) => t.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_NEG, t);
 
+        //public static bool operator ==(Term a, object b) => a.Equals(b);
+        //public static bool operator !=(Term a, object b) => a.Equals(b);
         public static Term operator ==(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_EQUAL, a, b);
         public static Term operator !=(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_DISTINCT, a, b);
         public static Term operator >(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UGT, a, b);
