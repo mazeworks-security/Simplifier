@@ -13,7 +13,7 @@ namespace Bitwuzla {
 public class SWIGTYPE_p_FILE {
   private global::System.Runtime.InteropServices.HandleRef swigCPtr;
 
-  internal SWIGTYPE_p_FILE(global::System.IntPtr cPtr, bool futureUse) {
+  public SWIGTYPE_p_FILE(global::System.IntPtr cPtr, bool futureUse) {
     swigCPtr = new global::System.Runtime.InteropServices.HandleRef(this, cPtr);
   }
 

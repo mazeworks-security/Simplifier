@@ -43,7 +43,7 @@ namespace Mba.Simplifier.Utility
                 AstOp.Mul => op0() * op1(),
                 AstOp.And => op0() & op1(),
                 AstOp.Or => op0() | op1(),
-                AstOp.Xor => op0() | op1(),
+                AstOp.Xor => op0() ^ op1(),
                 AstOp.Neg => ~op0(),
                 AstOp.Lshr => op0() >> op1(),
                 AstOp.Constant => z3Ctx.MkBvValue(ctx.GetConstantValue(idx), ctx.GetWidth(idx)),

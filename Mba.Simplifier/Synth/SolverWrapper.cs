@@ -2,7 +2,9 @@
 using Mba.Simplifier.Bindings;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -196,6 +198,9 @@ namespace Mba.Simplifier.Synth
         public static Term operator !=(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_DISTINCT, a, b);
         public static Term operator >(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UGT, a, b);
         public static Term operator <(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_ULT, a, b);
+        public static Term operator >=(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UGE, a, b);
+        public static Term operator <=(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_ULE, a, b);
+
 
         // Integer/Long Overloads
         public static Term operator &(Term a, long b) => a & Lift(a, b);
@@ -238,6 +243,10 @@ namespace Mba.Simplifier.Synth
         public static Term operator >(ulong a, Term b) => Lift(b, a) > b;
         public static Term operator <(Term a, ulong b) => a < Lift(a, b);
         public static Term operator <(ulong a, Term b) => Lift(b, a) < b;
+        public static Term operator >=(Term a, ulong b) => a >= Lift(a, b);
+        public static Term operator >=(ulong a, Term b) => Lift(b, a) >= b;
+        public static Term operator <=(Term a, ulong b) => a <= Lift(a, b);
+        public static Term operator <=(ulong a, Term b) => Lift(b, a) <= b;
 
         // Bool Overloads
         public static Term operator &(Term a, bool b) => a & Lift(a, b);
@@ -538,6 +547,22 @@ namespace Mba.Simplifier.Synth
         public Term GetValue(Term term)
             => new Term(BitwuzlaNative.bitwuzla_get_value(native, term.native)) { Manager = tm };
 
+        public void Write()
+        {
+            var handle = NativeMethods.fopen("C:\\Users\\colton\\Downloads\\Bitwuzla\\your_problem.smt2", "w");
+            BitwuzlaNative.bitwuzla_print_formula(native, "smt2", new SWIGTYPE_p_FILE(handle, true), 10);
+
+            NativeMethods.fclose(handle);
+            
+            for(int i = 0; i < 13443; i++)
+            {
+                Console.WriteLine("asd");
+            }
+
+            Console.ReadLine();
+            Debugger.Break();
+        }
+
         public void PrintModel()
         {
            // BitwuzlaNative.print
@@ -546,6 +571,20 @@ namespace Mba.Simplifier.Synth
         public void Dispose()
         {
             BitwuzlaNative.bitwuzla_delete(native);
+        }
+
+        public static class NativeMethods
+        {
+            // Import the native C functions
+            [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl, SetLastError = true)]
+            public static extern IntPtr fopen(string filename, string mode);
+
+            [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl, SetLastError = true)]
+            public static extern int fclose(IntPtr stream);
+
+            // If needed, import the function from the external DLL that takes the FILE*
+            // [DllImport("YourNativeLibrary.dll", CallingConvention = CallingConvention.Cdecl)]
+            // public static extern void ProcessFile(IntPtr fileHandle);
         }
     }
 }
