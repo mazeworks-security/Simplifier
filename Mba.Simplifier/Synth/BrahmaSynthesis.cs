@@ -60,7 +60,7 @@ namespace Mba.Simplifier.Synth
 
         // Config:
         // 7 is optimal for 8-bit modular inverse
-        private readonly int numInstructions = 8;
+        private readonly int numInstructions = 13;
 
 
         private bool usesTruthOperator = false;
@@ -104,14 +104,14 @@ namespace Mba.Simplifier.Synth
             new(SynthOpc.Constant),
 
             //new(SynthOpc.Not),
-            new(SynthOpc.And),
-            //new(SynthOpc.Or),
+            //new(SynthOpc.And),
+            new(SynthOpc.Or),
             //new(SynthOpc.TruthTable)
 
             new(SynthOpc.Xor),
 
             new(SynthOpc.Add),
-            new(SynthOpc.Sub),
+            //new(SynthOpc.Sub),
             //new(SynthOpc.Mul),
 
             //new(SynthOpc.Lshr),
@@ -200,6 +200,9 @@ namespace Mba.Simplifier.Synth
             var s = ctx.MkSolver();
             var constraints = GetProgramConstraints(lines, shiftVariables);
 
+            // Print `constraints` to dimacs file in CNF
+
+
             // Optionally hardcode constants
             /*
             var c0 = constantVariables[0];
@@ -210,6 +213,8 @@ namespace Mba.Simplifier.Synth
 
             s.Add(constraints);
 
+
+            ExportSmtToFile(ctx, s, "C:\\Users\\colton\\Downloads\\Bitwuzla\\your_problem.smt2");
 
             CEGIS(s, symbols, before, after, lines);
 
@@ -1050,7 +1055,7 @@ namespace Mba.Simplifier.Synth
             else
             {
 
-                var inputCombinations = new ulong[1, 2]
+                var inputCombinations = new ulong[3, 2]
                 {
                     //{ 5555555555555555, ~0x5555555555555555ul },
                     /*
@@ -1143,7 +1148,9 @@ namespace Mba.Simplifier.Synth
                       { 70, 178 },
                     */
 
-                    { 12162971962868221805, 6283772110841329810  },
+                    { 404801, 16372414   },
+                    { 9989854, 6787361    },
+                     { 5631938, 5391020    },
                     //{ 12162971954278319982, 6283772119431231633  },
                     //{ 2939599917423341567, 0  },
                     //{ 12162971954278319982, 6283772119431231633 },
@@ -1156,8 +1163,8 @@ namespace Mba.Simplifier.Synth
 
                 // Evaluate the expression on 8 random IO points
                 // for (var _ = 0; _ < 1; _++)
-                for (var _ = 0; _ < inputCombinations.GetLength(0); _++)
-                //for (var _ = 0; _ < 1; _++)
+                //for (var _ = 0; _ < inputCombinations.GetLength(0); _++)
+                for (var _ = 0; _ < 1; _++)
                 {
 
 
@@ -1165,7 +1172,7 @@ namespace Mba.Simplifier.Synth
                         .Select(x => rng.GetRandUlong())
                         .ToArray();
 
-                    keys = new ulong[] { inputCombinations[_, 0] };
+                    //keys = new ulong[] { inputCombinations[_, 0], inputCombinations[_, 1] };
 
                     points.Add(new ResultVectorKey(keys));
 
@@ -1587,7 +1594,8 @@ namespace Mba.Simplifier.Synth
             genSolver.Add(forallX);
 
             var res = genSolver.Check();
-            if (res == Status.SATISFIABLE)
+            //if (res == Status.SATISFIABLE)
+            if (false)
             {
                 Console.WriteLine("Generlization found a solution!");
 

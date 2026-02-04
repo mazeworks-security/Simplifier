@@ -223,7 +223,7 @@ namespace Mba.Simplifier.Synth
                 exprs.Add(select);
             }
 
-            return null;
+            return exprs.Last();
         }
 
         private Term SelectOperand(SynthOperand operand, List<Term> prev)
