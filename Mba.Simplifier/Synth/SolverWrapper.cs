@@ -556,14 +556,7 @@ namespace Mba.Simplifier.Synth
             BitwuzlaNative.bitwuzla_print_formula(native, "smt2", new SWIGTYPE_p_FILE(handle, true), 10);
 
             NativeMethods.fclose(handle);
-            
-            for(int i = 0; i < 13443; i++)
-            {
-                Console.WriteLine("asd");
-            }
-
-            Console.ReadLine();
-            Debugger.Break();
+           
         }
 
         public void PrintModel()

@@ -475,14 +475,35 @@ namespace Mba.Simplifier.Synth
         {
             // Randomly evaluate the expression on N initial points and assert its equivalence
             var rng = new SeededRandom();
-            int NUMSAMPLES = 1;
-            for(int i = 0; i < NUMSAMPLES; i++)
+
+            var inputCombinations = new List<List<ulong>>()
             {
-                var values = Enumerable.Range(0, symbols.Length)
+                new() { 18446744073709551364, 248},
+                 new() { 18446744073709551421, 128},
+            };
+
+            int NUMSAMPLES = 1;
+
+
+
+            for(int i = 0; i < inputCombinations.Count; i++)
+            {
+                Term[] values = null;
+                if(inputCombinations == null)
+                {
+                    values = Enumerable.Range(0, symbols.Length)
                     .Select(x => ctx.MkBvValue(rng.GetRandUlong() & ModuloReducer.GetMask((uint)symbols[x].Sort.BvSize), symbols[x].Sort.BvSize))
                     .ToArray();
+                }
 
-                var constraint = GetBehavioralConstraint(skeleton, values);
+                else
+                {
+                    values = Enumerable.Range(0, symbols.Length)
+                   .Select(x => ctx.MkBvValue(inputCombinations[i][x] & ModuloReducer.GetMask((uint)symbols[x].Sort.BvSize), symbols[x].Sort.BvSize))
+                   .ToArray();
+                }
+
+                    var constraint = GetBehavioralConstraint(skeleton, values);
                 constraints.Add(constraint);
             }
 
@@ -525,6 +546,8 @@ namespace Mba.Simplifier.Synth
                 var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
 
                 // Yield the solution if its equivalent
+                options = new Options();
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
                 var temp = new BvSolver(ctx, options);
                 temp.Assert(~(groundTruth == cegisSolution));
                 var isEquiv = temp.CheckSat() == Result.Unsat;
@@ -534,7 +557,9 @@ namespace Mba.Simplifier.Synth
                     Debugger.Break();
                 }
 
+                Console.WriteLine("Beginning generalization...");
                 var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants);
+                Console.WriteLine("Finished generalization...");
                 Debug.Assert(generalizedSolution is null);
 
                 s.Assert(generalizedBan);
@@ -671,6 +696,8 @@ namespace Mba.Simplifier.Synth
 
 
             solver.Assert(forall);
+
+            solver.Write();
 
             var res = solver.CheckSat();
             if (res == Result.Sat)
@@ -843,7 +870,7 @@ namespace Mba.Simplifier.Synth
 
         public static void P5()
         {
-            var (ctx, idx) = Parse("(171^((a+23)^(b)))^((((a|1111)+b)^b))", 8);
+            var (ctx, idx) = Parse("(171^((a+23)^(b)))^((((a|1111)+b)^b))", 64);
 
             // Works with 7 components and 3 constants. 500ms
             //var (ctx, idx) = Parse("(((a+23)^(b)))^((((a|1111)+b)))", 8);
