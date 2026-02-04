@@ -348,6 +348,7 @@ inputText = "234344323434*(15795372935317283107 + x + (y & x ^ 95116008023937310
 
 inputText = "(171^((a+23)^(b)))^((((a|1111)+b)^b))";
 
+inputText = "(a|b|c|d)";
 
 //inputText = "(((x|1111)+y)^y)";
 
@@ -478,7 +479,7 @@ if(brahma)
 bool useNew = true;
 if (useNew)
 {
-    SynthTests.P0();
+    SynthTests.P1();
     Debugger.Break();
     //var synthesizer = new BvSynthesis(ctx, id);
     //synthesizer.Run();

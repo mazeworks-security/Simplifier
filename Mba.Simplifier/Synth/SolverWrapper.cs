@@ -1,4 +1,5 @@
 ﻿using Bitwuzla;
+using Mba.Simplifier.Bindings;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -155,12 +156,17 @@ namespace Mba.Simplifier.Synth
         public static implicit operator Term(BitwuzlaTerm native) => new Term(native);
 
         // Helper to lift C# primitives to Terms using the context of an existing term
-        private static Term Lift(Term context, long value) => context.Manager.MkBvValue(context.Sort, value);
+        private static Term Lift(Term context, long value) => context.Manager.MkBvValue(context.Sort, (ulong)value);
         private static Term Lift(Term context, ulong value) => context.Manager.MkBvValue(context.Sort, value);
         private static Term Lift(Term context, bool value) => value ? context.Manager.MkTrue() : context.Manager.MkFalse();
 
         // Operators
-        public static Term operator ~(Term t) => t.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_NOT, t);
+        public static Term operator ~(Term t)
+        {
+            if (t.Sort.IsBv)
+                return t.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_NOT, t);
+            return t.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_NOT, t);
+        }
 
         public static Term operator &(Term a, Term b)
         {
@@ -182,12 +188,14 @@ namespace Mba.Simplifier.Synth
         public static Term operator -(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_SUB, a, b);
         public static Term operator *(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_MUL, a, b);
         public static Term operator >>(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_SHR, a, b);
-        public static Term operator /(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UDIV, a, b); 
+        public static Term operator /(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UDIV, a, b);
         public static Term operator %(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UREM, a, b);
         public static Term operator -(Term t) => t.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_NEG, t);
 
         public static Term operator ==(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_EQUAL, a, b);
         public static Term operator !=(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_DISTINCT, a, b);
+        public static Term operator >(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UGT, a, b);
+        public static Term operator <(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_ULT, a, b);
 
         // Integer/Long Overloads
         public static Term operator &(Term a, long b) => a & Lift(a, b);
@@ -226,6 +234,10 @@ namespace Mba.Simplifier.Synth
         public static Term operator ==(ulong a, Term b) => Lift(b, a) == b;
         public static Term operator !=(Term a, ulong b) => a != Lift(a, b);
         public static Term operator !=(ulong a, Term b) => Lift(b, a) != b;
+        public static Term operator >(Term a, ulong b) => a > Lift(a, b);
+        public static Term operator >(ulong a, Term b) => Lift(b, a) > b;
+        public static Term operator <(Term a, ulong b) => a < Lift(a, b);
+        public static Term operator <(ulong a, Term b) => Lift(b, a) < b;
 
         // Bool Overloads
         public static Term operator &(Term a, bool b) => a & Lift(a, b);
@@ -249,6 +261,12 @@ namespace Mba.Simplifier.Synth
     /// </summary>
     public class TermManager : IDisposable
     {
+        private static readonly System.Reflection.ConstructorInfo bitwuzlaTermCtor = typeof(BitwuzlaTerm).GetConstructor(
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+            null,
+            new Type[] { typeof(IntPtr), typeof(bool) },
+            null);
+
         internal readonly BitwuzlaTermManager native;
 
         public TermManager()
@@ -291,8 +309,6 @@ namespace Mba.Simplifier.Synth
         public Term MkBvConst(string name, ulong width)
             => Wrap(MkConst(MkBvSort(width), name));
 
-
-
         public Term MkBvConst(string name, int width)
            => Wrap(MkConst(MkBvSort((ulong)width), name));
 
@@ -307,6 +323,21 @@ namespace Mba.Simplifier.Synth
             return MkTerm(BitwuzlaKind.BITWUZLA_KIND_ITE, children);
         }
 
+        public Term MkZext(uint by, Term child)
+        {
+            if (by > 64)
+                throw new InvalidOperationException("Probably overflowed");
+
+            return Wrap(BitwuzlaNative.bitwuzla_mk_term1_indexed1(this, BitwuzlaKind.BITWUZLA_KIND_BV_ZERO_EXTEND, child, by));
+        }
+
+
+        public Term MkImplies(params Term[] children)
+        {
+            return MkTerm(BitwuzlaKind.BITWUZLA_KIND_IMPLIES, children);
+        }
+
+
         public unsafe Term MkTerm(BitwuzlaKind kind, params Term[] children)
         {
             if (children == null || children.Length == 0)
@@ -319,14 +350,136 @@ namespace Mba.Simplifier.Synth
                 ptrs[i] = BitwuzlaTerm.getCPtr(children[i].native).Handle;
             }
 
-            //return Wrap(BitwuzlaNative.bitwuzla_mk_term2(native, kind, children[0], children[1]));
-
             return Wrap(BitwuzlaNative.bitwuzla_mk_term(native, kind, (uint)len, ptrs));
         }
 
         public unsafe Term MkTerm(BitwuzlaKind kind, IEnumerable<Term> children)
         {
             return MkTerm(kind, children.ToArray());
+        }
+
+        public ulong GetIntegerValue(Term term)
+        {
+            var s = BitwuzlaNative.bitwuzla_term_to_string_fmt(term, 10);
+
+            s = s.Replace("(", "").Replace(")", "");
+
+            var split = s.Split(" ", StringSplitOptions.RemoveEmptyEntries);
+            if (split.Length != 3 || split[0] != "_" || !split[1].StartsWith("bv"))
+                throw new InvalidOperationException();
+
+            var uStr = split[1].Substring(2);
+
+            return ulong.Parse(uStr);
+        }
+
+        public bool GetBoolValue(Term term)
+        {
+            var s = BitwuzlaNative.bitwuzla_term_to_string_fmt(term, 10);
+            return bool.Parse(s);
+        }
+
+        public unsafe void SubstituteTerms(Term[] terms, Term[] from, Term[] to)
+        {
+            if (terms == null || terms.Length == 0) return;
+            if (from == null || to == null) return;
+            if (from.Length != to.Length) throw new ArgumentException("Substitution map arrays must be of same length");
+
+            int termsLen = terms.Length;
+            int mapLen = from.Length;
+
+            if (mapLen == 0) return;
+
+            IntPtr[] termHandles = new IntPtr[termsLen];
+            IntPtr[] keyHandles = new IntPtr[mapLen];
+            IntPtr[] valHandles = new IntPtr[mapLen];
+
+            for (int i = 0; i < termsLen; i++)
+            {
+                termHandles[i] = BitwuzlaTerm.getCPtr(terms[i].native).Handle;
+            }
+
+            for (int i = 0; i < mapLen; i++)
+            {
+                keyHandles[i] = BitwuzlaTerm.getCPtr(from[i].native).Handle;
+                valHandles[i] = BitwuzlaTerm.getCPtr(to[i].native).Handle;
+            }
+
+            fixed (IntPtr* tPtr = termHandles)
+            fixed (IntPtr* kPtr = keyHandles)
+            fixed (IntPtr* vPtr = valHandles)
+            {
+                BitwuzlaNative.bitwuzla_substitute_terms((uint)termsLen, tPtr, (uint)mapLen, kPtr, vPtr);
+            }
+
+            for (int i = 0; i < termsLen; i++)
+            {
+                var newPtr = termHandles[i];
+                terms[i] = Wrap((BitwuzlaTerm)bitwuzlaTermCtor.Invoke(new object[] { newPtr, true }));
+            }
+        }
+
+        public unsafe Term SubstituteTerm(Term term, Term[] from, Term[] to)
+        {
+            if (from == null || to == null) return term;
+            if (from.Length != to.Length) throw new ArgumentException("Substitution map arrays must be of same length");
+
+            int mapSize = from.Length;
+            if (mapSize == 0) return term;
+
+            IntPtr[] keys = new IntPtr[mapSize];
+            IntPtr[] values = new IntPtr[mapSize];
+
+            for (int i = 0; i < mapSize; i++)
+            {
+                keys[i] = BitwuzlaTerm.getCPtr(from[i].native).Handle;
+                values[i] = BitwuzlaTerm.getCPtr(to[i].native).Handle;
+            }
+
+            fixed (IntPtr* k = keys)
+            fixed (IntPtr* v = values)
+            {
+                return Wrap(BitwuzlaNative.bitwuzla_substitute_term(term.native, (uint)mapSize, k, v));
+            }
+        }
+
+        public unsafe void SubstituteTerms(Term[] terms, Dictionary<Term, Term> map)
+        {
+            if (terms == null || terms.Length == 0) return;
+            if (map == null || map.Count == 0) return;
+
+            int termsLen = terms.Length;
+            int mapLen = map.Count;
+
+            IntPtr[] termHandles = new IntPtr[termsLen];
+            IntPtr[] keyHandles = new IntPtr[mapLen];
+            IntPtr[] valHandles = new IntPtr[mapLen];
+
+            for (int i = 0; i < termsLen; i++)
+            {
+                termHandles[i] = BitwuzlaTerm.getCPtr(terms[i].native).Handle;
+            }
+
+            int j = 0;
+            foreach (var kvp in map)
+            {
+                keyHandles[j] = BitwuzlaTerm.getCPtr(kvp.Key.native).Handle;
+                valHandles[j] = BitwuzlaTerm.getCPtr(kvp.Value.native).Handle;
+                j++;
+            }
+
+            fixed (IntPtr* tPtr = termHandles)
+            fixed (IntPtr* kPtr = keyHandles)
+            fixed (IntPtr* vPtr = valHandles)
+            {
+                BitwuzlaNative.bitwuzla_substitute_terms((uint)termsLen, tPtr, (uint)mapLen, kPtr, vPtr);
+            }
+
+            for (int i = 0; i < termsLen; i++)
+            {
+                var newPtr = termHandles[i];
+                terms[i] = Wrap((BitwuzlaTerm)bitwuzlaTermCtor.Invoke(new object[] { newPtr, true }));
+            }
         }
 
         private Term Wrap(BitwuzlaTerm t)
@@ -384,6 +537,11 @@ namespace Mba.Simplifier.Synth
 
         public Term GetValue(Term term)
             => new Term(BitwuzlaNative.bitwuzla_get_value(native, term.native)) { Manager = tm };
+
+        public void PrintModel()
+        {
+           // BitwuzlaNative.print
+        }
 
         public void Dispose()
         {
