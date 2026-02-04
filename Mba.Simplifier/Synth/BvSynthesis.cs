@@ -475,7 +475,7 @@ namespace Mba.Simplifier.Synth
         {
             // Randomly evaluate the expression on N initial points and assert its equivalence
             var rng = new SeededRandom();
-            int NUMSAMPLES = 4;
+            int NUMSAMPLES = 1;
             for(int i = 0; i < NUMSAMPLES; i++)
             {
                 var values = Enumerable.Range(0, symbols.Length)
@@ -843,10 +843,10 @@ namespace Mba.Simplifier.Synth
 
         public static void P5()
         {
-            //var (ctx, idx) = Parse("(171^((a+23)^(b)))^((((a|1111)+b)^b))", 8);
+            var (ctx, idx) = Parse("(171^((a+23)^(b)))^((((a|1111)+b)^b))", 8);
 
             // Works with 7 components and 3 constants. 500ms
-            var (ctx, idx) = Parse("(((a+23)^(b)))^((((a|1111)+b)))", 8);
+            //var (ctx, idx) = Parse("(((a+23)^(b)))^((((a|1111)+b)))", 8);
 
             //var (ctx, idx) = Parse("(((a+23423434)^(b)))^((((a|432324234)+b)))^343433", 8);
 
@@ -857,7 +857,7 @@ namespace Mba.Simplifier.Synth
 
             };
 
-            var config = new SynthConfig(components, 7, 3);
+            var config = new SynthConfig(components, 9, 3);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
