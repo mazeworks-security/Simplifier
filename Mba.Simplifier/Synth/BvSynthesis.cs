@@ -379,7 +379,6 @@ namespace Mba.Simplifier.Synth
 
         private void AddAcyclicConstraints(List<Term> constraints)
         {
-
             // Constrain each operand to be less than `i-1`
             for (int i = FirstInstIdx; i < lines.Count; i++)
             {
@@ -398,12 +397,50 @@ namespace Mba.Simplifier.Synth
                     constraints.Add(constConstraint);
                 }
             }
+            
         }
 
         // Assert that the first constant must be used before the second constant.
         private void AddSymmetricConstantsConstraint(List<Term> constraints)
         {
             return;
+            var first = lines[FirstInstIdx].Operands[0];
+            constraints.Add(ctx.MkImplies(first.IsConstant, first.Index == 0));
+
+            var operands = lines.Skip(FirstInstIdx).SelectMany(x => x.Operands).ToList();
+            for(int i = 1; i < operands.Count; i++)
+            {
+                var isCurrConstant = operands[i].IsConstant;
+                var idxCurr = operands[i].Index;
+
+                var limit = Math.Min(i, constants.Count - 1);
+
+                for(int v = 1; v < limit+1; v++)
+                {
+                    var usingVal = isCurrConstant & (idxCurr == v);
+
+                    var prevUsage = new List<Term>();
+                    for(int j = 0; j < i; j++)
+                    {
+                        var isPrevConstant = operands[j].IsConstant;
+                        var idxPrev = operands[j].Index;
+
+                        var match = isPrevConstant & (idxPrev == (v - 1));
+                        prevUsage.Add(match);
+                    }
+
+                    constraints.Add(Implies(usingVal, Or(prevUsage)));
+                }
+            }
+
+            //var isUsed = Enumerable.Range(0, constants.Count).Select(x => ctx.False()); 
+            //for (int i = FirstInstIdx; i < lines.Count; i++)
+            //{
+
+            //}
+
+            // This encoding is not good
+            /*
             var size = (uint)BvWidth(constants.Count + 1); // works
             //var size = (uint)BvWidth(constants.Count);
 
@@ -439,13 +476,15 @@ namespace Mba.Simplifier.Synth
                     // Even if we just stop here with `maxConstant` set to something small.. why does this somehow makes solving faster??
                     constraints.Add(Implies(operand.IsConstant, opIdx <= maxConstant));
 
+
                     constConds.Add(operand.IsConstant & opIdx == maxConstant);
                 }
 
                 // 
-                maxConstant = ctx.MkIte(Or(constConds), maxConstant + 1, maxConstant);
+                //maxConstant = ctx.MkIte(Or(constConds), maxConstant + 1, maxConstant);
 
             }
+            */
         }
 
         private void AddPruningConstraints(List<Term> constraints)
@@ -1311,9 +1350,9 @@ namespace Mba.Simplifier.Synth
         public static void Pminv()
         {
             // 6 lines
-            //var (ctx, idx) = Parse("((x ^ 60) * ((82 - (x * (x ^ 60)))))", 8);
+            var (ctx, idx) = Parse("((x ^ 60) * ((82 - (x * (x ^ 60)))))", 8);
 
-            var (ctx, idx) = Parse("(((3*a)^2)*(1 + (1 - a*((3*a)^2))))*(1 + (1 - a*((3*a)^2))*(1 - a*((3*a)^2)))", 8);
+            //var (ctx, idx) = Parse("(((3*a)^2)*(1 + (1 - a*((3*a)^2))))*(1 + (1 - a*((3*a)^2))*(1 - a*((3*a)^2)))", 8);
 
 
             //var (ctx, idx) = Parse("(x^y)", 8);
@@ -1335,8 +1374,8 @@ namespace Mba.Simplifier.Synth
             };
 
             // works for 8-bit with {SUB, ADD, MUL, AND, XOR}
-            //var config = new SynthConfig(components, 5, 2);
-            var config = new SynthConfig(components, 10, 3);
+            var config = new SynthConfig(components, 5, 2);
+            //var config = new SynthConfig(components, 10, 3);
 
             //var config = new SynthConfig(components, 11, 4);
             var synth = new BvSynthesis(config, ctx, idx);
@@ -1417,6 +1456,8 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
                 new(SynthOpc.And, SynthOpc.Xor),
                 new(SynthOpc.Add),
+
+                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
                // new(SynthOpc.Add, SynthOpc.Sub),
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
