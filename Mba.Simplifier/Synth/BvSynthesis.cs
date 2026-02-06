@@ -762,7 +762,7 @@ namespace Mba.Simplifier.Synth
                 curr.Stop();
                 if (check == Result.Unsat)
                 {
-                    Console.WriteLine($"No solution. Took {totalTime.ElapsedMilliseconds}");
+                    Console.WriteLine($"No solution.  Took {totalTime.ElapsedMilliseconds}");
                     Debugger.Break();
                     return;
                 }
