@@ -429,7 +429,7 @@ namespace Mba.Simplifier.Synth
                 // Both operands should not be constant.
                 constraints.Add(~And(line.Operands.Select(x => x.IsConstant)));
 
-                bool dce = false;
+                bool dce = true;
 
                 if (dce && i != lines.Count - 1)
                 {
@@ -446,7 +446,14 @@ namespace Mba.Simplifier.Synth
                     constraints.Add(Or(usageConditions));
                 }
 
-                continue;
+
+                bool limitSize = true;
+                if(limitSize)
+                {
+                    constraints.Add(line.ComponentOpcode <= (uint)(Opcodes.Count - 1));
+                }
+
+                //continue;
 
                 //var isMul = line.ComponentOpcode == components.Single().Opcodes.IndexOf(SynthOpc.Mul);
                 //sum += ctx.MkIte(isMul, ctx.MkBvValue(1, 4), ctx.MkBvValue(0, 4));
@@ -478,10 +485,9 @@ namespace Mba.Simplifier.Synth
                 }
                 */
 
-
                 foreach (var component in components)
                 {
-                    var isComponent = IsComponent(line, component);
+                    //var isComponent = IsComponent(line, component);
                     /*
                      * if (component.Opcodes.Length == 4)
                         continue;
@@ -490,8 +496,8 @@ namespace Mba.Simplifier.Synth
                     */
 
                     // Both of these ideas actually degrade performance
-                    var implies = Implies(isComponent, line.ComponentOpcode <= (uint)(component.Opcodes.Length - 1));
-                    constraints.Add(implies);
+                    //var implies = Implies(isComponent, line.ComponentOpcode <= (uint)(component.Opcodes.Length - 1));
+                    //constraints.Add(implies);
 
                     //var implies = Implies(isComponent, ctx.MkZext(1, line.ComponentOpcode) < (uint)component.Opcodes.Length);
                     //constraints.Add(implies);
@@ -527,11 +533,26 @@ namespace Mba.Simplifier.Synth
                         constraints.Add(Implies(isUnary, line.Operands[1].IsConstant == false));
                         */
 
+
+                        var matches = line.ComponentOpcode == opcodeIndex;
+
+                        bool optCommutative = true;
+                        
+                        if (optCommutative && opc.IsCommutative())
+                        {
+                            constraints.Add(Implies(matches, line.Operands[0].Index < line.Operands[1].Index));
+                        }
+
                         if (!opc.IsIdempotent())
                             continue;
 
-                        var isIdempotent = line.ComponentOpcode == opcodeIndex;
-                        constraints.Add(Implies(isIdempotent, line.Operands[0].Index != line.Operands[1].Index));
+                        bool idempotencyOpt = true;
+                        if (idempotencyOpt)
+                        {
+
+                            var isIdempotent = matches;
+                            constraints.Add(Implies(isIdempotent, line.Operands[0].Index != line.Operands[1].Index));
+                        }
                     }
 
                 }
