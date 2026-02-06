@@ -370,6 +370,7 @@ namespace Mba.Simplifier.Synth
             var constraints = new List<Term>();
             AddAcyclicConstraints(constraints);
             AddPruningConstraints(constraints);
+            AddSymmetricConstantsConstraint(constraints);
             AddLimitConstraints(constraints);
 
             return constraints;
@@ -388,10 +389,52 @@ namespace Mba.Simplifier.Synth
                 {
                     var ult = operand.Index <= (uint)(i - 1);
                     var opConstraint = Implies(~operand.IsConstant, ult);
+                    // TODO: Being a constant should also imply that the chosen constant is less than the current line index?
+                    // There's at least something weird with the constant symmetry constraints improving this case even when only partially enabled
                     var constConstraint = Implies(operand.IsConstant, operand.Index <= (uint)Math.Max((config.MaxConstants - 1), 0));
 
                     constraints.Add(opConstraint);
                     constraints.Add(constConstraint);
+                }
+            }
+        }
+
+        // Assert that the first constant must be used before the second constant.
+        private void AddSymmetricConstantsConstraint(List<Term> constraints)
+        {
+
+            var size = (uint)BvWidth(constants.Count + 1);
+            var maxConstant = ctx.MkBvValue(constants.Count, size);
+
+            //var maxOperandSize = BvWidth(Math.Max(config.NumInstructions - 2, config.MaxConstants - 1));
+
+            for (int i = FirstInstIdx; i < lines.Count; i++)
+            {
+                var line = lines[i];
+                //var size0 = maxConstant.Sort.BvSize;
+               // var size1 = lines[i].Operands[0].Index.Sort.BvSize;
+
+                //if (size0 < size1)
+                //    maxConstant = ctx.MkZext((uint)size1 - (uint)size0, maxConstant);
+
+                foreach (var operand in line.Operands)
+                {
+                    var opIdx = operand.Index;
+                    var size0 = operand.Index.Sort.BvSize;
+                    var size1 = maxConstant.Sort.BvSize;
+
+                    if (size0 < size1)
+                        opIdx = ctx.MkZext((uint)size1 - (uint)size0, opIdx);
+                    else if (size0 > size1)
+                        maxConstant = ctx.MkZext((uint)size0 - (uint)size1, maxConstant);
+
+
+                    // Even if we just stop here with `maxConstant` set to something small.. why does this somehow makes solving faster??
+                    constraints.Add(Implies(operand.IsConstant, opIdx <= maxConstant));
+
+
+                    maxConstant = ctx.MkIte(operand.IsConstant & opIdx == maxConstant, maxConstant + 1, maxConstant);
+                    
                 }
             }
         }
@@ -422,6 +465,7 @@ namespace Mba.Simplifier.Synth
             */
 
 
+
             // Constrain each opcode to be less than its maximum
             for (int i = FirstInstIdx; i < lines.Count; i++)
             {
@@ -447,12 +491,21 @@ namespace Mba.Simplifier.Synth
                     constraints.Add(Or(usageConditions));
                 }
 
-
-                bool limitSize = true;
-                if(limitSize)
+                bool limitOpcodeIndex = true;
+                if(limitOpcodeIndex)
                 {
                     constraints.Add(line.ComponentOpcode <= (uint)(Opcodes.Count - 1));
                 }
+
+                bool limitConstantIndex = true;
+                if (limitConstantIndex && constants.Count > 0)
+                {
+                    foreach (var operand in line.Operands)
+                    {
+                        constraints.Add(Implies(operand.IsConstant, operand.Index <= (uint)(constants.Count - 1)));
+                    }
+                }
+
 
                 //continue;
 
@@ -486,6 +539,9 @@ namespace Mba.Simplifier.Synth
                 }
                 */
 
+
+
+
                 foreach (var component in components)
                 {
                     //var isComponent = IsComponent(line, component);
@@ -512,10 +568,14 @@ namespace Mba.Simplifier.Synth
 
 
                         bool pruneRhs = true;
-                        if (pruneRhs && opc == SynthOpc.Not)
+                        if (pruneRhs && opc.GetOperandCount() == 1)
                         {
                             constraints.Add(Implies(matches, line.Operands[1].Index == 0));
 
+                            // this does seem to speed things up
+                            //constraints.Add(Implies(matches, line.Operands[1].IsConstant == false));
+
+                            //constraints.Add(Implies(matches, line.Operands[0].Index == line.Operands[1].Index));
                         }
 
                         /*
@@ -1355,6 +1415,46 @@ namespace Mba.Simplifier.Synth
 
             synth.Run();
         }
+
+        public static void Ptest()
+        {
+            /*
+            var (ctx, idx) = Parse("2222 + (x&1111)", 8);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                new(SynthOpc.And),
+                new(SynthOpc.Add),
+               // new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 3, 2);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+            */
+
+            var (ctx, idx) = Parse("15795372935317283107 + parameter0 + -(34359717887 & parameter0 ^ 9511600802393731071)", 64);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                new(SynthOpc.And, SynthOpc.Xor),
+                new(SynthOpc.Add),
+               // new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 8, 3);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+
+        }
+
+
 
 
 
