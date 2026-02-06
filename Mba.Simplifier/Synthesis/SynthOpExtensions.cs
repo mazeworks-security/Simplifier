@@ -24,7 +24,7 @@ namespace Mba.Simplifier.Synthesis
         {
             return opc switch
             {
-                SynthOpc.And or SynthOpc.Xor or SynthOpc.Or => true,
+                SynthOpc.And or SynthOpc.Xor or SynthOpc.Or or SynthOpc.Sub => true,
                 _ => false,
             };
         }
@@ -35,7 +35,7 @@ namespace Mba.Simplifier.Synthesis
             {
                 SynthOpc.And or SynthOpc.Or or SynthOpc.Xor or SynthOpc.Add or SynthOpc.Sub or SynthOpc.Mul => 2,
                 SynthOpc.Not => 1,
-                SynthOpc.Lshr => 1, // TODO: In the future this may have two operands.
+                SynthOpc.Lshr => 2, 
                 SynthOpc.TruthTable => 2,
                 SynthOpc.Constant => 0,
             };
