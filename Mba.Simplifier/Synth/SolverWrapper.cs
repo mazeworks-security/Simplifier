@@ -343,6 +343,11 @@ namespace Mba.Simplifier.Synth
             return Wrap(BitwuzlaNative.bitwuzla_mk_term1_indexed1(this, BitwuzlaKind.BITWUZLA_KIND_BV_ZERO_EXTEND, child, by));
         }
 
+        public Term MkExtract(uint high, uint low, Term child)
+        {
+            return Wrap(BitwuzlaNative.bitwuzla_mk_term1_indexed2(this, BitwuzlaKind.BITWUZLA_KIND_BV_EXTRACT, child, high, low));
+        }
+
 
         public Term MkImplies(params Term[] children)
         {
@@ -556,12 +561,12 @@ namespace Mba.Simplifier.Synth
             BitwuzlaNative.bitwuzla_print_formula(native, "smt2", new SWIGTYPE_p_FILE(handle, true), 10);
 
             NativeMethods.fclose(handle);
-           
+
         }
 
         public void PrintModel()
         {
-           // BitwuzlaNative.print
+            // BitwuzlaNative.print
         }
 
         public void Dispose()

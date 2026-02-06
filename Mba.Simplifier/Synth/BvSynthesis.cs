@@ -20,10 +20,10 @@ namespace Mba.Simplifier.Synth
     // Synthesis configuration
     public record SynthConfig(
         // List of all synthesis components and their metadata
-        IReadOnlyList<SynthComponent> Components, 
+        IReadOnlyList<SynthComponent> Components,
 
         // Exact number of instructions
-        int NumInstructions, 
+        int NumInstructions,
 
         // Maximum number of allowed constants
         int MaxConstants
@@ -173,7 +173,7 @@ namespace Mba.Simplifier.Synth
 
             // Each variable gets a dedicated line
             for (int i = 0; i < symbols.Length; i++)
-                lines.Add(new() { IsSymbol = true});
+                lines.Add(new() { IsSymbol = true });
 
             var maxOperandSize = BvWidth(Math.Max(config.NumInstructions - 2, config.MaxConstants - 1));
 
@@ -195,7 +195,7 @@ namespace Mba.Simplifier.Synth
 
                     var operand = new SynthOperand(isConstant, operandIndex);
 
-                    
+
 
                     line.Operands[i] = operand;
                 }
@@ -209,7 +209,7 @@ namespace Mba.Simplifier.Synth
         private Term GetSkeleton()
         {
             var exprs = new List<Term>();
-            for(int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+            for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
             {
                 // The first N lines are symbols
                 var line = lines[lineIndex];
@@ -224,7 +224,7 @@ namespace Mba.Simplifier.Synth
 
                 // Need to get the opcode choices first.
                 var componentChoices = new List<Term>();
-                foreach(var component in components)
+                foreach (var component in components)
                 {
                     List<Term> terms = new();
 
@@ -316,9 +316,9 @@ namespace Mba.Simplifier.Synth
             if (n == 1)
                 return options[0];
 
-            // TODO: If n > 12, use the `PrunedTree` algorithm from your old version
-            //if (n > 12)
-            //    Debugger.Break();
+            //if (false)
+            if (n > 12)
+                return PrunedTree(index, options, 0, n);
 
             var result = options[n - 1];
 
@@ -330,6 +330,50 @@ namespace Mba.Simplifier.Synth
 
             return result;
         }
+
+        private Term PrunedTree(Term index, List<Term> options, int offset, int count)
+        {
+            if (count == 1) return options[offset];
+
+            int requiredBits = (int)Math.Ceiling(Math.Log2(count));
+            int msbIndex = requiredBits - 1;
+            int splitSize = 1 << msbIndex;
+            int rightCount = count - splitSize;
+
+            var condBit = ctx.MkExtract((uint)msbIndex, (uint)msbIndex, index);
+            var condition = condBit == ctx.MkBvValue(1, 1);
+
+            // Visit next branch of the tree
+            var lowResult = PrunedTree(index, options, offset, splitSize);
+            var highResult = PrunedTree(index, options, offset + splitSize, rightCount);
+
+            return ctx.MkIte(condition, highResult, lowResult);
+        }
+
+        private Term AndOrSelect(Term index, List<Term> options)
+        {
+            var n = options.Count;
+
+            if (n == 0)
+                throw new InvalidOperationException();
+            if (n == 1)
+                return options[0];
+
+            var terms = new List<Term>();
+            var zero = ctx.MkBvZero(options[0].Sort);
+
+            for (int i = 0; i < n; i++)
+            {
+                var idxVal = ctx.MkBvValue(i, index.Sort.BvSize);
+                var eq = index == idxVal;
+                var masked = ctx.MkIte(eq, options[i], zero);
+                terms.Add(masked);
+            }
+
+            return Or(terms);
+        }
+
+
 
         private List<Term> GetProgramConstraints()
         {
@@ -343,11 +387,14 @@ namespace Mba.Simplifier.Synth
 
         private void AddAcyclicConstraints(List<Term> constraints)
         {
+
             // Constrain each operand to be less than `i-1`
-            for(int i = FirstInstIdx; i < lines.Count; i++)
+            for (int i = FirstInstIdx; i < lines.Count; i++)
             {
                 var line = lines[i];
-                foreach(var operand in line.Operands)
+
+
+                foreach (var operand in line.Operands)
                 {
                     var ult = operand.Index <= (uint)(i - 1);
                     var opConstraint = Implies(~operand.IsConstant, ult);
@@ -361,22 +408,53 @@ namespace Mba.Simplifier.Synth
 
         private void AddPruningConstraints(List<Term> constraints)
         {
+            var sum = ctx.MkBvValue(0, 4);
+
             // Sort constants
-            for(int i = 1; i < constants.Count; i++)
+            for (int i = 1; i < constants.Count; i++)
             {
                 //constraints.Add(constants[i] > constants[i - 1]);
             }
+
+            /*
+            List<Term> isUsed = Enumerable.Range(0, lines.Count - FirstInstIdx).Select(x => ctx.MkBoolConst($"used_{x}")).ToList();
+            for(int k = lines.Count - 1; k >= FirstInstIdx; k--)
+            {
+                var usageConditions = new List<Term>();
+            }
+            */
+
 
             // Constrain each opcode to be less than its maximum
             for (int i = FirstInstIdx; i < lines.Count; i++)
             {
                 var line = lines[i];
 
-
                 // Both operands should not be constant.
                 constraints.Add(~And(line.Operands.Select(x => x.IsConstant)));
 
-                
+                bool dce = false;
+
+                if (dce && i != lines.Count - 1)
+                {
+                    var usageConditions = new List<Term>();
+                    for (int j = i + 1; j < lines.Count; j++)
+                    {
+                        var operands = lines[j].Operands;
+                        var used0 = ~operands[0].IsConstant & (operands[0].Index == i);
+                        var used1 = ~operands[1].IsConstant & (operands[1].Index == i);
+                        usageConditions.Add(used0);
+                        usageConditions.Add(used1);
+                    }
+
+                    constraints.Add(Or(usageConditions));
+                }
+
+                continue;
+
+                //var isMul = line.ComponentOpcode == components.Single().Opcodes.IndexOf(SynthOpc.Mul);
+                //sum += ctx.MkIte(isMul, ctx.MkBvValue(1, 4), ctx.MkBvValue(0, 4));
+
                 /*
                 continue;
 
@@ -405,27 +483,27 @@ namespace Mba.Simplifier.Synth
                 */
 
 
-                    foreach (var component in components)
+                foreach (var component in components)
+                {
+                    var isComponent = IsComponent(line, component);
+                    /*
+                     * if (component.Opcodes.Length == 4)
+                        continue;
+                    var implies = Implies(isComponent, line.ComponentOpcode <= (uint)(component.Opcodes.Length - 1));
+                    constraints.Add(implies);
+                    */
+
+                    // Both of these ideas actually degrade performance
+                    var implies = Implies(isComponent, line.ComponentOpcode <= (uint)(component.Opcodes.Length - 1));
+                    constraints.Add(implies);
+
+                    //var implies = Implies(isComponent, ctx.MkZext(1, line.ComponentOpcode) < (uint)component.Opcodes.Length);
+                    //constraints.Add(implies);
+
+
+                    for (int opcodeIndex = 0; opcodeIndex < component.Opcodes.Length; opcodeIndex++)
                     {
-                        var isComponent = IsComponent(line, component);
-                        /*
-                         * if (component.Opcodes.Length == 4)
-                            continue;
-                        var implies = Implies(isComponent, line.ComponentOpcode <= (uint)(component.Opcodes.Length - 1));
-                        constraints.Add(implies);
-                        */
-
-                        // Both of these ideas actually degrade performance
-                        //var implies = Implies(isComponent, line.ComponentOpcode <= (uint)(component.Opcodes.Length - 1));
-                        //constraints.Add(implies);
-
-                        //var implies = Implies(isComponent, ctx.MkZext(1, line.ComponentOpcode) < (uint)component.Opcodes.Length);
-                        //constraints.Add(implies);
-
-
-                        for (int opcodeIndex = 0; opcodeIndex < component.Opcodes.Length; opcodeIndex++)
-                        {
-                            var opc = component.Opcodes[opcodeIndex];
+                        var opc = component.Opcodes[opcodeIndex];
 
 
                         /*
@@ -456,12 +534,15 @@ namespace Mba.Simplifier.Synth
                         if (!opc.IsIdempotent())
                             continue;
 
-                        //var isIdempotent = line.ComponentOpcode == opcodeIndex;
-                        //constraints.Add(Implies(isIdempotent, line.Operands[0].Index != line.Operands[1].Index));
+                        var isIdempotent = line.ComponentOpcode == opcodeIndex;
+                        constraints.Add(Implies(isIdempotent, line.Operands[0].Index != line.Operands[1].Index));
                     }
 
-                    }
+                }
             }
+
+            // Constrain the number of multipliers
+            //constraints.Add(sum <= 5);
         }
 
         private Term IsComponent(SynthLine line, SynthComponent component)
@@ -478,18 +559,32 @@ namespace Mba.Simplifier.Synth
 
             var inputCombinations = new List<List<ulong>>()
             {
-                new() { 18446744073709551364, 248},
-                 new() { 18446744073709551421, 128},
+               // new() { 18446744073709551364, 248},
+              //   new() { 18446744073709551421, 128},
+              new() {0, },
+              new() { 1, },
+              new() { ulong.MaxValue},
+              new() { 2147483648},
+              new() { 2147483647},
+              new() { rng.GetRandUlong() }
             };
+
+            for(ushort i = 1; i < 30; i++)
+            {
+                inputCombinations.Add(new() { 1ul << i});
+            }
+
+            //inputCombinations = null;
 
             int NUMSAMPLES = 1;
 
 
+            bool minv = false;
 
-            for(int i = 0; i < inputCombinations.Count; i++)
+            for (int i = 0; i < inputCombinations.Count; i++)
             {
                 Term[] values = null;
-                if(inputCombinations == null)
+                if (inputCombinations == null)
                 {
                     values = Enumerable.Range(0, symbols.Length)
                     .Select(x => ctx.MkBvValue(rng.GetRandUlong() & ModuloReducer.GetMask((uint)symbols[x].Sort.BvSize), symbols[x].Sort.BvSize))
@@ -503,31 +598,46 @@ namespace Mba.Simplifier.Synth
                    .ToArray();
                 }
 
-                    var constraint = GetBehavioralConstraint(skeleton, values);
+                if (minv)
+                {
+                    values[0] |= 1;
+                    if ((i % 2) == 0)
+                        values[0] = ctx.MkBvValue(ModuloReducer.GetMask((uint)i), symbols[0].Sort.BvSize);
+                    else
+                        values[0] = ctx.MkBvValue(ModuloReducer.GetMask(12 - (uint)i), symbols[0].Sort.BvSize);
+                }
+
+
+
+
+                var constraint = GetBehavioralConstraint(skeleton, values);
                 constraints.Add(constraint);
             }
 
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
+            //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
             //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION, true);
             //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_BV_SIZE, 16);
             //options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
 
             var s = new BvSolver(ctx, options);
 
-      
+
+            if (minv)
+                constraints.Add((symbols[0] & 1) == 1);
+
+
 
             foreach (var c in constraints)
                 s.Assert(c);
 
-            //s.Write();
-            //Debugger.Break();
-
 
             var totalTime = Stopwatch.StartNew();
-            while(true)
+            while (true)
             {
                 var curr = Stopwatch.StartNew();
+                s.Write();
                 var check = s.CheckSat();
                 curr.Stop();
                 if (check == Result.Unsat)
@@ -539,7 +649,7 @@ namespace Mba.Simplifier.Synth
 
                 else
                 {
-                    Console.WriteLine($"Found solution. Took {totalTime.ElapsedMilliseconds}ms");
+                    Console.WriteLine($"Found solution. Took {curr.ElapsedMilliseconds}ms");
                 }
 
                 // Ask the solver for a fitting solution
@@ -549,22 +659,36 @@ namespace Mba.Simplifier.Synth
                 options = new Options();
                 options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
                 var temp = new BvSolver(ctx, options);
+
+                if (minv)
+                    temp.Assert((symbols[0] & 1) == 1);
+
                 temp.Assert(~(groundTruth == cegisSolution));
                 var isEquiv = temp.CheckSat() == Result.Unsat;
-                if(isEquiv)
+                if (isEquiv)
                 {
-                    Console.WriteLine("Solved");
+                    Console.WriteLine($"Solved in total time {totalTime.ElapsedMilliseconds}ms");
                     Debugger.Break();
                 }
 
-                Console.WriteLine("Beginning generalization...");
-                var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants);
-                Console.WriteLine("Finished generalization...");
-                Debug.Assert(generalizedSolution is null);
-
-                s.Assert(generalizedBan);
+                bool generalize = false;
+                if (generalize)
+                {
+                    Console.WriteLine("Beginning generalization...");
+                    var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants);
+                    Console.WriteLine("Finished generalization...");
+                    Debug.Assert(generalizedSolution is null);
+                    s.Assert(generalizedBan);
+                    constraints.Add(generalizedBan);
+                }
                 var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
                 s.Assert(GetBehavioralConstraint(skeleton, vs));
+                constraints.Add(GetBehavioralConstraint(skeleton, vs));
+
+                // Reset to disable incremental solving
+                //s = new BvSolver(ctx, options);
+                //foreach (var c in constraints)
+                //    s.Assert(c);
 
                 //Console.WriteLine($"Equiv: {temp.CheckSat()}");
                 //foreach(var symbol in symbols)
@@ -590,7 +714,7 @@ namespace Mba.Simplifier.Synth
             // Compute the list of constant terms
             List<Term> cegisConstants = new();
             List<AstIdx> ourConstants = new();
-            for(int i = 0; i < config.MaxConstants; i++)
+            for (int i = 0; i < config.MaxConstants; i++)
             {
                 var eval = s.GetValue(constants[i]);
 
@@ -600,7 +724,7 @@ namespace Mba.Simplifier.Synth
                 cegisConstants.Add(eval);
             }
 
-            foreach(var line in lines)
+            foreach (var line in lines)
             {
                 if (line.IsSymbol)
                     continue;
@@ -630,7 +754,7 @@ namespace Mba.Simplifier.Synth
 
                 var cegisOperands = new List<Term>();
                 var ourOperands = new List<AstIdx>();
-                foreach(var operand in line.Operands)
+                foreach (var operand in line.Operands)
                 {
                     var isConstant = ctx.GetBoolValue(s.GetValue(operand.IsConstant));
                     var operandIndex = (int)ctx.GetIntegerValue(s.GetValue(operand.Index));
@@ -660,7 +784,7 @@ namespace Mba.Simplifier.Synth
                     _ => throw new NotImplementedException(),
                 };
                 ourNodes.Add(ourNode);
-                
+
 
                 Term cegisNode = ApplyOperator(opc, cegisOperands);
                 cegisNodes.Add(cegisNode);
@@ -679,11 +803,11 @@ namespace Mba.Simplifier.Synth
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
             var solver = new BvSolver(ctx, options);
- 
+
 
             // Instantiate new quantifier variables.
             var quantVars = new List<Term>();
-            for(int i = 0; i < symbols.Length; i++)
+            for (int i = 0; i < symbols.Length; i++)
             {
                 var v = ctx.MkVar(symbols[i].Sort, mbaCtx.GetSymbolName(mbaVariables[i]));
                 solver.Assert(symbols[i] == v);
@@ -705,22 +829,22 @@ namespace Mba.Simplifier.Synth
 
             // Otherwise this solution is impossible.
             List<Term> structureVars = new();
-            foreach(var line in lines)
+            foreach (var line in lines)
             {
                 if (line.IsSymbol)
                     continue;
 
                 structureVars.Add(line.ComponentIndex);
                 structureVars.Add(line.ComponentOpcode);
-                foreach(var operand in line.Operands)
+                foreach (var operand in line.Operands)
                 {
                     structureVars.Add(operand.Index);
                     structureVars.Add(operand.IsConstant);
                 }
             }
 
-            List<Term> structureConstraints = new(); 
-            foreach(var svar in structureVars)
+            List<Term> structureConstraints = new();
+            foreach (var svar in structureVars)
             {
                 var eval = oldModel.GetValue(svar);
                 if (eval.Kind != BitwuzlaKind.BITWUZLA_KIND_VALUE)
@@ -744,7 +868,7 @@ namespace Mba.Simplifier.Synth
             => ctx.MkImplies(a, b);
 
         private Term Or(IEnumerable<Term> terms)
-            => MkBw(BitwuzlaKind.BITWUZLA_KIND_BV_OR, terms);
+            => MkBw(BitwuzlaKind.BITWUZLA_KIND_OR, terms);
 
         private Term And(IEnumerable<Term> terms)
             => MkBw(BitwuzlaKind.BITWUZLA_KIND_AND, terms);
@@ -922,7 +1046,7 @@ namespace Mba.Simplifier.Synth
 
         public static void P15()
         {
-            var (ctx, idx) = Parse("((x | (x^y)) - (((x^y)) >> 1))", 8);
+            //var (ctx, idx) = Parse("((x | (x^y)) - (((x^y)) >> 1))", 64);
 
 
             //var (ctx, idx) = Parse("(x^y)", 8);
@@ -931,18 +1055,21 @@ namespace Mba.Simplifier.Synth
 
             //var (ctx, idx) = Parse("(((x^y)) & z)", 8);
 
+            var (ctx, idx) = Parse("(x|y) - ((x^y) >> 1)", 64);
+
             var components = new List<SynthComponent>()
             {
                 //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
                 //new(SynthOpc.Add, SynthOpc.Sub),
 
                 //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Add),
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Sub),
+                new(SynthOpc.Or, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Sub),
                 //new(SynthOpc.And, SynthOpc.Xor),
 
             };
 
-            var config = new SynthConfig(components, 8, 1);
+            var config = new SynthConfig(components, 6, 1);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
@@ -973,6 +1100,78 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 9, 4);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+        // Modular oiinverse
+        public static void Pminv()
+        {
+            // 6 lines
+            //var (ctx, idx) = Parse("((x ^ 60) * ((82 - (x * (x ^ 60)))))", 8);
+
+            var (ctx, idx) = Parse("(((3*a)^2)*(1 + (1 - a*((3*a)^2))))*(1 + (1 - a*((3*a)^2))*(1 - a*((3*a)^2)))", 11);
+
+
+            //var (ctx, idx) = Parse("(x^y)", 8);
+
+            //var (ctx, idx) = Parse("(((x^y)) & a)", 8); // fails with 4/5 comps
+
+            //var (ctx, idx) = Parse("(((x^y)) & z)", 8);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.Add, SynthOpc.Sub),
+
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                // new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Mul),
+                new(SynthOpc.Sub, SynthOpc.Add, SynthOpc.Mul, SynthOpc.And, SynthOpc.Xor),
+                //new(SynthOpc.And, SynthOpc.Xor),
+
+            };
+
+            // works for 8-bit with {SUB, ADD, MUL, AND, XOR}
+            //var config = new SynthConfig(components, 5, 2);
+            var config = new SynthConfig(components, 10, 3);
+
+            //var config = new SynthConfig(components, 11, 4);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+
+        public static void Phardboolean()
+        {
+            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
+
+            var components = new List<SynthComponent>()
+            {
+                new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Not),
+                //new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 14, 0);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+        public static void PReallyHardBoolean ()
+        {
+            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))|x7|x8|x9", 1);
+
+            var components = new List<SynthComponent>()
+            {
+                new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 25, 0);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
