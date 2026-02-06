@@ -15,7 +15,8 @@ public class BitwuzlaTerm : global::System.IDisposable {
   protected bool swigCMemOwn;
 
   internal BitwuzlaTerm(global::System.IntPtr cPtr, bool cMemoryOwn) {
-    swigCMemOwn = cMemoryOwn;
+            cMemoryOwn = false;
+            swigCMemOwn = cMemoryOwn;
     swigCPtr = new global::System.Runtime.InteropServices.HandleRef(this, cPtr);
   }
 

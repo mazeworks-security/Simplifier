@@ -591,7 +591,7 @@ public unsafe class BitwuzlaNative {
 
   public static BitwuzlaTermManager bitwuzla_term_manager_new() {
     IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_term_manager_new();
-    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTermManager(cPtr, true);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaTermManager(cPtr, false);
   }
 
   public static void bitwuzla_term_manager_delete(BitwuzlaTermManager tm) {
@@ -614,7 +614,7 @@ public unsafe class BitwuzlaNative {
 
   public static BitwuzlaSort bitwuzla_mk_bv_sort(BitwuzlaTermManager tm, ulong size) {
     IntPtr cPtr = BitwuzlaNativePINVOKE.bitwuzla_mk_bv_sort(BitwuzlaTermManager.getCPtr(tm).Handle, size);
-    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, true);
+    return (cPtr == IntPtr.Zero) ? null : new BitwuzlaSort(cPtr, false);
   }
 
   public static BitwuzlaSort bitwuzla_mk_fp_sort(BitwuzlaTermManager tm, ulong exp_size, ulong sig_size) {

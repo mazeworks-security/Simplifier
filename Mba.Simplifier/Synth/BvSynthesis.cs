@@ -150,7 +150,7 @@ namespace Mba.Simplifier.Synth
             // Translate inputs to LLVM IR
             var translator = new BitwuzlaTranslator(mbaCtx, ctx);
 
-  
+
 
             groundTruth = translator.Translate(mbaIdx);
             symbols = mbaCtx.CollectVariables(mbaIdx).Select(x => translator.Translate(x)).ToArray();
@@ -247,7 +247,7 @@ namespace Mba.Simplifier.Synth
                 var operands = line.Operands.Select(x => SelectOperand(x, exprs)).ToList();
 
                 var terms = new List<Term>();
-                foreach(var opcode in Opcodes)
+                foreach (var opcode in Opcodes)
                 {
                     var term = ApplyOperator(opcode, operands);
 
@@ -400,9 +400,16 @@ namespace Mba.Simplifier.Synth
             var sum = ctx.MkBvValue(0, 4);
 
             // Sort constants
+            /*
             for (int i = 1; i < constants.Count; i++)
             {
-                //constraints.Add(constants[i] > constants[i - 1]);
+                constraints.Add(constants[i] > constants[i - 1]);
+            }
+            */
+
+            for(int i = 0; i < constants.Count - 1; i++)
+            {
+                //constraints.Add(constants[i] < constants[i + 1]);
             }
 
             /*
@@ -422,7 +429,7 @@ namespace Mba.Simplifier.Synth
                 // Both operands should not be constant.
                 constraints.Add(~And(line.Operands.Select(x => x.IsConstant)));
 
-                bool dce = true;
+                bool dce = false;
 
                 if (dce && i != lines.Count - 1)
                 {
@@ -561,10 +568,10 @@ namespace Mba.Simplifier.Synth
 
             foreach (var line in RealLines)
             {
-                for(int i = 0; i < components.Count; i++)
+                for (int i = 0; i < components.Count; i++)
                 {
                     var component = components[i];
-                    foreach(var opcode in component.Opcodes)
+                    foreach (var opcode in component.Opcodes)
                     {
                         var isTarget = IsInstance(line, opcode);
                         var cost = ctx.MkIte(isTarget, one, zero);
@@ -573,7 +580,7 @@ namespace Mba.Simplifier.Synth
                 }
             }
 
-            for(int i = 0; i < components.Count; i++)
+            for (int i = 0; i < components.Count; i++)
             {
                 var component = components[i];
                 var data = component.Data;
@@ -581,8 +588,8 @@ namespace Mba.Simplifier.Synth
                 if (data.MaxInstances == -1)
                     continue;
 
-                //constraints.Add(sums[i] <= (ulong)data.MaxInstances);
-                constraints.Add(sums[i] == (ulong)data.MaxInstances);
+                constraints.Add(sums[i] <= (ulong)data.MaxInstances);
+                //constraints.Add(sums[i] == (ulong)data.MaxInstances);
             }
 
         }
@@ -623,9 +630,9 @@ namespace Mba.Simplifier.Synth
               new() { rng.GetRandUlong() }
             };
 
-            for(ushort i = 1; i < 30; i++)
+            for (ushort i = 1; i < 30; i++)
             {
-                inputCombinations.Add(new() { 1ul << i});
+                inputCombinations.Add(new() { 1ul << i });
             }
 
             inputCombinations = null;
@@ -723,7 +730,7 @@ namespace Mba.Simplifier.Synth
 
 
 
-  
+
 
             var totalTime = Stopwatch.StartNew();
             while (true)
@@ -1213,7 +1220,7 @@ namespace Mba.Simplifier.Synth
             // 6 lines
             //var (ctx, idx) = Parse("((x ^ 60) * ((82 - (x * (x ^ 60)))))", 8);
 
-            var (ctx, idx) = Parse("(((3*a)^2)*(1 + (1 - a*((3*a)^2))))*(1 + (1 - a*((3*a)^2))*(1 - a*((3*a)^2)))", 11);
+            var (ctx, idx) = Parse("(((3*a)^2)*(1 + (1 - a*((3*a)^2))))*(1 + (1 - a*((3*a)^2))*(1 - a*((3*a)^2)))", 8);
 
 
             //var (ctx, idx) = Parse("(x^y)", 8);
@@ -1262,7 +1269,32 @@ namespace Mba.Simplifier.Synth
             synth.Run();
         }
 
-        public static void PReallyHardBoolean ()
+        public static void PMediumBoolean()
+        {
+            //var (ctx, idx) = Parse("(a|b|c|d|e)&f", 1);
+
+            // ~(a|b|c|d|e|f|g)
+            //var (ctx, idx) = Parse("~(((a|b|c|d|e|f|g))&h)", 1);
+
+            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                new(new ComponentData(6), SynthOpc.Not),
+                new(new ComponentData(6), SynthOpc.And),
+                new(new ComponentData(6), SynthOpc.Or),
+                new(new ComponentData(6), SynthOpc.Xor),
+                //new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 14, 0);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+        public static void PReallyHardBoolean()
         {
             var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))|x7|x8|x9", 1);
 
@@ -1278,6 +1310,29 @@ namespace Mba.Simplifier.Synth
 
             synth.Run();
         }
+
+        public static void PFastSynth()
+        {
+            var (ctx, idx) = Parse("15795372935317283107 + parameter0 + -(34359717887 & parameter0 ^ 9511600802393731071)", 64);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                new(SynthOpc.And, SynthOpc.Xor),
+                new(SynthOpc.Add),
+               // new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 8, 3);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+
+
+
 
         public static void PVerilog()
         {
