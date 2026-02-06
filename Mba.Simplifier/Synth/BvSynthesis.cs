@@ -611,7 +611,8 @@ namespace Mba.Simplifier.Synth
                         {
                             constraints.Add(Implies(matches & sameType, line.Operands[0].Index < line.Operands[1].Index));
 
-                            // TODO: If they're different types, we could move constants to the right or left.
+                            // TODO: If the operation is commutative and only one operand is a constant, move the constant to the right.
+                            constraints.Add(~(matches & line.Operands[0].IsConstant & ~line.Operands[1].IsConstant));
                         }
 
                         if (!opc.IsIdempotent())
@@ -859,7 +860,7 @@ namespace Mba.Simplifier.Synth
                 if (isEquiv)
                 {
                     Console.WriteLine($"Solved in total time {totalTime.ElapsedMilliseconds}ms");
-                    Debugger.Break();
+                        Debugger.Break();
                 }
 
                 bool generalize = false;
