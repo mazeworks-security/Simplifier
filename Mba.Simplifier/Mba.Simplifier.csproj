@@ -58,6 +58,12 @@
     <None Update="Synthesis\Circuits\add4_circuit.v">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Synthesis\Circuits\CONDITIONAL_DECODE.bits.v">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Synthesis\Circuits\conditiona_decode_blasted.v">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

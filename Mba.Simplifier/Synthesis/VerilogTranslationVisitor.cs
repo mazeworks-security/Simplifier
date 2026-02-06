@@ -120,10 +120,16 @@ namespace Mba.Simplifier.Synthesis
             // Shift the selected bit to the 0th index
             var symbol = inputs[name];
             var w = ctx.GetWidth(symbol);
-            //var output = ctx.Lshr(symbol, ctx.Constant((ulong)index, w));
 
-            //output = ctx.And(ctx.Constant(1, w), output);
-            var output = ctx.Extract(symbol, index, index);
+            bool useExtract = false;
+            if(useExtract)
+            {
+                var extract = ctx.Extract(symbol, index, index);
+                return extract;
+            }
+
+            var output = ctx.Lshr(symbol, ctx.Constant((ulong)index, w));
+            output = ctx.And(ctx.Constant(1, w), output);
             return output;
         }
 

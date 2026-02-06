@@ -237,6 +237,7 @@ namespace Mba.Simplifier.Synth
         public static Term operator -(ulong a, Term b) => Lift(b, a) - b;
         public static Term operator *(Term a, ulong b) => a * Lift(a, b);
         public static Term operator *(ulong a, Term b) => Lift(b, a) * b;
+        public static Term operator >>(Term a, ulong b) => a >> Lift(a, b);
 
         public static Term operator ==(Term a, ulong b) => a == Lift(a, b);
         public static Term operator ==(ulong a, Term b) => Lift(b, a) == b;
