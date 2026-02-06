@@ -482,7 +482,7 @@ bool useNew = true;
 if (useNew)
 {
     // SynthTests.P14();
-    SynthTests.P22();
+    SynthTests.P14();
     Debugger.Break();
     //var synthesizer = new BvSynthesis(ctx, id);
     //synthesizer.Run();

@@ -1,4 +1,5 @@
-﻿using Bitwuzla;
+﻿using Antlr4.Runtime.Tree;
+using Bitwuzla;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Fuzzing;
 using Mba.Simplifier.Pipeline;
@@ -12,6 +13,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
+using System.Reflection.Emit;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -90,7 +92,7 @@ namespace Mba.Simplifier.Synth
         public bool IsSymbol { get; set; }
 
         // Index of the component
-        public Term ComponentIndex { get; set; }
+        //public Term ComponentIndex { get; set; }
 
         // Which opcode was picked for the component
         public Term ComponentOpcode { get; set; }
@@ -119,6 +121,8 @@ namespace Mba.Simplifier.Synth
 
         // Get the max number of operands that one instruction may contain.
         private int MaxArity => config.Components.Max(x => x.Opcodes.Max(x => x.GetOperandCount()));
+
+        public List<SynthOpc> Opcodes => components.SelectMany(x => x.Opcodes).ToList();
 
         private readonly IReadOnlyList<SynthComponent> components;
 
@@ -181,7 +185,7 @@ namespace Mba.Simplifier.Synth
             {
                 var line = new SynthLine();
                 line.IsSymbol = false;
-                line.ComponentIndex = components.Count == 1 ? ctx.MkBvValue(0, 1) : ctx.MkBvConst($"compIdx{lineIndex}", componentIndexSize);
+                //line.ComponentIndex = components.Count == 1 ? ctx.MkBvValue(0, 1) : ctx.MkBvConst($"compIdx{lineIndex}", componentIndexSize);
                 line.ComponentOpcode = ctx.MkBvConst($"compCode{lineIndex}", componentOpcodeSize);
                 line.Operands = new SynthOperand[MaxArity];
                 var operandBitsize = BvWidth(Math.Max(lineIndex - 1, config.MaxConstants - 1));
@@ -222,54 +226,15 @@ namespace Mba.Simplifier.Synth
                 // Select all of the operands
                 var operands = line.Operands.Select(x => SelectOperand(x, exprs)).ToList();
 
-                // Need to get the opcode choices first.
-                var componentChoices = new List<Term>();
-                foreach (var component in components)
+                var terms = new List<Term>();
+                foreach(var opcode in Opcodes)
                 {
-                    List<Term> terms = new();
+                    var term = ApplyOperator(opcode, operands);
 
-                    // If the component is {add, sub}, try to share the adder circuit.
-                    var opcodes = component.Opcodes;
-                    //if (opcodes.Length == 2 && opcodes[0] == SynthOpc.Add && opcodes[1] == SynthOpc.Sub)
-                    if (false)
-                    {
-                        /*
-                        var size = operands[0].Sort.BvSize;
-                        var one = ctx.MkBvValue(1, size);
-                        var zero = ctx.MkBvValue(0, size);
-                        var allOnes = ~zero;
-
-                        var isSub = line.ComponentOpcode == 1;
-                        var mask = ctx.MkIte(isSub, allOnes, zero);
-                        var cin = ctx.MkIte(isSub, one, zero);
-
-                        var b = operands[1] ^ mask;
-                        var tmp = operands[0] + b;
-                        terms.Add(tmp + cin);
-                        */
-
-                        var isSub = line.ComponentOpcode == 1;
-                        var b = operands[1];
-                        var negB = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_NEG, b);
-                        var selectedB = ctx.MkIte(isSub, negB, b);
-                        var result = operands[0] + selectedB;
-                        terms.Add(result);
-                    }
-
-                    else
-                    {
-                        foreach (var opcode in opcodes)
-                        {
-                            var term = ApplyOperator(opcode, operands);
-
-                            terms.Add(term);
-                        }
-                    }
-
-                    componentChoices.Add(LinearSelect(line.ComponentOpcode, terms));
+                    terms.Add(term);
                 }
 
-                var select = LinearSelect(line.ComponentIndex, componentChoices);
+                var select = LinearSelect(line.ComponentOpcode, terms);
                 exprs.Add(select);
             }
 
@@ -545,10 +510,14 @@ namespace Mba.Simplifier.Synth
             //constraints.Add(sum <= 5);
         }
 
+
         private Term IsComponent(SynthLine line, SynthComponent component)
         {
-            return line.ComponentIndex == components.IndexOf(component);
+            throw new InvalidOperationException();
+            //return line.ComponentIndex == components.IndexOf(component);
         }
+
+
 
         // Implements CEGIS(T)
         // https://www.kroening.com/papers/cav2018-synthesis.pdf
@@ -574,14 +543,14 @@ namespace Mba.Simplifier.Synth
                 inputCombinations.Add(new() { 1ul << i});
             }
 
-            //inputCombinations = null;
+            inputCombinations = null;
 
             int NUMSAMPLES = 1;
 
 
             bool minv = false;
 
-            for (int i = 0; i < inputCombinations.Count; i++)
+            for (int i = 0; i < 1; i++)
             {
                 Term[] values = null;
                 if (inputCombinations == null)
@@ -730,8 +699,8 @@ namespace Mba.Simplifier.Synth
                     continue;
 
                 var a = s.GetValue(line.ComponentOpcode);
-                var b = s.GetValue(line.ComponentIndex);
-                Console.WriteLine($"{a},  {b}");
+                //var b = s.GetValue(line.ComponentIndex);
+                Console.WriteLine($"{a}");
             }
 
             // Compute the list of nodes
@@ -747,10 +716,10 @@ namespace Mba.Simplifier.Synth
                     continue;
                 }
 
-                var index = (int)ctx.GetIntegerValue(s.GetValue(line.ComponentIndex));
+                //var index = (int)ctx.GetIntegerValue(s.GetValue(line.ComponentIndex));
                 var opcode = ctx.GetIntegerValue(s.GetValue(line.ComponentOpcode));
-                if (opcode >= (ulong)components[index].Opcodes.Length)
-                    opcode = (ulong)components[index].Opcodes.Length - 1;
+                if (opcode >= (ulong)Opcodes.Count)
+                    opcode = (ulong)Opcodes.Count - 1;
 
                 var cegisOperands = new List<Term>();
                 var ourOperands = new List<AstIdx>();
@@ -769,7 +738,7 @@ namespace Mba.Simplifier.Synth
                 var op0 = () => ourOperands[0];
                 var op1 = () => ourOperands[1];
 
-                var opc = components[index].Opcodes[opcode];
+                var opc = Opcodes[(int)opcode];
                 AstIdx ourNode = opc switch
                 {
                     SynthOpc.Not => mbaCtx.Neg(op0()), // Neg() is actually bvnot in my IR
@@ -834,7 +803,7 @@ namespace Mba.Simplifier.Synth
                 if (line.IsSymbol)
                     continue;
 
-                structureVars.Add(line.ComponentIndex);
+                //structureVars.Add(line.ComponentIndex);
                 structureVars.Add(line.ComponentOpcode);
                 foreach (var operand in line.Operands)
                 {
@@ -897,7 +866,6 @@ namespace Mba.Simplifier.Synth
         {
             return null;
         }
-
 
     }
 
