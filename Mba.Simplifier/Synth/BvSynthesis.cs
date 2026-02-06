@@ -303,7 +303,8 @@ namespace Mba.Simplifier.Synth
 
             //if (false)
             //if (n > 12)
-            if (n > 13)
+            //if (n > 13)
+            if (false)
             {
                 // TODO: Sometimes this encoding is more efficient
                 Debugger.Break();
@@ -506,15 +507,15 @@ namespace Mba.Simplifier.Synth
                     for (int opcodeIndex = 0; opcodeIndex < component.Opcodes.Length; opcodeIndex++)
                     {
                         var opc = component.Opcodes[opcodeIndex];
+                        var matches = line.ComponentOpcode == opcodeIndex;
 
 
-                        /*
-                        var isUnary = line.ComponentOpcode == opcodeIndex;
-                        if (opc.IsCommutative())
+                        bool pruneRhs = true;
+                        if (pruneRhs && opc == SynthOpc.Not)
                         {
-                            constraints.Add(Implies(isUnary, line.Operands[0].Index < line.Operands[1].Index));
+                            constraints.Add(Implies(matches, line.Operands[1].Index == 0));
+
                         }
-                        */
 
                         /*
                         var isUnary = isComponent & line.ComponentOpcode == opcodeIndex;
@@ -534,7 +535,6 @@ namespace Mba.Simplifier.Synth
                         */
 
 
-                        var matches = line.ComponentOpcode == opcodeIndex;
 
                         bool optCommutative = true;
                         
@@ -1295,21 +1295,21 @@ namespace Mba.Simplifier.Synth
             //var (ctx, idx) = Parse("(a|b|c|d|e)&f", 1);
 
             // ~(a|b|c|d|e|f|g)
-            //var (ctx, idx) = Parse("~(((a|b|c|d|e|f|g))&h)", 1);
+            var (ctx, idx) = Parse("~(((a|b|c|d|e|f|g))&h)", 1);
 
-            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
+            //var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
             var components = new List<SynthComponent>()
             {
                 //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                new(new ComponentData(6), SynthOpc.Not),
-                new(new ComponentData(6), SynthOpc.And),
-                new(new ComponentData(6), SynthOpc.Or),
-                new(new ComponentData(6), SynthOpc.Xor),
+                new(new ComponentData(7), SynthOpc.Not),
+                new(new ComponentData(7), SynthOpc.And),
+                new(new ComponentData(7), SynthOpc.Or),
+                new(new ComponentData(7), SynthOpc.Xor),
                 //new(SynthOpc.Add, SynthOpc.Sub),
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
 
-            var config = new SynthConfig(components, 14, 0);
+            var config = new SynthConfig(components, 16, 0);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
