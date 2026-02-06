@@ -478,7 +478,7 @@ if (inputText == null || printUsage)
 // For now we only support integer widths of up to 64 bits.
 const int maxWidth = 64;
 if (bitWidth > maxWidth)
-    throw new InvalidOperationException($"Received bit width {bitWidth}, which is greater than the max width {maxWidth}    ");
+    throw new InvalidOperationException($"Received bit width {bitWidth}, which is greater than the max width {maxWidth}     ");
 
 var ctx = new AstCtx();
 AstIdx.ctx = ctx;
@@ -501,7 +501,7 @@ if(brahma)
 bool useNew = true;
 if (useNew)
 {
-    SynthTests.P14();
+    SynthTests.P1();
     //SynthTests.PFastSynth();
     Debugger.Break();
     //var synthesizer = new BvSynthesis(ctx, id);

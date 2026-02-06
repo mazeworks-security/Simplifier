@@ -15,6 +15,7 @@ public class BitwuzlaSort : global::System.IDisposable {
   protected bool swigCMemOwn;
 
   internal BitwuzlaSort(global::System.IntPtr cPtr, bool cMemoryOwn) {
+    cMemoryOwn = false;
     swigCMemOwn = cMemoryOwn;
     swigCPtr = new global::System.Runtime.InteropServices.HandleRef(this, cPtr);
   }
