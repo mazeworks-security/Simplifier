@@ -1296,21 +1296,25 @@ namespace Mba.Simplifier.Synth
             //var (ctx, idx) = Parse("(a|b|c|d|e)&f", 1);
 
             // ~(a|b|c|d|e|f|g)
-            var (ctx, idx) = Parse("~(((a|b))&c)", 1);
+            //var (ctx, idx) = Parse("~(((a|b))&c)", 1);
+            //var (ctx, idx) =  Parse("~(((a|b|c|d|e|f|g))&h)", 1);
+
+            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
 
             //var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
             var components = new List<SynthComponent>()
             {
                 //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                new(new ComponentData(7), SynthOpc.Not),
-                new(new ComponentData(7), SynthOpc.And),
-                new(new ComponentData(7), SynthOpc.Or),
-                new(new ComponentData(7), SynthOpc.Xor),
+
+                new(new ComponentData(6), SynthOpc.And),
+                new(new ComponentData(6), SynthOpc.Or),
+                new(new ComponentData(6), SynthOpc.Xor),
+                new(new ComponentData(6), SynthOpc.Not),
                 //new(SynthOpc.Add, SynthOpc.Sub),
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
 
-            var config = new SynthConfig(components, 6, 0);
+            var config = new SynthConfig(components, 14, 0);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
