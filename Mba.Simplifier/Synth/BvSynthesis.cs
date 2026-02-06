@@ -14,6 +14,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using System.Reflection.Emit;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -402,9 +403,14 @@ namespace Mba.Simplifier.Synth
         // Assert that the first constant must be used before the second constant.
         private void AddSymmetricConstantsConstraint(List<Term> constraints)
         {
+            return;
+            var size = (uint)BvWidth(constants.Count + 1); // works
+            //var size = (uint)BvWidth(constants.Count);
 
-            var size = (uint)BvWidth(constants.Count + 1);
-            var maxConstant = ctx.MkBvValue(constants.Count, size);
+            // works like this
+            //var maxConstant = ctx.MkBvValue(constants.Count, size);
+
+            var maxConstant = ctx.MkBvValue(0, 1);
 
             //var maxOperandSize = BvWidth(Math.Max(config.NumInstructions - 2, config.MaxConstants - 1));
 
@@ -412,11 +418,12 @@ namespace Mba.Simplifier.Synth
             {
                 var line = lines[i];
                 //var size0 = maxConstant.Sort.BvSize;
-               // var size1 = lines[i].Operands[0].Index.Sort.BvSize;
+                // var size1 = lines[i].Operands[0].Index.Sort.BvSize;
 
                 //if (size0 < size1)
                 //    maxConstant = ctx.MkZext((uint)size1 - (uint)size0, maxConstant);
 
+                List<Term> constConds = new List<Term>();
                 foreach (var operand in line.Operands)
                 {
                     var opIdx = operand.Index;
@@ -432,10 +439,12 @@ namespace Mba.Simplifier.Synth
                     // Even if we just stop here with `maxConstant` set to something small.. why does this somehow makes solving faster??
                     constraints.Add(Implies(operand.IsConstant, opIdx <= maxConstant));
 
-
-                    maxConstant = ctx.MkIte(operand.IsConstant & opIdx == maxConstant, maxConstant + 1, maxConstant);
-                    
+                    constConds.Add(operand.IsConstant & opIdx == maxConstant);
                 }
+
+                // 
+                maxConstant = ctx.MkIte(Or(constConds), maxConstant + 1, maxConstant);
+
             }
         }
 
@@ -451,7 +460,7 @@ namespace Mba.Simplifier.Synth
             }
             */
 
-            for(int i = 0; i < constants.Count - 1; i++)
+            for (int i = 0; i < constants.Count - 1; i++)
             {
                 //constraints.Add(constants[i] < constants[i + 1]);
             }
@@ -492,7 +501,7 @@ namespace Mba.Simplifier.Synth
                 }
 
                 bool limitOpcodeIndex = true;
-                if(limitOpcodeIndex)
+                if (limitOpcodeIndex)
                 {
                     constraints.Add(line.ComponentOpcode <= (uint)(Opcodes.Count - 1));
                 }
@@ -595,23 +604,24 @@ namespace Mba.Simplifier.Synth
                         constraints.Add(Implies(isUnary, line.Operands[1].IsConstant == false));
                         */
 
-
-
-                        bool optCommutative = true;
-                        
+                        var sameType = (line.Operands[0].IsConstant == line.Operands[1].IsConstant);
+                        // 
+                        bool optCommutative = true; 
                         if (optCommutative && opc.IsCommutative())
                         {
-                            constraints.Add(Implies(matches, line.Operands[0].Index < line.Operands[1].Index));
+                            constraints.Add(Implies(matches & sameType, line.Operands[0].Index < line.Operands[1].Index));
+
+                            // TODO: If they're different types, we could move constants to the right or left.
                         }
 
                         if (!opc.IsIdempotent())
                             continue;
 
+                        // If both operands have the same type, their indices must differ.
                         bool idempotencyOpt = true;
                         if (idempotencyOpt)
                         {
-
-                            var isIdempotent = matches;
+                            var isIdempotent = matches & sameType;
                             constraints.Add(Implies(isIdempotent, line.Operands[0].Index != line.Operands[1].Index));
                         }
                     }
@@ -1418,8 +1428,8 @@ namespace Mba.Simplifier.Synth
 
         public static void Ptest()
         {
-            /*
-            var (ctx, idx) = Parse("2222 + (x&1111)", 8);
+
+            var (ctx, idx) = Parse("(x&87)", 8);
 
             var components = new List<SynthComponent>()
             {
@@ -1430,12 +1440,12 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
 
-            var config = new SynthConfig(components, 3, 2);
+            var config = new SynthConfig(components, 2, 1);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
-            */
 
+            /*
             var (ctx, idx) = Parse("15795372935317283107 + parameter0 + -(34359717887 & parameter0 ^ 9511600802393731071)", 64);
 
             var components = new List<SynthComponent>()
@@ -1451,7 +1461,7 @@ namespace Mba.Simplifier.Synth
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
-
+            */
         }
 
 
