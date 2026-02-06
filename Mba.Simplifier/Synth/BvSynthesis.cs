@@ -152,7 +152,7 @@ namespace Mba.Simplifier.Synth
 
             // Get the minimum size bitvector needed to store the component index and component opcode
             componentIndexSize = (uint)BvWidth(components.Count - 1);
-            componentOpcodeSize = (uint)BvWidth(components.Max(x => x.Opcodes.Length) - 1);
+            componentOpcodeSize = (uint)BvWidth(Opcodes.Count - 1);
         }
 
         public void Run()
@@ -1001,8 +1001,13 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.Add, SynthOpc.Sub),
 
                 //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Add),
+                //new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Add),
                 //new(SynthOpc.And, SynthOpc.Xor),
+
+                new SynthComponent(SynthOpc.And),
+                new SynthComponent(SynthOpc.Xor),
+                new SynthComponent(SynthOpc.Lshr),
+                new SynthComponent(SynthOpc.Add),
 
             };
 
