@@ -31,7 +31,7 @@ namespace Mba.Simplifier.Synth
         int MaxConstants
         );
 
-    public record ComponentData(int MaxUsers = -1);
+    public record ComponentData(int MaxInstances = -1);
 
     // A component is a group of opcodes
     // E.g. {add, sub} can be a single component,
@@ -127,6 +127,8 @@ namespace Mba.Simplifier.Synth
         private readonly IReadOnlyList<SynthComponent> components;
 
         private List<SynthLine> lines;
+
+        public IReadOnlyList<SynthLine> RealLines => lines.Skip(FirstInstIdx).ToList();
 
         private List<Term> constants;
 
@@ -345,7 +347,7 @@ namespace Mba.Simplifier.Synth
             var constraints = new List<Term>();
             AddAcyclicConstraints(constraints);
             AddPruningConstraints(constraints);
-
+            AddLimitConstraints(constraints);
 
             return constraints;
         }
@@ -510,11 +512,71 @@ namespace Mba.Simplifier.Synth
             //constraints.Add(sum <= 5);
         }
 
+        private void AddLimitConstraints(List<Term> constraints)
+        {
+            /*
+            var size = lines.Count - FirstInstIdx;
+            var zero = ctx.MkBvValue(0, (ulong)size);
+            var one = ctx.MkBvValue(1, (ulong)size);
+            var sums = Opcodes.Select(x => zero).ToArray();
+            for(int i = FirstInstIdx; i < lines.Count; i++)
+            {
+                var line = lines[i];
+                for(int opcodeIdx = 0; opcodeIdx < Opcodes.Count; opcodeIdx++)
+                {
+                    var isTarget = IsInstance(line, Opcodes[opcodeIdx]);
+                    var cost = ctx.MkIte(isTarget, one, zero);
+
+                    sums[opcodeIdx] += cost;
+                }
+            }
+            */
+
+            var size = lines.Count - FirstInstIdx;
+            var zero = ctx.MkBvValue(0, (ulong)size);
+            var one = ctx.MkBvValue(1, (ulong)size);
+            var sums = components.Select(x => zero).ToArray();
+
+            foreach (var line in RealLines)
+            {
+                for(int i = 0; i < components.Count; i++)
+                {
+                    var component = components[i];
+                    foreach(var opcode in component.Opcodes)
+                    {
+                        var isTarget = IsInstance(line, opcode);
+                        var cost = ctx.MkIte(isTarget, one, zero);
+                        sums[i] += cost;
+                    }
+                }
+            }
+
+            for(int i = 0; i < components.Count; i++)
+            {
+                var component = components[i];
+                var data = component.Data;
+                // Assert no limit
+                if (data.MaxInstances == -1)
+                    continue;
+
+                constraints.Add(sums[i] <= (ulong)data.MaxInstances);
+            }
+
+        }
 
         private Term IsComponent(SynthLine line, SynthComponent component)
         {
             throw new InvalidOperationException();
             //return line.ComponentIndex == components.IndexOf(component);
+        }
+
+        private Term IsInstance(SynthLine line, SynthOpc opcode)
+        {
+            var index = Opcodes.IndexOf(opcode);
+            if (opcode != Opcodes.Last())
+                return line.ComponentOpcode == index;
+
+            return line.ComponentOpcode >= (ulong)index;
         }
 
 
@@ -1004,10 +1066,10 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Add),
                 //new(SynthOpc.And, SynthOpc.Xor),
 
-                new SynthComponent(SynthOpc.And),
-                new SynthComponent(SynthOpc.Xor),
-                new SynthComponent(SynthOpc.Lshr),
-                new SynthComponent(SynthOpc.Add),
+                new SynthComponent(new ComponentData(1), SynthOpc.And),
+                new SynthComponent(new ComponentData(1), SynthOpc.Xor),
+                new SynthComponent(new ComponentData(1), SynthOpc.Lshr),
+                new SynthComponent(new ComponentData(1), SynthOpc.Add),
 
             };
 
