@@ -501,8 +501,8 @@ if(brahma)
 bool useNew = true;
 if (useNew)
 {
-    // SynthTests.P14();
-    SynthTests.PMediumBoolean();
+    SynthTests.P14();
+    //SynthTests.PFastSynth();
     Debugger.Break();
     //var synthesizer = new BvSynthesis(ctx, id);
     //synthesizer.Run();
