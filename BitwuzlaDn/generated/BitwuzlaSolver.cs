@@ -15,6 +15,7 @@ public class BitwuzlaSolver : global::System.IDisposable {
   protected bool swigCMemOwn;
 
   internal BitwuzlaSolver(global::System.IntPtr cPtr, bool cMemoryOwn) {
+            cMemoryOwn = false;
     swigCMemOwn = cMemoryOwn;
     swigCPtr = new global::System.Runtime.InteropServices.HandleRef(this, cPtr);
   }

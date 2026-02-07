@@ -369,7 +369,7 @@ inputText = "a|b|c|d|e|f|g";
 
 inputText = "(a|b|c|d|e)&f";
 
-inputText = "~(a|b|c|d|e|f|g)";
+inputText = "(a|b|c|d|e|f)";
 
 //inputText = "(((x|1111)+y)^y)";
 
@@ -502,7 +502,7 @@ bool useNew = true;
 if (useNew)
 {
     //SynthTests.P1();
-    SynthTests.P14();
+    SynthTests.PImpossibleBoolean();
     Debugger.Break();
     //var synthesizer = new BvSynthesis(ctx, id);
     //synthesizer.Run();

@@ -17,6 +17,7 @@ using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Mba.Simplifier.Synth
@@ -285,6 +286,7 @@ namespace Mba.Simplifier.Synth
                 SynthOpc.Sub => (op0() - op1()),
                 SynthOpc.Mul => (op0() * op1()),
                 SynthOpc.Lshr => (op0() >> op1()),
+                SynthOpc.Shl => (op0() << op1()),
                 _ => throw new InvalidOperationException()
             };
 
@@ -299,7 +301,7 @@ namespace Mba.Simplifier.Synth
 
             var constSelect = LinearSelect(operand.Index, constants);
             var expr = ctx.MkIte(operand.IsConstant, constSelect, operandSelect);
-            return (expr, constSelect, operandSelect);
+            return (expr, operandSelect, constSelect);
         }
 
         private Term LinearSelect(Term index, List<Term> options)
@@ -380,7 +382,7 @@ namespace Mba.Simplifier.Synth
             var constraints = new List<Term>();
             AddAcyclicConstraints(constraints);
             AddPruningConstraints(constraints);
-            //AddSymmetricConstantsConstraint(constraints);
+            AddSymmetricConstantsConstraint(constraints);
             AddLimitConstraints(constraints);
 
             return constraints;
@@ -551,6 +553,33 @@ namespace Mba.Simplifier.Synth
                     constraints.Add(Or(usageConditions));
                 }
 
+                bool cse = false;
+                if(cse)
+                {
+                    var toBv = (Term term) => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
+                    var sigs = new List<Term>();
+                    var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, line.ComponentOpcode, toBv(line.Operands[0].IsConstant), line.Operands[0].Index, toBv(line.Operands[1].IsConstant), line.Operands[1].Index);
+                    sigs.Add(comb1);
+
+                    for (int j = i + 1; j < lines.Count; j++)
+                    {
+                        var other = lines[j];
+
+                        //var concats = Enumerable.Range(0, MaxArity).Select(x => ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT))
+
+                        var differences = Enumerable.Range(0, MaxArity).Select(x => (line.Operands[x].IsConstant != other.Operands[x].IsConstant) | (line.Operands[x].Index != other.Operands[x].Index));
+
+           
+
+                        //var comb2 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, other.ComponentOpcode, toBv(other.Operands[0].IsConstant), other.Operands[0].Index, toBv(other.Operands[1].IsConstant), other.Operands[1].Index);
+
+                        //sigs.Add(comb2)
+
+                        var imply = Implies(line.ComponentOpcode == other.ComponentOpcode, Or(differences));
+                        constraints.Add(imply);
+                    }
+                }
+
                 bool limitOpcodeIndex = true;
                 if (limitOpcodeIndex)
                 {
@@ -600,7 +629,7 @@ namespace Mba.Simplifier.Synth
                 */
 
 
-
+                //constraints.Add(Implies( line.Operands[1].IsConstant, line.Operands[1].ConcreteValue != 0));
 
                 foreach (var component in components)
                 {
@@ -726,6 +755,8 @@ namespace Mba.Simplifier.Synth
         private Term IsInstance(SynthLine line, SynthOpc opcode)
         {
             var index = Opcodes.IndexOf(opcode);
+            if (index == -1)
+                throw new InvalidOperationException();
             if (opcode != Opcodes.Last())
                 return line.ComponentOpcode == index;
 
@@ -859,9 +890,12 @@ namespace Mba.Simplifier.Synth
             while (true)
             {
                 var curr = Stopwatch.StartNew();
+                s.Simplify();
                 s.Write();
                 var check = s.CheckSat();
                 curr.Stop();
+
+
                 if (check == Result.Unsat)
                 {
                     Console.WriteLine($"No solution.  Took {totalTime.ElapsedMilliseconds}");
@@ -869,13 +903,17 @@ namespace Mba.Simplifier.Synth
                     return;
                 }
 
-                else
-                {
-                    Console.WriteLine($"Found solution. Took {curr.ElapsedMilliseconds}ms");
-                }
 
                 // Ask the solver for a fitting solution
                 var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
+
+                Console.WriteLine($"Found solution. Took {curr.ElapsedMilliseconds}ms\n\n{ourSolution}\n\n\n");
+                
+                if(curr.ElapsedMilliseconds >= 15000)
+                {
+                    Debugger.Break();
+                }
+
 
                 // Yield the solution if its equivalent
                 options = new Options();
@@ -1003,6 +1041,7 @@ namespace Mba.Simplifier.Synth
                     SynthOpc.Sub => mbaCtx.Sub(op0(), op1()),
                     SynthOpc.Mul => mbaCtx.Mul(op0(), op1()),
                     SynthOpc.Lshr => mbaCtx.Lshr(op0(), op1()),
+                    SynthOpc.Shl => mbaCtx.Symbol("SHL_PLACEHOLDER", mbaCtx.GetWidth(op0())),
                     _ => throw new NotImplementedException(),
                 };
                 ourNodes.Add(ourNode);
@@ -1215,7 +1254,7 @@ namespace Mba.Simplifier.Synth
 
         public static void P5()
         {
-            var (ctx, idx) = Parse("(171^((a+23)^(b)))^((((a|1111)+b)^b))", 64);
+            var (ctx, idx) = Parse("(171^((a+23)^(b)))^((((a|1111)+b)^b))", 16);
 
             // Works with 7 components and 3 constants. 500ms
             //var (ctx, idx) = Parse("(((a+23)^(b)))^((((a|1111)+b)))", 8);
@@ -1432,11 +1471,30 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
 
-            var config = new SynthConfig(components, 25, 0);
+            var config = new SynthConfig(components, 20, 0);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
         }
+
+
+        public static void PImpossibleBoolean()
+        {
+            var (ctx, idx) = Parse("(~((((((c^d)&(~(a^f)))|((((d&c)^(f&c))^(f&d))^c))|(f&(a^d)))^(b&((((f&(~c))&a)|((f&(~d))&a))|((((d&c)^(f&c))^(f&d))^f))))^(e&(((d&c)|(((((f&c)^(f&d))^a)^c)^d))^(b&((((~c)&(a^f))|(~((((d&a)^(f&c))^a)^d)))|(f&d)))))))", 1);
+
+            var components = new List<SynthComponent>()
+            {
+                new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 20, 0);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
 
         public static void PFastSynth()
         {
@@ -1455,11 +1513,40 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
 
-            var config = new SynthConfig(components, 8, 3);
+            var config = new SynthConfig(components, 5, 3);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
         }
+
+
+        public static void PBSwap()
+        {
+            //  var (ctx, idx) = Parse("((val & 0x000000FF) << 24) | ((val & 0x0000FF00) << 8)  | ((val & 0x00FF0000) >> 8)  | ((val & 0xFF000000) >> 24)", 32);
+            var (ctx, idx) = Parse("(val << 24) | ((val << 8) & 0x00FF0000) | ((val >> 8) & 0x0000FF00) | (val >> 24)", 32);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.And, SynthOpc.Xor),
+                //new(SynthOpc.Add),
+
+                new(new ComponentData(4), SynthOpc.Lshr), 
+                new(new ComponentData(4), SynthOpc.Or),
+                new(new ComponentData(4), SynthOpc.And),
+                new(new ComponentData(4), SynthOpc.Shl),
+
+                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
+               // new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 10, 4);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
 
         public static void Ptest()
         {

@@ -24,6 +24,7 @@ namespace Mba.Simplifier.Minimization
 
         public static AstIdx GetBitwise(AstCtx ctx, IReadOnlyList<AstIdx> variables, BooleanTruthTable truthTable, bool negate = false)
         {
+            //truthTable.Arr[0] = 0x9ef7a8d9c7193a0f;
             // If requested, negate the result vector to find a negated expression.
             if (negate)
             {

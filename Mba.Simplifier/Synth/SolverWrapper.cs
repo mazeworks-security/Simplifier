@@ -190,6 +190,7 @@ namespace Mba.Simplifier.Synth
         public static Term operator +(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_ADD, a, b);
         public static Term operator -(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_SUB, a, b);
         public static Term operator *(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_MUL, a, b);
+        public static Term operator <<(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_SHL, a, b);
         public static Term operator >>(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_SHR, a, b);
         public static Term operator /(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UDIV, a, b);
         public static Term operator %(Term a, Term b) => a.Manager.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_UREM, a, b);
@@ -555,6 +556,9 @@ namespace Mba.Simplifier.Synth
 
         public Term GetValue(Term term)
             => new Term(BitwuzlaNative.bitwuzla_get_value(native, term.native)) { Manager = tm };
+
+        public void Simplify()
+            => BitwuzlaNative.bitwuzla_simplify(native);
 
         public void Write()
         {
