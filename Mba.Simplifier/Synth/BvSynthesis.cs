@@ -529,9 +529,9 @@ namespace Mba.Simplifier.Synth
 
 
             // Constrain each opcode to be less than its maximum
-            for (int i = FirstInstIdx; i < lines.Count; i++)
+            for (int lineIdx = FirstInstIdx; lineIdx < lines.Count; lineIdx++)
             {
-                var line = lines[i];
+                var line = lines[lineIdx];
 
                 // Both operands should not be constant.
                 bool constFold = true;
@@ -541,14 +541,15 @@ namespace Mba.Simplifier.Synth
 
                 bool dce = true;
 
-                if (dce && i != lines.Count - 1)
+                // TODO: We should also assert that symbolic variables are used!
+                if (dce && lineIdx != lines.Count - 1)
                 {
                     var usageConditions = new List<Term>();
-                    for (int j = i + 1; j < lines.Count; j++)
+                    for (int j = lineIdx + 1; j < lines.Count; j++)
                     {
                         var operands = lines[j].Operands;
-                        var used0 = ~operands[0].IsConstant & (operands[0].Index == i);
-                        var used1 = ~operands[1].IsConstant & (operands[1].Index == i);
+                        var used0 = ~operands[0].IsConstant & (operands[0].Index == lineIdx);
+                        var used1 = ~operands[1].IsConstant & (operands[1].Index == lineIdx);
                         usageConditions.Add(used0);
                         usageConditions.Add(used1);
                     }
@@ -556,15 +557,16 @@ namespace Mba.Simplifier.Synth
                     constraints.Add(Or(usageConditions));
                 }
 
+                var toBv = (Term term) => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
                 bool cse = false;
                 if(cse)
                 {
-                    var toBv = (Term term) => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
+         
                     var sigs = new List<Term>();
                     var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, line.ComponentOpcode, toBv(line.Operands[0].IsConstant), line.Operands[0].Index, toBv(line.Operands[1].IsConstant), line.Operands[1].Index);
                     sigs.Add(comb1);
 
-                    for (int j = i + 1; j < lines.Count; j++)
+                    for (int j = lineIdx + 1; j < lines.Count; j++)
                     {
                         var other = lines[j];
 
@@ -646,6 +648,7 @@ namespace Mba.Simplifier.Synth
                         bool pruneRhs = true;
                         if (pruneRhs && opc.GetOperandCount() == 1)
                         {
+                            // TODO: Maybe we could instead make this a constant?
                             constraints.Add(Implies(matches, line.Operands[1].Index == 0));
 
                             // this does seem to speed things up
@@ -675,6 +678,41 @@ namespace Mba.Simplifier.Synth
 
                             // TODO: If the operation is commutative and only one operand is a constant, move the constant to the right.
                             constraints.Add(~(matches & line.Operands[0].IsConstant & ~line.Operands[1].IsConstant));
+                        }
+
+                        bool optOrder = true;
+                        if (optOrder && lineIdx != FirstInstIdx)
+                        {
+                            var prevIdx = lineIdx - 1;
+                            var prev = lines[lineIdx - 1];
+                            // For each operand, assert that the operand is not the previous construction
+                            var depConstraints = new List<Term>();
+                            for(int i = 0; i < opc.GetOperandCount(); i++)
+                            {
+                                var different = line.Operands[i].IsConstant | (line.Operands[i].Index != prevIdx);
+                                depConstraints.Add(different);
+                            }
+
+                            var isIndependent = matches & And(depConstraints);
+                            var sameOpcode = line.ComponentOpcode == prev.ComponentOpcode;
+
+                            // Sort by opcode
+                            constraints.Add(Implies(isIndependent, line.ComponentOpcode >= prev.ComponentOpcode));
+
+                            // If they have identical opcodes, 
+                            var comb0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, toBv(prev.Operands[0].IsConstant), toBv(prev.Operands[1].IsConstant), prev.Operands[0].Index, prev.Operands[1].Index);
+                            var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, toBv(line.Operands[0].IsConstant), toBv(line.Operands[1].IsConstant), line.Operands[0].Index, line.Operands[1].Index);
+                            var tie = matches & sameOpcode;
+                            constraints.Add(Implies(tie, comb0 <= comb1));
+
+                            //var (j, k) = prev.Operands[0].Index
+
+                            //var tie = isIndependent & sameOpcode;
+                            //var ags0 = prev.Operands.Select(x => x.)
+
+
+
+                            //var same = line.ComponentOpcode == next.ComponentOpcode;
                         }
 
                         if (!opc.IsIdempotent())
