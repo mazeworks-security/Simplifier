@@ -1,0 +1,80 @@
+===================================
+# Encoding
+
+# A maximum number of constants is specified, each receiving a variable of
+Constants:
+const0 = BvConst("const0", WIDTH)
+const1 = BvConst("const1", WIDTH)
+const2 = BvConst("const2", WIDTH)
+
+Enum Opcode
+{
+	Add = 0,
+	Sub = 1,
+	And = 2,
+	...
+}
+
+Operand
+{
+	is_constant: Bool
+	index: BitVec
+}
+
+# Line definitions
+# First few lines dedicated to inputs ( [x, y] )
+# All subsequent lines dedicated to operations
+lines[0] = x
+lines[1] = y
+lines[N] = opcode operands[2] 
+lines[N+1] = opcode operands[2] 
+...
+
+===================================
+# Selection of semantics
+
+
+line = lines[N]
+opcode = line.opcode
+op0 = line.operands[0]
+op1 = line.operands[1]
+
+# If the operand is a constant, represent it as an ITE chain selecting one of the possible constants
+opnd0_const = ITE(op0.index == 0, constants[0], ITE(op0.index == 1, constants[1], constants[2]))
+opnd1_const = ITE(op1.index == 0, constants[0], ITE(op1.index == 1, constants[1], constants[2]))
+# Similarly if the operand is not a c onstant, represent it as an ITE chain selecting the semantic of a previous line
+opnd0_value = ITE(op0.index == 0, semantics[0], semantics[1])
+opnd1_value = ITE(op1.index == 0, semantics[0], semantics[1])
+
+# We then select either a constant or line semantic using `is_constant`
+op0 = ITE(op0.is_constant, opnd0_const, opnd0_value)
+op1 = ITE(op1.is_constant, opnd1_const, opnd1_value)
+# Finally the semantics for this line is represented as an ITE chain of all possible semantics.
+semantics[0] = ITE(opcode == Add, op0 + op1, ITE(opcode == Sub, op0 - op1, op0 & op1 ... ))
+
+===================================
+Real world example: (a&b) + 255
+
+Line definitions:
+lines[0] = a
+lines[1] = b
+lines[2] = compCode2 (line2_op0Const line2_op0) (line2_op1Const line2_op1)
+lines[3] = compCode3 (line3_op0Const line3_op0) (line3_op1Const line3_op1)
+semantics0 = a
+
+semantics1 = b
+
+line2_op0_semantics = (let ((_let0 (= line2_op0 #b00))) (ite line2_op0Const (ite _let0 const0 const1) (ite _let0 a b)))
+
+line2_op1_semantics = (let ((_let0 (= line2_op1 #b00))) (ite line2_op1Const (ite _let0 const0 const1) (ite _let0 a b)))
+
+semantics2 = (ite (= compCode2 #b000) (bvnot line2_op0_semantics) (ite (= compCode2 #b001) (bvand line2_op0_semantics line2_op1_semantics) (ite (= compCode2 #b010) (bvor line2_op0_semantics line2_op1_semantics) (ite (= compCode2 #b011) (bvxor line2_op0_semantics line2_op1_semantics) (ite (= compCode2 #b100) (bvadd line2_op0_semantics line2_op1_semantics) (bvsub line2_op0_semantics line2_op1_semantics))))))
+
+line3_op0_semantics = (let ((_let0 (= line3_op0 #b00))) (ite line3_op0Const (ite _let0 const0 const1) (ite _let0 a (ite (= line3_op0 #b01) b semantics2))))
+
+line3_op1_semantics = (let ((_let0 (= line3_op1 #b00))) (ite line3_op1Const (ite _let0 const0 const1) (ite _let0 a (ite (= line3_op1 #b01) b semantics2))))
+
+semantics3 = (ite (= compCode3 #b000) (bvnot line3_op0_semantics) (ite (= compCode3 #b001) (bvand line3_op0_semantics line3_op1_semantics) (ite (= compCode3 #b010) (bvor line3_op0_semantics line3_op1_semantics) (ite (= compCode3 #b011) (bvxor line3_op0_semantics line3_op1_semantics) (ite (= compCode3 #b100) (bvadd line3_op0_semantics line3_op1_semantics) (bvsub line3_op0_semantics line3_op1_semantics))))))
+
+
+===================================
