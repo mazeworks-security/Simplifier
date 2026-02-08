@@ -240,80 +240,6 @@ namespace Mba.Simplifier.Synth
             return lines;
         }
 
-        /*
-        private Term GetSkeleton()
-        {
-            var exprs = new List<Term>();
-
-            // Identify indices for Add and Sub to merge them into a shared adder
-            var opcodes = Opcodes;
-            var subIndices = new List<int>();
-            bool hasAdd = false;
-            for (int i = 0; i < opcodes.Count; i++)
-            {
-                if (opcodes[i] == SynthOpc.Add) hasAdd = true;
-                if (opcodes[i] == SynthOpc.Sub) subIndices.Add(i);
-            }
-            bool useSharedAdder = hasAdd && subIndices.Any();
-
-            useSharedAdder = false ;
-
-            for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
-            {
-                // The first N lines are symbols
-                var line = lines[lineIndex];
-                if (line.IsSymbol)
-                {
-                    exprs.Add(symbols[lineIndex]);
-                    continue;
-                }
-
-                // Select all of the operands
-                var operands = line.Operands.Select(x => SelectOperand(x, exprs)).ToList();
-
-                // Provide the concrete value just for lazy editing.
-                for (int i = 0; i < line.Operands.Length; i++)
-                    line.Operands[i].ConcreteValue = operands[i].justConstants;
-
-                Term sharedAdder = null;
-                if (useSharedAdder)
-                {
-                    var op0 = operands[0].expr;
-                    var op1 = operands[1].expr;
-
-                    // Condition: ComponentOpcode == subIndex1 OR ComponentOpcode == subIndex2 ...
-                    var isSub = Or(subIndices.Select(idx => line.ComponentOpcode == ctx.MkBvValue(idx, componentOpcodeSize)));
-
-                    // A - B <=> A + (-B)
-                    // If we are doing subtraction, negate the second operand.
-                    var op1Term = ctx.MkIte(isSub, -op1, op1);
-                    sharedAdder = op0 + op1Term;
-                }
-
-                var terms = new List<Term>();
-                for (int i = 0; i < opcodes.Count; i++)
-                {
-                    var opcode = opcodes[i];
-                    if (useSharedAdder && (opcode == SynthOpc.Add || opcode == SynthOpc.Sub))
-                    {
-                        terms.Add(sharedAdder);
-                    }
-                    else
-                    {
-                        var term = ApplyOperator(opcode, operands.Select(x => x.expr).ToList());
-                        terms.Add(term);
-                    }
-                }
-
-                var select = LinearSelect(line.ComponentOpcode, terms);
-                exprs.Add(select);
-            }
-
-            return exprs.Last();
-        }
-        */
-
-
         private Term GetSkeleton()
         {
             var exprs = new List<Term>();
@@ -1079,7 +1005,7 @@ namespace Mba.Simplifier.Synth
                     Debugger.Break();
                 }
 
-                bool generalize = false;
+                bool generalize = true;
                 if (generalize)
                 {
                     Console.WriteLine("Beginning generalization...");
@@ -1733,74 +1659,6 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 11, 4);
-            var synth = new BvSynthesis(config, ctx, idx);
-
-            synth.Run();
-        }
-
-        public static void PSpecializedNodesDoesNotWork()
-        {
-            var (ctx, idx) = Parse("32213231+(a&b&1111)-c", 64);
-
-            var components = new List<SynthComponent>()
-            {
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.And, SynthOpc.Xor),
-                //new(SynthOpc.Add),
-
-                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Sub, SynthOpc.Add, SynthOpc.Shl),
-                //new(new ComponentData(4), SynthOpc.Not),
-                new(new ComponentData(4), SynthOpc.And),
-                // new(new ComponentData(4), SynthOpc.Or),
-                //new(new ComponentData(4), SynthOpc.Xor),
-                 new(new ComponentData(4), SynthOpc.Sub),
-                new(new ComponentData(4), SynthOpc.Add),
-                 new(new ComponentData(4), SynthOpc.Shl),
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Shl),
-
-
-                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
-                // new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
-
-                // Optional
-                //new(new ComponentData(), SynthOpc.Not),
-                //new(new ComponentData(), SynthOpc.Or),
-
-                /*
-                new(new ComponentData(2), SynthOpc.And),
-
-                new(new ComponentData(2), SynthOpc.Xor),
-                new(new ComponentData(2), SynthOpc.Add),
-
-                new(new ComponentData(2), SynthOpc.Shl),
-                */
-            };
-
-            var config = new SynthConfig(components, 7, 4);
-            var synth = new BvSynthesis(config, ctx, idx);
-
-            synth.Run();
-        }
-
-        public static void PSpecializedNodes()
-        {
-            var (ctx, idx) = Parse("15795372935317283107 + parameter0 + -(34359717887 & parameter0 ^ 9511600802393731071)", 64);
-
-            var components = new List<SynthComponent>()
-            {
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.And, SynthOpc.Xor),
-                //new(SynthOpc.Add),
-
-                new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Sub, SynthOpc.Add),
-
-                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
-               // new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
-            };
-
-            var config = new SynthConfig(components, 5, 3);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
