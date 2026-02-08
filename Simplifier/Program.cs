@@ -373,6 +373,8 @@ inputText = "(a|b|c|d|e|f)";
 
 inputText = "(171^((a+23)^(b)))^((((a|1111)+b)^b))";
 
+inputText = "32213231+a+b+c";
+
 //inputText = "(((x|1111)+y)^y)";
 
 //inputText = "((x ^ 60) * ((82 - (x * (x ^ 60)))))";
@@ -504,7 +506,7 @@ bool useNew = true;
 if (useNew)
 {
     //SynthTests.P1();
-    SynthTests.PMatteo();
+    SynthTests.Pminv();
     Debugger.Break();
     //var synthesizer = new BvSynthesis(ctx, id);
     //synthesizer.Run();
