@@ -650,7 +650,8 @@ namespace Mba.Simplifier.Synth
                             var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, toBv(line.Operands[0].IsConstant), toBv(line.Operands[1].IsConstant), line.Operands[0].Index, line.Operands[1].Index);
                             var tie = matches & sameOpcode;
 
-                            bool CSE = false;
+                            // CSE only helps if the CEGIS(T) opcode generalization is turned on
+                            bool CSE = true;
                             if (CSE)
                                 constraints.Add(Implies(tie, comb0 < comb1));
                             else
@@ -832,9 +833,9 @@ namespace Mba.Simplifier.Synth
 
                     Console.WriteLine("Beginning generalization...");
                     var sww = Stopwatch.StartNew();
-                    var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
+                    //var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
 
-                    //var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
+                    var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
 
                     sww.Stop();
                     Console.WriteLine($"Generalizing took {sww.ElapsedMilliseconds}ms");
