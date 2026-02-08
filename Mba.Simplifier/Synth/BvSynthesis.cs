@@ -413,13 +413,9 @@ namespace Mba.Simplifier.Synth
             }
         }
 
-        // Proper liveness analysis: an instruction is live iff it is the output
-        // or it is used by at least one instruction that is itself live.
-        // This is computed backwards from the output.
+     
         private void AddLivenessConstraints(List<Term> constraints)
         {
-            // Assert that every instruction (including variables) is used
-
             for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
             {
                 if (lineIdx != lines.Count - 1)
@@ -454,7 +450,6 @@ namespace Mba.Simplifier.Synth
             int numLines = lines.Count;
             int lastIdx = numLines - 1;
 
-            // Helper: does instruction j reference line index i as a non-constant operand?
             Term UsedBy(int i, int j)
             {
                 var operands = lines[j].Operands;
@@ -465,20 +460,13 @@ namespace Mba.Simplifier.Synth
                 }
                 return Or(clauses);
             }
-
-            // Build liveness terms backwards.
-            // live[i] is a symbolic boolean that is true iff instruction i
-            // contributes (transitively) to the output.
             var live = new Term[numLines];
 
-            // The output instruction is always live.
             live[lastIdx] = ctx.MkTrue();
 
-            // Walk backwards from the second-to-last instruction.
+
             for (int i = lastIdx - 1; i >= FirstInstIdx; i--)
             {
-                // live[i] = OR over all later instructions j:
-                //   (live[j] AND j_references_i)
                 var liveConditions = new List<Term>();
                 for (int j = i + 1; j < numLines; j++)
                 {
@@ -494,7 +482,6 @@ namespace Mba.Simplifier.Synth
                     live[i] = ctx.MkFalse();
             }
 
-            // Assert that every non-symbol instruction must be live.
             for (int i = FirstInstIdx; i < lastIdx; i++)
             {
                 constraints.Add(live[i]);
@@ -839,9 +826,9 @@ namespace Mba.Simplifier.Synth
 
                     Console.WriteLine("Beginning generalization...");
                     var sww = Stopwatch.StartNew();
-                    var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
+                    //var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
 
-                    //var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
+                    var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
 
                     sww.Stop();
                     Console.WriteLine($"Generalizing took {sww.ElapsedMilliseconds}ms");
@@ -1048,7 +1035,7 @@ namespace Mba.Simplifier.Synth
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
             //options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_UNSAT_CORES, true);
-            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 3000);
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 5000);
             var solver = new BvSolver(ctx, options);
 
 
@@ -1088,31 +1075,6 @@ namespace Mba.Simplifier.Synth
 
                 structureVars.Add(line.ComponentOpcode);
             }
-
-            /*
-            // Get a list of constraints of the assigned values.
-            List<Term> structureConstraints = new();
-            foreach (var svar in structureVars)
-            {
-                // Add a backtrackable constraint.
-                solver.Push(1);
-
-                var eval = oldModel.GetValue(svar);
-                if (eval.Kind != BitwuzlaKind.BITWUZLA_KIND_VALUE)
-                    Debugger.Break();
-
-                if (eval.Sort.IsBv)
-                    structureConstraints.Add(svar == ctx.GetIntegerValue(eval));
-                else
-                    structureConstraints.Add(svar == ctx.GetBoolValue(eval));
-            }
-
-            foreach (var t in structureConstraints)
-                solver.Push();
-            */
-
-            //var ss = solver.CheckSat();
-            //Console.WriteLine(ss);
 
             Stack<Term> levels = new();
 
