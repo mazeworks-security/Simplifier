@@ -598,7 +598,7 @@ namespace Mba.Simplifier.Synth
                         }
 
                         // Constant fold unary instrunctions
-                        if(constFold && opc.GetOperandCount() == 1)
+                        if(false && opc.GetOperandCount() == 1)
                         {
                             constraints.Add(Implies(matches, line.Operands[0].IsConstant == false));
                         }
