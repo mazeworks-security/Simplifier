@@ -20,6 +20,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace Mba.Simplifier.Synth
 {
@@ -348,6 +349,7 @@ namespace Mba.Simplifier.Synth
         {
             var constraints = new List<Term>();
             AddAcyclicConstraints(constraints);
+            AddLivenessConstraints(constraints);
             AddPruningConstraints(constraints);
             AddSymmetricConstantsConstraint(constraints);
             AddLimitConstraints(constraints);
@@ -411,6 +413,96 @@ namespace Mba.Simplifier.Synth
             }
         }
 
+        // Proper liveness analysis: an instruction is live iff it is the output
+        // or it is used by at least one instruction that is itself live.
+        // This is computed backwards from the output.
+        private void AddLivenessConstraints(List<Term> constraints)
+        {
+            // Assert that every instruction (including variables) is used
+
+            for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
+            {
+                if (lineIdx != lines.Count - 1)
+                {
+                    // TODO: For some reason we get worse results if we assert that each variable be used?
+                    if (lines[lineIdx].IsSymbol)
+                        continue;
+
+                    var usageConditions = new List<Term>();
+                    for (int j = lineIdx + 1; j < lines.Count; j++)
+                    {
+                        if (lines[j].IsSymbol)
+                            continue;
+
+                        var operands = lines[j].Operands;
+                        var used0 = (~operands[0].IsConstant) & (operands[0].Index == lineIdx);
+                        var used1 = (~operands[1].IsConstant) & operands[1].Index == lineIdx;
+
+                        Debug.Assert(components.SelectMany(x => x.Opcodes).Where(x => x.GetOperandCount() == 1).Single() == SynthOpc.Not);
+
+                        usageConditions.Add(used0);
+                        usageConditions.Add(used1);
+                    }
+
+                    var anyUses = Or(usageConditions);
+                    constraints.Add(anyUses);
+                }
+            }
+
+            return;
+
+            int numLines = lines.Count;
+            int lastIdx = numLines - 1;
+
+            // Helper: does instruction j reference line index i as a non-constant operand?
+            Term UsedBy(int i, int j)
+            {
+                var operands = lines[j].Operands;
+                var clauses = new List<Term>();
+                for (int k = 0; k < operands.Length; k++)
+                {
+                    clauses.Add((~operands[k].IsConstant) & (operands[k].Index == (uint)i));
+                }
+                return Or(clauses);
+            }
+
+            // Build liveness terms backwards.
+            // live[i] is a symbolic boolean that is true iff instruction i
+            // contributes (transitively) to the output.
+            var live = new Term[numLines];
+
+            // The output instruction is always live.
+            live[lastIdx] = ctx.MkTrue();
+
+            // Walk backwards from the second-to-last instruction.
+            for (int i = lastIdx - 1; i >= FirstInstIdx; i--)
+            {
+                // live[i] = OR over all later instructions j:
+                //   (live[j] AND j_references_i)
+                var liveConditions = new List<Term>();
+                for (int j = i + 1; j < numLines; j++)
+                {
+                    if (lines[j].IsSymbol)
+                        continue;
+
+                    liveConditions.Add(live[j] & UsedBy(i, j));
+                }
+
+                if (liveConditions.Count > 0)
+                    live[i] = Or(liveConditions);
+                else
+                    live[i] = ctx.MkFalse();
+            }
+
+            // Assert that every non-symbol instruction must be live.
+            for (int i = FirstInstIdx; i < lastIdx; i++)
+            {
+                constraints.Add(live[i]);
+            }
+        }
+
+
+
         private void AddPruningConstraints(List<Term> constraints)
         {
             var sum = ctx.MkBvValue(0, 4);
@@ -430,41 +522,15 @@ namespace Mba.Simplifier.Synth
             {
                 var line = lines[lineIdx];
 
-                bool dce = true;
-
-                // Assert that every instruction (including variables) is used
-                if (dce && lineIdx != lines.Count - 1)
-                {
-                    // TODO: For some reason we get worse results if we assert that each variable be used?
-                    if (lines[lineIdx].IsSymbol)
-                        continue;
-
-                    var usageConditions = new List<Term>();
-                    for (int j = lineIdx + 1; j < lines.Count; j++)
-                    {
-                        if (lines[j].IsSymbol)
-                            continue;
-
-                        var operands = lines[j].Operands;
-                        var used0 = (~operands[0].IsConstant) & (operands[0].Index == lineIdx);
-                        var used1 = (~operands[1].IsConstant) & (operands[1].Index == lineIdx);
-
-                        usageConditions.Add(used0);
-                        usageConditions.Add(used1);
-                    }
-
-                    var anyUses = Or(usageConditions);
-                    constraints.Add(anyUses);
-                }
-
-
                 if (lineIdx < FirstInstIdx)
                     continue;
 
                 // Both operands should not be constant.
                 bool constFold = true;
                 if (constFold)
+                {
                     constraints.Add(~And(line.Operands.Select(x => x.IsConstant)));
+                }
 
                 var toBv = (Term term) => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
                 bool cse = false;
@@ -530,6 +596,13 @@ namespace Mba.Simplifier.Synth
                             // this does seem to speed things up
                             constraints.Add(Implies(matches, line.Operands[1].IsConstant == false));
                         }
+
+                        // Constant fold unary instrunctions
+                        if(constFold && opc.GetOperandCount() == 1)
+                        {
+                            constraints.Add(Implies(matches, line.Operands[0].IsConstant == false));
+                        }
+
 
                         // For some reason this heavily degrades performance.
                         bool foldTrivialConstantIdentities = false;
@@ -756,9 +829,9 @@ namespace Mba.Simplifier.Synth
 
                     Console.WriteLine("Beginning generalization...");
                     var sww = Stopwatch.StartNew();
-                    // var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants);
+                    var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
 
-                    var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
+                    //var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
 
                     sww.Stop();
                     Console.WriteLine($"Generalizing took {sww.ElapsedMilliseconds}ms");
@@ -884,7 +957,7 @@ namespace Mba.Simplifier.Synth
             return (ourNodes.Last(), cegisNodes.Last(), cegisConstants);
         }
 
-        private (Term generalizedSolution, Term generalizedConstraints) Generalize(BvSolver oldModel, Term candidate, List<Term> cegisConstants)
+        private (Term generalizedSolution, Term generalizedConstraints) Generalize(BvSolver oldModel, Term candidate, List<Term> cegisConstants, Stopwatch totalTime)
         {
             // Replace the constants with symbolic holes
             var skeleton = ctx.SubstituteTerm(candidate, cegisConstants.ToArray(), constants.ToArray());
@@ -917,9 +990,15 @@ namespace Mba.Simplifier.Synth
 
             solver.Write();
 
+            var sw = Stopwatch.StartNew();
             var res = solver.CheckSat();
             if (res == Result.Sat)
+            {
+                totalTime.Stop();
+                sw.Stop();
+                Console.WriteLine($"Found global solution in {totalTime.ElapsedMilliseconds}ms. Solving generalized query took {sw.ElapsedMilliseconds}");
                 Debugger.Break();
+            }
 
             // Otherwise this solution is impossible.
             List<Term> structureVars = new();
@@ -959,7 +1038,7 @@ namespace Mba.Simplifier.Synth
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
             //options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_UNSAT_CORES, true);
-            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 5000);
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 3000);
             var solver = new BvSolver(ctx, options);
 
 
@@ -1059,7 +1138,7 @@ namespace Mba.Simplifier.Synth
             var normalLines = lines.Skip(FirstInstIdx).ToList();
             var visit = new List<Term>();
             // First process all opcodes
-            
+
             visit.AddRange(normalLines.Select(x => x.ComponentOpcode));
             visit.AddRange(normalLines.Select(x => x.Operands[0].Index));
             visit.AddRange(normalLines.Select(x => x.Operands[1].Index));
@@ -1109,7 +1188,7 @@ namespace Mba.Simplifier.Synth
 
             all.Reverse();
 
-            foreach(var elem in all)
+            foreach (var elem in all)
             {
                 solver.Push();
                 solver.Assert(elem);
@@ -1681,6 +1760,29 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 8, 3);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+        public static void PBenchSlotSlightlyMoreTractable()
+        {
+            var (ctx, idx) = Parse("(x^y) & (15795372935317283107 + parameter0 + -(34359717887 & parameter0 ^ 9511600802393731071))", 64);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.And, SynthOpc.Xor),
+                //new(SynthOpc.Add),
+
+                new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Sub, SynthOpc.Add),
+
+                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
+               // new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 9, 3);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
