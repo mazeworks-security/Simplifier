@@ -1630,23 +1630,32 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.Add),
 
                 //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Sub, SynthOpc.Add, SynthOpc.Shl),
+                //new(new ComponentData(3), SynthOpc.Not),
+                new(new ComponentData(3), SynthOpc.And),
+                 //new(new ComponentData(3), SynthOpc.Or),
+                new(new ComponentData(3), SynthOpc.Xor),
+                 new(new ComponentData(3), SynthOpc.Sub),
+                new(new ComponentData(3), SynthOpc.Add),
+                 new(new ComponentData(3), SynthOpc.Shl),
                 //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Shl),
 
 
                 //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
                 // new(SynthOpc.Add, SynthOpc.Sub),
                 //new(SynthOpc.Not, SynthOpc.Or),
-                
+
                 // Optional
                 //new(new ComponentData(), SynthOpc.Not),
                 //new(new ComponentData(), SynthOpc.Or),
 
+                /*
                 new(new ComponentData(2), SynthOpc.And),
 
                 new(new ComponentData(2), SynthOpc.Xor),
                 new(new ComponentData(2), SynthOpc.Add),
 
                 new(new ComponentData(2), SynthOpc.Shl),
+                */
             };
 
             var config = new SynthConfig(components, 11, 4);
