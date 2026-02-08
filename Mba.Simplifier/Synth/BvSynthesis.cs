@@ -586,16 +586,6 @@ namespace Mba.Simplifier.Synth
                             var tie = matches & sameOpcode;
 
                             constraints.Add(Implies(tie, comb0 <= comb1));
-
-
-                            //var (j, k) = prev.Operands[0].Index
-
-                            //var tie = isIndependent & sameOpcode;
-                            //var ags0 = prev.Operands.Select(x => x.)
-
-
-
-                            //var same = line.ComponentOpcode == next.ComponentOpcode;
                         }
 
                         if (!opc.IsIdempotent())
@@ -612,31 +602,10 @@ namespace Mba.Simplifier.Synth
 
                 }
             }
-
-            // Constrain the number of multipliers
-            //constraints.Add(sum <= 5);
         }
 
         private void AddLimitConstraints(List<Term> constraints)
         {
-            /*
-            var size = lines.Count - FirstInstIdx;
-            var zero = ctx.MkBvValue(0, (ulong)size);
-            var one = ctx.MkBvValue(1, (ulong)size);
-            var sums = Opcodes.Select(x => zero).ToArray();
-            for(int i = FirstInstIdx; i < lines.Count; i++)
-            {
-                var line = lines[i];
-                for(int opcodeIdx = 0; opcodeIdx < Opcodes.Count; opcodeIdx++)
-                {
-                    var isTarget = IsInstance(line, Opcodes[opcodeIdx]);
-                    var cost = ctx.MkIte(isTarget, one, zero);
-
-                    sums[opcodeIdx] += cost;
-                }
-            }
-            */
-
             var size = lines.Count - FirstInstIdx;
             var zero = ctx.MkBvValue(0, (ulong)size);
             var one = ctx.MkBvValue(1, (ulong)size);
