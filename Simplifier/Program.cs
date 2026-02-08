@@ -504,7 +504,7 @@ bool useNew = true;
 if (useNew)
 {
     //SynthTests.P1();
-    SynthTests.P5();
+    SynthTests.PMatteo();
     Debugger.Break();
     //var synthesizer = new BvSynthesis(ctx, id);
     //synthesizer.Run();
