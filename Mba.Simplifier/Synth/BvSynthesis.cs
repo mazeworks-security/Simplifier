@@ -1369,7 +1369,6 @@ namespace Mba.Simplifier.Synth
 
             var config = new SynthConfig(components, 9, 3);
             var synth = new BvSynthesis(config, ctx, idx);
-
             synth.Run();
         }
 
