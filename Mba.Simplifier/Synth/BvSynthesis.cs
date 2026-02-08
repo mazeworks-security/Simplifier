@@ -423,7 +423,7 @@ namespace Mba.Simplifier.Synth
                     constraints.Add(constants[i] > constants[i - 1]);
                 }
             }
-            
+
 
             // Constrain each opcode to be less than its maximum
             for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
@@ -499,10 +499,17 @@ namespace Mba.Simplifier.Synth
                 }
 
                 // Constant shift opt
-                bool constantShiftsOnly = false;
+                bool constantShiftsOnly = true;
                 if (components.Any(x => x.Opcodes.Contains(SynthOpc.Shl)) && constantShiftsOnly)
                 {
                     var isShift = IsComponent(line, SynthOpc.Shl);
+                    constraints.Add(Implies(isShift, line.Operands[1].IsConstant));
+                }
+
+                bool constantRShiftsOnly = true;
+                if (components.Any(x => x.Opcodes.Contains(SynthOpc.Lshr)) && constantRShiftsOnly)
+                {
+                    var isShift = IsComponent(line, SynthOpc.Lshr);
                     constraints.Add(Implies(isShift, line.Operands[1].IsConstant));
                 }
 
@@ -746,10 +753,10 @@ namespace Mba.Simplifier.Synth
                 bool generalize = true;
                 if (generalize)
                 {
-                   
+
                     Console.WriteLine("Beginning generalization...");
                     var sww = Stopwatch.StartNew();
-                    //var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants);
+                    // var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants);
 
                     var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
 
@@ -761,7 +768,7 @@ namespace Mba.Simplifier.Synth
                     constraints.Add(generalizedBan);
                 }
 
-                
+
 
                 var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
                 s.Assert(GetBehavioralConstraint(skeleton, vs));
@@ -952,7 +959,9 @@ namespace Mba.Simplifier.Synth
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
             //options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_UNSAT_CORES, true);
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 1000);
             var solver = new BvSolver(ctx, options);
+
 
 
             // Instantiate new quantifier variables.
@@ -1020,52 +1029,75 @@ namespace Mba.Simplifier.Synth
 
             List<Term> opcodeConstraints = new();
 
-            foreach(var line in lines)
+            // Initially add all of the operands structures
+            foreach (var line in lines)
             {
                 if (line.IsSymbol)
                     continue;
 
-                solver.Push(1);
+                // solver.Push(1);
 
                 // Get all symbolic variables
                 var symVars = new List<Term>();
                 symVars.Add(line.ComponentOpcode);
 
-                
-                foreach(var op in line.Operands)
+
+                foreach (var op in line.Operands)
                 {
                     symVars.Add(op.Index);
                     symVars.Add(op.IsConstant);
                 }
-                
+
 
                 List<Term> curr = new List<Term>();
 
-                foreach(var svar in symVars)
+                foreach (var svar in symVars)
                 {
                     var eval = oldModel.GetValue(svar);
                     if (eval.Kind != BitwuzlaKind.BITWUZLA_KIND_VALUE)
                         Debugger.Break();
+
+
 
                     if (eval.Sort.IsBv)
                         curr.Add(svar == ctx.GetIntegerValue(eval));
                     else
                         curr.Add(svar == ctx.GetBoolValue(eval));
 
-                    if (lines.Any(x => !x.IsSymbol && x.ComponentOpcode.native == svar.native))
-                        opcodeConstraints.Add(curr.Last());
+        
 
                 }
 
                 all.AddRange(curr);
 
-                foreach (var c in curr)
-                    solver.Assert(c);
+                //foreach (var c in curr)
+                //    solver.Assert(c);
 
-                levels.Push(And(curr));
-
+                
             }
 
+            foreach(var elem in all)
+            {
+                solver.Push();
+                solver.Assert(elem);
+            }
+
+
+            /*
+            // Then add opcodes
+            foreach (var opc in opcodeConstraints)
+            {
+                solver.Assert(opc);
+            }
+
+            foreach (var level in levels)
+            {
+                solver.Push();
+                solver.Assert(level);
+            }
+            */
+
+            // return (null, Implies(And(opcodeConstraints), ~And(all)));
             /*
             var s = solver.CheckSat();
             if (s == Result.Sat)
@@ -1075,25 +1107,59 @@ namespace Mba.Simplifier.Synth
             core.Remove(core.Single(x => x.Kind == BitwuzlaKind.BITWUZLA_KIND_FORALL));
             */
 
-            return (null, Implies(And(opcodeConstraints), ~And(all));
+
             //return (null, ~And(all));
 
-            /*
-            for (int i = FirstInstIdx; i < lines.Count; i++)
+
+            // We build a skeleton like this, where the opcodes are defined and the wires are symbolic:
+            // add op op
+            // sub op op
+            // and op op
+            // or op op
+
+            var all2 = new List<Term>();
+            all2.AddRange(all.Where(x => x.ToString().Contains("compCode")).OrderBy(x => x.ToString()));
+            all2 = all2.Concat(all.OrderBy(x => x.ToString()).Where(x => !all2.Contains(x))).ToList();
+
+            //all = all.OrderBy(x => x.ToString()).ToList();
+            all2.Reverse();
+            var stack = new Stack<Term>(all2);
+            while(stack.Any())
             {
-                Console.WriteLine($"Checking: {i - FirstInstIdx}");
+                var peek = stack.Peek();
+                Console.WriteLine($"Checking: {peek}");
+                var sw = Stopwatch.StartNew();
                 var s = solver.CheckSat();
-                Console.WriteLine(s);
+                sw.Stop();
+                Console.WriteLine($"Took {sw.ElapsedMilliseconds} with result {s}");
 
-                var core = solver.GetUnsatCore();
+                if (s == Result.Unknown)
+                    break;
 
-                solver.Pop(1);
+                solver.Pop();
+                stack.Pop();
             }
-            */
+
+            return (null, ~And(stack));
+
+            /*
+
+            // We are killing a specific configuration... instead we want to reject as many configuration as possible..
+            // Opcodes are more expensive 
+            // But we're still pruning a much larger space.
+            if (levels.Count == 0)
+            {
+                return (null, ~And(stack));
+            }
+
+
 
             Debugger.Break();
 
+
+
             return (null, null);
+            */
         }
 
 
@@ -1588,9 +1654,9 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.And, SynthOpc.Xor),
                 //new(SynthOpc.Add),
 
-                new(new ComponentData(4), SynthOpc.Lshr),
-                new(new ComponentData(4), SynthOpc.Or),
-                new(new ComponentData(4), SynthOpc.And),
+                new(new ComponentData(2), SynthOpc.Lshr),
+                new(new ComponentData(3), SynthOpc.Or),
+                new(new ComponentData(3), SynthOpc.And),
                 new(new ComponentData(4), SynthOpc.Shl),
 
                 //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
