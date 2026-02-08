@@ -959,7 +959,7 @@ namespace Mba.Simplifier.Synth
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
             //options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_UNSAT_CORES, true);
-            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 2500);
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 5000);
             var solver = new BvSolver(ctx, options);
 
 
