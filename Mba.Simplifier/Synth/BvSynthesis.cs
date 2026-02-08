@@ -746,8 +746,15 @@ namespace Mba.Simplifier.Synth
                 bool generalize = true;
                 if (generalize)
                 {
+                   
                     Console.WriteLine("Beginning generalization...");
-                    var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants);
+                    var sww = Stopwatch.StartNew();
+                    //var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants);
+
+                    var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
+
+                    sww.Stop();
+                    Console.WriteLine($"Generalizing took {sww.ElapsedMilliseconds}ms");
                     Console.WriteLine("Finished generalization...");
                     Debug.Assert(generalizedSolution is null);
                     s.Assert(generalizedBan);
@@ -937,6 +944,158 @@ namespace Mba.Simplifier.Synth
 
             return (null, ~And(structureConstraints));
         }
+
+
+        private (Term generalizedSolution, Term generalizedConstraints) GeneralizeIncremental(BvSolver oldModel, Term skeleton, List<Term> cegisConstants)
+        {
+
+            var options = new Options();
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
+            //options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_UNSAT_CORES, true);
+            var solver = new BvSolver(ctx, options);
+
+
+            // Instantiate new quantifier variables.
+            var quantVars = new List<Term>();
+            for (int i = 0; i < symbols.Length; i++)
+            {
+                var v = ctx.MkVar(symbols[i].Sort, mbaCtx.GetSymbolName(mbaVariables[i]));
+                quantVars.Add(v);
+            }
+
+            // Substitute the global constants (symbols) with the bound variables in the check
+            var groundTruthBody = ctx.SubstituteTerm(groundTruth, symbols, quantVars.ToArray());
+            var skeletonBody = ctx.SubstituteTerm(skeleton, symbols, quantVars.ToArray());
+
+            var equality = groundTruthBody == skeletonBody;
+            var concat = quantVars.Append(equality).ToArray();
+            var forall = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_FORALL, concat);
+
+            solver.Assert(forall);
+
+            // Get a list of all structural variables
+            List<Term> structureVars = new();
+            foreach (var line in lines)
+            {
+                if (line.IsSymbol)
+                    continue;
+
+                foreach (var operand in line.Operands)
+                {
+                    structureVars.Add(operand.Index);
+                    structureVars.Add(operand.IsConstant);
+                }
+
+                structureVars.Add(line.ComponentOpcode);
+            }
+
+            /*
+            // Get a list of constraints of the assigned values.
+            List<Term> structureConstraints = new();
+            foreach (var svar in structureVars)
+            {
+                // Add a backtrackable constraint.
+                solver.Push(1);
+
+                var eval = oldModel.GetValue(svar);
+                if (eval.Kind != BitwuzlaKind.BITWUZLA_KIND_VALUE)
+                    Debugger.Break();
+
+                if (eval.Sort.IsBv)
+                    structureConstraints.Add(svar == ctx.GetIntegerValue(eval));
+                else
+                    structureConstraints.Add(svar == ctx.GetBoolValue(eval));
+            }
+
+            foreach (var t in structureConstraints)
+                solver.Push();
+            */
+
+            //var ss = solver.CheckSat();
+            //Console.WriteLine(ss);
+
+            Stack<Term> levels = new();
+
+            List<Term> all = new();
+
+            List<Term> opcodeConstraints = new();
+
+            foreach(var line in lines)
+            {
+                if (line.IsSymbol)
+                    continue;
+
+                solver.Push(1);
+
+                // Get all symbolic variables
+                var symVars = new List<Term>();
+                symVars.Add(line.ComponentOpcode);
+
+                
+                foreach(var op in line.Operands)
+                {
+                    symVars.Add(op.Index);
+                    symVars.Add(op.IsConstant);
+                }
+                
+
+                List<Term> curr = new List<Term>();
+
+                foreach(var svar in symVars)
+                {
+                    var eval = oldModel.GetValue(svar);
+                    if (eval.Kind != BitwuzlaKind.BITWUZLA_KIND_VALUE)
+                        Debugger.Break();
+
+                    if (eval.Sort.IsBv)
+                        curr.Add(svar == ctx.GetIntegerValue(eval));
+                    else
+                        curr.Add(svar == ctx.GetBoolValue(eval));
+
+                    if (lines.Any(x => !x.IsSymbol && x.ComponentOpcode.native == svar.native))
+                        opcodeConstraints.Add(curr.Last());
+
+                }
+
+                all.AddRange(curr);
+
+                foreach (var c in curr)
+                    solver.Assert(c);
+
+                levels.Push(And(curr));
+
+            }
+
+            /*
+            var s = solver.CheckSat();
+            if (s == Result.Sat)
+                Debugger.Break();
+
+            var core = solver.GetUnsatCore();
+            core.Remove(core.Single(x => x.Kind == BitwuzlaKind.BITWUZLA_KIND_FORALL));
+            */
+
+            return (null, Implies(And(opcodeConstraints), ~And(all));
+            //return (null, ~And(all));
+
+            /*
+            for (int i = FirstInstIdx; i < lines.Count; i++)
+            {
+                Console.WriteLine($"Checking: {i - FirstInstIdx}");
+                var s = solver.CheckSat();
+                Console.WriteLine(s);
+
+                var core = solver.GetUnsatCore();
+
+                solver.Pop(1);
+            }
+            */
+
+            Debugger.Break();
+
+            return (null, null);
+        }
+
 
 
 

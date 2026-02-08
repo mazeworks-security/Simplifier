@@ -554,6 +554,34 @@ namespace Mba.Simplifier.Synth
             return (Result)BitwuzlaNative.bitwuzla_check_sat_assuming(native, (uint)len, ptrs);
         }
 
+        public unsafe List<Term> GetUnsatCore()
+        {
+            nuint size;
+            var ptr = BitwuzlaNative.bitwuzla_get_unsat_core(native, &size);
+
+            var result = new List<Term>();
+            if (size == 0 || ptr.swigCPtr.Handle == IntPtr.Zero)
+                return result;
+
+            // Access the internal SWIG constructor for BitwuzlaTerm from the IntPtr
+            var ctor = typeof(BitwuzlaTerm).GetConstructor(
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                null,
+                new Type[] { typeof(IntPtr), typeof(bool) },
+                null);
+
+            var items = (IntPtr*)ptr.swigCPtr.Handle;
+            for (ulong i = 0; i < size; i++)
+            {
+                var termPtr = items[i];
+                // Create the BitwuzlaTerm wrapper (ownsMemory=false)
+                var term = (BitwuzlaTerm)ctor.Invoke(new object[] { termPtr, false });
+                result.Add(new Term(term) { Manager = tm });
+            }
+
+            return result;
+        }
+
         public Term GetValue(Term term)
             => new Term(BitwuzlaNative.bitwuzla_get_value(native, term.native)) { Manager = tm };
 
@@ -562,7 +590,7 @@ namespace Mba.Simplifier.Synth
 
         public void Write()
         {
-            var handle = NativeMethods.fopen("C:\\Users\\colton\\Downloads\\Bitwuzla\\your_problem.smt2", "w");
+            var handle = NativeMethods.fopen("\\\\wsl.localhost\\Ubuntu-22.04\\home\\colton\\bitwuzla_linux_build\\bitwuzla\\build\\src\\main\\your_problem.smt2", "w");
             BitwuzlaNative.bitwuzla_print_formula(native, "smt2", new SWIGTYPE_p_FILE(handle, true), 10);
 
             NativeMethods.fclose(handle);
