@@ -370,6 +370,7 @@ namespace Mba.Simplifier.Synth
                     var opConstraint = Implies(~operand.IsConstant, ult);
                     // TODO: Being a constant should also imply that the chosen constant is less than the current line index?
                     // There's at least something weird with the constant symmetry constraints improving this case even when only partially enabled
+                    // TODO: Here we should also be constraining the the constant index is less than or equal to the current line index
                     var constConstraint = Implies(operand.IsConstant, operand.Index <= (uint)Math.Max((config.MaxConstants - 1), 0));
 
                     constraints.Add(opConstraint);
@@ -383,8 +384,11 @@ namespace Mba.Simplifier.Synth
         private void AddSymmetricConstantsConstraint(List<Term> constraints)
         {
             //return;
-            var first = lines[FirstInstIdx].Operands[0];
-            constraints.Add(ctx.MkImplies(first.IsConstant, first.Index == 0));
+            // All operands of the first instruction that are constants must use constant index 0.
+            foreach (var operand in lines[FirstInstIdx].Operands)
+            {
+                constraints.Add(Implies(operand.IsConstant, operand.Index == 0));
+            }
 
             var operands = lines.Skip(FirstInstIdx).SelectMany(x => x.Operands).ToList();
             for (int i = 1; i < operands.Count; i++)
@@ -413,7 +417,7 @@ namespace Mba.Simplifier.Synth
             }
         }
 
-     
+
         private void AddLivenessConstraints(List<Term> constraints)
         {
             for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
@@ -601,7 +605,7 @@ namespace Mba.Simplifier.Synth
 
                         // Rewrite (a - 1111) as (a + -1111)
                         bool canonicalizeConstSubtraction = true;
-                        if(canonicalizeConstSubtraction)
+                        if (canonicalizeConstSubtraction)
                         {
                             if (opc == SynthOpc.Sub && HasComponent(SynthOpc.Add))
                             {
@@ -731,7 +735,7 @@ namespace Mba.Simplifier.Synth
             return line.ComponentOpcode >= (ulong)index;
         }
 
-        private bool HasComponent( SynthOpc opcode)
+        private bool HasComponent(SynthOpc opcode)
         {
             return Opcodes.Contains(opcode);
         }
@@ -827,7 +831,7 @@ namespace Mba.Simplifier.Synth
                 // Ask the solver for a fitting solution
                 var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
 
-                Console.WriteLine($"Found solution. Took {curr.ElapsedMilliseconds}ms\n\n{ourSolution}\n\n\n");
+                Console.WriteLine($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{ourSolution}\n\n\n");
 
                 // Yield the solution if its equivalent
                 options = new Options();
@@ -842,7 +846,7 @@ namespace Mba.Simplifier.Synth
                     Debugger.Break();
                 }
 
-       
+
                 bool generalize = true;
                 if (generalize)
                 {
@@ -962,8 +966,8 @@ namespace Mba.Simplifier.Synth
                 var op0 = () => ourOperands[0];
                 var op1 = () => ourOperands[1];
 
-  
-                
+
+
 
 
                 var opc = Opcodes[(int)opcode];
@@ -985,7 +989,7 @@ namespace Mba.Simplifier.Synth
 
 
                 List<string> operandStrs = new();
-                for(int i = 0; i < MaxArity; i++)
+                for (int i = 0; i < MaxArity; i++)
                 {
                     var operand = line.Operands[i];
                     var isConstant = ctx.GetBoolValue(s.GetValue(operand.IsConstant));
@@ -994,7 +998,7 @@ namespace Mba.Simplifier.Synth
                 }
 
                 Log($"%{li} = {opc}({String.Join(", ", operandStrs)})\n");
-                
+
 
 
                 Term cegisNode = ApplyOperator(opc, cegisOperands);
