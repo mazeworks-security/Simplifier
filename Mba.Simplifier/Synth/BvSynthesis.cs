@@ -650,7 +650,13 @@ namespace Mba.Simplifier.Synth
                             var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, toBv(line.Operands[0].IsConstant), toBv(line.Operands[1].IsConstant), line.Operands[0].Index, line.Operands[1].Index);
                             var tie = matches & sameOpcode;
 
-                            constraints.Add(Implies(tie, comb0 <= comb1));
+                            bool CSE = false;
+                            if (CSE)
+                                constraints.Add(Implies(tie, comb0 < comb1));
+                            else
+                                constraints.Add(Implies(tie, comb0 <= comb1));
+
+
                         }
 
                         if (!opc.IsIdempotent())
@@ -826,9 +832,9 @@ namespace Mba.Simplifier.Synth
 
                     Console.WriteLine("Beginning generalization...");
                     var sww = Stopwatch.StartNew();
-                    //var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
+                    var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
 
-                    var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
+                    //var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
 
                     sww.Stop();
                     Console.WriteLine($"Generalizing took {sww.ElapsedMilliseconds}ms");
@@ -1209,10 +1215,15 @@ namespace Mba.Simplifier.Synth
             //all2.Reverse();
             //var stack = new Stack<Term>(queue.Reverse());
             var stack = new Stack<Term>(all);
+            int ii = 0;
             while (stack.Any())
             {
                 var peek = stack.Peek();
-                Console.WriteLine($"Checking: {peek}");
+
+                bool isTarget = ii == (lines.Count - FirstInstIdx) - 1;
+                ii++;
+
+                Console.WriteLine($"Checking: {peek} {isTarget} vs {lines.Last().ComponentOpcode}");
                 var sw = Stopwatch.StartNew();
                 var s = solver.CheckSat();
                 sw.Stop();
@@ -1227,6 +1238,10 @@ namespace Mba.Simplifier.Synth
 
                 solver.Pop();
                 stack.Pop();
+
+                if (isTarget)
+                    break;
+
             }
 
             Console.WriteLine($"Leftover constraints:");

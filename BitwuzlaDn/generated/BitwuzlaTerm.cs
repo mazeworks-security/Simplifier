@@ -11,7 +11,7 @@
 namespace Bitwuzla {
 
 public class BitwuzlaTerm : global::System.IDisposable {
-  private global::System.Runtime.InteropServices.HandleRef swigCPtr;
+  public global::System.Runtime.InteropServices.HandleRef swigCPtr;
   protected bool swigCMemOwn;
 
   internal BitwuzlaTerm(global::System.IntPtr cPtr, bool cMemoryOwn) {
