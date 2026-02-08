@@ -526,11 +526,13 @@ namespace Mba.Simplifier.Synth
                     continue;
 
                 // Both operands should not be constant.
+                /*
                 bool constFold = true;
                 if (constFold)
                 {
                     constraints.Add(~And(line.Operands.Select(x => x.IsConstant)));
                 }
+                */
 
                 var toBv = (Term term) => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
                 bool cse = false;
@@ -597,10 +599,18 @@ namespace Mba.Simplifier.Synth
                             constraints.Add(Implies(matches, line.Operands[1].IsConstant == false));
                         }
 
+                        bool constFold = true;
+
+
                         // Constant fold unary instrunctions
-                        if(false && opc.GetOperandCount() == 1)
+
+                        if (constFold)
                         {
-                            constraints.Add(Implies(matches, line.Operands[0].IsConstant == false));
+                            if (opc.GetOperandCount() == 1)
+                                constraints.Add(Implies(matches, line.Operands[0].IsConstant == false));
+                            if (opc.GetOperandCount() == 2)
+                                constraints.Add(Implies(matches, ~And(line.Operands.Select(x => x.IsConstant))));
+
                         }
 
 
