@@ -959,7 +959,7 @@ namespace Mba.Simplifier.Synth
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
             //options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_UNSAT_CORES, true);
-            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 1000);
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 2500);
             var solver = new BvSolver(ctx, options);
 
 
@@ -981,6 +981,8 @@ namespace Mba.Simplifier.Synth
             var forall = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_FORALL, concat);
 
             solver.Assert(forall);
+
+
 
             // Get a list of all structural variables
             List<Term> structureVars = new();
@@ -1029,7 +1031,44 @@ namespace Mba.Simplifier.Synth
 
             List<Term> opcodeConstraints = new();
 
+            var queue = new Queue<Term>();
+
             // Initially add all of the operands structures
+
+            // Doing whole lines individually did not work..
+
+            // We first want to free up the opcodes..
+            // Then diagnose what went wrong with the wiring
+            // 
+
+            var getValue = (Term svar) =>
+            {
+                var eval = oldModel.GetValue(svar);
+                if (eval.Kind != BitwuzlaKind.BITWUZLA_KIND_VALUE)
+                    Debugger.Break();
+
+                Term c = null;
+
+                if (eval.Sort.IsBv)
+                    c = (svar == ctx.GetIntegerValue(eval));
+                else
+                    c = (svar == ctx.GetBoolValue(eval));
+                return c;
+            };
+
+            var normalLines = lines.Skip(FirstInstIdx).ToList();
+            var visit = new List<Term>();
+            // First process all opcodes
+            
+            visit.AddRange(normalLines.Select(x => x.ComponentOpcode));
+            visit.AddRange(normalLines.Select(x => x.Operands[0].Index));
+            visit.AddRange(normalLines.Select(x => x.Operands[1].Index));
+            visit.AddRange(normalLines.Select(x => x.Operands[0].IsConstant));
+            visit.AddRange(normalLines.Select(x => x.Operands[1].IsConstant));
+
+            visit = visit.Select(x => getValue(x)).ToList();
+
+            /*
             foreach (var line in lines)
             {
                 if (line.IsSymbol)
@@ -1053,19 +1092,8 @@ namespace Mba.Simplifier.Synth
 
                 foreach (var svar in symVars)
                 {
-                    var eval = oldModel.GetValue(svar);
-                    if (eval.Kind != BitwuzlaKind.BITWUZLA_KIND_VALUE)
-                        Debugger.Break();
-
-
-
-                    if (eval.Sort.IsBv)
-                        curr.Add(svar == ctx.GetIntegerValue(eval));
-                    else
-                        curr.Add(svar == ctx.GetBoolValue(eval));
-
-        
-
+                    var c = getValue(svar);
+                    curr.Add(c);
                 }
 
                 all.AddRange(curr);
@@ -1075,6 +1103,11 @@ namespace Mba.Simplifier.Synth
 
                 
             }
+            */
+
+            all = visit.ToList();
+
+            all.Reverse();
 
             foreach(var elem in all)
             {
@@ -1118,13 +1151,14 @@ namespace Mba.Simplifier.Synth
             // or op op
 
             var all2 = new List<Term>();
-            all2.AddRange(all.Where(x => x.ToString().Contains("compCode")).OrderBy(x => x.ToString()));
-            all2 = all2.Concat(all.OrderBy(x => x.ToString()).Where(x => !all2.Contains(x))).ToList();
+            //all2.AddRange(all.Where(x => x.ToString().Contains("compCode")).OrderBy(x => x.ToString()));
+            //all2 = all2.Concat(all.OrderBy(x => x.ToString()).Where(x => !all2.Contains(x))).ToList();
 
             //all = all.OrderBy(x => x.ToString()).ToList();
-            all2.Reverse();
-            var stack = new Stack<Term>(all2);
-            while(stack.Any())
+            //all2.Reverse();
+            //var stack = new Stack<Term>(queue.Reverse());
+            var stack = new Stack<Term>(all);
+            while (stack.Any())
             {
                 var peek = stack.Peek();
                 Console.WriteLine($"Checking: {peek}");
@@ -1136,8 +1170,18 @@ namespace Mba.Simplifier.Synth
                 if (s == Result.Unknown)
                     break;
 
+                if (s == Result.Sat)
+                    Debugger.Break();
+
+
                 solver.Pop();
                 stack.Pop();
+            }
+
+            Console.WriteLine($"Leftover constraints:");
+            foreach (var constraint in stack)
+            {
+                Console.WriteLine($"{constraint}");
             }
 
             return (null, ~And(stack));
