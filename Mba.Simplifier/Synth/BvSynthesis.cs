@@ -434,7 +434,6 @@ namespace Mba.Simplifier.Synth
                         var used0 = (~operands[0].IsConstant) & (operands[0].Index == lineIdx);
                         var used1 = (~operands[1].IsConstant) & operands[1].Index == lineIdx;
 
-                        Debug.Assert(components.SelectMany(x => x.Opcodes).Where(x => x.GetOperandCount() == 1).Single() == SynthOpc.Not);
 
                         usageConditions.Add(used0);
                         usageConditions.Add(used1);
@@ -576,6 +575,7 @@ namespace Mba.Simplifier.Synth
                         var matches = IsComponent(line, opc);
 
 
+                        // If the instruction only needs one operand, set the 2nd operand to zero.
                         bool pruneRhs = true;
                         if (pruneRhs && opc.GetOperandCount() == 1)
                         {
@@ -597,7 +597,16 @@ namespace Mba.Simplifier.Synth
                                 constraints.Add(Implies(matches, line.Operands[0].IsConstant == false));
                             if (opc.GetOperandCount() == 2)
                                 constraints.Add(Implies(matches, ~And(line.Operands.Select(x => x.IsConstant))));
+                        }
 
+                        // Rewrite (a - 1111) as (a + -1111)
+                        bool canonicalizeConstSubtraction = true;
+                        if(canonicalizeConstSubtraction)
+                        {
+                            if (opc == SynthOpc.Sub && HasComponent(SynthOpc.Add))
+                            {
+                                constraints.Add(Implies(matches, ~line.Operands[1].IsConstant));
+                            }
                         }
 
 
@@ -722,6 +731,12 @@ namespace Mba.Simplifier.Synth
             return line.ComponentOpcode >= (ulong)index;
         }
 
+        private bool HasComponent( SynthOpc opcode)
+        {
+            return Opcodes.Contains(opcode);
+        }
+
+
 
 
         // Implements CEGIS(T)
@@ -827,15 +842,16 @@ namespace Mba.Simplifier.Synth
                     Debugger.Break();
                 }
 
+       
                 bool generalize = true;
                 if (generalize)
                 {
 
                     Console.WriteLine("Beginning generalization...");
                     var sww = Stopwatch.StartNew();
-                    //var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
+                    var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
 
-                    var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
+                    //var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
 
                     sww.Stop();
                     Console.WriteLine($"Generalizing took {sww.ElapsedMilliseconds}ms");
@@ -846,7 +862,7 @@ namespace Mba.Simplifier.Synth
                 }
 
 
-
+                // Probably need better heuristic for IO points?
                 var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
                 s.Assert(GetBehavioralConstraint(skeleton, vs));
                 constraints.Add(GetBehavioralConstraint(skeleton, vs));
@@ -875,6 +891,7 @@ namespace Mba.Simplifier.Synth
             return before == after;
         }
 
+        // TODO: We're getting tons of identical duplicates even with CEGIS(T). I think the forall query is broken?
         private (AstIdx ourSolution, Term cegisSolution, List<Term> constants) SolutionToExpr(BvSolver s)
         {
             // Compute the list of constant terms
@@ -888,17 +905,26 @@ namespace Mba.Simplifier.Synth
                 var myConstant = ctx.GetIntegerValue(eval);
                 ourConstants.Add(mbaCtx.Constant(myConstant, (byte)w));
                 cegisConstants.Add(eval);
+
+                Console.WriteLine($"const{i} = {myConstant}");
             }
+
+
+
 
             foreach (var line in lines)
             {
                 if (line.IsSymbol)
+                {
                     continue;
+                }
 
                 var a = s.GetValue(line.ComponentOpcode);
                 //var b = s.GetValue(line.ComponentIndex);
                 Console.WriteLine($"{a}");
             }
+
+
 
             // Compute the list of nodes
             List<Term> cegisNodes = new();
@@ -910,6 +936,7 @@ namespace Mba.Simplifier.Synth
                 {
                     cegisNodes.Add(symbols[li]);
                     ourNodes.Add(mbaVariables[li]);
+                    Log($"%{li} = {mbaCtx.GetSymbolName(mbaVariables[li])}\n");
                     continue;
                 }
 
@@ -935,6 +962,10 @@ namespace Mba.Simplifier.Synth
                 var op0 = () => ourOperands[0];
                 var op1 = () => ourOperands[1];
 
+  
+                
+
+
                 var opc = Opcodes[(int)opcode];
                 AstIdx ourNode = opc switch
                 {
@@ -951,6 +982,19 @@ namespace Mba.Simplifier.Synth
                     _ => throw new NotImplementedException(),
                 };
                 ourNodes.Add(ourNode);
+
+
+                List<string> operandStrs = new();
+                for(int i = 0; i < MaxArity; i++)
+                {
+                    var operand = line.Operands[i];
+                    var isConstant = ctx.GetBoolValue(s.GetValue(operand.IsConstant));
+                    var operandIndex = (int)ctx.GetIntegerValue(s.GetValue(operand.Index));
+                    operandStrs.Add($"{isConstant} {operandIndex}");
+                }
+
+                Log($"%{li} = {opc}({String.Join(", ", operandStrs)})\n");
+                
 
 
                 Term cegisNode = ApplyOperator(opc, cegisOperands);
@@ -1036,6 +1080,7 @@ namespace Mba.Simplifier.Synth
         }
 
 
+        // On `PBenchSlotSlightlyMoreTractable` we are repeatedly getting the same expression?
         private (Term generalizedSolution, Term generalizedConstraints) GeneralizeIncremental(BvSolver oldModel, Term skeleton, List<Term> cegisConstants)
         {
 
@@ -1118,11 +1163,51 @@ namespace Mba.Simplifier.Synth
             var visit = new List<Term>();
             // First process all opcodes
 
+
+            // We're not banning identical structures, we're just banning the wirings..
+            // 
             visit.AddRange(normalLines.Select(x => x.ComponentOpcode));
             visit.AddRange(normalLines.Select(x => x.Operands[0].Index));
             visit.AddRange(normalLines.Select(x => x.Operands[1].Index));
             visit.AddRange(normalLines.Select(x => x.Operands[0].IsConstant));
             visit.AddRange(normalLines.Select(x => x.Operands[1].IsConstant));
+
+            visit.Clear();
+            foreach (var line in lines)
+            {
+                if (line.IsSymbol)
+                    continue;
+
+                // solver.Push(1);
+
+                // Get all symbolic variables
+                var symVars = new List<Term>();
+                symVars.Add(line.ComponentOpcode);
+
+
+                foreach (var op in line.Operands)
+                {
+                    symVars.Add(op.Index);
+                    symVars.Add(op.IsConstant);
+                }
+
+
+                List<Term> curr = new List<Term>();
+
+                foreach (var svar in symVars)
+                {
+                    var c = getValue(svar);
+                    curr.Add(c);
+                }
+
+                //curr.Reverse();
+                visit.AddRange(curr);
+
+                //foreach (var c in curr)
+                //    solver.Assert(c);
+
+
+            }
 
             visit = visit.Select(x => getValue(x)).ToList();
 
@@ -1219,9 +1304,11 @@ namespace Mba.Simplifier.Synth
             int ii = 0;
             while (stack.Any())
             {
+                // There is no solution when we have this opcode with this wiring...
                 var peek = stack.Peek();
 
-                bool isTarget = ii == (lines.Count - FirstInstIdx) - 1;
+                //bool isTarget = ii == (lines.Count - FirstInstIdx) - 1;
+                bool isTarget = false;
                 ii++;
 
                 Console.WriteLine($"Checking: {peek} {isTarget} vs {lines.Last().ComponentOpcode}");
@@ -1770,7 +1857,7 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
 
-            var config = new SynthConfig(components, 9, 3);
+            var config = new SynthConfig(components, 8, 3);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
