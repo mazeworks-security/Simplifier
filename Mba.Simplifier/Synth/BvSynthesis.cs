@@ -35,6 +35,8 @@ namespace Mba.Simplifier.Synth
         int MaxConstants
         );
 
+    public record SynthOptimizations();
+
     public record ComponentData(int MaxInstances = -1);
 
     // A component is a group of opcodes
@@ -161,20 +163,6 @@ namespace Mba.Simplifier.Synth
 
             groundTruth = translator.Translate(mbaIdx);
             symbols = mbaCtx.CollectVariables(mbaIdx).Select(x => translator.Translate(x)).ToArray();
-
-            // parity
-            /*
-            var x = symbols[0];
-            var o1 = x >> (ulong)1;
-            var o2 = o1 ^ x;
-            var o3 = o2 >> 2;
-            var o4 = o2 ^ o3;
-            var o5 = o4 & 0x11111111;
-            var o6 = o5 * 0x11111111;
-            var o7 = o6 >> 28;
-            var res = o7 & 1;
-            groundTruth = res;
-            */
 
 
             // Get the minimum size bitvector needed to store the component index and component opcode
