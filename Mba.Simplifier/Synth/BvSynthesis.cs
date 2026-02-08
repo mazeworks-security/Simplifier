@@ -529,33 +529,45 @@ namespace Mba.Simplifier.Synth
 
 
             // Constrain each opcode to be less than its maximum
-            for (int lineIdx = FirstInstIdx; lineIdx < lines.Count; lineIdx++)
+            for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
             {
                 var line = lines[lineIdx];
-
-                // Both operands should not be constant.
-                bool constFold = true;
-                if (constFold)
-                    constraints.Add(~And(line.Operands.Select(x => x.IsConstant)));
 
 
                 bool dce = true;
 
-                // TODO: We should also assert that symbolic variables are used!
+                // Assert that every instruction (including variables) is used
                 if (dce && lineIdx != lines.Count - 1)
                 {
+                    // TODO: For some reason we get worse results if we assert that each variable be used?
+                    //if (lines[lineIdx].IsSymbol)
+                     //   continue;
+
                     var usageConditions = new List<Term>();
                     for (int j = lineIdx + 1; j < lines.Count; j++)
                     {
+                        if (lines[j].IsSymbol)
+                            continue;
+
                         var operands = lines[j].Operands;
-                        var used0 = ~operands[0].IsConstant & (operands[0].Index == lineIdx);
-                        var used1 = ~operands[1].IsConstant & (operands[1].Index == lineIdx);
+                        var used0 = (~operands[0].IsConstant) & (operands[0].Index == lineIdx);
+                        var used1 = (~operands[1].IsConstant) & (operands[1].Index == lineIdx);
+
                         usageConditions.Add(used0);
                         usageConditions.Add(used1);
                     }
 
                     constraints.Add(Or(usageConditions));
                 }
+
+
+                if (lineIdx < FirstInstIdx)
+                    continue;
+
+                // Both operands should not be constant.
+                bool constFold = true;
+                if (constFold)
+                    constraints.Add(~And(line.Operands.Select(x => x.IsConstant)));
 
                 var toBv = (Term term) => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
                 bool cse = false;
@@ -600,7 +612,13 @@ namespace Mba.Simplifier.Synth
                     }
                 }
 
-
+                // Constant shift opt
+                bool constantShiftsOnly = true;
+                if (components.Any(x => x.Opcodes.Contains(SynthOpc.Shl)) && constantShiftsOnly)
+                {
+                    var isShift = IsInstance(line, SynthOpc.Shl);
+                    constraints.Add(Implies(isShift, line.Operands[1].IsConstant));
+                }
                 //continue;
 
                 //var isMul = line.ComponentOpcode == components.Single().Opcodes.IndexOf(SynthOpc.Mul);
@@ -703,7 +721,9 @@ namespace Mba.Simplifier.Synth
                             var comb0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, toBv(prev.Operands[0].IsConstant), toBv(prev.Operands[1].IsConstant), prev.Operands[0].Index, prev.Operands[1].Index);
                             var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, toBv(line.Operands[0].IsConstant), toBv(line.Operands[1].IsConstant), line.Operands[0].Index, line.Operands[1].Index);
                             var tie = matches & sameOpcode;
+
                             constraints.Add(Implies(tie, comb0 <= comb1));
+
 
                             //var (j, k) = prev.Operands[0].Index
 
@@ -813,22 +833,18 @@ namespace Mba.Simplifier.Synth
             // Randomly evaluate the expression on N initial points and assert its equivalence
             var rng = new SeededRandom();
 
+            // New idea: All possible bitwise functions put in individual 
             var inputCombinations = new List<List<ulong>>()
             {
                // new() { 18446744073709551364, 248},
               //   new() { 18446744073709551421, 128},
-              new() {0, },
-              new() { 1, },
-              new() { ulong.MaxValue},
-              new() { 2147483648},
-              new() { 2147483647},
-              new() { rng.GetRandUlong() }
+              new() { 58229829, 160749783, 2180495597, 2149681939 },
+               new() { 73896448, 2944159190, 2163435311, 3323985711 },
+               //new() { 0, 0, 0, 0 },
+              //new() { ulong.MaxValue, ulong.MaxValue, ulong.MaxValue, ulong.MaxValue },
             };
 
-            for (ushort i = 1; i < 30; i++)
-            {
-                inputCombinations.Add(new() { 1ul << i });
-            }
+
 
             inputCombinations = null;
 
@@ -837,7 +853,7 @@ namespace Mba.Simplifier.Synth
 
             bool minv = false;
 
-            for (int i = 0; i < 1; i++)
+            for (int i = 0; i < NUMINPUTS; i++)
             {
                 Term[] values = null;
                 if (inputCombinations == null)
@@ -1186,7 +1202,7 @@ namespace Mba.Simplifier.Synth
         {
             var c = terms.Count();
             if (c == 0)
-                return ctx.MkFalse();
+                throw new InvalidOperationException();
             if (c == 1)
                 return terms.Single();
             return ctx.MkTerm(kind, terms);
@@ -1317,7 +1333,7 @@ namespace Mba.Simplifier.Synth
 
         public static void P5()
         {
-            var (ctx, idx) = Parse("(171^((a+23)^(b)))^((((a|1111)+b)^b))", 16);
+            var (ctx, idx) = Parse("(171^((a+23)^(b)))^((((a|1111)+b)^b))", 32);
 
             // Works with 7 components and 3 constants. 500ms
             //var (ctx, idx) = Parse("(((a+23)^(b)))^((((a|1111)+b)))", 8);
@@ -1327,7 +1343,11 @@ namespace Mba.Simplifier.Synth
             var components = new List<SynthComponent>()
             {
                 // new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Sub),
-                new(SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add),
+                //new(SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add),
+
+                new(new ComponentData(4), SynthOpc.Or),
+                new(new ComponentData(4), SynthOpc.Xor),
+                new(new ComponentData(4), SynthOpc.Add),
 
             };
 
@@ -1578,6 +1598,42 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 5, 3);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+        public static void PMatteo()
+        {
+            var (ctx, idx) = Parse("((b ^ ((c + d) ^ (7992590397050383240))) + ((a & (134217727)) << 5)) & 4294967295", 64);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.And, SynthOpc.Xor),
+                //new(SynthOpc.Add),
+
+                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Sub, SynthOpc.Add, SynthOpc.Shl),
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Shl),
+
+
+                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
+                // new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+                
+                // Optional
+                 new(new ComponentData(), SynthOpc.Not),
+                new(new ComponentData(), SynthOpc.Or),
+
+                new(new ComponentData(), SynthOpc.And),
+
+                new(new ComponentData(), SynthOpc.Xor),
+                new(new ComponentData(), SynthOpc.Add),
+
+                new(new ComponentData(), SynthOpc.Shl),
+            };
+
+            var config = new SynthConfig(components, 9, 4);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
