@@ -753,6 +753,9 @@ namespace Mba.Simplifier.Synth
                     s.Assert(generalizedBan);
                     constraints.Add(generalizedBan);
                 }
+
+                
+
                 var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
                 s.Assert(GetBehavioralConstraint(skeleton, vs));
                 constraints.Add(GetBehavioralConstraint(skeleton, vs));
@@ -893,7 +896,6 @@ namespace Mba.Simplifier.Synth
             var equality = groundTruthBody == skeletonBody;
             var concat = quantVars.Append(equality).ToArray();
             var forall = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_FORALL, concat);
-
 
             solver.Assert(forall);
 
