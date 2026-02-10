@@ -723,7 +723,7 @@ namespace Mba.Simplifier.Synth
                 }
             }
 
-     
+
             for (int i = 0; i < components.Count; i++)
             {
                 var component = components[i];
@@ -733,7 +733,7 @@ namespace Mba.Simplifier.Synth
                     continue;
 
                 constraints.Add(sums[i] <= (ulong)data.MaxInstances);
-                
+
                 //constraints.Add(sums[i] == (ulong)data.MaxInstances);
             }
         }
@@ -764,17 +764,17 @@ namespace Mba.Simplifier.Synth
             // New idea: All possible bitwise functions put in individual 
             var inputCombinations = new List<List<ulong>>()
             {
-               // new() { 18446744073709551364, 248},
-              //   new() { 18446744073709551421, 128},
-              //new() { 58229829, 160749783, 2180495597, 2149681939 },
-              // new() { 73896448, 2944159190, 2163435311, 3323985711 },
-               //new() { 0, 0, 0, 0 },
-              //new() { ulong.MaxValue, ulong.MaxValue, ulong.MaxValue, ulong.MaxValue },
+                // new() { 18446744073709551364, 248},
+                //   new() { 18446744073709551421, 128},
+                //new() { 58229829, 160749783, 2180495597, 2149681939 },
+                // new() { 73896448, 2944159190, 2163435311, 3323985711 },
+                //new() { 0, 0, 0, 0 },
+                //new() { ulong.MaxValue, ulong.MaxValue, ulong.MaxValue, ulong.MaxValue },
             };
 
 
 
-            for(int i = 0; i < 32; i++)
+            for (int i = 0; i < 32; i++)
             {
                 inputCombinations.Add(new() { (1ul << (ushort)i) });
             }
@@ -878,7 +878,7 @@ namespace Mba.Simplifier.Synth
                     var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
 
                     //var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
-                
+
 
                     sww.Stop();
                     Console.WriteLine($"Generalizing took {sww.ElapsedMilliseconds}ms");
