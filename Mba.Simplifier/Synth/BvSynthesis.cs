@@ -1874,7 +1874,7 @@ namespace Mba.Simplifier.Synth
                 new(new ComponentData(4), SynthOpc.Xor),
                 new(new ComponentData(4), SynthOpc.Add),
                 new(new ComponentData(4), SynthOpc.Sub),
-                new(new ComponentData(1), SynthOpc.Lshr),
+                //new(new ComponentData(1), SynthOpc.Lshr),
 
 
                 //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
