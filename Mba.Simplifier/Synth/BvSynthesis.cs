@@ -113,6 +113,8 @@ namespace Mba.Simplifier.Synth
 
     public class BvSynthesis
     {
+        private const int MAXSHIFT = 64;
+
         private readonly SynthConfig config;
 
         private readonly AstCtx mbaCtx;
@@ -278,8 +280,8 @@ namespace Mba.Simplifier.Synth
                 SynthOpc.Add => (op0() + op1()),
                 SynthOpc.Sub => (op0() - op1()),
                 SynthOpc.Mul => (op0() * op1()),
-                SynthOpc.Lshr => (op0() >> op1()),
-                SynthOpc.Shl => (op0() << op1()),
+                SynthOpc.Lshr => (op0() >> (op1() & (op1().Sort.BvSize - 1))), // Truncate the shift width
+                SynthOpc.Shl => (op0() << (op1() & (op1().Sort.BvSize - 1))),
                 _ => throw new InvalidOperationException()
             };
 
@@ -309,6 +311,8 @@ namespace Mba.Simplifier.Synth
             //if (false)
             //if (n > 12)
             //if (n > 13)
+            //if (n >= 16)
+            //    return PrunedTree(index, options, 0, n);
             if (false)
             {
                 // TODO: Sometimes this encoding is more efficient
@@ -417,15 +421,17 @@ namespace Mba.Simplifier.Synth
             }
         }
 
-
+        // Add constraints asserting that every instruction is used in the final computation
+        // `instsOnly` chooses whether to require variable uses too
         private void AddLivenessConstraints(List<Term> constraints)
         {
+            bool skipVars = true;
             for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
             {
                 if (lineIdx != lines.Count - 1)
                 {
                     // TODO: For some reason we get worse results if we assert that each variable be used?
-                    if (lines[lineIdx].IsSymbol)
+                    if (skipVars && lines[lineIdx].IsSymbol)
                         continue;
 
                     var usageConditions = new List<Term>();
@@ -562,6 +568,10 @@ namespace Mba.Simplifier.Synth
                 {
                     var isShift = IsComponent(line, SynthOpc.Shl);
                     constraints.Add(Implies(isShift, line.Operands[1].IsConstant));
+
+                    // TODO: Stop hardcoding this
+                    constraints.Add(Implies(isShift, line.Operands[1].ConcreteValue <= 31));
+                    constraints.Add(Implies(isShift, line.Operands[1].ConcreteValue != 0));
                 }
 
                 bool constantRShiftsOnly = true;
@@ -569,6 +579,9 @@ namespace Mba.Simplifier.Synth
                 {
                     var isShift = IsComponent(line, SynthOpc.Lshr);
                     constraints.Add(Implies(isShift, line.Operands[1].IsConstant));
+
+                    constraints.Add(Implies(isShift, line.Operands[1].ConcreteValue <= 31));
+                    constraints.Add(Implies(isShift, line.Operands[1].ConcreteValue != 0));
                 }
 
                 foreach (var component in components)
@@ -710,6 +723,7 @@ namespace Mba.Simplifier.Synth
                 }
             }
 
+     
             for (int i = 0; i < components.Count; i++)
             {
                 var component = components[i];
@@ -719,9 +733,9 @@ namespace Mba.Simplifier.Synth
                     continue;
 
                 constraints.Add(sums[i] <= (ulong)data.MaxInstances);
+                
                 //constraints.Add(sums[i] == (ulong)data.MaxInstances);
             }
-
         }
 
         private Term IsComponent(SynthLine line, SynthOpc opcode)
@@ -740,9 +754,6 @@ namespace Mba.Simplifier.Synth
             return Opcodes.Contains(opcode);
         }
 
-
-
-
         // Implements CEGIS(T)
         // https://www.kroening.com/papers/cav2018-synthesis.pdf
         private void CegisT(List<Term> constraints, Term skeleton)
@@ -755,13 +766,24 @@ namespace Mba.Simplifier.Synth
             {
                // new() { 18446744073709551364, 248},
               //   new() { 18446744073709551421, 128},
-              new() { 58229829, 160749783, 2180495597, 2149681939 },
-               new() { 73896448, 2944159190, 2163435311, 3323985711 },
+              //new() { 58229829, 160749783, 2180495597, 2149681939 },
+              // new() { 73896448, 2944159190, 2163435311, 3323985711 },
                //new() { 0, 0, 0, 0 },
               //new() { ulong.MaxValue, ulong.MaxValue, ulong.MaxValue, ulong.MaxValue },
             };
 
 
+
+            for(int i = 0; i < 32; i++)
+            {
+                inputCombinations.Add(new() { (1ul << (ushort)i) });
+            }
+
+            inputCombinations.Add(new() { 0 });
+
+            inputCombinations.Add(new() { ulong.MaxValue });
+
+            inputCombinations.Add(new() { 5555555555555555 });
 
             inputCombinations = null;
 
@@ -856,13 +878,19 @@ namespace Mba.Simplifier.Synth
                     var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
 
                     //var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
+                
 
                     sww.Stop();
                     Console.WriteLine($"Generalizing took {sww.ElapsedMilliseconds}ms");
-                    Console.WriteLine("Finished generalization...");
-                    Debug.Assert(generalizedSolution is null);
-                    s.Assert(generalizedBan);
-                    constraints.Add(generalizedBan);
+
+                    if (generalizedBan is not null)
+                    {
+
+                        Console.WriteLine("Finished generalization...");
+                        Debug.Assert(generalizedSolution is null);
+                        s.Assert(generalizedBan);
+                        constraints.Add(generalizedBan);
+                    }
                 }
 
 
@@ -1017,6 +1045,7 @@ namespace Mba.Simplifier.Synth
 
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 5000);
             var solver = new BvSolver(ctx, options);
 
 
@@ -1050,6 +1079,12 @@ namespace Mba.Simplifier.Synth
                 sw.Stop();
                 Console.WriteLine($"Found global solution in {totalTime.ElapsedMilliseconds}ms. Solving generalized query took {sw.ElapsedMilliseconds}");
                 Debugger.Break();
+            }
+
+            if (res == Result.Unknown)
+            {
+                Console.WriteLine("Generalization timed out.");
+                return (null, null);
             }
 
             // Otherwise this solution is impossible.
@@ -1091,7 +1126,7 @@ namespace Mba.Simplifier.Synth
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
             //options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_UNSAT_CORES, true);
-            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 5000);
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 2000);
             var solver = new BvSolver(ctx, options);
 
 
@@ -1719,7 +1754,7 @@ namespace Mba.Simplifier.Synth
 
         public static void PReallyHardBoolean()
         {
-            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))|x7|x8|x9", 32);
+            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))|x7|x8|x9", 1);
 
             var components = new List<SynthComponent>()
             {
@@ -1793,7 +1828,7 @@ namespace Mba.Simplifier.Synth
                 new(new ComponentData(3), SynthOpc.Xor),
                  new(new ComponentData(3), SynthOpc.Sub),
                 new(new ComponentData(3), SynthOpc.Add),
-                 new(new ComponentData(3), SynthOpc.Shl),
+                 new(new ComponentData(1), SynthOpc.Shl),
                 //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Shl),
 
 
@@ -1831,14 +1866,23 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.And, SynthOpc.Xor),
                 //new(SynthOpc.Add),
 
-                new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Sub, SynthOpc.Add, SynthOpc.Lshr),
+                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Sub, SynthOpc.Add, SynthOpc.Lshr),
+
+                new(new ComponentData(4), SynthOpc.Not),
+                new(new ComponentData(4), SynthOpc.And),
+                new(new ComponentData(4), SynthOpc.Or),
+                new(new ComponentData(4), SynthOpc.Xor),
+                new(new ComponentData(4), SynthOpc.Add),
+                new(new ComponentData(4), SynthOpc.Sub),
+                new(new ComponentData(1), SynthOpc.Lshr),
+
 
                 //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
                // new(SynthOpc.Add, SynthOpc.Sub),
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
 
-            var config = new SynthConfig(components, 8, 3);
+            var config = new SynthConfig(components, 9, 3);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
@@ -1861,17 +1905,20 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
 
-            var config = new SynthConfig(components, 8, 3);
+            var config = new SynthConfig(components, 9, 3);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
         }
 
 
+        // Completes in 140s
         public static void PBSwap()
         {
             //  var (ctx, idx) = Parse("((val & 0x000000FF) << 24) | ((val & 0x0000FF00) << 8)  | ((val & 0x00FF0000) >> 8)  | ((val & 0xFF000000) >> 24)", 32);
-            var (ctx, idx) = Parse("(val << 24) | ((val << 8) & 0x00FF0000) | ((val >> 8) & 0x0000FF00) | (val >> 24)", 32);
+            //     val = ((val << 8) & 0xFF00FF00 ) | ((val >> 8) & 0xFF00FF ); 
+            //     return (val << 16) | (val >> 16);
+            var (ctx, idx) = Parse("((((val << 8) & 0xFF00FF00 ) | ((val >> 8) & 0xFF00FF )) << 16) | ((((val << 8) & 0xFF00FF00 ) | ((val >> 8) & 0xFF00FF )) >> 16)", 32);
 
             var components = new List<SynthComponent>()
             {
@@ -1889,11 +1936,68 @@ namespace Mba.Simplifier.Synth
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
 
-            var config = new SynthConfig(components, 10, 4);
+            var config = new SynthConfig(components, 9, 4);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
         }
+
+        public static void PBSwapReduced()
+        {
+            //  var (ctx, idx) = Parse("((val & 0x000000FF) << 24) | ((val & 0x0000FF00) << 8)  | ((val & 0x00FF0000) >> 8)  | ((val & 0xFF000000) >> 24)", 32);
+            var (ctx, idx) = Parse("((val << 8) & 0x00FF0000) | ((val >> 8) & 0x0000FF00)", 32);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.And, SynthOpc.Xor),
+                //new(SynthOpc.Add),
+
+                new(new ComponentData(2), SynthOpc.Lshr),
+                new(new ComponentData(3), SynthOpc.Or),
+                new(new ComponentData(3), SynthOpc.And),
+                new(new ComponentData(4), SynthOpc.Shl),
+
+                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
+               // new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 7, 2);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+
+        public static void PDebugShiftPerformance()
+        {
+            //  var (ctx, idx) = Parse("((val & 0x000000FF) << 24) | ((val & 0x0000FF00) << 8)  | ((val & 0x00FF0000) >> 8)  | ((val & 0xFF000000) >> 24)", 32);
+            var (ctx, idx) = Parse("(x+y+111) >> 5", 32);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.And, SynthOpc.Xor),
+                //new(SynthOpc.Add),
+
+                new(new ComponentData(2), SynthOpc.Lshr),
+                new(new ComponentData(3), SynthOpc.And),
+                new(new ComponentData(3), SynthOpc.Or),
+                 new(new ComponentData(3), SynthOpc.Add),
+                new(new ComponentData(4), SynthOpc.Shl),
+
+                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
+               // new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 5, 2);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
 
 
         public static void Ptest()
