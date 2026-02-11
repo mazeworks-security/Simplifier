@@ -150,6 +150,9 @@ namespace Mba.Simplifier.Synth
 
         private readonly uint componentOpcodeSize;
 
+        private List<Term> semanticConstraints = new();
+        private List<Term> templateVars = new();
+
         public BvSynthesis(SynthConfig config, AstCtx mbaCtx, AstIdx mbaIdx)
         {
             this.config = config;
@@ -233,6 +236,9 @@ namespace Mba.Simplifier.Synth
 
         private Term GetSkeleton()
         {
+            semanticConstraints.Clear();
+            templateVars.Clear();
+
             var exprs = new List<Term>();
             for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
             {
@@ -251,16 +257,23 @@ namespace Mba.Simplifier.Synth
                 for (int i = 0; i < line.Operands.Length; i++)
                     line.Operands[i].ConcreteValue = operands[i].justConstants;
 
-                var terms = new List<Term>();
-                foreach (var opcode in Opcodes)
+                // Create a variable for the result of this line
+                var lineOutput = ctx.MkBvConst($"line_{lineIndex}_out", (int)symbols[0].Sort.BvSize);
+                templateVars.Add(lineOutput);
+
+                for (int opIdx = 0; opIdx < Opcodes.Count; opIdx++)
                 {
+                    var opcode = Opcodes[opIdx];
                     var term = ApplyOperator(opcode, operands.Select(x => x.expr).ToList());
 
-                    terms.Add(term);
+                    // Add implication constraint
+                    var isOp = line.ComponentOpcode == ctx.MkBvValue((ulong)opIdx, line.ComponentOpcode.Sort.BvSize);
+
+                    var semantics = Implies(isOp, lineOutput == term);
+                    semanticConstraints.Add(semantics);
                 }
 
-                var select = LinearSelect(line.ComponentOpcode, terms);
-                exprs.Add(select);
+                exprs.Add(lineOutput);
             }
 
             return exprs.Last();
@@ -924,7 +937,7 @@ namespace Mba.Simplifier.Synth
                     Console.WriteLine($"Solved in total time {totalTime.ElapsedMilliseconds}ms");
                     Debugger.Break();
 
-                    bool skipSymmetries = false;
+                    bool skipSymmetries = true;
                     if (skipSymmetries)
                     {
 
@@ -962,7 +975,7 @@ namespace Mba.Simplifier.Synth
                 }
 
 
-                bool generalize = false;
+                bool generalize = true;
                 if (generalize)
                 {
 
@@ -1011,9 +1024,25 @@ namespace Mba.Simplifier.Synth
         // Constrain that expr1(x0, x1) == expr2(x0, x1) on some concrete inputs
         private Term GetBehavioralConstraint(Term skeleton, Term[] points)
         {
+            var oldTerms = new List<Term>();
+            var newTerms = new List<Term>();
+
+            oldTerms.AddRange(symbols);
+            newTerms.AddRange(points);
+
+            oldTerms.AddRange(templateVars);
+            var freshVars = templateVars.Select(v => ctx.MkBvConst(v.ToString() + "_inst", (int)v.Sort.BvSize)).ToArray();
+            newTerms.AddRange(freshVars);
+
             var before = ctx.SubstituteTerm(groundTruth, symbols, points);
-            var after = ctx.SubstituteTerm(skeleton, symbols, points);
-            return before == after;
+            var after = ctx.SubstituteTerm(skeleton, oldTerms.ToArray(), newTerms.ToArray());
+
+            var behavior = (before == after);
+
+            var instantiatedConstraints = semanticConstraints.Select(c =>
+                ctx.SubstituteTerm(c, oldTerms.ToArray(), newTerms.ToArray()));
+
+            return And(instantiatedConstraints.Append(behavior));
         }
 
         // TODO: We're getting tons of identical duplicates even with CEGIS(T). I think the forall query is broken?
