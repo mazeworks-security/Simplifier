@@ -324,9 +324,9 @@ namespace Mba.Simplifier.Synth
         {
             var constraints = new List<Term>();
             AddWfpConstraints(constraints);
-            AddSymmetricConstantsConstraint(constraints);
             AddLivenessConstraints(constraints);
             AddPruningConstraints(constraints);
+            AddSymmetricConstantsConstraint(constraints);
             AddLimitConstraints(constraints);
 
             return constraints;
@@ -338,9 +338,6 @@ namespace Mba.Simplifier.Synth
             for (int i = FirstInstIdx; i < lines.Count; i++)
             {
                 var line = lines[i];
-
-                // The opcode must be valid
-                constraints.Add(line.ComponentOpcode <= (uint)(Opcodes.Count - 1));
 
                 // Each line can only refer to lines below it
                 foreach (var operand in line.Operands)
@@ -463,6 +460,10 @@ namespace Mba.Simplifier.Synth
                         constraints.Add(imply);
                     }
                 }
+
+
+                // The opcode must be valid
+                constraints.Add(line.ComponentOpcode <= (uint)(Opcodes.Count - 1));
 
                 bool limitConstantIndex = true;
                 if (limitConstantIndex && constants.Count > 0)
@@ -841,7 +842,7 @@ namespace Mba.Simplifier.Synth
                     Console.WriteLine($"Solved in total time {totalTime.ElapsedMilliseconds}ms");
                     Debugger.Break();
 
-                    bool skipSymmetries = true;
+                    bool skipSymmetries = false;
                     if (skipSymmetries)
                     {
 
