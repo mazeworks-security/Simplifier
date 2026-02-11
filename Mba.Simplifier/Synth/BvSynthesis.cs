@@ -521,15 +521,6 @@ namespace Mba.Simplifier.Synth
                 if (lineIdx < FirstInstIdx)
                     continue;
 
-                // Both operands should not be constant.
-                /*
-                bool constFold = true;
-                if (constFold)
-                {
-                    constraints.Add(~And(line.Operands.Select(x => x.IsConstant)));
-                }
-                */
-
                 var toBv = (Term term) => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
                 bool cse = false;
                 if (cse)
@@ -790,6 +781,88 @@ namespace Mba.Simplifier.Synth
             int NUMINPUTS = 1;
 
 
+
+            var options = new Options();
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
+
+            bool abstraction = true;
+            if (abstraction)
+            {
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION, true);
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_BV_SIZE, 32);
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_SEED, 0);
+            }
+
+
+            var s = new BvSolver(ctx, options);
+            List<int> skip = new();
+
+            //List<int> skip = new() { 4, 6, 20, 22, 30, 31, 38, 42, 46, 54, 55, 66, 72, 78, 86, 90, 91, 102, 108, 114, 122, 126, 127, 138, 144, 150, 158, 162, 163, 174, 180, 186, 194, 198, 199, 202, 203, 204, 205, 208, 210, 211, 214, 216, 217, 220, 222, 223, 226, 228, 230, 235 };
+
+            /*
+            var throwaway = new BvSolver(ctx, options);
+
+            for (int i = 0; i < constraints.Count; i++)
+            {
+                var c = constraints[i];
+                if (i == 0)
+                {
+                    throwaway.Assert(c);
+                    s.Assert(c);
+                    continue;
+                }
+
+                //continue;
+
+                //s.Push(1);
+
+                throwaway.Push(1);
+                throwaway.Assert(~c);
+
+                var bar = throwaway.CheckSat();
+                if (bar == Result.Unsat)
+                {
+                    skip.Add(i);
+                    Console.WriteLine($"Redundant constraint {c}");
+
+                    throwaway.Pop();
+
+                    continue;
+
+                }
+
+                throwaway.Pop();
+                throwaway.Assert(c);
+
+                s.Assert(c);
+            }
+
+            Console.WriteLine($"[{String.Join(", ", skip)}]");
+            */
+
+            for (int i = 0; i < constraints.Count; i++)
+            {
+                if (skip.Contains(i))
+                    continue;
+
+                s.Assert(constraints[i]);
+            }
+
+            s.Simplify();
+
+            s.Write();
+
+
+            /*
+            foreach (var c in constraints)
+                s.Assert(c);
+
+            s.Simplify();
+            s.Write();
+            */
+
             for (int i = 0; i < NUMINPUTS; i++)
             {
                 Term[] values = null;
@@ -808,26 +881,8 @@ namespace Mba.Simplifier.Synth
                 }
 
                 var constraint = GetBehavioralConstraint(skeleton, values);
-                constraints.Add(constraint);
+                s.Assert(constraint);
             }
-
-            var options = new Options();
-            options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
-
-            bool abstraction = true;
-            if (abstraction)
-            {
-                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION, true);
-                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
-                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_BV_SIZE, 32);
-                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
-            }
-
-            var s = new BvSolver(ctx, options);
-
-            foreach (var c in constraints)
-                s.Assert(c);
-
 
 
 
@@ -864,12 +919,50 @@ namespace Mba.Simplifier.Synth
                 var isEquiv = temp.CheckSat() == Result.Unsat;
                 if (isEquiv)
                 {
+
+
                     Console.WriteLine($"Solved in total time {totalTime.ElapsedMilliseconds}ms");
                     Debugger.Break();
+
+                    bool skipSymmetries = false;
+                    if (skipSymmetries)
+                    {
+
+                        // Otherwise this solution is impossible.
+                        List<Term> structureVars = new();
+                        foreach (var line in lines)
+                        {
+                            if (line.IsSymbol)
+                                continue;
+
+                            structureVars.Add(line.ComponentOpcode);
+                            foreach (var operand in line.Operands)
+                            {
+                                structureVars.Add(operand.Index);
+                                structureVars.Add(operand.IsConstant);
+                            }
+                        }
+
+                        List<Term> structureConstraints = new();
+                        foreach (var svar in structureVars)
+                        {
+                            var eval = s.GetValue(svar);
+                            if (eval.Kind != BitwuzlaKind.BITWUZLA_KIND_VALUE)
+                                Debugger.Break();
+
+                            if (eval.Sort.IsBv)
+                                structureConstraints.Add(svar == ctx.GetIntegerValue(eval));
+                            else
+                                structureConstraints.Add(svar == ctx.GetBoolValue(eval));
+                        }
+
+                        s.Assert(~And(structureConstraints));
+                        continue;
+                    }
                 }
 
 
-                bool generalize = true;
+                bool generalize = false;
                 if (generalize)
                 {
 
@@ -1067,9 +1160,9 @@ namespace Mba.Simplifier.Synth
 
             solver.Assert(forall);
 
-            solver.Write();
+            //solver.Write();
 
-            solver.Write();
+            //solver.Write();
 
             var sw = Stopwatch.StartNew();
             var res = solver.CheckSat();
@@ -1700,6 +1793,23 @@ namespace Mba.Simplifier.Synth
             //var config = new SynthConfig(components, 10, 3);
 
             //var config = new SynthConfig(components, 11, 4);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+        public static void PTestSymmetry()
+        {
+            var (ctx, idx) = Parse("a + b + (c&d) + 11111", 8);
+
+            var components = new List<SynthComponent>()
+            {
+                new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 8, 1);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();

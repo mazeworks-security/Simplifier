@@ -23,6 +23,7 @@
   </ItemGroup>
   
   <ItemGroup>
+    <ProjectReference Include="..\BitwuzlaDn\BitwuzlaDn.csproj" />
     <ProjectReference Include="..\Mba.Simplifier\Mba.Simplifier.csproj" />
   </ItemGroup>
   
