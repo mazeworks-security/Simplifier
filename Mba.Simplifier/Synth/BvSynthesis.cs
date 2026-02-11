@@ -62,6 +62,17 @@ namespace Mba.Simplifier.Synth
         }
     }
 
+    //// ComponentDbEntry(SynthComponent Component, Index, Opc
+
+    //// List of components
+    //// Integer assignments for component index and component opcode
+    //public class ComponentDatabase
+    //{
+    //    public List<SynthComponent> Components { get; set; }
+
+
+    //}
+
     public class SynthOperand
     {
         // Boolean variable indicating whether the first operand is a constant
@@ -135,6 +146,8 @@ namespace Mba.Simplifier.Synth
 
         private readonly int w;
 
+        private readonly uint componentIndexSize;
+
         private readonly uint componentOpcodeSize;
 
         public BvSynthesis(SynthConfig config, AstCtx mbaCtx, AstIdx mbaIdx)
@@ -156,6 +169,7 @@ namespace Mba.Simplifier.Synth
 
 
             // Get the minimum size bitvector needed to store the component index and component opcode
+            componentIndexSize = (uint)BvWidth(components.Count - 1);
             componentOpcodeSize = (uint)BvWidth(Opcodes.Count - 1);
         }
 
@@ -176,7 +190,7 @@ namespace Mba.Simplifier.Synth
         }
 
         private void Log(string x)
-            => Console.WriteLine(x);
+            => Console.Write(x);
 
         private List<SynthLine> GetLines()
         {
@@ -200,10 +214,14 @@ namespace Mba.Simplifier.Synth
                 {
                     var isConstant = config.MaxConstants == 0 ? ctx.MkFalse() : ctx.MkBoolConst($"line{lineIndex}_op{i}Const");
                     var operandIndex = ctx.MkBvConst($"line{lineIndex}_op{i}", operandBitsize);
-                    if (maxOperandSize > operandBitsize)
-                        operandIndex = ctx.MkZext((uint)maxOperandSize - (uint)operandBitsize, operandIndex);
+
+                    // Zero extend all operands to the same width.
+                    operandIndex = ctx.MkZext((uint)maxOperandSize - (uint)operandBitsize, operandIndex);
 
                     var operand = new SynthOperand(isConstant, operandIndex);
+
+
+
                     line.Operands[i] = operand;
                 }
 
@@ -281,7 +299,6 @@ namespace Mba.Simplifier.Synth
             return (expr, operandSelect, constSelect);
         }
 
-        // Select one of N values using a chain of ITEs
         private Term LinearSelect(Term index, List<Term> options)
         {
             var n = options.Count;
@@ -291,7 +308,20 @@ namespace Mba.Simplifier.Synth
             if (n == 1)
                 return options[0];
 
+            //if (false)
+            //if (n > 12)
+            //if (n > 13)
+            //if (n >= 16)
+            //    return PrunedTree(index, options, 0, n);
+            if (false)
+            {
+                // TODO: Sometimes this encoding is more efficient
+                Debugger.Break();
+                //return PrunedTree(index, options, 0, n);
+            }
+
             var result = options[n - 1];
+
             for (int i = n - 2; i >= 0; i--)
             {
                 var condition = index == ctx.MkBvValue(i, index.Sort.BvSize);
@@ -301,8 +331,7 @@ namespace Mba.Simplifier.Synth
             return result;
         }
 
-        // Select one of N values using a binary search
-        private Term BinarySelect(Term index, List<Term> options, int offset, int count)
+        private Term PrunedTree(Term index, List<Term> options, int offset, int count)
         {
             if (count == 1) return options[offset];
 
@@ -314,8 +343,8 @@ namespace Mba.Simplifier.Synth
             var condBit = ctx.MkExtract((uint)msbIndex, (uint)msbIndex, index);
             var condition = condBit == ctx.MkBvValue(1, 1);
 
-            var lowResult = BinarySelect(index, options, offset, splitSize);
-            var highResult = BinarySelect(index, options, offset + splitSize, rightCount);
+            var lowResult = PrunedTree(index, options, offset, splitSize);
+            var highResult = PrunedTree(index, options, offset + splitSize, rightCount);
 
             return ctx.MkIte(condition, highResult, lowResult);
         }
@@ -323,7 +352,7 @@ namespace Mba.Simplifier.Synth
         private List<Term> GetProgramConstraints()
         {
             var constraints = new List<Term>();
-            AddWfpConstraints(constraints);
+            AddAcyclicConstraints(constraints);
             AddLivenessConstraints(constraints);
             AddPruningConstraints(constraints);
             AddSymmetricConstantsConstraint(constraints);
@@ -332,19 +361,20 @@ namespace Mba.Simplifier.Synth
             return constraints;
         }
 
-        // Constrain the synthesis template to be a valid program
-        private void AddWfpConstraints(List<Term> constraints)
+        private void AddAcyclicConstraints(List<Term> constraints)
         {
+            // Constrain each operand to be less than `i-1`
             for (int i = FirstInstIdx; i < lines.Count; i++)
             {
                 var line = lines[i];
 
-                // Each line can only refer to lines below it
                 foreach (var operand in line.Operands)
                 {
                     var ult = operand.Index <= (uint)(i - 1);
                     var opConstraint = Implies(~operand.IsConstant, ult);
-                    // TODO: If the operand is a constant, maybe the bounds should be Min(i-1, config.MaxConstants)
+                    // TODO: Being a constant should also imply that the chosen constant is less than the current line index?
+                    // There's at least something weird with the constant symmetry constraints improving this case even when only partially enabled
+                    // TODO: Here we should also be constraining the the constant index is less than or equal to the current line index
                     var constConstraint = Implies(operand.IsConstant, operand.Index <= (uint)Math.Max((config.MaxConstants - 1), 0));
 
                     constraints.Add(opConstraint);
@@ -357,11 +387,13 @@ namespace Mba.Simplifier.Synth
         // Assert that the first constant must be used before the second constant.
         private void AddSymmetricConstantsConstraint(List<Term> constraints)
         {
+            //return;
             // All operands of the first instruction that are constants must use constant index 0.
             foreach (var operand in lines[FirstInstIdx].Operands)
+            {
                 constraints.Add(Implies(operand.IsConstant, operand.Index == 0));
-            
-            // For the remaining operands, the constants must be used in ascending order
+            }
+
             var operands = lines.Skip(FirstInstIdx).SelectMany(x => x.Operands).ToList();
             for (int i = 1; i < operands.Count; i++)
             {
@@ -390,7 +422,7 @@ namespace Mba.Simplifier.Synth
         }
 
         // Add constraints asserting that every instruction is used in the final computation
-        // `skipVars` skips input variables
+        // `instsOnly` chooses whether to require variable uses too
         private void AddLivenessConstraints(List<Term> constraints)
         {
             bool skipVars = true;
@@ -423,10 +455,54 @@ namespace Mba.Simplifier.Synth
             }
 
             return;
+
+            int numLines = lines.Count;
+            int lastIdx = numLines - 1;
+
+            Term UsedBy(int i, int j)
+            {
+                var operands = lines[j].Operands;
+                var clauses = new List<Term>();
+                for (int k = 0; k < operands.Length; k++)
+                {
+                    clauses.Add((~operands[k].IsConstant) & (operands[k].Index == (uint)i));
+                }
+                return Or(clauses);
+            }
+            var live = new Term[numLines];
+
+            live[lastIdx] = ctx.MkTrue();
+
+
+            for (int i = lastIdx - 1; i >= FirstInstIdx; i--)
+            {
+                var liveConditions = new List<Term>();
+                for (int j = i + 1; j < numLines; j++)
+                {
+                    if (lines[j].IsSymbol)
+                        continue;
+
+                    liveConditions.Add(live[j] & UsedBy(i, j));
+                }
+
+                if (liveConditions.Count > 0)
+                    live[i] = Or(liveConditions);
+                else
+                    live[i] = ctx.MkFalse();
+            }
+
+            for (int i = FirstInstIdx; i < lastIdx; i++)
+            {
+                constraints.Add(live[i]);
+            }
         }
+
+
 
         private void AddPruningConstraints(List<Term> constraints)
         {
+            var sum = ctx.MkBvValue(0, 4);
+
             bool sortConstants = false;
             if (sortConstants)
             {
@@ -435,6 +511,7 @@ namespace Mba.Simplifier.Synth
                     constraints.Add(constants[i] > constants[i - 1]);
                 }
             }
+
 
             // Constrain each opcode to be less than its maximum
             for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
@@ -461,9 +538,11 @@ namespace Mba.Simplifier.Synth
                     }
                 }
 
-
-                // The opcode must be valid
-                constraints.Add(line.ComponentOpcode <= (uint)(Opcodes.Count - 1));
+                bool limitOpcodeIndex = true;
+                if (limitOpcodeIndex)
+                {
+                    constraints.Add(line.ComponentOpcode <= (uint)(Opcodes.Count - 1));
+                }
 
                 bool limitConstantIndex = true;
                 if (limitConstantIndex && constants.Count > 0)
@@ -508,6 +587,7 @@ namespace Mba.Simplifier.Synth
                         bool pruneRhs = true;
                         if (pruneRhs && opc.GetOperandCount() == 1)
                         {
+                            // TODO: Maybe we could instead make this a constant?
                             constraints.Add(Implies(matches, line.Operands[1].Index == 0));
 
                             // this does seem to speed things up
@@ -518,6 +598,7 @@ namespace Mba.Simplifier.Synth
 
 
                         // Constant fold unary instrunctions
+
                         if (constFold)
                         {
                             if (opc.GetOperandCount() == 1)
@@ -535,6 +616,7 @@ namespace Mba.Simplifier.Synth
                                 constraints.Add(Implies(matches, ~line.Operands[1].IsConstant));
                             }
                         }
+
 
                         // For some reason this heavily degrades performance.
                         bool foldTrivialConstantIdentities = false;
@@ -586,7 +668,7 @@ namespace Mba.Simplifier.Synth
                             var tie = matches & sameOpcode;
 
                             // CSE only helps if the CEGIS(T) opcode generalization is turned on
-                            bool CSE = false;
+                            bool CSE = true;
                             if (CSE)
                                 constraints.Add(Implies(tie, comb0 < comb1));
                             else
@@ -842,7 +924,7 @@ namespace Mba.Simplifier.Synth
                     Console.WriteLine($"Solved in total time {totalTime.ElapsedMilliseconds}ms");
                     Debugger.Break();
 
-                    bool skipSymmetries = false;
+                    bool skipSymmetries = true;
                     if (skipSymmetries)
                     {
 
