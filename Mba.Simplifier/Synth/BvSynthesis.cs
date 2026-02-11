@@ -439,29 +439,9 @@ namespace Mba.Simplifier.Synth
             }
 
             // Constrain each opcode to be less than its maximum
-            for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
+            for (int lineIdx = FirstInstIdx; lineIdx < lines.Count; lineIdx++)
             {
                 var line = lines[lineIdx];
-
-                if (lineIdx < FirstInstIdx)
-                    continue;
-
-                var toBv = (Term term) => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
-                bool cse = false;
-                if (cse)
-                {
-                    var sigs = new List<Term>();
-                    var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, line.ComponentOpcode, toBv(line.Operands[0].IsConstant), line.Operands[0].Index, toBv(line.Operands[1].IsConstant), line.Operands[1].Index);
-                    sigs.Add(comb1);
-
-                    for (int j = lineIdx + 1; j < lines.Count; j++)
-                    {
-                        var other = lines[j];
-                        var differences = Enumerable.Range(0, MaxArity).Select(x => (line.Operands[x].IsConstant != other.Operands[x].IsConstant) | (line.Operands[x].Index != other.Operands[x].Index));
-                        var imply = Implies(line.ComponentOpcode == other.ComponentOpcode, Or(differences));
-                        constraints.Add(imply);
-                    }
-                }
 
 
                 // The opcode must be valid
@@ -583,8 +563,8 @@ namespace Mba.Simplifier.Synth
                             constraints.Add(Implies(isIndependent, line.ComponentOpcode >= prev.ComponentOpcode));
 
                             // If they have identical opcodes, 
-                            var comb0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, toBv(prev.Operands[0].IsConstant), toBv(prev.Operands[1].IsConstant), prev.Operands[0].Index, prev.Operands[1].Index);
-                            var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, toBv(line.Operands[0].IsConstant), toBv(line.Operands[1].IsConstant), line.Operands[0].Index, line.Operands[1].Index);
+                            var comb0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, ToBv(prev.Operands[0].IsConstant), ToBv(prev.Operands[1].IsConstant), prev.Operands[0].Index, prev.Operands[1].Index);
+                            var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, ToBv(line.Operands[0].IsConstant), ToBv(line.Operands[1].IsConstant), line.Operands[0].Index, line.Operands[1].Index);
                             var tie = matches & sameOpcode;
 
                             // CSE only helps if the CEGIS(T) opcode generalization is turned on
@@ -1412,8 +1392,8 @@ namespace Mba.Simplifier.Synth
             */
         }
 
-
-
+        private Term ToBv(Term term) 
+            => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
 
         private Term Implies(Term a, Term b)
             => ctx.MkImplies(a, b);
