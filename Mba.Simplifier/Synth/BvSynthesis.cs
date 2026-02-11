@@ -200,8 +200,8 @@ namespace Mba.Simplifier.Synth
                 {
                     var isConstant = config.MaxConstants == 0 ? ctx.MkFalse() : ctx.MkBoolConst($"line{lineIndex}_op{i}Const");
                     var operandIndex = ctx.MkBvConst($"line{lineIndex}_op{i}", operandBitsize);
-                    if (maxOperandSize > operandBitsize)
-                        operandIndex = ctx.MkZext((uint)maxOperandSize - (uint)operandBitsize, operandIndex);
+                    //if (maxOperandSize > operandBitsize)
+                    operandIndex = ctx.MkZext((uint)maxOperandSize - (uint)operandBitsize, operandIndex);
 
                     var operand = new SynthOperand(isConstant, operandIndex);
                     line.Operands[i] = operand;
@@ -359,7 +359,9 @@ namespace Mba.Simplifier.Synth
         {
             // All operands of the first instruction that are constants must use constant index 0.
             foreach (var operand in lines[FirstInstIdx].Operands)
+            {
                 constraints.Add(Implies(operand.IsConstant, operand.Index == 0));
+            }
 
             // For the remaining operands, the constants must be used in ascending order
             var operands = lines.Skip(FirstInstIdx).SelectMany(x => x.Operands).ToList();
@@ -586,7 +588,7 @@ namespace Mba.Simplifier.Synth
                             var tie = matches & sameOpcode;
 
                             // CSE only helps if the CEGIS(T) opcode generalization is turned on
-                            bool CSE = false;
+                            bool CSE = true;
                             if (CSE)
                                 constraints.Add(Implies(tie, comb0 < comb1));
                             else
