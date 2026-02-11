@@ -197,8 +197,8 @@ namespace Mba.Simplifier.Synth
                 {
                     var isConstant = config.MaxConstants == 0 ? ctx.MkFalse() : ctx.MkBoolConst($"line{lineIndex}_op{i}Const");
                     var operandIndex = ctx.MkBvConst($"line{lineIndex}_op{i}", operandBitsize);
-                    if (maxOperandSize > operandBitsize)
-                        operandIndex = ctx.MkZext((uint)maxOperandSize - (uint)operandBitsize, operandIndex);
+                    //if (maxOperandSize > operandBitsize)
+                    operandIndex = ctx.MkZext((uint)maxOperandSize - (uint)operandBitsize, operandIndex);
 
                     var operand = new SynthOperand(isConstant, operandIndex);
                     line.Operands[i] = operand;
