@@ -82,6 +82,6 @@ namespace Mba.Simplifier.Utility
             => z3Ctx.MkIte(term, z3Ctx.MkBvValue(1, width), z3Ctx.MkBvValue(0, width));
 
         private Term ToBool(Term term)
-            => z3Ctx.MkIte(term == 0, z3Ctx.MkFalse(), z3Ctx.MkTrue());
+            => z3Ctx.MkExtract(0, 0, term) == 1;
     }
 }

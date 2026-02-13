@@ -14,7 +14,7 @@ namespace Mba.Simplifier.Synthesis
             return opc switch
             {
                 SynthOpc.And or SynthOpc.Or or SynthOpc.Xor or SynthOpc.Add or SynthOpc.Mul or SynthOpc.Eq => true,
-                SynthOpc.Not or SynthOpc.Sub or SynthOpc.Lshr or SynthOpc.Ashr or SynthOpc.Shl or SynthOpc.Ult or SynthOpc.TruthTable or SynthOpc.Constant => false,
+                SynthOpc.Not or SynthOpc.Sub or SynthOpc.Lshr or SynthOpc.Ashr or SynthOpc.Shl or SynthOpc.Ult or SynthOpc.Select or SynthOpc.TruthTable or SynthOpc.Constant => false,
                 _ => throw new NotImplementedException(),
             };
         }
@@ -37,6 +37,7 @@ namespace Mba.Simplifier.Synthesis
                 SynthOpc.Not => 1,
                 SynthOpc.Lshr or SynthOpc.Ashr or SynthOpc.Shl => 2, 
                 SynthOpc.TruthTable => 2,
+                SynthOpc.Select => 3,
                 SynthOpc.Constant => 0,
             };
         }

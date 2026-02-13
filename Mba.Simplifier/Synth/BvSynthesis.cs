@@ -252,6 +252,7 @@ namespace Mba.Simplifier.Synth
         {
             var op0 = () => operands[0];
             var op1 = () => operands[1];
+            var op2 = () => operands[2];
 
             var term = opcode switch
             {
@@ -267,6 +268,7 @@ namespace Mba.Simplifier.Synth
                 SynthOpc.Shl => (op0() << (op1() & (op1().Sort.BvSize - 1))),
                 SynthOpc.Eq => ToBv(op0() == op1(), w),
                 SynthOpc.Ult => ToBv(op0() < op1(), w),
+                SynthOpc.Select => ctx.MkIte(ToBool(op0()), op1(), op2()),
 
                 _ => throw new InvalidOperationException()
             };
@@ -415,13 +417,20 @@ namespace Mba.Simplifier.Synth
                         if (lines[j].IsSymbol)
                             continue;
 
+                        /*
                         var operands = lines[j].Operands;
                         var used0 = (~operands[0].IsConstant) & (operands[0].Index == lineIdx);
                         var used1 = (~operands[1].IsConstant) & operands[1].Index == lineIdx;
 
+                        //usageConditions.Add(used0);
+                        //usageConditions.Add(used1);
+                        */
 
-                        usageConditions.Add(used0);
-                        usageConditions.Add(used1);
+                        foreach (var operand in lines[j].Operands)
+                            usageConditions.Add((~operand.IsConstant) & (operand.Index == lineIdx));
+
+
+      
                     }
 
                     var anyUses = Or(usageConditions);
@@ -492,13 +501,17 @@ namespace Mba.Simplifier.Synth
                         bool constFold = true;
 
 
-                        // Constant fold unary instrunctions
+                        // Constant fold instrunctions
                         if (constFold)
                         {
                             if (opc.GetOperandCount() == 1)
                                 constraints.Add(Implies(matches, line.Operands[0].IsConstant == false));
                             if (opc.GetOperandCount() == 2)
                                 constraints.Add(Implies(matches, ~And(line.Operands.Select(x => x.IsConstant))));
+
+                            // Select is a special case. It has 3 operands, but we only care if the first operand is constant.
+                            if(opc == SynthOpc.Select)
+                                constraints.Add(Implies(matches, line.Operands[0].IsConstant == false));
                         }
 
                         // Rewrite (a - 1111) as (a + -1111)
@@ -555,9 +568,19 @@ namespace Mba.Simplifier.Synth
                             // Sort by opcode
                             constraints.Add(Implies(isIndependent, line.ComponentOpcode >= prev.ComponentOpcode));
 
+                            var getMembers = (SynthLine l) =>
+                            {
+                                var members = new List<Term>();
+                                members.AddRange(l.Operands.Select(x => ToBv(x.IsConstant)));
+                                members.AddRange(l.Operands.Select(x => x.Index));
+                                return members;
+                            };
+
                             // If they have identical opcodes, 
-                            var comb0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, ToBv(prev.Operands[0].IsConstant), ToBv(prev.Operands[1].IsConstant), prev.Operands[0].Index, prev.Operands[1].Index);
-                            var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, ToBv(line.Operands[0].IsConstant), ToBv(line.Operands[1].IsConstant), line.Operands[0].Index, line.Operands[1].Index);
+                            //var comb0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, ToBv(prev.Operands[0].IsConstant), ToBv(prev.Operands[1].IsConstant), prev.Operands[0].Index, prev.Operands[1].Index);
+                            //var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, ToBv(line.Operands[0].IsConstant), ToBv(line.Operands[1].IsConstant), line.Operands[0].Index, line.Operands[1].Index);
+                            var comb0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, getMembers(prev));
+                            var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, getMembers(line));
                             var tie = matches & sameOpcode;
 
                             // CSE only helps if the CEGIS(T) opcode generalization is turned on
@@ -568,11 +591,17 @@ namespace Mba.Simplifier.Synth
                                 constraints.Add(Implies(tie, comb0 <= comb1));
                         }
 
+                        bool idempotencyOpt = true;
+                        if(idempotencyOpt && opc == SynthOpc.Select)
+                        {
+                            var isIdempotent = matches & (line.Operands[1].IsConstant == line.Operands[2].IsConstant);
+                            constraints.Add(Implies(matches, line.Operands[1].Index != line.Operands[2].Index));
+                        }
+
                         if (!opc.IsIdempotent())
                             continue;
 
                         // If both operands have the same type, their indices must differ.
-                        bool idempotencyOpt = true;
                         if (idempotencyOpt)
                         {
                             var isIdempotent = matches & sameType;
@@ -821,8 +850,19 @@ namespace Mba.Simplifier.Synth
 
                 var op0 = () => ourOperands[0];
                 var op1 = () => ourOperands[1];
+                var op2 = () => ourOperands[2];
+
+                
 
                 var opc = Opcodes[(int)opcode];
+
+                if(opc == SynthOpc.Select)
+                {
+                    Console.WriteLine("\n\n");
+                    foreach(var operand in ourOperands)
+                        Console.WriteLine(mbaCtx.GetAstString(operand));
+                }
+
                 AstIdx ourNode = opc switch
                 {
                     SynthOpc.Not => mbaCtx.Neg(op0()), // Neg() is actually bvnot in my IR
@@ -836,8 +876,10 @@ namespace Mba.Simplifier.Synth
                     SynthOpc.Lshr => mbaCtx.Lshr(op0(), op1()),
                     SynthOpc.Ashr => mbaCtx.Symbol("ASHR_PLACEHOLDER", mbaCtx.GetWidth(op0())),
                     SynthOpc.Shl => mbaCtx.Symbol("SHL_PLACEHOLDER", mbaCtx.GetWidth(op0())),
-                    SynthOpc.Eq => mbaCtx.ICmp(Predicate.Eq, op0(), op1()),
-                    SynthOpc.Ult => mbaCtx.ICmp(Predicate.Ult, op0(), op1()),
+                    SynthOpc.Eq => mbaCtx.Zext(mbaCtx.ICmp(Predicate.Eq, op0(), op1()), (byte)w),
+                    SynthOpc.Ult => mbaCtx.Zext(mbaCtx.ICmp(Predicate.Ult, op0(), op1()), (byte)w),
+                    SynthOpc.Select => mbaCtx.Select(mbaCtx.Trunc(op0(), 1), op1(), op2()),
+
                     _ => throw new NotImplementedException(),
                 };
                 ourNodes.Add(ourNode);
@@ -939,6 +981,9 @@ namespace Mba.Simplifier.Synth
 
         private Term ToBv(Term term, uint width = 1)
             => ctx.MkIte(term, ctx.MkBvValue(1, width), ctx.MkBvValue(0, width));
+
+        private Term ToBool(Term term)
+           => ctx.MkExtract(0, 0, term) == 1;
 
         private Term Implies(Term a, Term b)
             => ctx.MkImplies(a, b);
