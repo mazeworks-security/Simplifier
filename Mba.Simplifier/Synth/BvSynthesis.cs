@@ -1,5 +1,6 @@
 ﻿using Antlr4.Runtime.Tree;
 using Bitwuzla;
+using Mba.Common.Ast;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Fuzzing;
 using Mba.Simplifier.Pipeline;
@@ -128,7 +129,7 @@ namespace Mba.Simplifier.Synth
 
         private List<Term> constants;
 
-        private readonly int w;
+        private readonly uint w;
 
         private readonly uint componentOpcodeSize;
 
@@ -139,7 +140,14 @@ namespace Mba.Simplifier.Synth
             this.mbaIdx = mbaIdx;
             this.mbaVariables = mbaCtx.CollectVariables(mbaIdx).ToArray();
             this.components = config.Components;
-            w = mbaCtx.GetWidth(mbaIdx);
+
+            // Set the global width that all expressions use
+            w = mbaVariables.Select(x => mbaCtx.GetWidth(x)).Append(mbaCtx.GetWidth(mbaIdx)).Max();
+
+            // Zero extend the output if needed
+            var outputWidth = mbaCtx.GetWidth(mbaIdx);
+            if (w > outputWidth)
+                mbaIdx = mbaCtx.Zext(mbaIdx, (byte)w);
 
             // Translate inputs to LLVM IR
             var translator = new BitwuzlaTranslator(mbaCtx, ctx);
@@ -256,8 +264,10 @@ namespace Mba.Simplifier.Synth
                 SynthOpc.Mul => (op0() * op1()),
                 SynthOpc.Lshr => (op0() >> (op1() & (op1().Sort.BvSize - 1))), // Truncate the shift width
                 SynthOpc.Ashr => (op0() >>> (op1() & (op1().Sort.BvSize - 1))), // Truncate the shift width
-
                 SynthOpc.Shl => (op0() << (op1() & (op1().Sort.BvSize - 1))),
+                SynthOpc.Eq => ToBv(op0() == op1(), w),
+                SynthOpc.Ult => ToBv(op0() < op1(), w),
+
                 _ => throw new InvalidOperationException()
             };
 
@@ -389,6 +399,7 @@ namespace Mba.Simplifier.Synth
         // `skipVars` skips input variables
         private void AddLivenessConstraints(List<Term> constraints)
         {
+            // TODO: If a constant is not used, maybe force it to zero?
             bool skipVars = true;
             for (int lineIdx = 0; lineIdx < lines.Count; lineIdx++)
             {
@@ -825,6 +836,8 @@ namespace Mba.Simplifier.Synth
                     SynthOpc.Lshr => mbaCtx.Lshr(op0(), op1()),
                     SynthOpc.Ashr => mbaCtx.Symbol("ASHR_PLACEHOLDER", mbaCtx.GetWidth(op0())),
                     SynthOpc.Shl => mbaCtx.Symbol("SHL_PLACEHOLDER", mbaCtx.GetWidth(op0())),
+                    SynthOpc.Eq => mbaCtx.ICmp(Predicate.Eq, op0(), op1()),
+                    SynthOpc.Ult => mbaCtx.ICmp(Predicate.Ult, op0(), op1()),
                     _ => throw new NotImplementedException(),
                 };
                 ourNodes.Add(ourNode);
@@ -924,8 +937,8 @@ namespace Mba.Simplifier.Synth
             return (null, ~And(structureConstraints));
         }
 
-        private Term ToBv(Term term)
-            => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
+        private Term ToBv(Term term, uint width = 1)
+            => ctx.MkIte(term, ctx.MkBvValue(1, width), ctx.MkBvValue(0, width));
 
         private Term Implies(Term a, Term b)
             => ctx.MkImplies(a, b);
@@ -1499,6 +1512,26 @@ namespace Mba.Simplifier.Synth
         }
 
 
+        public static void PCmp()
+        {
+            var (ctx, idx) = Parse("(x+y) < z", 8);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                new(SynthOpc.Sub),
+                new(SynthOpc.Add),
+                new(SynthOpc.Eq),
+                new(SynthOpc.Ult),
+               // new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 5, 1);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
 
 
 

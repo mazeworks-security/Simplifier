@@ -501,14 +501,14 @@ Console.WriteLine(ctx.GetAstString(barrr));
 bool brahma = false;
 if(brahma)
 {
-    new BrahmaSynthesis(ctx, id).Run();
+    // new BrahmaSynthesis(ctx, id).Run();
 }
 
 bool useNew = true;
 if (useNew)
 {
     //SynthTests.P1();
-    SynthTests.PVerilog();
+    SynthTests.PCmp();
     Debugger.Break();
     //var synthesizer = new BvSynthesis(ctx, id);
     //synthesizer.Run();

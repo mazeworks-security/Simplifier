@@ -13,8 +13,8 @@ namespace Mba.Simplifier.Synthesis
         {
             return opc switch
             {
-                SynthOpc.And or SynthOpc.Or or SynthOpc.Xor or SynthOpc.Add or SynthOpc.Mul => true,
-                SynthOpc.Not or SynthOpc.Sub or SynthOpc.Lshr or SynthOpc.Ashr or SynthOpc.Shl or SynthOpc.TruthTable or SynthOpc.Constant => false,
+                SynthOpc.And or SynthOpc.Or or SynthOpc.Xor or SynthOpc.Add or SynthOpc.Mul or SynthOpc.Eq => true,
+                SynthOpc.Not or SynthOpc.Sub or SynthOpc.Lshr or SynthOpc.Ashr or SynthOpc.Shl or SynthOpc.Ult or SynthOpc.TruthTable or SynthOpc.Constant => false,
                 _ => throw new NotImplementedException(),
             };
         }
@@ -24,7 +24,7 @@ namespace Mba.Simplifier.Synthesis
         {
             return opc switch
             {
-                SynthOpc.And or SynthOpc.Xor or SynthOpc.Or or SynthOpc.Sub => true,
+                SynthOpc.And or SynthOpc.Xor or SynthOpc.Or or SynthOpc.Sub or SynthOpc.Eq or SynthOpc.Ult => true,
                 _ => false,
             };
         }
@@ -33,7 +33,7 @@ namespace Mba.Simplifier.Synthesis
         {
             return opc switch
             {
-                SynthOpc.And or SynthOpc.Or or SynthOpc.Xor or SynthOpc.Add or SynthOpc.Sub or SynthOpc.Mul => 2,
+                SynthOpc.And or SynthOpc.Or or SynthOpc.Xor or SynthOpc.Add or SynthOpc.Sub or SynthOpc.Mul or SynthOpc.Eq or SynthOpc.Ult => 2,
                 SynthOpc.Not => 1,
                 SynthOpc.Lshr or SynthOpc.Ashr or SynthOpc.Shl => 2, 
                 SynthOpc.TruthTable => 2,

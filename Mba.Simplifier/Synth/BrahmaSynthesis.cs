@@ -37,9 +37,14 @@ namespace Mba.Simplifier.Synth
         Sub,
         Mul,
 
+        // Shifts
         Lshr,
         Ashr,
         Shl,
+
+        // Comparisons
+        Eq,
+        Ult,
 
         // Special
         TruthTable,
@@ -121,11 +126,6 @@ namespace Mba.Simplifier.Synth
 
         public BrahmaSynthesis(AstCtx mbaCtx, AstIdx mbaIdx)
         {
-            var config = new Dictionary<string, string>()
-            {
-                { "html_mode", "false"}
-            };
-
             components = components.OrderBy(x => x.Opcode).ToList();
 
             // The `SynthOpc` enum has the simplest components at top.

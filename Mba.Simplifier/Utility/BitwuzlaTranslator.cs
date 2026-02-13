@@ -69,12 +69,16 @@ namespace Mba.Simplifier.Utility
                 AstOp.Constant => z3Ctx.MkBvValue(ctx.GetConstantValue(idx), ctx.GetWidth(idx)),
                 AstOp.Symbol => z3Ctx.MkBvConst(ctx.GetSymbolName(idx), ctx.GetWidth(idx)),
                 AstOp.Select => z3Ctx.MkIte(op0(), op1(), op2()),
-                AstOp.ICmp => z3Ctx.MkTerm(icmp(ctx.GetPredicate(idx)), op0(), op1()),
+                AstOp.ICmp => ToBv(z3Ctx.MkTerm(icmp(ctx.GetPredicate(idx)), op0(), op1())),
+                AstOp.Zext => z3Ctx.MkZext((uint)ctx.GetWidth(idx) - ctx.GetWidth(ctx.GetOp0(idx)), op0()),
                 _ => throw new InvalidOperationException(),
             };
 
             cache[idx] = ast;
             return ast;
         }
+
+        private Term ToBv(Term term, uint width = 1)
+            => z3Ctx.MkIte(term, z3Ctx.MkBvValue(1, width), z3Ctx.MkBvValue(0, width));
     }
 }
