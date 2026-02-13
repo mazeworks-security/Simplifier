@@ -506,7 +506,7 @@ bool useNew = true;
 if (useNew)
 {
     //SynthTests.P1();
-    SynthTests.PBenchSlot();
+    SynthTests.PVerilog();
     Debugger.Break();
     //var synthesizer = new BvSynthesis(ctx, id);
     //synthesizer.Run();

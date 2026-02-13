@@ -153,6 +153,8 @@ namespace Mba.Simplifier.Synth
             symbols = mbaCtx.CollectVariables(mbaIdx).Select(x => translator.Translate(x)).ToArray();
 
 
+
+
             // Get the minimum size bitvector needed to store the component index and component opcode
             componentOpcodeSize = (uint)BvWidth(Opcodes.Count - 1);
         }
@@ -197,7 +199,8 @@ namespace Mba.Simplifier.Synth
                 {
                     var isConstant = config.MaxConstants == 0 ? ctx.MkFalse() : ctx.MkBoolConst($"line{lineIndex}_op{i}Const");
                     var operandIndex = ctx.MkBvConst($"line{lineIndex}_op{i}", operandBitsize);
-                    //if (maxOperandSize > operandBitsize)
+                    // Sometimes this will emit useless zero extensions. Zext(a, 0)
+                    // For some reason there are performance regressions if you remove this redundant zext. Specifically on the `PBenchSlot` benchmark
                     operandIndex = ctx.MkZext((uint)maxOperandSize - (uint)operandBitsize, operandIndex);
 
                     var operand = new SynthOperand(isConstant, operandIndex);
@@ -324,7 +327,7 @@ namespace Mba.Simplifier.Synth
             AddLivenessConstraints(constraints);
             AddPruningConstraints(constraints);
             AddSymmetricConstantsConstraint(constraints);
-            AddLimitConstraints(constraints);
+            //AddLimitConstraints(constraints);
 
             return constraints;
         }
@@ -642,43 +645,8 @@ namespace Mba.Simplifier.Synth
             return Opcodes.Contains(opcode);
         }
 
-        // Implements CEGIS(T)
-        // https://www.kroening.com/papers/cav2018-synthesis.pdf
-        private void CegisT(List<Term> constraints, Term skeleton)
+        private void ConstraintDbg(IReadOnlyList<Term> constraints)
         {
-            // Randomly evaluate the expression on N initial points and assert its equivalence
-            var rng = new SeededRandom();
-
-            // New idea: All possible bitwise functions put in individual 
-            var inputCombinations = new List<List<ulong>>()
-            {
-                // new() { 18446744073709551364, 248},
-                //   new() { 18446744073709551421, 128},
-                //new() { 58229829, 160749783, 2180495597, 2149681939 },
-                // new() { 73896448, 2944159190, 2163435311, 3323985711 },
-                //new() { 0, 0, 0, 0 },
-                //new() { ulong.MaxValue, ulong.MaxValue, ulong.MaxValue, ulong.MaxValue },
-            };
-
-
-
-            for (int i = 0; i < 32; i++)
-            {
-                inputCombinations.Add(new() { (1ul << (ushort)i) });
-            }
-
-            inputCombinations.Add(new() { 0 });
-
-            inputCombinations.Add(new() { ulong.MaxValue });
-
-            inputCombinations.Add(new() { 5555555555555555 });
-
-            inputCombinations = null;
-
-            int NUMINPUTS = 1;
-
-
-
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
 
@@ -692,74 +660,227 @@ namespace Mba.Simplifier.Synth
                 options.Set(BitwuzlaOption.BITWUZLA_OPT_SEED, 0);
             }
 
+            // Otherwise this solution is impossible.
+            List<Term> structureVars = new();
+            foreach (var line in lines)
+            {
+                if (line.IsSymbol)
+                    continue;
+
+                structureVars.Add(line.ComponentOpcode);
+                foreach (var operand in line.Operands)
+                {
+                    structureVars.Add(operand.Index);
+                    structureVars.Add(ToBv(operand.IsConstant));
+                }
+            }
 
             var s = new BvSolver(ctx, options);
-            List<int> skip = new();
 
-            //List<int> skip = new() { 4, 6, 20, 22, 30, 31, 38, 42, 46, 54, 55, 66, 72, 78, 86, 90, 91, 102, 108, 114, 122, 126, 127, 138, 144, 150, 158, 162, 163, 174, 180, 186, 194, 198, 199, 202, 203, 204, 205, 208, 210, 211, 214, 216, 217, 220, 222, 223, 226, 228, 230, 235 };
+            // Track known bits and unsigned ranges per variable.
+            // knownZeros/knownOnes: bitmask of bit positions forced to 0 or 1.
+            var knownZeros = new Dictionary<Term, ulong>();
+            var knownOnes = new Dictionary<Term, ulong>();
+            var rangeMin = new Dictionary<Term, ulong>();
+            var rangeMax = new Dictionary<Term, ulong>();
 
-            /*
-            var throwaway = new BvSolver(ctx, options);
-
-            for (int i = 0; i < constraints.Count; i++)
+            foreach (var v in structureVars)
             {
-                var c = constraints[i];
-                if (i == 0)
-                {
-                    throwaway.Assert(c);
-                    s.Assert(c);
-                    continue;
-                }
-
-                //continue;
-
-                //s.Push(1);
-
-                throwaway.Push(1);
-                throwaway.Assert(~c);
-
-                var bar = throwaway.CheckSat();
-                if (bar == Result.Unsat)
-                {
-                    skip.Add(i);
-                    Console.WriteLine($"Redundant constraint {c}");
-
-                    throwaway.Pop();
-
-                    continue;
-
-                }
-
-                throwaway.Pop();
-                throwaway.Assert(c);
-
-                s.Assert(c);
+                var width = (int)v.Sort.BvSize;
+                knownZeros[v] = 0;
+                knownOnes[v] = 0;
+                rangeMin[v] = 0;
+                rangeMax[v] = width == 64 ? ulong.MaxValue : (1UL << width) - 1;
             }
 
-            Console.WriteLine($"[{String.Join(", ", skip)}]");
-            */
-
-            for (int i = 0; i < constraints.Count; i++)
+            for (int ci = 0; ci < constraints.Count; ci++)
             {
-                if (skip.Contains(i))
-                    continue;
+                s.Assert(constraints[ci]);
 
-                s.Assert(constraints[i]);
+                bool anyChanged = false;
+                var sb = new StringBuilder();
+
+                foreach (var v in structureVars)
+                {
+                    var width = (int)v.Sort.BvSize;
+
+                    var oldZeros = knownZeros[v];
+                    var oldOnes = knownOnes[v];
+                    var oldMin = rangeMin[v];
+                    var oldMax = rangeMax[v];
+
+                    // Skip if fully determined already
+                    var allBits = width == 64 ? ulong.MaxValue : (1UL << width) - 1;
+                    if ((oldZeros | oldOnes) == allBits)
+                        continue;
+
+                    // --- Known bits ---
+                    var newZeros = oldZeros;
+                    var newOnes = oldOnes;
+
+                    for (int bit = 0; bit < width; bit++)
+                    {
+                        var mask = 1UL << bit;
+                        if ((oldZeros & mask) != 0 || (oldOnes & mask) != 0)
+                            continue;
+
+                        var bitExpr = ctx.MkExtract((uint)bit, (uint)bit, v);
+
+                        // Can this bit be 0?
+                        s.Push(1);
+                        s.Assert(bitExpr == ctx.MkBvValue(0, 1));
+                        var canBeZero = s.CheckSat() != Result.Unsat;
+                        s.Pop(1);
+
+                        // Can this bit be 1?
+                        s.Push(1);
+                        s.Assert(bitExpr == ctx.MkBvValue(1, 1));
+                        var canBeOne = s.CheckSat() != Result.Unsat;
+                        s.Pop(1);
+
+                        if (!canBeOne) newZeros |= mask;   // forced 0
+                        if (!canBeZero) newOnes |= mask;   // forced 1
+                    }
+
+                    // --- Unsigned range (find min via iterative tightening) ---
+                    ulong newMin = oldMin;
+                    {
+                        s.Push(1);
+                        if (s.CheckSat() == Result.Sat)
+                        {
+                            var best = ctx.GetIntegerValue(s.GetValue(v));
+                            s.Pop(1);
+
+                            // Tighten downward: is there a value < best?
+                            while (true)
+                            {
+                                s.Push(1);
+                                s.Assert(v < ctx.MkBvValue(best, (ulong)width));
+                                if (s.CheckSat() == Result.Sat)
+                                {
+                                    best = ctx.GetIntegerValue(s.GetValue(v));
+                                    s.Pop(1);
+                                }
+                                else
+                                {
+                                    s.Pop(1);
+                                    break;
+                                }
+                            }
+
+                            newMin = best;
+                        }
+                        else
+                        {
+                            s.Pop(1);
+                        }
+                    }
+
+                    // --- Unsigned range (find max via iterative tightening) ---
+                    ulong newMax = oldMax;
+                    {
+                        s.Push(1);
+                        if (s.CheckSat() == Result.Sat)
+                        {
+                            var best = ctx.GetIntegerValue(s.GetValue(v));
+                            s.Pop(1);
+
+                            // Tighten upward: is there a value > best?
+                            while (true)
+                            {
+                                s.Push(1);
+                                s.Assert(v > ctx.MkBvValue(best, (ulong)width));
+                                if (s.CheckSat() == Result.Sat)
+                                {
+                                    best = ctx.GetIntegerValue(s.GetValue(v));
+                                    s.Pop(1);
+                                }
+                                else
+                                {
+                                    s.Pop(1);
+                                    break;
+                                }
+                            }
+
+                            newMax = best;
+                        }
+                        else
+                        {
+                            s.Pop(1);
+                        }
+                    }
+
+                    // Check if anything changed
+                    bool changed = newZeros != oldZeros || newOnes != oldOnes || newMin != oldMin || newMax != oldMax;
+                    if (changed)
+                    {
+                        knownZeros[v] = newZeros;
+                        knownOnes[v] = newOnes;
+                        rangeMin[v] = newMin;
+                        rangeMax[v] = newMax;
+
+                        anyChanged = true;
+
+                        // Format known bits string (MSB first)
+                        var bits = new char[width];
+                        for (int b = 0; b < width; b++)
+                        {
+                            var mask = 1UL << b;
+                            if ((newZeros & mask) != 0) bits[width - 1 - b] = '0';
+                            else if ((newOnes & mask) != 0) bits[width - 1 - b] = '1';
+                            else bits[width - 1 - b] = '?';
+                        }
+
+                        sb.AppendLine($"  {v}: bits={new string(bits)}  range=[{newMin}, {newMax}]");
+                    }
+
+                    //s.Assert(constraints[ci])
+
+                }
+
+                if (anyChanged)
+                {
+                    Console.WriteLine($"--- After constraint {ci} ---");
+                    Console.Write(sb);
+                }
+
+   
             }
-
-            s.Simplify();
 
             s.Write();
+            Debugger.Break();
+        }
 
+        // Implements CEGIS(T)
+        // https://www.kroening.com/papers/cav2018-synthesis.pdf
+        private void CegisT(List<Term> constraints, Term skeleton)
+        {
+            var options = new Options();
+            options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
 
-            /*
+            bool abstraction = true;
+            if (abstraction)
+            {
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION, true);
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_BV_SIZE, 32);
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
+                options.Set(BitwuzlaOption.BITWUZLA_OPT_SEED, 0);
+            }
+
+            var s = new BvSolver(ctx, options);
+
             foreach (var c in constraints)
                 s.Assert(c);
 
-            s.Simplify();
             s.Write();
-            */
 
+
+            var rng = new SeededRandom();
+            var inputCombinations = new List<List<ulong>>();
+            inputCombinations = null;
+
+            int NUMINPUTS = 1;
             for (int i = 0; i < NUMINPUTS; i++)
             {
                 Term[] values = null;
@@ -782,13 +903,13 @@ namespace Mba.Simplifier.Synth
             }
 
 
-
+            var lastSolution = "";
 
             var totalTime = Stopwatch.StartNew();
             while (true)
             {
                 var curr = Stopwatch.StartNew();
-                s.Simplify();
+                //s.Simplify();
                 s.Write();
                 var check = s.CheckSat();
                 curr.Stop();
@@ -806,6 +927,12 @@ namespace Mba.Simplifier.Synth
                 var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
 
                 Console.WriteLine($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{ourSolution}\n\n\n");
+
+                if (curr.ElapsedMilliseconds > 75000)
+                    Debugger.Break();
+
+                lastSolution = mbaCtx.GetAstString(ourSolution);
+
 
                 // Yield the solution if its equivalent
                 options = new Options();
@@ -859,7 +986,7 @@ namespace Mba.Simplifier.Synth
                 }
 
 
-                bool generalize = true;
+                bool generalize = false;
                 if (generalize)
                 {
 
@@ -1032,7 +1159,6 @@ namespace Mba.Simplifier.Synth
             // Replace the constants with symbolic holes
             var skeleton = ctx.SubstituteTerm(candidate, cegisConstants.ToArray(), constants.ToArray());
 
-
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
             options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 5000);
@@ -1056,10 +1182,6 @@ namespace Mba.Simplifier.Synth
             var forall = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_FORALL, concat);
 
             solver.Assert(forall);
-
-            //solver.Write();
-
-            //solver.Write();
 
             var sw = Stopwatch.StartNew();
             var res = solver.CheckSat();
@@ -1108,7 +1230,7 @@ namespace Mba.Simplifier.Synth
             return (null, ~And(structureConstraints));
         }
 
-        private Term ToBv(Term term) 
+        private Term ToBv(Term term)
             => ctx.MkIte(term, ctx.MkBvValue(1, 1), ctx.MkBvValue(0, 1));
 
         private Term Implies(Term a, Term b)
@@ -1182,8 +1304,6 @@ namespace Mba.Simplifier.Synth
             var components = new List<SynthComponent>()
             {
                 new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
             };
 
             var config = new SynthConfig(components, 14, 0);
@@ -1210,17 +1330,10 @@ namespace Mba.Simplifier.Synth
 
         public static void P3()
         {
-            //var (ctx, idx) = Parse("(a|b|c|d) + (a+1111)", 8);
-
-            // 3000s initially
             var (ctx, idx) = Parse("(((a^b)) - ((c&d))) + (b&111)", 16);
 
             var components = new List<SynthComponent>()
             {
-                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.And, SynthOpc.Xor),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
                 new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Sub),
             };
 
@@ -1252,16 +1365,8 @@ namespace Mba.Simplifier.Synth
         {
             var (ctx, idx) = Parse("(171^((a+23)^(b)))^((((a|1111)+b)^b))", 32);
 
-            // Works with 7 components and 3 constants. 500ms
-            //var (ctx, idx) = Parse("(((a+23)^(b)))^((((a|1111)+b)))", 8);
-
-            //var (ctx, idx) = Parse("(((a+23423434)^(b)))^((((a|432324234)+b)))^343433", 8);
-
             var components = new List<SynthComponent>()
             {
-                // new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add),
-
                 new(new ComponentData(4), SynthOpc.Or),
                 new(new ComponentData(4), SynthOpc.Xor),
                 new(new ComponentData(4), SynthOpc.Add),
@@ -1281,21 +1386,8 @@ namespace Mba.Simplifier.Synth
         {
             var (ctx, idx) = Parse("((x&y) + (((x^y)) >> 1))", 64);
 
-            //var (ctx, idx) = Parse("(x^y)", 8);
-
-            //var (ctx, idx) = Parse("(((x^y)) & a)", 8); // fails with 4/5 comps
-
-            //var (ctx, idx) = Parse("(((x^y)) & z)", 8);
-
             var components = new List<SynthComponent>()
             {
-                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Add),
-                //new(SynthOpc.And, SynthOpc.Xor),
-
                 new SynthComponent(new ComponentData(1), SynthOpc.And),
                 new SynthComponent(new ComponentData(1), SynthOpc.Xor),
                 new SynthComponent(new ComponentData(1), SynthOpc.Lshr),
@@ -1311,27 +1403,11 @@ namespace Mba.Simplifier.Synth
 
         public static void P15()
         {
-            //var (ctx, idx) = Parse("((x | (x^y)) - (((x^y)) >> 1))", 64);
-
-
-            //var (ctx, idx) = Parse("(x^y)", 8);
-
-            //var (ctx, idx) = Parse("(((x^y)) & a)", 8); // fails with 4/5 comps
-
-            //var (ctx, idx) = Parse("(((x^y)) & z)", 8);
-
             var (ctx, idx) = Parse("(x|y) - ((x^y) >> 1)", 64);
 
             var components = new List<SynthComponent>()
             {
-                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Sub),
                 new(SynthOpc.Or, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Sub),
-                //new(SynthOpc.And, SynthOpc.Xor),
-
             };
 
             var config = new SynthConfig(components, 6, 1);
@@ -1345,29 +1421,12 @@ namespace Mba.Simplifier.Synth
             // This formula might be wrong
             var (ctx, idx) = Parse("(((((v ^ (v >> 1)) ^ ((v ^ (v >> 1)) >> 2)) & 0x11111111) * 0x11111111) >> 28) & 1", 32);
 
-
-            //var (ctx, idx) = Parse("(x^y)", 8);
-
-            //var (ctx, idx) = Parse("(((x^y)) & a)", 8); // fails with 4/5 comps
-
-            //var (ctx, idx) = Parse("(((x^y)) & z)", 8);
-
             var components = new List<SynthComponent>()
             {
-                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                // new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Mul),
-                //new(SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Mul, SynthOpc.And),
-                //new(SynthOpc.And, SynthOpc.Xor),
-
-                
                 new SynthComponent(new ComponentData(1), SynthOpc.Mul),
                 new SynthComponent(new ComponentData(2), SynthOpc.Xor),
                 new SynthComponent(new ComponentData(2), SynthOpc.And),
                 new SynthComponent(new ComponentData(3), SynthOpc.Lshr),
-
             };
 
             var config = new SynthConfig(components, 9, 4);
@@ -1379,36 +1438,14 @@ namespace Mba.Simplifier.Synth
         // Modular oiinverse
         public static void Pminv()
         {
-            // 6 lines
             var (ctx, idx) = Parse("((x ^ 60) * ((82 - (x * (x ^ 60)))))", 64);
-
-            //var (ctx, idx) = Parse("(((3*a)^2)*(1 + (1 - a*((3*a)^2))))*(1 + (1 - a*((3*a)^2))*(1 - a*((3*a)^2)))", 8);
-
-
-            //var (ctx, idx) = Parse("(x^y)", 8);
-
-            //var (ctx, idx) = Parse("(((x^y)) & a)", 8); // fails with 4/5 comps
-
-            //var (ctx, idx) = Parse("(((x^y)) & z)", 8);
 
             var components = new List<SynthComponent>()
             {
-                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                // new(SynthOpc.And, SynthOpc.Xor, SynthOpc.Lshr, SynthOpc.Mul),
-               // new(SynthOpc.Sub, SynthOpc.Add, SynthOpc.Mul, SynthOpc.And, SynthOpc.Xor),
                new(SynthOpc.Sub, SynthOpc.Add, SynthOpc.Mul, SynthOpc.And, SynthOpc.Or, SynthOpc.Not, SynthOpc.Xor),
-                //new(SynthOpc.And, SynthOpc.Xor),
-
             };
 
-            // works for 8-bit with {SUB, ADD, MUL, AND, XOR}
             var config = new SynthConfig(components, 5, 2);
-            //var config = new SynthConfig(components, 10, 3);
-
-            //var config = new SynthConfig(components, 11, 4);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
@@ -1421,8 +1458,6 @@ namespace Mba.Simplifier.Synth
             var components = new List<SynthComponent>()
             {
                 new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
             };
 
             var config = new SynthConfig(components, 8, 1);
@@ -1432,6 +1467,23 @@ namespace Mba.Simplifier.Synth
         }
 
 
+        public static void PDebugZextIssue()
+        {
+            var (ctx, idx) = Parse("~((a|b)*342324342234234)", 64);
+
+            var components = new List<SynthComponent>()
+            {
+                new(SynthOpc.And, SynthOpc.Or, SynthOpc.Mul, SynthOpc.Not),
+            };
+
+            var config = new SynthConfig(components, 5, 1);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
+
+
+
         public static void Phardboolean()
         {
             var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
@@ -1439,8 +1491,6 @@ namespace Mba.Simplifier.Synth
             var components = new List<SynthComponent>()
             {
                 new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
             };
 
             var config = new SynthConfig(components, 14, 0);
@@ -1451,25 +1501,14 @@ namespace Mba.Simplifier.Synth
 
         public static void PMediumBoolean()
         {
-            //var (ctx, idx) = Parse("(a|b|c|d|e)&f", 1);
-
-            // ~(a|b|c|d|e|f|g)
-            //var (ctx, idx) = Parse("~(((a|b))&c)", 1);
-            //var (ctx, idx) =  Parse("~(((a|b|c|d|e|f|g))&h)", 1);
-
             var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
 
-            //var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
             var components = new List<SynthComponent>()
             {
-                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-
                 new(new ComponentData(6), SynthOpc.And),
                 new(new ComponentData(6), SynthOpc.Or),
                 new(new ComponentData(6), SynthOpc.Xor),
                 new(new ComponentData(6), SynthOpc.Not),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
             };
 
             var config = new SynthConfig(components, 14, 0);
@@ -1485,8 +1524,6 @@ namespace Mba.Simplifier.Synth
             var components = new List<SynthComponent>()
             {
                 new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
             };
 
             var config = new SynthConfig(components, 20, 0);
@@ -1503,8 +1540,6 @@ namespace Mba.Simplifier.Synth
             var components = new List<SynthComponent>()
             {
                 new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
             };
 
             var config = new SynthConfig(components, 25, 0);
@@ -1520,15 +1555,7 @@ namespace Mba.Simplifier.Synth
 
             var components = new List<SynthComponent>()
             {
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.And, SynthOpc.Xor),
-                //new(SynthOpc.Add),
-
                 new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Sub, SynthOpc.Add),
-
-                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
-               // new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
             };
 
             var config = new SynthConfig(components, 5, 3);
@@ -1543,43 +1570,56 @@ namespace Mba.Simplifier.Synth
 
             var components = new List<SynthComponent>()
             {
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                //new(SynthOpc.And, SynthOpc.Xor),
-                //new(SynthOpc.Add),
-
-                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Sub, SynthOpc.Add, SynthOpc.Shl),
-                //new(new ComponentData(3), SynthOpc.Not),
                 new(new ComponentData(3), SynthOpc.And),
-                 //new(new ComponentData(3), SynthOpc.Or),
                 new(new ComponentData(3), SynthOpc.Xor),
-                 new(new ComponentData(3), SynthOpc.Sub),
+                new(new ComponentData(3), SynthOpc.Sub),
                 new(new ComponentData(3), SynthOpc.Add),
-                 new(new ComponentData(1), SynthOpc.Shl),
-                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Shl),
-
-
-                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
-                // new(SynthOpc.Add, SynthOpc.Sub),
-                //new(SynthOpc.Not, SynthOpc.Or),
-
-                // Optional
-                //new(new ComponentData(), SynthOpc.Not),
-                //new(new ComponentData(), SynthOpc.Or),
-
-                /*
-                new(new ComponentData(2), SynthOpc.And),
-
-                new(new ComponentData(2), SynthOpc.Xor),
-                new(new ComponentData(2), SynthOpc.Add),
-
-                new(new ComponentData(2), SynthOpc.Shl),
-                */
+                new(new ComponentData(1), SynthOpc.Shl),
             };
 
             var config = new SynthConfig(components, 11, 4);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
+        }
+
+        public static void PDebugZext()
+        {
+            var s0 = "-(~8830963753255973168|(~y&z)) + (z^(~8830963753255973168&(y|z))) - ~(8830963753255973168^z) + (y|~(8830963753255973168^z)) - 1";
+            var s1 = "8830963753255973168 + y";
+
+            s0 = "-7360133807098015136 + (1*(-1863238229756760676&x)) + (576460752303423487*(32&x)) + (288230376151711743*(64&x)) + (36028797018963967*(512&x)) + (4503599627370495*(4096&x)) + (1125899906842623*(16384&x)) + (70368744177663*(262144&x)) + (17592186044415*(1048576&x)) + (2199023255551*(8388608&x)) + (68719476735*(268435456&x)) + (17179869183*(1073741824&x)) + (1073741823*(17179869184&x)) + (536870911*(34359738368&x)) + (67108863*(274877906944&x)) + (16777215*(1099511627776&x)) + (4194303*(4398046511104&x)) + (2097151*(8796093022208&x)) + (131071*(140737488355328&x)) + (65535*(281474976710656&x)) + (32767*(562949953421312&x)) + (8191*(2251799813685248&x)) + (4095*(4503599627370496&x)) + (1023*(18014398509481984&x)) + (511*(36028797018963968&x)) + (255*(72057594037927936&x)) + (31*(576460752303423488&x)) + (15*(1152921504606846976&x))";
+            s1 = "-7360133807098015136^(-4&x)";
+
+            s0 = "((((x ^ 533433953090025345) ^ ~2477519675323023630) & 4390262060064730371) * 8506239995682776553) + ((((x ^ 533433953090025345) | ~2477519675323023630) & 4390262060064730371) * -8506239995682775442) + ((((x ^ 533433953090025345) | 2477519675323023630) ^ 4390262060064730371) * 4160415173633232112) + ((((x & 533433953090025345) & ~2477519675323023630) & 4390262060064730371) * -4160415173633233223) + ((((x ^ 533433953090025345) & ~2477519675323023630) & 4390262060064730371) * 7398805680029297517) + ((((x ^ ~533433953090025345) | 2477519675323023630) ^ 4390262060064730371) * 1107434315653479036) + ((((x | 533433953090025345) | 2477519675323023630) ^ 4390262060064730371) * 3557466608742890343) + ((((x | 533433953090025345) | 2477519675323023630) ^ 4390262060064730371) * -7717881782376123566) + ((((x ^ 533433953090025345) | 2477519675323023630) & ~4390262060064730371) * 7991277945930471858) + ((((x ^ ~533433953090025345) | 2477519675323023630) & ~4390262060064730371) * -9098712261583949783) + ((((~x ^ ~533433953090025345) | ~2477519675323023630) & ~4390262060064730371) * 923009115682583261) + ((((~x | ~533433953090025345) ^ ~2477519675323023630) & ~4390262060064730371) * -923009115682582150) + ((((x | 533433953090025345) ^ 2477519675323023630) & ~4390262060064730371) * 8056370110469764822) + ((((x | 533433953090025345) ^ 2477519675323023630) & ~4390262060064730371) * -7133360994787182672) + ((((x & 533433953090025345) & ~2477519675323023630) & ~4390262060064730371) * 8643096519935237325) + ((((x ^ ~533433953090025345) & ~2477519675323023630) & ~4390262060064730371) * 2585587483945883384) + ((((x ^ 533433953090025345) & ~2477519675323023630) & ~4390262060064730371) * 7669063500040012620) + ((((~x ^ ~533433953090025345) & ~2477519675323023630) & ~4390262060064730371) * 940384396373903949) + ((((~x & ~533433953090025345) & ~2477519675323023630) & ~4390262060064730371) * 819475353985819650) + ((((~x & ~533433953090025345) & ~2477519675323023630) & ~4390262060064730371) * 3663205992316184452)";
+            s1 = "1111*(x^533433953090025345)";
+
+            var (ctx, idx1) = Parse(s0, 48);
+            var idx2 = RustAstParser.Parse(ctx, s1, 48);
+
+            var tm = new TermManager();
+            var translator = new BitwuzlaTranslator(ctx, tm);
+
+            var before = translator.Translate(idx1);
+            var after = translator.Translate(idx2);
+
+            before = tm.MkZext(16, before);
+            after = tm.MkZext(16, after);
+
+            var solver = new BvSolver(tm);
+            solver.Assert(before != after);
+
+            solver.Write();
+
+            var sw = Stopwatch.StartNew();
+            var sat = solver.CheckSat();
+            sw.Stop();
+
+            Console.WriteLine($"{sat} in {sw.ElapsedMilliseconds}ms");
+
+            Debugger.Break();
+
+
         }
 
         public static void PBenchSlot()
@@ -1788,7 +1828,7 @@ namespace Mba.Simplifier.Synth
 
             text = "(((1:i4&(in2:i4>>1:i4))|(1:i4&(in1:i4>>1:i4)))&(((in2:i4&in1:i4)>>1:i4)|((in2:i4&in1:i4)>>0:i4)))";
 
-            text = "(a > b) ? 1111 : 0";
+      
 
             var (ctx, idx) = Parse(text, 4);
 
