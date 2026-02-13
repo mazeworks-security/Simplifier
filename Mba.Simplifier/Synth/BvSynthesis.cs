@@ -645,212 +645,6 @@ namespace Mba.Simplifier.Synth
             return Opcodes.Contains(opcode);
         }
 
-        private void ConstraintDbg(IReadOnlyList<Term> constraints)
-        {
-            var options = new Options();
-            options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
-
-            bool abstraction = true;
-            if (abstraction)
-            {
-                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION, true);
-                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
-                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_BV_SIZE, 32);
-                options.Set(BitwuzlaOption.BITWUZLA_OPT_ABSTRACTION_INC_BITBLAST, true);
-                options.Set(BitwuzlaOption.BITWUZLA_OPT_SEED, 0);
-            }
-
-            // Otherwise this solution is impossible.
-            List<Term> structureVars = new();
-            foreach (var line in lines)
-            {
-                if (line.IsSymbol)
-                    continue;
-
-                structureVars.Add(line.ComponentOpcode);
-                foreach (var operand in line.Operands)
-                {
-                    structureVars.Add(operand.Index);
-                    structureVars.Add(ToBv(operand.IsConstant));
-                }
-            }
-
-            var s = new BvSolver(ctx, options);
-
-            // Track known bits and unsigned ranges per variable.
-            // knownZeros/knownOnes: bitmask of bit positions forced to 0 or 1.
-            var knownZeros = new Dictionary<Term, ulong>();
-            var knownOnes = new Dictionary<Term, ulong>();
-            var rangeMin = new Dictionary<Term, ulong>();
-            var rangeMax = new Dictionary<Term, ulong>();
-
-            foreach (var v in structureVars)
-            {
-                var width = (int)v.Sort.BvSize;
-                knownZeros[v] = 0;
-                knownOnes[v] = 0;
-                rangeMin[v] = 0;
-                rangeMax[v] = width == 64 ? ulong.MaxValue : (1UL << width) - 1;
-            }
-
-            for (int ci = 0; ci < constraints.Count; ci++)
-            {
-                s.Assert(constraints[ci]);
-
-                bool anyChanged = false;
-                var sb = new StringBuilder();
-
-                foreach (var v in structureVars)
-                {
-                    var width = (int)v.Sort.BvSize;
-
-                    var oldZeros = knownZeros[v];
-                    var oldOnes = knownOnes[v];
-                    var oldMin = rangeMin[v];
-                    var oldMax = rangeMax[v];
-
-                    // Skip if fully determined already
-                    var allBits = width == 64 ? ulong.MaxValue : (1UL << width) - 1;
-                    if ((oldZeros | oldOnes) == allBits)
-                        continue;
-
-                    // --- Known bits ---
-                    var newZeros = oldZeros;
-                    var newOnes = oldOnes;
-
-                    for (int bit = 0; bit < width; bit++)
-                    {
-                        var mask = 1UL << bit;
-                        if ((oldZeros & mask) != 0 || (oldOnes & mask) != 0)
-                            continue;
-
-                        var bitExpr = ctx.MkExtract((uint)bit, (uint)bit, v);
-
-                        // Can this bit be 0?
-                        s.Push(1);
-                        s.Assert(bitExpr == ctx.MkBvValue(0, 1));
-                        var canBeZero = s.CheckSat() != Result.Unsat;
-                        s.Pop(1);
-
-                        // Can this bit be 1?
-                        s.Push(1);
-                        s.Assert(bitExpr == ctx.MkBvValue(1, 1));
-                        var canBeOne = s.CheckSat() != Result.Unsat;
-                        s.Pop(1);
-
-                        if (!canBeOne) newZeros |= mask;   // forced 0
-                        if (!canBeZero) newOnes |= mask;   // forced 1
-                    }
-
-                    // --- Unsigned range (find min via iterative tightening) ---
-                    ulong newMin = oldMin;
-                    {
-                        s.Push(1);
-                        if (s.CheckSat() == Result.Sat)
-                        {
-                            var best = ctx.GetIntegerValue(s.GetValue(v));
-                            s.Pop(1);
-
-                            // Tighten downward: is there a value < best?
-                            while (true)
-                            {
-                                s.Push(1);
-                                s.Assert(v < ctx.MkBvValue(best, (ulong)width));
-                                if (s.CheckSat() == Result.Sat)
-                                {
-                                    best = ctx.GetIntegerValue(s.GetValue(v));
-                                    s.Pop(1);
-                                }
-                                else
-                                {
-                                    s.Pop(1);
-                                    break;
-                                }
-                            }
-
-                            newMin = best;
-                        }
-                        else
-                        {
-                            s.Pop(1);
-                        }
-                    }
-
-                    // --- Unsigned range (find max via iterative tightening) ---
-                    ulong newMax = oldMax;
-                    {
-                        s.Push(1);
-                        if (s.CheckSat() == Result.Sat)
-                        {
-                            var best = ctx.GetIntegerValue(s.GetValue(v));
-                            s.Pop(1);
-
-                            // Tighten upward: is there a value > best?
-                            while (true)
-                            {
-                                s.Push(1);
-                                s.Assert(v > ctx.MkBvValue(best, (ulong)width));
-                                if (s.CheckSat() == Result.Sat)
-                                {
-                                    best = ctx.GetIntegerValue(s.GetValue(v));
-                                    s.Pop(1);
-                                }
-                                else
-                                {
-                                    s.Pop(1);
-                                    break;
-                                }
-                            }
-
-                            newMax = best;
-                        }
-                        else
-                        {
-                            s.Pop(1);
-                        }
-                    }
-
-                    // Check if anything changed
-                    bool changed = newZeros != oldZeros || newOnes != oldOnes || newMin != oldMin || newMax != oldMax;
-                    if (changed)
-                    {
-                        knownZeros[v] = newZeros;
-                        knownOnes[v] = newOnes;
-                        rangeMin[v] = newMin;
-                        rangeMax[v] = newMax;
-
-                        anyChanged = true;
-
-                        // Format known bits string (MSB first)
-                        var bits = new char[width];
-                        for (int b = 0; b < width; b++)
-                        {
-                            var mask = 1UL << b;
-                            if ((newZeros & mask) != 0) bits[width - 1 - b] = '0';
-                            else if ((newOnes & mask) != 0) bits[width - 1 - b] = '1';
-                            else bits[width - 1 - b] = '?';
-                        }
-
-                        sb.AppendLine($"  {v}: bits={new string(bits)}  range=[{newMin}, {newMax}]");
-                    }
-
-                    //s.Assert(constraints[ci])
-
-                }
-
-                if (anyChanged)
-                {
-                    Console.WriteLine($"--- After constraint {ci} ---");
-                    Console.Write(sb);
-                }
-
-   
-            }
-
-            s.Write();
-            Debugger.Break();
-        }
-
         // Implements CEGIS(T)
         // https://www.kroening.com/papers/cav2018-synthesis.pdf
         private void CegisT(List<Term> constraints, Term skeleton)
@@ -902,14 +696,10 @@ namespace Mba.Simplifier.Synth
                 s.Assert(constraint);
             }
 
-
-            var lastSolution = "";
-
             var totalTime = Stopwatch.StartNew();
             while (true)
             {
                 var curr = Stopwatch.StartNew();
-                //s.Simplify();
                 s.Write();
                 var check = s.CheckSat();
                 curr.Stop();
@@ -917,22 +707,18 @@ namespace Mba.Simplifier.Synth
 
                 if (check == Result.Unsat)
                 {
-                    Console.WriteLine($"No solution.  Took {totalTime.ElapsedMilliseconds}");
+                    Log($"No solution.  Took {totalTime.ElapsedMilliseconds}");
                     Debugger.Break();
                     return;
                 }
 
-
                 // Ask the solver for a fitting solution
                 var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
 
-                Console.WriteLine($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{ourSolution}\n\n\n");
+                Log($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{ourSolution}\n\n\n");
 
                 if (curr.ElapsedMilliseconds > 75000)
                     Debugger.Break();
-
-                lastSolution = mbaCtx.GetAstString(ourSolution);
-
 
                 // Yield the solution if its equivalent
                 options = new Options();
@@ -945,7 +731,7 @@ namespace Mba.Simplifier.Synth
                 {
 
 
-                    Console.WriteLine($"Solved in total time {totalTime.ElapsedMilliseconds}ms");
+                    Log($"Solved in total time {totalTime.ElapsedMilliseconds}ms");
                     Debugger.Break();
 
                     bool skipSymmetries = false;
@@ -990,20 +776,17 @@ namespace Mba.Simplifier.Synth
                 if (generalize)
                 {
 
-                    Console.WriteLine("Beginning generalization...");
+                    Log("Beginning generalization...");
                     var sww = Stopwatch.StartNew();
                     var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
 
-                    //var (generalizedSolution, generalizedBan) = GeneralizeIncremental(s, skeleton, cegisConstants);
-
-
                     sww.Stop();
-                    Console.WriteLine($"Generalizing took {sww.ElapsedMilliseconds}ms");
+                    Log($"Generalizing took {sww.ElapsedMilliseconds}ms");
 
                     if (generalizedBan is not null)
                     {
 
-                        Console.WriteLine("Finished generalization...");
+                        Log("Finished generalization...");
                         Debug.Assert(generalizedSolution is null);
                         s.Assert(generalizedBan);
                         constraints.Add(generalizedBan);
@@ -1015,20 +798,6 @@ namespace Mba.Simplifier.Synth
                 var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
                 s.Assert(GetBehavioralConstraint(skeleton, vs));
                 constraints.Add(GetBehavioralConstraint(skeleton, vs));
-
-                // Reset to disable incremental solving
-                //s = new BvSolver(ctx, options);
-                //foreach (var c in constraints)
-                //    s.Assert(c);
-
-                //Console.WriteLine($"Equiv: {temp.CheckSat()}");
-                //foreach(var symbol in symbols)
-                //{
-                //    Console.WriteLine($"Invalid input: {ctx.GetIntegerValue(temp.GetValue(symbol))}");
-                //}
-
-                //Debugger.Break();
-                // Otherwise we found a solution.
             }
         }
 
@@ -1055,7 +824,7 @@ namespace Mba.Simplifier.Synth
                 ourConstants.Add(mbaCtx.Constant(myConstant, (byte)w));
                 cegisConstants.Add(eval);
 
-                Console.WriteLine($"const{i} = {myConstant}");
+                Log($"const{i} = {myConstant}");
             }
 
 
@@ -1069,8 +838,7 @@ namespace Mba.Simplifier.Synth
                 }
 
                 var a = s.GetValue(line.ComponentOpcode);
-                //var b = s.GetValue(line.ComponentIndex);
-                Console.WriteLine($"{a}");
+                Log($"{a}");
             }
 
 
@@ -1089,7 +857,6 @@ namespace Mba.Simplifier.Synth
                     continue;
                 }
 
-                //var index = (int)ctx.GetIntegerValue(s.GetValue(line.ComponentIndex));
                 var opcode = ctx.GetIntegerValue(s.GetValue(line.ComponentOpcode));
                 if (opcode >= (ulong)Opcodes.Count)
                     opcode = (ulong)Opcodes.Count - 1;
@@ -1110,10 +877,6 @@ namespace Mba.Simplifier.Synth
 
                 var op0 = () => ourOperands[0];
                 var op1 = () => ourOperands[1];
-
-
-
-
 
                 var opc = Opcodes[(int)opcode];
                 AstIdx ourNode = opc switch
