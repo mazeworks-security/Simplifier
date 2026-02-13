@@ -21,6 +21,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Transactions;
 using System.Xml.Linq;
 
 namespace Mba.Simplifier.Synth
@@ -333,7 +334,7 @@ namespace Mba.Simplifier.Synth
             AddLivenessConstraints(constraints);
             AddPruningConstraints(constraints);
             AddSymmetricConstantsConstraint(constraints);
-            //AddLimitConstraints(constraints);
+            AddLimitConstraints(constraints);
 
             return constraints;
         }
@@ -416,15 +417,6 @@ namespace Mba.Simplifier.Synth
                     {
                         if (lines[j].IsSymbol)
                             continue;
-
-                        /*
-                        var operands = lines[j].Operands;
-                        var used0 = (~operands[0].IsConstant) & (operands[0].Index == lineIdx);
-                        var used1 = (~operands[1].IsConstant) & operands[1].Index == lineIdx;
-
-                        //usageConditions.Add(used0);
-                        //usageConditions.Add(used1);
-                        */
 
                         foreach (var operand in lines[j].Operands)
                             usageConditions.Add((~operand.IsConstant) & (operand.Index == lineIdx));
@@ -576,19 +568,19 @@ namespace Mba.Simplifier.Synth
                                 return members;
                             };
 
-                            // If they have identical opcodes, 
-                            //var comb0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, ToBv(prev.Operands[0].IsConstant), ToBv(prev.Operands[1].IsConstant), prev.Operands[0].Index, prev.Operands[1].Index);
-                            //var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, ToBv(line.Operands[0].IsConstant), ToBv(line.Operands[1].IsConstant), line.Operands[0].Index, line.Operands[1].Index);
+                            // If they have identical opcodes
                             var comb0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, getMembers(prev));
                             var comb1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, getMembers(line));
                             var tie = matches & sameOpcode;
 
                             // CSE only helps if the CEGIS(T) opcode generalization is turned on
+                            // TODO: This might actually be illegal? The constraint should be `tie & isIndependent`
+                            // `isIndependent` also speeds up the solving time..
                             bool CSE = true;
                             if (CSE)
-                                constraints.Add(Implies(tie, comb0 < comb1));
+                                constraints.Add(Implies(tie & isIndependent, comb0 < comb1));
                             else
-                                constraints.Add(Implies(tie, comb0 <= comb1));
+                                constraints.Add(Implies(tie & isIndependent, comb0 <= comb1));
                         }
 
                         bool idempotencyOpt = true;
@@ -687,6 +679,10 @@ namespace Mba.Simplifier.Synth
 
             s.Write();
 
+            bool mba = false;
+            if (mba)
+                s.Assert(symbols[0] >= 50);
+
 
             var rng = new SeededRandom();
             var inputCombinations = new List<List<ulong>>();
@@ -710,9 +706,18 @@ namespace Mba.Simplifier.Synth
                    .ToArray();
                 }
 
+                while(mba && ctx.GetIntegerValue(values[0]) < 50)
+                {
+                    values[0] |= (rng.GetRandUlong() & ModuloReducer.GetMask((uint)symbols[0].Sort.BvSize));
+                }
+                   
+
+
                 var constraint = GetBehavioralConstraint(skeleton, values);
                 s.Assert(constraint);
             }
+
+        
 
             var totalTime = Stopwatch.StartNew();
             while (true)
@@ -743,6 +748,9 @@ namespace Mba.Simplifier.Synth
                 options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
                 var temp = new BvSolver(ctx, options);
 
+                if (mba)
+                    temp.Assert(symbols[0] >= 50);
+
                 temp.Assert(~(groundTruth == cegisSolution));
                 var isEquiv = temp.CheckSat() == Result.Unsat;
                 if (isEquiv)
@@ -751,12 +759,12 @@ namespace Mba.Simplifier.Synth
                     Debugger.Break();
                 }
 
-                bool generalize = false;
+                bool generalize = true;
                 if (generalize)
                 {
                     Log("Beginning generalization...");
                     var sww = Stopwatch.StartNew();
-                    var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
+                    var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime, mba);
 
                     sww.Stop();
                     Log($"Generalizing took {sww.ElapsedMilliseconds}ms");
@@ -903,7 +911,7 @@ namespace Mba.Simplifier.Synth
             return (ourNodes.Last(), cegisNodes.Last(), cegisConstants);
         }
 
-        private (Term generalizedSolution, Term generalizedConstraints) Generalize(BvSolver oldModel, Term candidate, List<Term> cegisConstants, Stopwatch totalTime)
+        private (Term generalizedSolution, Term generalizedConstraints) Generalize(BvSolver oldModel, Term candidate, List<Term> cegisConstants, Stopwatch totalTime, bool mba)
         {
             // Replace the constants with symbolic holes
             var skeleton = ctx.SubstituteTerm(candidate, cegisConstants.ToArray(), constants.ToArray());
@@ -912,6 +920,9 @@ namespace Mba.Simplifier.Synth
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
             options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 5000);
             var solver = new BvSolver(ctx, options);
+
+            if(mba)
+                solver.Assert(symbols[0] >= 50);
 
 
             // Instantiate new quantifier variables.
@@ -929,6 +940,10 @@ namespace Mba.Simplifier.Synth
             var equality = groundTruthBody == skeletonBody;
             var concat = quantVars.Append(equality).ToArray();
             var forall = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_FORALL, concat);
+
+            //if (mba)
+            //    solver.Assert(quantVars[0] >= 50);
+
 
             solver.Assert(forall);
 
@@ -948,6 +963,7 @@ namespace Mba.Simplifier.Synth
                 return (null, null);
             }
 
+            /*
             // Otherwise this solution is impossible.
             List<Term> structureVars = new();
             foreach (var line in lines)
@@ -977,6 +993,63 @@ namespace Mba.Simplifier.Synth
             }
 
             return (null, ~And(structureConstraints));
+            */
+
+            /*
+            var realLines = lines.SkipWhile(x => x.IsSymbol).ToList();
+            List<Term> structureVars = new();
+
+
+
+            structureVars.AddRange(realLines.Select(x => x.ComponentOpcode));
+            structureVars.AddRange(realLines.SelectMany(x => x.Operands.Select(x => ToBv(x.IsConstant))));
+            structureVars.AddRange(realLines.SelectMany(x => x.Operands.Select(x => x.Index)));
+
+            var concat0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, structureVars);
+    
+
+            structureVars = new();
+            structureVars.AddRange(realLines.Select(x => oldModel.GetValue(x.ComponentOpcode)));
+            structureVars.AddRange(realLines.SelectMany(x => x.Operands.Select(x => ToBv(oldModel.GetValue(x.IsConstant)))));
+            structureVars.AddRange(realLines.SelectMany(x => (x.Operands.Select(x => oldModel.GetValue(x.Index)))));
+
+            var concat1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, structureVars);
+            */
+
+            List<Term> structureVars = new();
+            foreach (var line in lines)
+            {
+                if (line.IsSymbol)
+                    continue;
+
+                structureVars.Add(line.ComponentOpcode);
+                foreach (var operand in line.Operands)
+                {
+                    structureVars.Add(operand.Index);
+                    structureVars.Add(ToBv(operand.IsConstant));
+                }
+            }
+
+            var concat0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, structureVars);
+            structureVars.Clear();
+
+            foreach (var line in lines)
+            {
+                if (line.IsSymbol)
+                    continue;
+
+                structureVars.Add(oldModel.GetValue(line.ComponentOpcode));
+                foreach (var operand in line.Operands)
+                {
+                    structureVars.Add(oldModel.GetValue(operand.Index));
+                    structureVars.Add(ToBv(oldModel.GetValue(operand.IsConstant)));
+                }
+            }
+
+            var concat1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, structureVars);
+
+            return (null, concat0 != concat1);
+
         }
 
         private Term ToBv(Term term, uint width = 1)
@@ -1619,22 +1692,50 @@ namespace Mba.Simplifier.Synth
 
             text = "((2:i4*((~(1:i4&((in2:i4&in1:i4)>>0:i4)))^(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))+(8:i4*((~(1:i4&(((in2:i4&in1:i4)>>2:i4)|((((in2:i4&in1:i4)>>1:i4)|((in2:i4&in1:i4)>>0:i4))&(((in2:i4|in1:i4)>>2:i4)&((in2:i4|in1:i4)>>1:i4))))))+(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4)))))))";
 
-            var (ctx, idx) = Parse(text, 4);
+            text = "(2:i8*(~((~((1:i8&(a:i8>>1:i8))^(1:i8&(b:i8>>1:i8))))^(((1:i8&(a:i8>>0:i8))&(1:i8&(b:i8>>0:i8)))&((~((1:i8&(a:i8>>7:i8))&(1:i8&(b:i8>>7:i8))))&(~(((1:i8&(a:i8>>6:i8))&(1:i8&(b:i8>>6:i8)))&((((1:i8&(a:i8>>4:i8))&(1:i8&(b:i8>>4:i8)))|((1:i8&(a:i8>>3:i8))&(1:i8&(b:i8>>3:i8))))|(((1:i8&(a:i8>>2:i8))&(1:i8&(b:i8>>2:i8)))|(((1:i8&(a:i8>>1:i8))&(1:i8&(b:i8>>1:i8)))|((1:i8&(a:i8>>5:i8))&(1:i8&(b:i8>>5:i8)))))))))))))\r\n";
+
+            text = "(a < 53) ? (a&b) : (a^b)";
+
+            text = "(128:i8*((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))&((1:i8&(a:i8>>7:i8))^(1:i8&(b:i8>>7:i8)))))\r\n";
+
+            text = "(((2:i8*(1:i8&(((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>1:i8))|(((1:i8&(a:i8>>1:i8))^(1:i8&(b:i8>>1:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))))|((4:i8*(1:i8&((((1:i8&(a:i8>>2:i8))^(1:i8&(b:i8>>2:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>2:i8)))))|((8:i8*((((1:i8&(a:i8>>3:i8))^(1:i8&(b:i8>>3:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|(1:i8&((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>3:i8)))))+((~((1:i8&((a:i8&b:i8)>>0:i8))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((1:i8&(((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8&b:i8)>>0:i8)))|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))&((a:i8|b:i8)>>0:i8))))))+(((64:i8*(1:i8&(((1:i8&(a:i8>>6:i8))^(1:i8&(b:i8>>6:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))))+(128:i8*(1:i8&(((1:i8&(a:i8>>7:i8))^(1:i8&(b:i8>>7:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))))+(16:i8*((((1:i8&(a:i8>>4:i8))^(1:i8&(b:i8>>4:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&(1:i8&((a:i8&b:i8)>>4:i8)))))))";
+
+            text = "((((2:i8*(1:i8&(((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>1:i8))|(((1:i8&(a:i8>>1:i8))^(1:i8&(b:i8>>1:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))))|((4:i8*(1:i8&((((1:i8&(a:i8>>2:i8))^(1:i8&(b:i8>>2:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>2:i8)))))|((8:i8*((((1:i8&(a:i8>>3:i8))^(1:i8&(b:i8>>3:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|(1:i8&((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>3:i8)))))+((~((1:i8&((a:i8&b:i8)>>0:i8))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((1:i8&(((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8&b:i8)>>0:i8)))|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))&((a:i8|b:i8)>>0:i8))))))+(((64:i8*(1:i8&(((1:i8&(a:i8>>6:i8))^(1:i8&(b:i8>>6:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))))+(128:i8*(1:i8&(((1:i8&(a:i8>>7:i8))^(1:i8&(b:i8>>7:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))))+(16:i8*((((1:i8&(a:i8>>4:i8))^(1:i8&(b:i8>>4:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&(1:i8&((a:i8&b:i8)>>4:i8)))))))+(32:i8*((((1:i8&(a:i8>>5:i8))^(1:i8&(b:i8>>5:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&(1:i8&((a:i8&b:i8)>>5:i8))))))";
+
+            text = "(16:i8*(~(((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))|(~((1:i8&(a:i8>>4:i8))&(1:i8&(b:i8>>4:i8)))))&(~((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))&((1:i8&(a:i8>>4:i8))^(1:i8&(b:i8>>4:i8))))))))|(32:i8*(~(((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))|(~((1:i8&(a:i8>>5:i8))&(1:i8&(b:i8>>5:i8)))))&(~((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))&((1:i8&(a:i8>>5:i8))^(1:i8&(b:i8>>5:i8))))))))|(64:i8*((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))&((1:i8&(a:i8>>6:i8))^(1:i8&(b:i8>>6:i8)))))|(128:i8*((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))&((1:i8&(a:i8>>7:i8))^(1:i8&(b:i8>>7:i8)))))\r\n";
+
+            text = "(2:i8*(1:i8&(((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>1:i8))|(((1:i8&(a:i8>>1:i8))^(1:i8&(b:i8>>1:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))))";
+
+            text = "(((1:i8&(a:i8>>2:i8))^(1:i8&(b:i8>>2:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))";
+
+            text = "(16:i8*(~(((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))|(~((1:i8&(a:i8>>4:i8))&(1:i8&(b:i8>>4:i8)))))&(~((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))&((1:i8&(a:i8>>4:i8))^(1:i8&(b:i8>>4:i8))))))))|(32:i8*(~(((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))|(~((1:i8&(a:i8>>5:i8))&(1:i8&(b:i8>>5:i8)))))&(~((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))&((1:i8&(a:i8>>5:i8))^(1:i8&(b:i8>>5:i8))))))))|(64:i8*((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))&((1:i8&(a:i8>>6:i8))^(1:i8&(b:i8>>6:i8)))))|(128:i8*((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))&((1:i8&(a:i8>>7:i8))^(1:i8&(b:i8>>7:i8)))))\r\n";
+
+            text = "((((2:i8*(1:i8&(((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>1:i8))|(((1:i8&(a:i8>>1:i8))^(1:i8&(b:i8>>1:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))))|((4:i8*(1:i8&((((1:i8&(a:i8>>2:i8))^(1:i8&(b:i8>>2:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>2:i8)))))|((8:i8*((((1:i8&(a:i8>>3:i8))^(1:i8&(b:i8>>3:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|(1:i8&((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>3:i8)))))+((~((1:i8&((a:i8&b:i8)>>0:i8))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((1:i8&(((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8&b:i8)>>0:i8)))|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))&((a:i8|b:i8)>>0:i8))))))+(((64:i8*(1:i8&(((1:i8&(a:i8>>6:i8))^(1:i8&(b:i8>>6:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))))+(128:i8*(1:i8&(((1:i8&(a:i8>>7:i8))^(1:i8&(b:i8>>7:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))))+(16:i8*((((1:i8&(a:i8>>4:i8))^(1:i8&(b:i8>>4:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&(1:i8&((a:i8&b:i8)>>4:i8)))))))+(32:i8*((((1:i8&(a:i8>>5:i8))^(1:i8&(b:i8>>5:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&(1:i8&((a:i8&b:i8)>>5:i8))))))";
+
+            text = "((~(((1:i8&(a:i8>>0:i8))&(1:i8&(b:i8>>0:i8)))&(~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))))&((((1:i8&(a:i8>>0:i8))&(1:i8&(b:i8>>0:i8)))|(~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8)))))))&((1:i8&(a:i8>>0:i8))|(1:i8&(b:i8>>0:i8)))))|(2:i8*(~(((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))|(~((1:i8&(a:i8>>1:i8))&(1:i8&(b:i8>>1:i8)))))&(~((~((~(((1:i8&(a:i8>>3:i8))|((1:i8&(a:i8>>2:i8))&((1:i8&(a:i8>>1:i8))|(1:i8&(a:i8>>0:i8)))))&((1:i8&(a:i8>>5:i8))&(1:i8&(a:i8>>4:i8)))))&(~((1:i8&(a:i8>>6:i8))|(1:i8&(a:i8>>7:i8))))))&((1:i8&(a:i8>>1:i8))^(1:i8&(b:i8>>1:i8))))))))\r\n";
+
+            text = "((((2:i8*(1:i8&(((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>1:i8))|(((1:i8&(a:i8>>1:i8))^(1:i8&(b:i8>>1:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))))|((4:i8*(1:i8&((((1:i8&(a:i8>>2:i8))^(1:i8&(b:i8>>2:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>2:i8)))))|((8:i8*((((1:i8&(a:i8>>3:i8))^(1:i8&(b:i8>>3:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|(1:i8&((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((a:i8&b:i8)>>3:i8)))))+((~((1:i8&((a:i8&b:i8)>>0:i8))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&((1:i8&(((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8&b:i8)>>0:i8)))|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))&((a:i8|b:i8)>>0:i8))))))+(((64:i8*(1:i8&(((1:i8&(a:i8>>6:i8))^(1:i8&(b:i8>>6:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))))+(128:i8*(1:i8&(((1:i8&(a:i8>>7:i8))^(1:i8&(b:i8>>7:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))))+(16:i8*((((1:i8&(a:i8>>4:i8))^(1:i8&(b:i8>>4:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&(1:i8&((a:i8&b:i8)>>4:i8)))))))+(32:i8*((((1:i8&(a:i8>>5:i8))^(1:i8&(b:i8>>5:i8)))&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8)))))))))|((~(1:i8&((a:i8>>6:i8)|((a:i8>>7:i8)|((a:i8>>5:i8)&((a:i8>>4:i8)&((a:i8>>3:i8)|((a:i8>>2:i8)&((a:i8>>0:i8)|(a:i8>>1:i8))))))))))&(1:i8&((a:i8&b:i8)>>5:i8))))))";
+
+            var (ctx, idx) = Parse(text, 8);
 
             var components = new List<SynthComponent>()
             {
-                new(new ComponentData(4), SynthOpc.And),
-                new(new ComponentData(4), SynthOpc.Or),
-                new(new ComponentData(4), SynthOpc.Xor),
-                new(new ComponentData(4), SynthOpc.Add),
-                new(new ComponentData(4), SynthOpc.Sub),
+                new(new ComponentData(2), SynthOpc.Not),
+                new(new ComponentData(3), SynthOpc.And),
+                new(new ComponentData(3), SynthOpc.Or),
+                new(new ComponentData(3), SynthOpc.Xor),
+                new(new ComponentData(3), SynthOpc.Add),
+                new(new ComponentData(2), SynthOpc.Sub),
 
-                //new(new ComponentData(2), SynthOpc.Ashr),
+                //new(new ComponentData(1), SynthOpc.Ashr),
                 new(new ComponentData(2), SynthOpc.Lshr),
+                new(new ComponentData(2), SynthOpc.Select),
+                new(new ComponentData(1), SynthOpc.Ult),
+                new(new ComponentData(2), SynthOpc.Eq),
 
             };
 
-            var config = new SynthConfig(components, 4, 3);
+            var config = new SynthConfig(components, 6, 3);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();

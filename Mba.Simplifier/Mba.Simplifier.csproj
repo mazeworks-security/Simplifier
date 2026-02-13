@@ -63,6 +63,9 @@
     <None Update="Synthesis\Circuits\conditiona_decode_blasted.v">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Synthesis\Circuits\cond_ult53_blast.v">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
