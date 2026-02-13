@@ -73,7 +73,9 @@ namespace Mba.Simplifier.Synth
         public Term Index { get; }
 
         // The chain of ITEs corresponding to this operand's value
-        public Term ConcreteValue { get; set; }
+        public Term ConstValue { get; set; }
+
+        public Term ActualValue { get; set; }
 
         public SynthOperand(Term isConstant, Term index)
         {
@@ -232,7 +234,7 @@ namespace Mba.Simplifier.Synth
 
                 // Provide the concrete value just for lazy editing.
                 for (int i = 0; i < line.Operands.Length; i++)
-                    line.Operands[i].ConcreteValue = operands[i].justConstants;
+                    line.Operands[i].ConstValue = operands[i].justConstants;
 
                 var terms = new List<Term>();
                 foreach (var opcode in Opcodes)
@@ -396,6 +398,25 @@ namespace Mba.Simplifier.Synth
                     constraints.Add(Implies(usingVal, Or(prevUsage)));
                 }
             }
+
+            bool pruneUnusedConstants = false;
+            if (pruneUnusedConstants)
+            {
+                // If a constant is unused, set it to zero
+                // This check isn't always profitable
+                var allOperands = lines.Skip(FirstInstIdx).SelectMany(x => x.Operands).ToList();
+                for (int k = 0; k < constants.Count; k++)
+                {
+                    var usages = new List<Term>();
+                    foreach (var operand in allOperands)
+                    {
+                        usages.Add(operand.IsConstant & (operand.Index == k));
+                    }
+
+                    var isUsed = Or(usages);
+                    constraints.Add(Implies(~isUsed, constants[k] == 0));
+                }
+            }
         }
 
         // Add constraints asserting that every instruction is used in the final computation
@@ -422,7 +443,7 @@ namespace Mba.Simplifier.Synth
                             usageConditions.Add((~operand.IsConstant) & (operand.Index == lineIdx));
 
 
-      
+
                     }
 
                     var anyUses = Or(usageConditions);
@@ -442,7 +463,11 @@ namespace Mba.Simplifier.Synth
                 {
                     constraints.Add(constants[i] > constants[i - 1]);
                 }
-            }   
+            }
+
+            bool distinctConstants = true;
+            if (distinctConstants && constants.Any())
+                constraints.Add(ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_DISTINCT, constants));
 
             // Constrain each opcode to be less than its maximum
             for (int lineIdx = FirstInstIdx; lineIdx < lines.Count; lineIdx++)
@@ -461,7 +486,7 @@ namespace Mba.Simplifier.Synth
                     }
                 }
 
-                
+
                 foreach (var component in components)
                 {
                     for (int opcodeIndex = 0; opcodeIndex < component.Opcodes.Length; opcodeIndex++)
@@ -471,12 +496,12 @@ namespace Mba.Simplifier.Synth
 
                         // If enabled, require shift amounts to be constant and within the ranges of the bitwidth
                         bool constShiftsOnly = true;
-                        if(constShiftsOnly && new SynthOpc[] { SynthOpc.Shl, SynthOpc.Lshr, SynthOpc.Ashr}.Contains(opc))
+                        if (constShiftsOnly && new SynthOpc[] { SynthOpc.Shl, SynthOpc.Lshr, SynthOpc.Ashr }.Contains(opc))
                         {
                             var maxW = (uint)mbaCtx.GetWidth(mbaIdx) - 1;
                             constraints.Add(Implies(matches, line.Operands[1].IsConstant));
-                            constraints.Add(Implies(matches, line.Operands[1].ConcreteValue <= maxW));
-                            constraints.Add(Implies(matches, line.Operands[1].ConcreteValue != 0));
+                            constraints.Add(Implies(matches, line.Operands[1].ConstValue <= maxW));
+                            constraints.Add(Implies(matches, line.Operands[1].ConstValue != 0));
                         }
 
 
@@ -502,7 +527,7 @@ namespace Mba.Simplifier.Synth
                                 constraints.Add(Implies(matches, ~And(line.Operands.Select(x => x.IsConstant))));
 
                             // Select is a special case. It has 3 operands, but we only care if the first operand is constant.
-                            if(opc == SynthOpc.Select)
+                            if (opc == SynthOpc.Select)
                                 constraints.Add(Implies(matches, line.Operands[0].IsConstant == false));
                         }
 
@@ -516,17 +541,35 @@ namespace Mba.Simplifier.Synth
                             }
                         }
 
-                        // For some reason this heavily degrades performance.
+                        // Ban trivial identities
                         bool foldTrivialConstantIdentities = false;
                         if (foldTrivialConstantIdentities && opc.GetOperandCount() == 2)
                         {
-                            // Ban trivial expressions: (a&0), (a|0), (a|0)
-                            constraints.Add(Implies(matches & line.Operands[1].IsConstant, line.Operands[1].ConcreteValue != 0));
+                            var isConstOp = matches & line.Operands[1].IsConstant;
 
-                            // Ban (a&-1), (a|-1)
-                            var uMax = ModuloReducer.GetMask((uint)line.Operands[1].ConcreteValue.Sort.BvSize);
-                            if (opc == SynthOpc.Or || opc == SynthOpc.And)
-                                constraints.Add(Implies(matches & line.Operands[1].IsConstant, line.Operands[1].ConcreteValue != uMax));
+                            // Ban (a|0)
+                            if (opc == SynthOpc.And || opc == SynthOpc.Or || opc == SynthOpc.Xor || opc == SynthOpc.Add || opc == SynthOpc.Sub)
+                            {
+                                for (int k = 0; k < constants.Count; k++)
+                                    constraints.Add(Implies(isConstOp & (line.Operands[1].Index == k), constants[k] != 0));
+                            }
+                            /*
+                            if (opc == SynthOpc.Mul)
+                            {
+                                for (int k = 0; k < constants.Count; k++)
+                                {
+                                    constraints.Add(Implies(isConstOp & (line.Operands[1].Index == k), constants[k] != 0));
+                                    constraints.Add(Implies(isConstOp & (line.Operands[1].Index == k), constants[k] != 1));
+                                }
+                            }
+
+                            if (opc == SynthOpc.And || opc == SynthOpc.Or)
+                            {
+                                var uMax = ModuloReducer.GetMask(w);
+                                for (int k = 0; k < constants.Count; k++)
+                                    constraints.Add(Implies(isConstOp & (line.Operands[1].Index == k), constants[k] != uMax));
+                            }
+                            */
                         }
 
 
@@ -584,7 +627,7 @@ namespace Mba.Simplifier.Synth
                         }
 
                         bool idempotencyOpt = true;
-                        if(idempotencyOpt && opc == SynthOpc.Select)
+                        if (idempotencyOpt && opc == SynthOpc.Select)
                         {
                             var isIdempotent = matches & (line.Operands[1].IsConstant == line.Operands[2].IsConstant);
                             constraints.Add(Implies(matches, line.Operands[1].Index != line.Operands[2].Index));
@@ -635,6 +678,7 @@ namespace Mba.Simplifier.Synth
                 if (data.MaxInstances == -1)
                     continue;
 
+                //constraints.Add(sums[i] == (ulong)data.MaxInstances);
                 constraints.Add(sums[i] <= (ulong)data.MaxInstances);
             }
         }
@@ -706,18 +750,18 @@ namespace Mba.Simplifier.Synth
                    .ToArray();
                 }
 
-                while(mba && ctx.GetIntegerValue(values[0]) < 50)
+                while (mba && ctx.GetIntegerValue(values[0]) < 50)
                 {
                     values[0] |= (rng.GetRandUlong() & ModuloReducer.GetMask((uint)symbols[0].Sort.BvSize));
                 }
-                   
+
 
 
                 var constraint = GetBehavioralConstraint(skeleton, values);
                 s.Assert(constraint);
             }
 
-        
+
 
             var totalTime = Stopwatch.StartNew();
             while (true)
@@ -860,14 +904,14 @@ namespace Mba.Simplifier.Synth
                 var op1 = () => ourOperands[1];
                 var op2 = () => ourOperands[2];
 
-                
+
 
                 var opc = Opcodes[(int)opcode];
 
-                if(opc == SynthOpc.Select)
+                if (opc == SynthOpc.Select)
                 {
                     Console.WriteLine("\n\n");
-                    foreach(var operand in ourOperands)
+                    foreach (var operand in ourOperands)
                         Console.WriteLine(mbaCtx.GetAstString(operand));
                 }
 
@@ -921,7 +965,7 @@ namespace Mba.Simplifier.Synth
             options.Set(BitwuzlaOption.BITWUZLA_OPT_TIME_LIMIT_PER, 5000);
             var solver = new BvSolver(ctx, options);
 
-            if(mba)
+            if (mba)
                 solver.Assert(symbols[0] >= 50);
 
 
@@ -993,27 +1037,7 @@ namespace Mba.Simplifier.Synth
             }
 
             return (null, ~And(structureConstraints));
-            */
-
-            /*
-            var realLines = lines.SkipWhile(x => x.IsSymbol).ToList();
-            List<Term> structureVars = new();
-
-
-
-            structureVars.AddRange(realLines.Select(x => x.ComponentOpcode));
-            structureVars.AddRange(realLines.SelectMany(x => x.Operands.Select(x => ToBv(x.IsConstant))));
-            structureVars.AddRange(realLines.SelectMany(x => x.Operands.Select(x => x.Index)));
-
-            var concat0 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, structureVars);
-    
-
-            structureVars = new();
-            structureVars.AddRange(realLines.Select(x => oldModel.GetValue(x.ComponentOpcode)));
-            structureVars.AddRange(realLines.SelectMany(x => x.Operands.Select(x => ToBv(oldModel.GetValue(x.IsConstant)))));
-            structureVars.AddRange(realLines.SelectMany(x => (x.Operands.Select(x => oldModel.GetValue(x.Index)))));
-
-            var concat1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, structureVars);
+            
             */
 
             List<Term> structureVars = new();
@@ -1049,6 +1073,7 @@ namespace Mba.Simplifier.Synth
             var concat1 = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_BV_CONCAT, structureVars);
 
             return (null, concat0 != concat1);
+
 
         }
 
@@ -1395,10 +1420,10 @@ namespace Mba.Simplifier.Synth
 
             var components = new List<SynthComponent>()
             {
-                new(new ComponentData(3), SynthOpc.And),
-                new(new ComponentData(3), SynthOpc.Xor),
-                new(new ComponentData(3), SynthOpc.Sub),
-                new(new ComponentData(3), SynthOpc.Add),
+                new(new ComponentData(2), SynthOpc.And),
+                new(new ComponentData(2), SynthOpc.Xor),
+                //new(new ComponentData(3), SynthOpc.Sub),
+                new(new ComponentData(2), SynthOpc.Add),
                 new(new ComponentData(1), SynthOpc.Shl),
             };
 
