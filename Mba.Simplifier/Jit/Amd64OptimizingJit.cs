@@ -181,7 +181,8 @@ namespace Mba.Simplifier.Interpreter
         public Amd64OptimizingJit(AstCtx ctx)
         {
             this.ctx = ctx;
-            seen = new MapInfoStorage();
+            //seen = new MapInfoStorage();
+            seen = new AuxInfoStorage(ctx);
         }
 
         public unsafe void Compile(AstIdx idx, IReadOnlyList<AstIdx> variables, nint pagePtr, bool useIcedBackend = false)
@@ -197,6 +198,8 @@ namespace Mba.Simplifier.Interpreter
             for (int i = 0; i < variables.Count; i++)
             {
                 var vIdx = variables[i];
+                if (!seen.Contains(vIdx))
+                    continue;
                 var data = seen.Get(vIdx);
                 data.varIdx = (byte)i;
                 seen.Set(vIdx, data);

@@ -1,4 +1,5 @@
-﻿using Mba.Simplifier.Bindings;
+﻿using Mba.Common.MSiMBA;
+using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Pipeline;
 using System;
 using System.Collections.Generic;
@@ -51,6 +52,16 @@ namespace Mba.Simplifier.Synthesis
         {
             var seen = new HashSet<AstIdx>();
             Collect(idx, seen);
+            Run(seen);
+        }
+
+        public void Run(HashSet<AstIdx> seen)
+        {
+
+
+            var pagePtr1 = JitUtils.AllocateExecutablePage(4096);
+            var pagePtr2 = JitUtils.AllocateExecutablePage(4096);
+
 
             HashSet<AstIdx> simplSeen = new();
 
@@ -58,7 +69,7 @@ namespace Mba.Simplifier.Synthesis
             {
                 var state = new NodeState();
 
-                var range = Enumerable.Range(3, 10);
+                var range = Enumerable.Range(2, 8);
 
                 //var all = EnumeratePatterns(subtree, 13, state);
                 var all = range.SelectMany(x => EnumeratePatterns(subtree, x, new NodeState()));
@@ -70,15 +81,21 @@ namespace Mba.Simplifier.Synthesis
                         continue;
                     simplSeen.Add(before);
 
-                    var after = LinearSimplifier.Run(ctx.GetWidth(before), ctx, before, false, false);
-                 
+                    var w = ctx.GetWidth(before);
+                    var after = LinearSimplifier.Run(w, ctx, before, false, true);
+
 
                     var c0 = ctx.GetCost(after);
                     var c1 = ctx.GetCost(before);
-                    if (c0 < c1)
+              
+                    if (c0 < c1 )
                     {
-                        Console.WriteLine($"{before}\n=>\n{after}\n{c0} => {c1}\n\n");
+                        var probEquiv = ProbableEquivalenceChecker.ProbablyEquivalent(ctx, before, after, true, pagePtr1, pagePtr2);
+                        if (probEquiv)
+                            Console.WriteLine($"{before}\n=>\n{after}\n{c1} => {c0}\nEquiv: {probEquiv}\n\n");
                     }
+                    
+
                 }
             }
             Debugger.Break();
@@ -103,6 +120,8 @@ namespace Mba.Simplifier.Synthesis
                 case AstOp.And:
                 case AstOp.Or:
                 case AstOp.Xor:
+                case AstOp.Add:
+                case AstOp.Mul:
                     Collect(ctx.GetOp0(idx), seen);
                     Collect(ctx.GetOp1(idx), seen);
                     break;
@@ -119,6 +138,7 @@ namespace Mba.Simplifier.Synthesis
 
             // Substitute the node with a variable if we have not committed to using it in the tree.
             bool isSymbol = ctx.IsSymbol(idx);
+            bool isConstant = ctx.IsConstant(idx);
             var decision = state.Get(idx);
 
 
@@ -153,7 +173,14 @@ namespace Mba.Simplifier.Synthesis
                     return results;
                 }
 
+                if (ctx.IsConstant(idx))
+                {
+                    var sPattern = new Pattern(idx, 1, currentState);
+                    results.Add(sPattern);
+                    return results;
+                }
 
+                //Console.WriteLine(ctx.GetOpcode(idx));
                 var op0 = ctx.GetOp0(idx);
                 var lefts = EnumeratePatterns(op0, remainingBudget, currentState);
                 var opc = ctx.GetOpcode(idx);

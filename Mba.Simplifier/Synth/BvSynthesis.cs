@@ -465,8 +465,8 @@ namespace Mba.Simplifier.Synth
                 }
             }
 
-            bool distinctConstants = true;
-            if (distinctConstants && constants.Any())
+            bool distinctConstants = false;
+            if (distinctConstants && constants.Count > 1)
                 constraints.Add(ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_DISTINCT, constants));
 
             // Constrain each opcode to be less than its maximum
@@ -1679,6 +1679,43 @@ namespace Mba.Simplifier.Synth
             synth.Run();
         }
 
+
+        public static void PMba()
+        {
+            // 7 components, 1 constant
+            var (ctx, idx) = Parse("((1+((~x)&(x+y)))&((~x)+(~y)))", 8);
+
+            (ctx, idx) = Parse("(1+((~x)&(x+y)))", 8);
+
+            (ctx, idx) = Parse("((~x)+(~y))", 8);
+
+            var components = new List<SynthComponent>()
+            {
+                //new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
+                //new(SynthOpc.And, SynthOpc.Xor),
+                //new(SynthOpc.Add),
+
+                //new(SynthOpc.Not, SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Sub, SynthOpc.Add, SynthOpc.Lshr),
+
+                new(new ComponentData(3), SynthOpc.Not),
+                new(new ComponentData(3), SynthOpc.And),
+                new(new ComponentData(3), SynthOpc.Or),
+                new(new ComponentData(3), SynthOpc.Xor),
+                new(new ComponentData(3), SynthOpc.Add),
+                new(new ComponentData(3), SynthOpc.Sub),
+                //new(new ComponentData(1), SynthOpc.Lshr),
+
+
+                //new(SynthOpc.Or, SynthOpc.Sub, SynthOpc.Not),
+               // new(SynthOpc.Add, SynthOpc.Sub),
+                //new(SynthOpc.Not, SynthOpc.Or),
+            };
+
+            var config = new SynthConfig(components, 4, 1);
+            var synth = new BvSynthesis(config, ctx, idx);
+
+            synth.Run();
+        }
 
 
 
