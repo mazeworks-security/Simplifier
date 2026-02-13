@@ -375,6 +375,8 @@ inputText = "(171^((a+23)^(b)))^((((a|1111)+b)^b))";
 
 inputText = "32213231+a+b+c";
 
+inputText = "(((1:i4&(in2:i4>>0:i4))^(1:i4&(in1:i4>>0:i4)))+((4:i4*((((1:i4&(in2:i4>>1:i4))|(1:i4&(in1:i4>>1:i4)))&(((in2:i4&in1:i4)>>1:i4)|((in2:i4&in1:i4)>>0:i4)))^((1:i4&(in2:i4>>2:i4))^(1:i4&(in1:i4>>2:i4)))))+((2:i4*((~(1:i4&((in2:i4&in1:i4)>>0:i4)))^(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))+(8:i4*((~(1:i4&(((in2:i4&in1:i4)>>2:i4)|((((1:i4&(in2:i4>>1:i4))|(1:i4&(in1:i4>>1:i4)))&(((in2:i4&in1:i4)>>1:i4)|((in2:i4&in1:i4)>>0:i4)))&((in1:i4|in2:i4)>>2:i4)))))^(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4)))))))))";
+
 //inputText = "(((x|1111)+y)^y)";
 
 //inputText = "((x ^ 60) * ((82 - (x * (x ^ 60)))))";
@@ -428,8 +430,8 @@ if (circuitSynthesis)
     var circuitCtx = new AstCtx();
     AstIdx.ctx = circuitCtx;
 
-    //var circuitText = File.ReadAllText(@"Synthesis/Circuits/add4_circuit.v");
-    var circuitText = File.ReadAllText(@"Synthesis/Circuits/CONDITIONAL_DECODE.bits.v");
+    var circuitText = File.ReadAllText(@"Synthesis/Circuits/add4_circuit.v");
+    //var circuitText = File.ReadAllText(@"Synthesis/Circuits/CONDITIONAL_DECODE.bits.v");
     CircuitParser.Parse(circuitCtx, circuitText);
 }
 

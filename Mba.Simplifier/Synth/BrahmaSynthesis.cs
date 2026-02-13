@@ -38,6 +38,7 @@ namespace Mba.Simplifier.Synth
         Mul,
 
         Lshr,
+        Ashr,
         Shl,
 
         // Special

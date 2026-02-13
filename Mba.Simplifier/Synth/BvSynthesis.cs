@@ -90,9 +90,6 @@ namespace Mba.Simplifier.Synth
         // Gets or sets whether the line is a symbol or instruction
         public bool IsSymbol { get; set; }
 
-        // Index of the component
-        //public Term ComponentIndex { get; set; }
-
         // Which opcode was picked for the component
         public Term ComponentOpcode { get; set; }
 
@@ -102,8 +99,6 @@ namespace Mba.Simplifier.Synth
 
     public class BvSynthesis
     {
-        private const int MAXSHIFT = 64;
-
         private readonly SynthConfig config;
 
         private readonly AstCtx mbaCtx;
@@ -152,9 +147,6 @@ namespace Mba.Simplifier.Synth
             groundTruth = translator.Translate(mbaIdx);
             symbols = mbaCtx.CollectVariables(mbaIdx).Select(x => translator.Translate(x)).ToArray();
 
-
-
-
             // Get the minimum size bitvector needed to store the component index and component opcode
             componentOpcodeSize = (uint)BvWidth(Opcodes.Count - 1);
         }
@@ -200,7 +192,7 @@ namespace Mba.Simplifier.Synth
                     var isConstant = config.MaxConstants == 0 ? ctx.MkFalse() : ctx.MkBoolConst($"line{lineIndex}_op{i}Const");
                     var operandIndex = ctx.MkBvConst($"line{lineIndex}_op{i}", operandBitsize);
                     // Sometimes this will emit useless zero extensions. Zext(a, 0)
-                    // For some reason there are performance regressions if you remove this redundant zext. Specifically on the `PBenchSlot` benchmark
+                    // For some reason there are performance regressions with Bitwuzla if you remove this redundant zext. Specifically on the `PBenchSlot` benchmark
                     operandIndex = ctx.MkZext((uint)maxOperandSize - (uint)operandBitsize, operandIndex);
 
                     var operand = new SynthOperand(isConstant, operandIndex);
@@ -263,6 +255,8 @@ namespace Mba.Simplifier.Synth
                 SynthOpc.Sub => (op0() - op1()),
                 SynthOpc.Mul => (op0() * op1()),
                 SynthOpc.Lshr => (op0() >> (op1() & (op1().Sort.BvSize - 1))), // Truncate the shift width
+                SynthOpc.Ashr => (op0() >>> (op1() & (op1().Sort.BvSize - 1))), // Truncate the shift width
+
                 SynthOpc.Shl => (op0() << (op1() & (op1().Sort.BvSize - 1))),
                 _ => throw new InvalidOperationException()
             };
@@ -436,13 +430,12 @@ namespace Mba.Simplifier.Synth
                 {
                     constraints.Add(constants[i] > constants[i - 1]);
                 }
-            }
+            }   
 
             // Constrain each opcode to be less than its maximum
             for (int lineIdx = FirstInstIdx; lineIdx < lines.Count; lineIdx++)
             {
                 var line = lines[lineIdx];
-
 
                 // The opcode must be valid
                 constraints.Add(line.ComponentOpcode <= (uint)(Opcodes.Count - 1));
@@ -456,34 +449,23 @@ namespace Mba.Simplifier.Synth
                     }
                 }
 
-                // Constant shift opt
-                bool constantShiftsOnly = true;
-                if (components.Any(x => x.Opcodes.Contains(SynthOpc.Shl)) && constantShiftsOnly)
-                {
-                    var isShift = IsComponent(line, SynthOpc.Shl);
-                    constraints.Add(Implies(isShift, line.Operands[1].IsConstant));
-
-                    // TODO: Stop hardcoding this
-                    constraints.Add(Implies(isShift, line.Operands[1].ConcreteValue <= 31));
-                    constraints.Add(Implies(isShift, line.Operands[1].ConcreteValue != 0));
-                }
-
-                bool constantRShiftsOnly = true;
-                if (components.Any(x => x.Opcodes.Contains(SynthOpc.Lshr)) && constantRShiftsOnly)
-                {
-                    var isShift = IsComponent(line, SynthOpc.Lshr);
-                    constraints.Add(Implies(isShift, line.Operands[1].IsConstant));
-
-                    constraints.Add(Implies(isShift, line.Operands[1].ConcreteValue <= 31));
-                    constraints.Add(Implies(isShift, line.Operands[1].ConcreteValue != 0));
-                }
-
+                
                 foreach (var component in components)
                 {
                     for (int opcodeIndex = 0; opcodeIndex < component.Opcodes.Length; opcodeIndex++)
                     {
                         var opc = component.Opcodes[opcodeIndex];
                         var matches = IsComponent(line, opc);
+
+                        // If enabled, require shift amounts to be constant and within the ranges of the bitwidth
+                        bool constShiftsOnly = true;
+                        if(constShiftsOnly && new SynthOpc[] { SynthOpc.Shl, SynthOpc.Lshr, SynthOpc.Ashr}.Contains(opc))
+                        {
+                            var maxW = (uint)mbaCtx.GetWidth(mbaIdx) - 1;
+                            constraints.Add(Implies(matches, line.Operands[1].IsConstant));
+                            constraints.Add(Implies(matches, line.Operands[1].ConcreteValue <= maxW));
+                            constraints.Add(Implies(matches, line.Operands[1].ConcreteValue != 0));
+                        }
 
 
                         // If the instruction only needs one operand, set the 2nd operand to zero.
@@ -573,8 +555,6 @@ namespace Mba.Simplifier.Synth
                                 constraints.Add(Implies(tie, comb0 < comb1));
                             else
                                 constraints.Add(Implies(tie, comb0 <= comb1));
-
-
                         }
 
                         if (!opc.IsIdempotent())
@@ -624,8 +604,6 @@ namespace Mba.Simplifier.Synth
                     continue;
 
                 constraints.Add(sums[i] <= (ulong)data.MaxInstances);
-
-                //constraints.Add(sums[i] == (ulong)data.MaxInstances);
             }
         }
 
@@ -729,53 +707,13 @@ namespace Mba.Simplifier.Synth
                 var isEquiv = temp.CheckSat() == Result.Unsat;
                 if (isEquiv)
                 {
-
-
                     Log($"Solved in total time {totalTime.ElapsedMilliseconds}ms");
                     Debugger.Break();
-
-                    bool skipSymmetries = false;
-                    if (skipSymmetries)
-                    {
-
-                        // Otherwise this solution is impossible.
-                        List<Term> structureVars = new();
-                        foreach (var line in lines)
-                        {
-                            if (line.IsSymbol)
-                                continue;
-
-                            structureVars.Add(line.ComponentOpcode);
-                            foreach (var operand in line.Operands)
-                            {
-                                structureVars.Add(operand.Index);
-                                structureVars.Add(operand.IsConstant);
-                            }
-                        }
-
-                        List<Term> structureConstraints = new();
-                        foreach (var svar in structureVars)
-                        {
-                            var eval = s.GetValue(svar);
-                            if (eval.Kind != BitwuzlaKind.BITWUZLA_KIND_VALUE)
-                                Debugger.Break();
-
-                            if (eval.Sort.IsBv)
-                                structureConstraints.Add(svar == ctx.GetIntegerValue(eval));
-                            else
-                                structureConstraints.Add(svar == ctx.GetBoolValue(eval));
-                        }
-
-                        s.Assert(~And(structureConstraints));
-                        continue;
-                    }
                 }
-
 
                 bool generalize = false;
                 if (generalize)
                 {
-
                     Log("Beginning generalization...");
                     var sww = Stopwatch.StartNew();
                     var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime);
@@ -827,9 +765,6 @@ namespace Mba.Simplifier.Synth
                 Log($"const{i} = {myConstant}");
             }
 
-
-
-
             foreach (var line in lines)
             {
                 if (line.IsSymbol)
@@ -840,8 +775,6 @@ namespace Mba.Simplifier.Synth
                 var a = s.GetValue(line.ComponentOpcode);
                 Log($"{a}");
             }
-
-
 
             // Compute the list of nodes
             List<Term> cegisNodes = new();
@@ -890,6 +823,7 @@ namespace Mba.Simplifier.Synth
                     SynthOpc.Sub => mbaCtx.Sub(op0(), op1()),
                     SynthOpc.Mul => mbaCtx.Mul(op0(), op1()),
                     SynthOpc.Lshr => mbaCtx.Lshr(op0(), op1()),
+                    SynthOpc.Ashr => mbaCtx.Symbol("ASHR_PLACEHOLDER", mbaCtx.GetWidth(op0())),
                     SynthOpc.Shl => mbaCtx.Symbol("SHL_PLACEHOLDER", mbaCtx.GetWidth(op0())),
                     _ => throw new NotImplementedException(),
                 };
@@ -907,13 +841,10 @@ namespace Mba.Simplifier.Synth
 
                 Log($"%{li} = {opc}({String.Join(", ", operandStrs)})\n");
 
-
-
                 Term cegisNode = ApplyOperator(opc, cegisOperands);
                 cegisNodes.Add(cegisNode);
             }
 
-            //Debugger.Break();
             return (ourNodes.Last(), cegisNodes.Last(), cegisConstants);
         }
 
@@ -1591,19 +1522,38 @@ namespace Mba.Simplifier.Synth
 
             text = "(((1:i4&(in2:i4>>1:i4))|(1:i4&(in1:i4>>1:i4)))&(((in2:i4&in1:i4)>>1:i4)|((in2:i4&in1:i4)>>0:i4)))";
 
-      
+            // Saw some shifts with > bitwidth on this one
+            text = "((((1:i8&(a:i8>>2:i8))&(1:i8&(b:i8>>2:i8)))|(((1:i8&(a:i8>>2:i8))|(1:i8&(b:i8>>2:i8)))&(((1:i8&(a:i8>>1:i8))&(1:i8&(b:i8>>1:i8)))|(((1:i8&(a:i8>>0:i8))&(1:i8&(b:i8>>0:i8)))&((1:i8&(a:i8>>1:i8))|(1:i8&(b:i8>>1:i8)))))))&((1:i8&(a:i8>>3:i8))|(1:i8&(b:i8>>3:i8))))";
+
+            text = "((~((1:i8&(a:i8>>7:i8))&(1:i8&(b:i8>>7:i8))))&(~(((1:i8&(a:i8>>6:i8))&(1:i8&(b:i8>>6:i8)))&((((1:i8&(a:i8>>4:i8))&(1:i8&(b:i8>>4:i8)))|((1:i8&(a:i8>>3:i8))&(1:i8&(b:i8>>3:i8))))|(((1:i8&(a:i8>>2:i8))&(1:i8&(b:i8>>2:i8)))|(((1:i8&(a:i8>>1:i8))&(1:i8&(b:i8>>1:i8)))|((1:i8&(a:i8>>5:i8))&(1:i8&(b:i8>>5:i8)))))))))";
+
+            text = "((((1:i4&(in2:i4>>0:i4))^(1:i4&(in1:i4>>0:i4)))|(2:i4*((~((1:i4&(in2:i4>>0:i4))&(1:i4&(in1:i4>>0:i4))))^(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4)))))))|(4:i4*((~(((~((1:i4&(in2:i4>>0:i4))&(1:i4&(in1:i4>>0:i4))))|(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4)))))&(~((1:i4&(in2:i4>>1:i4))&(1:i4&(in1:i4>>1:i4))))))^((1:i4&(in2:i4>>2:i4))^(1:i4&(in1:i4>>2:i4))))))";
+
+            text = "(8:i4*((~(((~(((~((1:i4&(in2:i4>>0:i4))&(1:i4&(in1:i4>>0:i4))))|(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4)))))&(~((1:i4&(in2:i4>>1:i4))&(1:i4&(in1:i4>>1:i4))))))&((1:i4&(in2:i4>>2:i4))^(1:i4&(in1:i4>>2:i4))))|((1:i4&(in2:i4>>2:i4))&(1:i4&(in1:i4>>2:i4)))))^(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4))))))";
+
+            // 4-bit adder circuit optimized using eqsat
+            text = "(((2:i4*((~(1:i4&((in2:i4&in1:i4)>>0:i4)))^(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))+(8:i4*((~(1:i4&(((in2:i4&in1:i4)>>2:i4)|((((in2:i4&in1:i4)>>1:i4)|((in2:i4&in1:i4)>>0:i4))&(((in2:i4|in1:i4)>>2:i4)&((in2:i4|in1:i4)>>1:i4))))))+(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4)))))))+(((1:i4&(in2:i4>>0:i4))^(1:i4&(in1:i4>>0:i4)))+(4:i4*((1:i4&((((in2:i4&in1:i4)>>1:i4)|((in2:i4&in1:i4)>>0:i4))&((in2:i4|in1:i4)>>1:i4)))^((1:i4&(in2:i4>>2:i4))^(1:i4&(in1:i4>>2:i4)))))))";
+
+            text = "((2:i4*((~(1:i4&((in2:i4&in1:i4)>>0:i4)))^(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))+(8:i4*((~(1:i4&(((in2:i4&in1:i4)>>2:i4)|((((in2:i4&in1:i4)>>1:i4)|((in2:i4&in1:i4)>>0:i4))&(((in2:i4|in1:i4)>>2:i4)&((in2:i4|in1:i4)>>1:i4))))))+(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4)))))))";
+
+            text = "((2:i4*((~(1:i4&((in2:i4&in1:i4)>>0:i4)))^(~((1:i4&(in2:i4>>1:i4))^(1:i4&(in1:i4>>1:i4))))))+(8:i4*((~(1:i4&(((in2:i4&in1:i4)>>2:i4)|((((in2:i4&in1:i4)>>1:i4)|((in2:i4&in1:i4)>>0:i4))&(((in2:i4|in1:i4)>>2:i4)&((in2:i4|in1:i4)>>1:i4))))))+(~((1:i4&(in2:i4>>3:i4))^(1:i4&(in1:i4>>3:i4)))))))";
 
             var (ctx, idx) = Parse(text, 4);
 
             var components = new List<SynthComponent>()
             {
-                new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor),
-                new(SynthOpc.Add, SynthOpc.Sub),
-                new (SynthOpc.Lshr),
-                //new(SynthOpc.Not, SynthOpc.Or),
+                new(new ComponentData(4), SynthOpc.And),
+                new(new ComponentData(4), SynthOpc.Or),
+                new(new ComponentData(4), SynthOpc.Xor),
+                new(new ComponentData(4), SynthOpc.Add),
+                new(new ComponentData(4), SynthOpc.Sub),
+
+                //new(new ComponentData(2), SynthOpc.Ashr),
+                new(new ComponentData(2), SynthOpc.Lshr),
+
             };
 
-            var config = new SynthConfig(components, 7, 3);
+            var config = new SynthConfig(components, 4, 3);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();
