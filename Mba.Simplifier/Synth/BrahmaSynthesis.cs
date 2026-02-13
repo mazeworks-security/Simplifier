@@ -46,6 +46,8 @@ namespace Mba.Simplifier.Synth
         Eq,
         Ult,
 
+        Select,
+
         // Special
         TruthTable,
 

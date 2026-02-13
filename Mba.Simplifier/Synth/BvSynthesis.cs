@@ -1514,7 +1514,7 @@ namespace Mba.Simplifier.Synth
 
         public static void PCmp()
         {
-            var (ctx, idx) = Parse("(x+y) < z", 8);
+            var (ctx, idx) = Parse("(x == y) ? 123 : 0", 8);
 
             var components = new List<SynthComponent>()
             {
@@ -1523,11 +1523,14 @@ namespace Mba.Simplifier.Synth
                 new(SynthOpc.Add),
                 new(SynthOpc.Eq),
                 new(SynthOpc.Ult),
+
+                new(SynthOpc.Select),
+
                // new(SynthOpc.Add, SynthOpc.Sub),
                 //new(SynthOpc.Not, SynthOpc.Or),
             };
 
-            var config = new SynthConfig(components, 5, 1);
+            var config = new SynthConfig(components, 4, 2);
             var synth = new BvSynthesis(config, ctx, idx);
 
             synth.Run();

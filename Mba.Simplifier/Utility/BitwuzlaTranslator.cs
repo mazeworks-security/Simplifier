@@ -68,7 +68,7 @@ namespace Mba.Simplifier.Utility
                 AstOp.Lshr => op0() >> op1(),
                 AstOp.Constant => z3Ctx.MkBvValue(ctx.GetConstantValue(idx), ctx.GetWidth(idx)),
                 AstOp.Symbol => z3Ctx.MkBvConst(ctx.GetSymbolName(idx), ctx.GetWidth(idx)),
-                AstOp.Select => z3Ctx.MkIte(op0(), op1(), op2()),
+                AstOp.Select => z3Ctx.MkIte(ToBool(op0()), op1(), op2()),
                 AstOp.ICmp => ToBv(z3Ctx.MkTerm(icmp(ctx.GetPredicate(idx)), op0(), op1())),
                 AstOp.Zext => z3Ctx.MkZext((uint)ctx.GetWidth(idx) - ctx.GetWidth(ctx.GetOp0(idx)), op0()),
                 _ => throw new InvalidOperationException(),
@@ -80,5 +80,8 @@ namespace Mba.Simplifier.Utility
 
         private Term ToBv(Term term, uint width = 1)
             => z3Ctx.MkIte(term, z3Ctx.MkBvValue(1, width), z3Ctx.MkBvValue(0, width));
+
+        private Term ToBool(Term term)
+            => z3Ctx.MkIte(term == 0, z3Ctx.MkFalse(), z3Ctx.MkTrue());
     }
 }
