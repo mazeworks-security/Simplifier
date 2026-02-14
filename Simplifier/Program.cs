@@ -7,6 +7,7 @@ using Mba.Simplifier.Interpreter;
 using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
+using Mba.Simplifier.Verification;
 using Mba.Utility;
 using Microsoft.Z3;
 using System.ComponentModel;
@@ -17,7 +18,17 @@ bool onlyLinear = false;
 uint bitWidth = 64;
 bool useEqsat = false;
 bool proveEquivalence = false;
-string inputText = null;
+string inputText = "(x+y) | ((1 + ((x+y) & (~x))) & (-(x+y)-2)) ";
+
+inputText = "x&(~(-999992*~x)|-~x)";
+
+inputText = "(2*a)|(-(a^-a))";
+
+inputText = "(-(a^-a))";
+
+inputText = "-(a^b)";
+
+Console.WriteLine("\n\n\n");
 
 var printHelp = () =>
 {
@@ -64,6 +75,13 @@ if (inputText == null || printUsage)
     printHelp();
     return;
 }
+
+bool groebnerVerify = true;
+if(groebnerVerify)
+{
+    new GroebnerVerifier().Run();
+}
+
 
 // For now we only support integer widths of up to 64 bits.
 const int maxWidth = 64;

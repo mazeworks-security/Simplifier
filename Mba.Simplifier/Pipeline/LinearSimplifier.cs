@@ -350,7 +350,8 @@ namespace Mba.Simplifier.Pipeline
                 return ctx.Constant(constant, width);
             // (2) If only a single term exists, we can immediately find the optimal solution.
             // For more terms we need to take special care to eliminate dead variables, but the boolean minimizer will eliminate dead variables for the single term case!
-            if (coeffToTable.Count == 1)
+            //if (coeffToTable.Count == 1)
+            if(false)
             {
                 var (coeff, truthTable) = coeffToTable.First();
                 var single = SimplifyOneTerm(constant, coeff, truthTable);
