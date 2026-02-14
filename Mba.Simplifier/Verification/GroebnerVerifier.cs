@@ -3,6 +3,7 @@ using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Polynomial;
 using Mba.Simplifier.Utility;
+using Mba.Utility;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -167,7 +168,9 @@ namespace Mba.Simplifier.Verification
         {
             SymVars = vars.ToHashSet();
             SortedVars = SymVars.ToList();
-            SortedVars.Sort();
+            SortedVars = SymVars.OrderByDescending(x => x).ToList();
+
+
         }
 
         public Monomial(params SymVar[] vars) : this(vars.AsEnumerable())
@@ -302,7 +305,7 @@ namespace Mba.Simplifier.Verification
 
         public bool Equals(SymVar other)
         {
-            return Kind == other.Kind && Name == other.Name && other.BitIndex == other.BitIndex;
+            return Kind == other.Kind && Name == other.Name && this.BitIndex == other.BitIndex;
         }
 
         public int CompareTo(SymVar other)
@@ -318,7 +321,8 @@ namespace Mba.Simplifier.Verification
                 return cmp;
             cmp = TotalOrder.CompareTo(other.TotalOrder);
             if (cmp != 0)
-                cmp = Name.CompareTo(other.Name);
+                return cmp;
+            cmp = Name.CompareTo(other.Name);
             if (cmp != 0)
                 return cmp;
 
@@ -355,15 +359,138 @@ namespace Mba.Simplifier.Verification
         {
             before = RustAstParser.Parse(ctx, "x+y", w);
             //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
-            after = RustAstParser.Parse(ctx, "x+y", w);
+            after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
+            //after = RustAstParser.Parse(ctx, "x+x+x+y", w);
 
+            //before = RustAstParser.Parse(ctx, "x+y", w);
+            //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             //before = RustAstParser.Parse(ctx, "x&y", w);
             //after = RustAstParser.Parse(ctx, "x&y", w);
         }
 
+        /// <summary>
+        /// Enumerates all input variable assignments (each bit is 0 or 1),
+        /// propagates through the ideal members to solve for gate variables,
+        /// and verifies that the last member always evaluates to zero.
+        /// </summary>
+        public static bool Validate(List<Poly> ideal, int w)
+        {
+            // Collect all input variables across the entire ideal.
+            var allVars = new HashSet<SymVar>();
+            foreach (var p in ideal)
+                foreach (var m in p.Coeffs.Keys)
+                    foreach (var v in m.SymVars)
+                        allVars.Add(v);
+
+            var inputVars = allVars.Where(v => v.Kind == SymKind.Input).OrderBy(v => v).ToList();
+            int numInputs = inputVars.Count;
+
+            // Enumerate all 2^numInputs boolean assignments.
+            for (ulong combo = 0; combo < (1UL << numInputs); combo++)
+            {
+                var assignment = new Dictionary<SymVar, long>();
+                for (int i = 0; i < numInputs; i++)
+                    assignment[inputVars[i]] = (long)((combo >> i) & 1);
+
+                // Process each ideal member in order.
+                // Each non-last member defines a gate variable in terms of previously known variables.
+                // The last member is the specification / difference polynomial to check.
+                for (int i = 0; i < ideal.Count; i++)
+                {
+                    var poly = ideal[i];
+
+                    if (i < ideal.Count - 1)
+                    {
+                        // Find the unassigned gate variable defined by this polynomial.
+                        // The ideal member has the form: coeff*gate + f(known_vars) = 0
+                        // So gate = -f(known_vars) / coeff
+                        SymVar? unassigned = null;
+                        foreach (var m in poly.Coeffs.Keys)
+                        {
+                            if (m.SymVars.Count == 1)
+                            {
+                                var v = m.SymVars.First();
+                                if (!assignment.ContainsKey(v))
+                                {
+                                    unassigned = v;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (unassigned == null)
+                        {
+                            // All variables are known; just verify this member is zero.
+                            long check = EvaluatePoly(poly, assignment);
+                            if (check != 0)
+                                return false;
+                            continue;
+                        }
+
+                        var gate = unassigned.Value;
+                        var gateMono = new Monomial(gate);
+
+                        // Evaluate all terms that don't contain the gate variable.
+                        long restSum = 0;
+                        long gateCoeff = 0;
+                        foreach (var (monomial, coeff) in poly.Coeffs)
+                        {
+                            if (monomial.SymVars.Contains(gate))
+                            {
+                                // This term contains the gate variable.
+                                // It should be of the form coeff * gate (linear in gate).
+                                Debug.Assert(monomial.SymVars.Count == 1, $"Gate variable {gate} appears in higher-degree monomial {monomial}");
+                                gateCoeff += coeff;
+                            }
+                            else
+                            {
+                                restSum += EvaluateMonomial(monomial, coeff, assignment);
+                            }
+                        }
+
+                        // coeff * gate + rest = 0  =>  gate = -rest / coeff
+                        Debug.Assert(gateCoeff != 0);
+                        Debug.Assert(restSum % gateCoeff == 0 || (gateCoeff == 1 || gateCoeff == -1),
+                            $"Non-unit coefficient {gateCoeff} for gate {gate}");
+                        assignment[gate] = -restSum / gateCoeff;
+                    }
+                    else
+                    {
+                        // Last member: evaluate and check it equals zero.
+                        long result = EvaluatePoly(poly, assignment);
+                        if (result != 0)
+                            return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        private static long EvaluatePoly(Poly poly, Dictionary<SymVar, long> assignment)
+        {
+            long result = 0;
+            foreach (var (monomial, coeff) in poly.Coeffs)
+                result += EvaluateMonomial(monomial, coeff, assignment);
+            return result;
+        }
+
+        private static long EvaluateMonomial(Monomial monomial, long coeff, Dictionary<SymVar, long> assignment)
+        {
+            long termVal = coeff;
+            foreach (var v in monomial.SymVars)
+            {
+                if (!assignment.TryGetValue(v, out var val))
+                    throw new InvalidOperationException($"Variable {v} is not assigned.");
+                termVal *= val;
+            }
+
+            return termVal;
+        }
+
         public void Run()
         {
-            var ideal = new List<(int, uint, Poly)>();
+            var idealArr = new List<(int, uint, Poly)>();
 
             uint totalOrder = 0;
             var firstSeen = new Dictionary<SymVar, uint>();
@@ -373,7 +500,7 @@ namespace Mba.Simplifier.Verification
             {
                 Console.WriteLine("\n\n");
                 for (int i = 0; i < w; i++)
-                    results.Add(GetSpecification(curr, i, ideal, firstSeen, ref totalOrder, true));
+                    results.Add(GetSpecification(curr, i, idealArr, firstSeen, ref totalOrder, true));
 
                 //foreach (var member in ideal)
                 //    Console.WriteLine(member);
@@ -381,9 +508,16 @@ namespace Mba.Simplifier.Verification
                 //ideal.Clear();
             }
 
-            ideal = ideal.OrderBy(x => x.Item1).ThenBy(x => x.Item3.Lm).ThenBy(x => x.Item2).ToList();
+
+            //var ideal = idealArr.OrderBy(x => x.Item1).ThenBy(x => x.Item3.Lm).ThenBy(x => x.Item2).ToList().Select(x => x.Item3).ToList();
+            var ideal = idealArr.ToList().Select(x => x.Item3).ToList();
             foreach (var member in ideal)
-                Console.WriteLine(member.Item3);
+            {
+                member.Simplify();
+                Console.WriteLine(member);
+            }
+
+       
 
             //var target = ideal[3].Item3;
             //var bar = target.Coeffs.Keys.ToList();
@@ -393,11 +527,179 @@ namespace Mba.Simplifier.Verification
             // Compute difference of the output variables, not the ideal members
             //var last = results[0] - results[1];
 
-            var last = results[results.Count - 2] - results[results.Count - 1];
+            // 63 - 127
+            //var last = results[results.Count - 2] - results[results.Count - 1];
+
+            var last = results[3] - results[1];
+
+            ideal.Add(last);
 
             Console.WriteLine($"\n\nDifference: {last}\n");
 
 
+            var r = Validate(ideal, ctx.GetWidth(before));
+            Debug.Assert(r == true);
+
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+
+                for (int i = 0; i < ideal.Count; i++)
+                {
+                    if (ideal[i].Coeffs.Count == 0)
+                        continue;
+
+                    var curr = ideal[i].Clone();
+                    var lm = curr.Lm;
+
+
+
+                    for (int j = i + 1; j < ideal.Count; j++)
+                    {
+                        var next = ideal[j].Clone();
+                        if (!next.Coeffs.ContainsKey(lm))
+                            continue;
+                        //if (next.Lm.CompareTo(lm) == -1)
+                        //    continue;
+
+                        var first = curr.Clone();
+
+                        if (first.Coeffs[lm] != 1 && first.Coeffs[lm] != -1)
+                        {
+                            Console.WriteLine($"todo: fix with coeff {first.Coeffs[lm]}");
+                            continue;
+                        }
+                        //Debug.Assert(first.Coeffs[lm] == 1);
+
+                        first.Sub(lm, first.Coeffs[lm]);
+
+                        var factor = first.Coeffs[lm] == 1 ? -1L : 1L;
+
+                        //first = -1L * first;
+                        first = factor * first;
+                        //first = -1L * first;
+
+                        first.Simplify();
+
+                        next.Replace(lm, first);
+                        next.Simplify();
+                        ideal[j] = next;
+                        //last.Simplify();
+                        changed = true;
+
+                    }
+                }
+            }
+
+            changed = true;
+            while (changed)
+            {
+                changed = false;
+                for (int i = 0; i < ideal.Count; i++)
+                {
+                    if (ideal[i].Coeffs.Count == 0)
+                        continue;
+
+                    var curr = ideal[i].Clone();
+                    var lm = curr.Lm;
+
+                    if (lm.SymVars.Count != 1)
+                        continue;
+
+                    var v = lm.SymVars.Single();
+
+                    for (int j = i + 1; j < ideal.Count; j++)
+                    {
+                        var next = ideal[j].Clone();
+                        var targets = next.Coeffs.Keys.Where(x => x.SymVars.Contains(lm.SymVars.Single())).ToList();
+                        if (targets.Count == 0)
+                            continue;
+
+
+                        // Compute the rhs
+                        var first = curr.Clone();
+                        //Debug.Assert(first.Coeffs[lm] == 1);
+
+
+                        if (first.Coeffs[lm] != 1 && first.Coeffs[lm] != -1)
+                        {
+                            Console.WriteLine($"todo: fix");
+                            continue;
+                        }
+                        first.Sub(lm, first.Coeffs[lm]);
+                        // dubious or not verified
+                        var factor = first.Coeffs[lm] == 1 ? -1L : 1L;
+
+                        //first = -1L * first;
+                        first = factor * first;
+                        first.Simplify();
+
+                        var temp = new Poly();
+                        foreach (var m in targets)
+                        {
+                            if (m.SymVars.Count == 1)
+                            {
+                                temp.Add(Monomial.Constant(), next.Coeffs[m]);
+                                continue;
+                            }
+
+                            var map = m.SymVars.ToHashSet();
+                            map.Remove(v);
+
+                            temp.Add(new Monomial(map), next.Coeffs[m]);
+                        }
+
+                        temp = temp * first;
+                        foreach (var t in targets)
+                            next.Remove(t);
+
+                        next += temp;
+                        next.Simplify();
+                        ideal[j] = next;
+                        changed = true;
+
+
+                    }
+                }
+            }
+
+            /*
+            var barr = ideal.Last();
+            var list = barr.Coeffs.Keys.ToList();
+
+            var op0 = list[1];
+            var op2 = list[13];
+
+            var s1 = op0.SymVars.OrderBy(x => x).ToList();
+            var s2 = op2.SymVars.OrderBy(x => x).ToList();
+
+
+            var cmp = s1[0].CompareTo(s2[0]);
+
+            for(int i = 0; i < list.Count - 1; i++)
+            {
+                var a = list[i];
+                var b = list[i + 1];
+                Console.WriteLine($"{a} == {b}: {a == b}");
+            }
+            */
+
+            Console.WriteLine("\n\n\n");
+            foreach (var p in ideal)
+            {
+                foreach (var key in p.Coeffs.Keys.ToList())
+                    p.Coeffs[key] &= (long)ModuloReducer.GetMask(w);
+
+                p.Simplify();
+                Console.WriteLine(p);
+            }
+
+
+
+            Debugger.Break();
+
+            /*
             ideal.Reverse();
 
             while (true)
@@ -420,6 +722,7 @@ namespace Mba.Simplifier.Verification
 
                 Debugger.Break();
             }
+            */
 
 
 
@@ -471,7 +774,7 @@ namespace Mba.Simplifier.Verification
                 var sum = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}sum");
                 update(sum);
 
-           
+
 
 
                 //Poly cin = SymVar.Temp($"arith[{carryId}][{bitIdx}].cin");
@@ -488,7 +791,7 @@ namespace Mba.Simplifier.Verification
 
                 var sumLhs = sum;
                 var sumRhs = a + b + cin + (-2 * (a * b + b * cin + a * cin)) + 4 * (a * b * cin);
-              
+
                 ideal.Add((bitIdx, totalOrder++, sumLhs - sumRhs));
 
                 var carryLhs = cout;
