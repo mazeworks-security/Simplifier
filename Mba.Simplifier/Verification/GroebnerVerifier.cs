@@ -6,6 +6,7 @@ using Mba.Simplifier.Utility;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -25,7 +26,9 @@ namespace Mba.Simplifier.Verification
 
         public Poly(IEnumerable<Monomial> coeffs)
         {
-            Coeffs = coeffs.ToDictionary(x => x, x => 1l);
+            Coeffs = new();
+            foreach (var m in coeffs)
+                Add(m, 1);
         }
 
         public Poly()
@@ -126,11 +129,11 @@ namespace Mba.Simplifier.Verification
 
         public override string ToString()
         {
-            return String.Join(" + ", Coeffs.Select(x => $"{x.Value}*({x.Key})"));
+            return String.Join(" + ", Coeffs.OrderByDescending(x => x.Key).Select(x => $"{x.Value}*({x.Key})"));
         }
     }
 
-    public class Monomial
+    public class Monomial : IEquatable<Monomial>, IComparable<Monomial>
     {
         public readonly HashSet<SymVar> SymVars = new();
 
@@ -164,6 +167,47 @@ namespace Mba.Simplifier.Verification
         public override string ToString()
         {
             return String.Join("*", SortedVars);
+        }
+
+        public override int GetHashCode()
+        {
+            var hash = 17;
+            foreach (var v in SortedVars)
+                hash += 31 * v.GetHashCode();
+            return hash;
+        }
+
+        public override bool Equals(object? obj)
+        {
+            if (obj is Monomial other)
+                return Equals(other);
+            return false;
+        }
+
+        public bool Equals(Monomial? other)
+        {
+            return SortedVars.SequenceEqual(other.SortedVars);
+        }
+
+        public int CompareTo(Monomial? other)
+        {
+            var below = 1;
+            var above = -1;
+
+            if (this == other)
+                return 0;
+
+            for(int i = 0; i < Math.Min(SortedVars.Count, other.SortedVars.Count); i++)
+            {
+                var a = SortedVars[i];
+                var b = other.SortedVars[i];
+                var cmp = a.CompareTo(b);
+                if (cmp != 0)
+                    return cmp;
+            }
+
+            return SortedVars.Count.CompareTo(other.SortedVars.Count);
+
         }
     }
 
@@ -208,6 +252,13 @@ namespace Mba.Simplifier.Verification
         public override string ToString()
             => Name;
 
+        public override bool Equals([NotNullWhen(true)] object? obj)
+        {
+            if (obj is SymVar other)
+                return Equals(other);
+            return false;
+        }
+
         public bool Equals(SymVar other)
         {
             return Kind == other.Kind && Name == other.Name && other.SliceIndex == other.SliceIndex;
@@ -230,6 +281,11 @@ namespace Mba.Simplifier.Verification
 
             return 0;
         }
+
+        public override int GetHashCode()
+        {
+            return Kind.GetHashCode() + Name.GetHashCode() + SliceIndex.GetHashCode();
+        }
     }
 
     public record ArithInfo(Poly cin, Poly cout);
@@ -248,7 +304,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 16;
+        uint w = 2;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -278,6 +334,12 @@ namespace Mba.Simplifier.Verification
             ideal = ideal.OrderBy(x => x.Item1).ThenBy(x => x.Item2).ToList();
             foreach(var member in ideal)
                 Console.WriteLine(member.Item3);
+
+            var target = ideal[3].Item3;
+            var bar = target.Coeffs.Keys.ToList();
+
+            //var eq = bar[2].Equals(bar[3]);
+
 
             Debugger.Break();
         }
