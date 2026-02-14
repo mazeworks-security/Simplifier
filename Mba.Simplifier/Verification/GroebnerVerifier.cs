@@ -358,8 +358,8 @@ namespace Mba.Simplifier.Verification
         public GroebnerVerifier()
         {
             before = RustAstParser.Parse(ctx, "x+y", w);
-            //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
-            after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
+            after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            //after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
             //after = RustAstParser.Parse(ctx, "x+x+x+y", w);
 
             //before = RustAstParser.Parse(ctx, "x+y", w);
