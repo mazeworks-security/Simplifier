@@ -36,6 +36,13 @@ namespace Mba.Simplifier.Verification
             Coeffs = new();
         }
 
+        public void Simplify()
+        {
+            var toRemove = Coeffs.Where(x => x.Value == 0).Select(x => x.Key).ToList();
+            foreach (var del in toRemove)
+                Coeffs.Remove(del);
+        }
+
         public Poly(params Monomial[] coeffs) : this(coeffs.AsEnumerable())
         {
         }
@@ -43,7 +50,7 @@ namespace Mba.Simplifier.Verification
         public static Poly Add(Poly a, Poly b)
         {
             var output = new Poly();
-            foreach(var p in new Poly[] { a, b})
+            foreach (var p in new Poly[] { a, b })
             {
                 foreach (var (m, c) in p.Coeffs)
                     output.Add(m, c);
@@ -63,6 +70,23 @@ namespace Mba.Simplifier.Verification
             existing += coeff;
             Coeffs[m] = existing;
         }
+
+        public void Sub(Monomial m, long coeff)
+        {
+            Add(m, -1 * coeff);
+        }
+
+        public void Replace(Monomial a, Poly other)
+        {
+            var coeff = Coeffs[a];
+            Remove(a);
+
+            other = coeff * other;
+            var sum = Add(this, other);
+            Coeffs = sum.Coeffs;
+        }
+
+        public void Remove(Monomial a) => Coeffs.Remove(a);
 
 
         public static Poly Mul(Poly a, Poly b)
@@ -110,7 +134,7 @@ namespace Mba.Simplifier.Verification
         public static Poly operator *(long coeff, Poly a)
         {
             var output = new Poly();
-            foreach(var (m, c) in a.Coeffs.ToDictionary())
+            foreach (var (m, c) in a.Coeffs.ToDictionary())
                 output.Add(m, c * coeff);
             return output;
         }
@@ -148,7 +172,7 @@ namespace Mba.Simplifier.Verification
 
         public Monomial(params SymVar[] vars) : this(vars.AsEnumerable())
         {
-            
+
         }
 
         public static Monomial Constant()
@@ -162,6 +186,20 @@ namespace Mba.Simplifier.Verification
         public static Monomial operator *(Monomial a, Monomial b)
         {
             return new Monomial(a.SymVars.AsEnumerable().Concat(b.SymVars));
+        }
+
+        public static bool operator ==(Monomial? left, Monomial? right)
+        {
+            if (ReferenceEquals(left, right))
+                return true;
+            if (ReferenceEquals(left, null) || ReferenceEquals(right, null))
+                return false;
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(Monomial? left, Monomial? right)
+        {
+            return !(left == right);
         }
 
         public override string ToString()
@@ -197,7 +235,7 @@ namespace Mba.Simplifier.Verification
             if (this == other)
                 return 0;
 
-            for(int i = 0; i < Math.Min(SortedVars.Count, other.SortedVars.Count); i++)
+            for (int i = 0; i < Math.Min(SortedVars.Count, other.SortedVars.Count); i++)
             {
                 var a = SortedVars[i];
                 var b = other.SortedVars[i];
@@ -234,15 +272,18 @@ namespace Mba.Simplifier.Verification
 
         //public AstIdx? InputId { get; private set; }
 
+
+        public int BitIndex { get; private set; }
+
+        public uint TotalOrder { get; set; }
+
         public string Name { get; set; }
 
-        public int SliceIndex { get; private set; }
-
         public static SymVar Symbol(AstCtx ctx, AstIdx idx, int bitIdx)
-            => new SymVar() { Kind = SymKind.Input, Name = $"{ctx.GetSymbolName(idx)}{bitIdx}", SliceIndex = bitIdx };
+            => new SymVar() { Kind = SymKind.Input, Name = $"{ctx.GetSymbolName(idx)}{bitIdx}", BitIndex = bitIdx };
 
-        public static SymVar Temp(SymKind kind, string name)
-            => new SymVar() { Kind = kind, Name = name };
+        public static SymVar Temp(SymKind kind, int bitIdx, uint sliceIndex, string name)
+            => new SymVar() { Kind = kind, BitIndex = bitIdx, TotalOrder = sliceIndex, Name = name };
 
         public static Poly operator *(long coeff, SymVar a)
         {
@@ -261,7 +302,7 @@ namespace Mba.Simplifier.Verification
 
         public bool Equals(SymVar other)
         {
-            return Kind == other.Kind && Name == other.Name && other.SliceIndex == other.SliceIndex;
+            return Kind == other.Kind && Name == other.Name && other.BitIndex == other.BitIndex;
         }
 
         public int CompareTo(SymVar other)
@@ -272,10 +313,12 @@ namespace Mba.Simplifier.Verification
             var cmp = Kind.CompareTo(other.Kind);
             if (cmp != 0)
                 return cmp;
-            cmp = SliceIndex.CompareTo(other.SliceIndex);
+            cmp = BitIndex.CompareTo(other.BitIndex);
             if (cmp != 0)
                 return cmp;
-            cmp = Name.CompareTo(other.Name);
+            cmp = TotalOrder.CompareTo(other.TotalOrder);
+            if (cmp != 0)
+                cmp = Name.CompareTo(other.Name);
             if (cmp != 0)
                 return cmp;
 
@@ -284,11 +327,11 @@ namespace Mba.Simplifier.Verification
 
         public override int GetHashCode()
         {
-            return Kind.GetHashCode() + Name.GetHashCode() + SliceIndex.GetHashCode();
+            return Kind.GetHashCode() + Name.GetHashCode() + BitIndex.GetHashCode();
         }
     }
 
-    public record ArithInfo(Poly cin, Poly cout);
+    public record ArithInfo(Poly cin, Poly cout, Poly result);
 
     // https://danielakaufmann.at/wp-content/uploads/2020/11/Kaufmann-PhD-Thesis-2020.pdf
     // "Formal Verification of Multiplier Circuits using Computer Algebra"
@@ -311,7 +354,11 @@ namespace Mba.Simplifier.Verification
         public GroebnerVerifier()
         {
             before = RustAstParser.Parse(ctx, "x+y", w);
-            after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            after = RustAstParser.Parse(ctx, "x+y", w);
+
+            //before = RustAstParser.Parse(ctx, "x&y", w);
+            //after = RustAstParser.Parse(ctx, "x&y", w);
         }
 
         public void Run()
@@ -319,11 +366,14 @@ namespace Mba.Simplifier.Verification
             var ideal = new List<(int, uint, Poly)>();
 
             uint totalOrder = 0;
-            foreach(var curr in new AstIdx[] { before, after})
+            var firstSeen = new Dictionary<SymVar, uint>();
+
+            var results = new List<Poly>();
+            foreach (var curr in new AstIdx[] { before, after })
             {
                 Console.WriteLine("\n\n");
                 for (int i = 0; i < w; i++)
-                    GetSpecification(curr, i, ideal, ref totalOrder, true);
+                    results.Add(GetSpecification(curr, i, ideal, firstSeen, ref totalOrder, true));
 
                 //foreach (var member in ideal)
                 //    Console.WriteLine(member);
@@ -331,21 +381,53 @@ namespace Mba.Simplifier.Verification
                 //ideal.Clear();
             }
 
-            ideal = ideal.OrderBy(x => x.Item1).ThenBy(x => x.Item2).ToList();
-            foreach(var member in ideal)
+            ideal = ideal.OrderBy(x => x.Item1).ThenBy(x => x.Item3.Lm).ThenBy(x => x.Item2).ToList();
+            foreach (var member in ideal)
                 Console.WriteLine(member.Item3);
 
-            var target = ideal[3].Item3;
-            var bar = target.Coeffs.Keys.ToList();
+            //var target = ideal[3].Item3;
+            //var bar = target.Coeffs.Keys.ToList();
 
             //var eq = bar[2].Equals(bar[3]);
+
+            // Compute difference of the output variables, not the ideal members
+            //var last = results[0] - results[1];
+
+            var last = results[results.Count - 2] - results[results.Count - 1];
+
+            Console.WriteLine($"\n\nDifference: {last}\n");
+
+
+            ideal.Reverse();
+
+            while (true)
+            {
+                Monomial lm = last.Lm;
+
+     
+
+                var first = ideal.First(x => x.Item3.Lm == lm).Item3.Clone();
+                Debug.Assert(first.Coeffs[lm] == 1);
+
+                first.Sub(lm, first.Coeffs[lm]);
+                first = -1L * first;
+
+                first.Simplify();
+
+                //var oldCoeff = last.Coeffs[lm];
+                last.Replace(lm, first);
+                last.Simplify();
+
+                Debugger.Break();
+            }
+
 
 
             Debugger.Break();
         }
 
         // Each node gets an x, y, carry in, carry out bits
-        private Poly GetSpecification(AstIdx idx, int bitIdx, List<(int bitIndex, uint opIndex, Poly poly)> ideal, ref uint totalOrder, bool isOutput = false)
+        private Poly GetSpecification(AstIdx idx, int bitIdx, List<(int bitIndex, uint opIndex, Poly poly)> ideal, Dictionary<SymVar, uint> firstSeen, ref uint totalOrder, bool isOutput = false)
         {
             var opc = ctx.GetOpcode(idx);
             if (opc == AstOp.Symbol)
@@ -363,15 +445,35 @@ namespace Mba.Simplifier.Verification
             if (!carryIdentifiers.ContainsKey(idx))
                 carryIdentifiers.Add(idx, ((uint)carryIdentifiers.Count, new()));
 
+            var update = (SymVar sym) =>
+            {
+                var existing = firstSeen.TryGetValue(sym, out var val);
+                if (existing)
+                {
+                    sym.TotalOrder = val;
+                    return sym;
+                }
+
+                firstSeen.Add(sym, (uint)firstSeen.Count);
+                sym.TotalOrder = (uint)firstSeen.Count;
+                return sym;
+            };
+
             var (carryId, arithInfo) = carryIdentifiers[idx];
             if (opc == AstOp.Add)
             {
-               
+                if (arithInfo.Count > bitIdx)
+                    return arithInfo[bitIdx].result;
                 Debug.Assert(arithInfo.Count == bitIdx);
-                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, ideal, ref totalOrder);
-                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, ideal, ref totalOrder);
+                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, ideal, firstSeen, ref totalOrder);
+                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, ideal, firstSeen, ref totalOrder);
                 //var sum = SymVar.Temp($"a[{carryId}][{bitIdx}].sum");
-                var sum = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate,  $"op{carryId}_{bitIdx}sum");
+                var sum = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}sum");
+                update(sum);
+
+           
+
+
                 //Poly cin = SymVar.Temp($"arith[{carryId}][{bitIdx}].cin");
                 //if (bitIdx == 0)
                 //    cin = Poly.Constant(0);
@@ -380,16 +482,24 @@ namespace Mba.Simplifier.Verification
                     cin = arithInfo[bitIdx - 1].cout;
 
                 //var cout = SymVar.Temp($"a[{carryId}][{bitIdx}].cout");
-                var cout = SymVar.Temp(SymKind.InternalGate, $"op{carryId}_{bitIdx}cout");
+                var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
+                update(cout);
 
-                var bar = sum - a;
 
-                var p0 = 2L * cout + sum;
+                var sumLhs = sum;
+                var sumRhs = a + b + cin + (-2 * (a * b + b * cin + a * cin)) + 4 * (a * b * cin);
+              
+                ideal.Add((bitIdx, totalOrder++, sumLhs - sumRhs));
+
+                var carryLhs = cout;
+                var carryRhs = a * b + b * cin + a * cin + (-1 * (2 * a * b * cin));
+                ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
+
 
                 var member = (2L * cout) + sum - a - b - cin;
                 ideal.Add((bitIdx, totalOrder, member));
 
-                arithInfo.Add(new(cin, cout));
+                arithInfo.Add(new(cin, cout, sum));
 
                 totalOrder++;
                 return sum;
@@ -397,10 +507,11 @@ namespace Mba.Simplifier.Verification
 
             if (opc == AstOp.And)
             {
-                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, ideal, ref totalOrder);
-                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, ideal, ref totalOrder);
+                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, ideal, firstSeen, ref totalOrder);
+                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, ideal, firstSeen, ref totalOrder);
 
-                var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, $"r{carryId}_{bitIdx}");
+                var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
+                update(y);
                 ideal.Add((bitIdx, totalOrder, y - (a * b)));
 
                 totalOrder++;
@@ -409,11 +520,12 @@ namespace Mba.Simplifier.Verification
 
             if (opc == AstOp.Xor)
             {
-                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, ideal, ref totalOrder);
-                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, ideal, ref totalOrder);
+                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, ideal, firstSeen, ref totalOrder);
+                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, ideal, firstSeen, ref totalOrder);
 
-                var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, $"r{carryId}_{bitIdx}");
-                ideal.Add((bitIdx, totalOrder, (y - (a+b - (2 * (a*b))))));
+                var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
+                update(y);
+                ideal.Add((bitIdx, totalOrder, (y - (a + b - (2 * (a * b))))));
 
                 totalOrder++;
                 return y;
