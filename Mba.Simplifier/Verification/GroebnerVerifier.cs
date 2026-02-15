@@ -42,6 +42,8 @@ namespace Mba.Simplifier.Verification
             var toRemove = Coeffs.Where(x => x.Value == 0).Select(x => x.Key).ToList();
             foreach (var del in toRemove)
                 Coeffs.Remove(del);
+
+
         }
 
         public void ReduceMod(uint w)
@@ -253,8 +255,10 @@ namespace Mba.Simplifier.Verification
                     return cmp;
             }
 
-            return SortedVars.Count.CompareTo(other.SortedVars.Count);
-
+            var tie = SortedVars.Count.CompareTo(other.SortedVars.Count);
+            if (tie == 0)
+                Debugger.Break();
+            return tie;
         }
     }
 
@@ -357,14 +361,19 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 2;
+        uint w = 4;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
         public GroebnerVerifier()
         {
             before = RustAstParser.Parse(ctx, "x+y", w);
+            //after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
             after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+
+
+            //before = RustAstParser.Parse(ctx, "x+x+x+x", w);
+
             //after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
             //after = RustAstParser.Parse(ctx, "x+x+x+y", w);
 
@@ -489,26 +498,45 @@ namespace Mba.Simplifier.Verification
             return termVal;
         }
 
-        private void BackwardsEliminate(List<Poly> ideal)
+        private void BackwardsEliminate(List<Poly> ideal, int targetIdx, bool linearOnly = false, bool singleUseOnly = false)
         {
 
             var mmask = ModuloReducer.GetMask(w);
             var solver = new LinearCongruenceSolver(mmask);
 
 
+            Console.WriteLine($"Initial: {ideal[targetIdx]}");
             //while (ideal.Last().Coeffs.Count != 0)
             bool changed = true;
             while (changed)
             {
                 changed = false;
-                for (int i = 0; i < ideal.Count - 1; i++)
+                for (int i = 0; i < targetIdx; i++)
+                //for(int i = ideal.Count - 2; i >= 0; i--)
                 {
-                    var next = ideal.Last().Clone();
+                    var next = ideal[targetIdx].Clone();
                     var curr = ideal[i].Clone();
                     //if (!ideal.Any(x => x.Lm.SymVars.Count == 1 && x)))
                     //    continue;
                     var v = next.Lm.SortedVars.First();
                     var currLm = new Monomial(v);
+
+                    // If linearOnly, only do substitution of terms with 1 or more variables
+                    if (linearOnly && curr.Coeffs.Count > 2)
+                        continue;
+
+                    // If a term only has one use, immediately substitute it.
+                    // 1*(r4_1) + 2*(y1*x1) + 15*(y1) + 15*(x1)
+                    // 15 * (r4_1 * y0 * x0) + 1 * (op1_1cout)
+
+                    if (singleUseOnly && next.ToString() == "15*(r4_1*y0*x0) + 1*(op1_1cout)" && i == 17)
+                        Debugger.Break();
+
+                    var skip = ideal.Skip(i+1).ToList();
+                    if (singleUseOnly && skip.Count(x => x.Lm.SortedVars[0].Equals(v)) != 1)
+                        continue;
+
+
                     if (!curr.Coeffs.ContainsKey(currLm))
                         continue;
 
@@ -548,7 +576,7 @@ namespace Mba.Simplifier.Verification
                     next.ReduceMod(w);
                     next.Simplify();
                     changed = true;
-                    ideal[ideal.Count - 1] = next;
+                    ideal[targetIdx] = next;
 
 
                     Console.WriteLine($"Intermediate product: {next}\n");
@@ -566,7 +594,125 @@ namespace Mba.Simplifier.Verification
 
             }
 
-            Debugger.Break();
+            //Debugger.Break();
+        }
+
+        private void LinElim(List<Poly> ideal)
+        {
+            var mmask = ModuloReducer.GetMask(w);
+            var solver = new LinearCongruenceSolver(mmask);
+
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+                // Identify linear equations of the form c1*v1 + c2*v2 = 0 (or constant)
+                // And substitute them forward into other ideals.
+                for (int i = 0; i < ideal.Count; i++)
+                {
+                    var curr = ideal[i];
+                    if (curr.Coeffs.Count != 2 && curr.Coeffs.Count != 1)
+                        continue;
+
+                    // Check if we have (v1) and (v2) or (v1) and (constant)
+                    var mons = curr.Coeffs.Keys.ToList();
+                    var m1 = mons[0];
+           
+                    // One of them must be a single variable leading term we want to eliminate.
+                    // Usually the leading monomial is the one we want to substitute out.
+                    var lm = curr.Lm;
+                    if (lm.SymVars.Count != 1)
+                        continue;
+
+                    // The other term must be "simpler", which implies it should be smaller or equal in order,
+                    // but if it's in the ideal, we are just looking for structure `c * v + rest = 0`.
+                    // The example `1*op + 3*x0` implies `op = -3*x0`.
+
+                    var variable = lm.SymVars.Single();
+                    var coeff = curr.Coeffs[lm]; // c1
+
+                    // Find the "rhs" poly (which is just the other term negated)
+                    var rhs = curr.Clone();
+                    rhs.Remove(lm);
+                    rhs = -1L * rhs; // -c2*v2
+
+                    // Now substitute 'variable' in all subsequent polynomials
+                    for (int j = i + 1; j < ideal.Count; j++)
+                    {
+                        if (i == j) continue;
+
+                        var next = ideal[j].Clone();
+                        bool onlyOne = curr.Coeffs.Count == 1;
+                        if (onlyOne && next.Coeffs.Keys.Any(x => lm.SymVars.IsSubsetOf(x.SymVars)))
+                        {
+                            var banned = next.Coeffs.Keys.Where(x => lm.SymVars.IsSubsetOf(x.SymVars)).ToList();
+                            foreach (var t in banned)
+                                next.Remove(t);
+
+                            ideal[j] = next;
+                            changed = true;
+                            continue;
+                        }
+
+                        // We are looking for occurrences of 'lm' (the variable v1) in 'next'.
+                        // Since 'lm' is a single variable, we look for monomials containing it?
+                        // Or just linear occurrences? Groebner basis usually eliminates leading monomials.
+                        // But if we have `x = y`, we want to replace `x` everywhere.
+
+                        // Let's filter for monomials in 'next' that contain 'variable'.
+                        var targets = next.Coeffs.Keys.Where(k => k.SymVars.Contains(variable)).ToList();
+                        if (targets.Count == 0)
+                            continue;
+
+                        // Substitute v = (rhs / coeff)
+                        // For each term T = c_T * v * M (where M is monomial without v)
+                        // We have c_T * (rhs / coeff) * M
+                        // We need solution s such that s * coeff = c_T (mod m)
+
+                        bool instantiated = false;
+                        foreach (var targetM in targets)
+                        {
+                            var targetCoeff = next.Coeffs[targetM];
+                            var lc = solver.LinearCongruence((UInt128)coeff & mmask, (UInt128)targetCoeff & mmask, mmask + 1);
+
+                            if (lc == null || lc.n == 0)
+                                continue; // Cannot divide
+
+                            var s = solver.GetSolution(0, lc);
+
+                            // The term T is removed
+                            next.Remove(targetM);
+
+                            // Construct M (monomial without variable)
+                            var map = targetM.SymVars.ToHashSet();
+                            map.Remove(variable);
+                            var remainderM = new Monomial(map);
+
+                            // Add s * rhs * M
+                            var increment = (long)s * rhs;
+
+                            // Multiply by remainderM
+                            var temp = new Poly();
+                            temp.Add(remainderM, 1);
+
+                            increment = increment * temp;
+
+                            next = next + increment;
+
+                            // Keep clean
+                            next.ReduceMod(w);
+                            next.Simplify();
+                            instantiated = true;
+                        }
+
+                        if (instantiated)
+                        {
+                            ideal[j] = next;
+                            changed = true;
+                        }
+                    }
+                }
+            }
         }
 
         public void Run()
@@ -616,18 +762,48 @@ namespace Mba.Simplifier.Verification
 
             //var last = results[15] - results[31];
 
-            var last = results[3] - results[1];
+            //var last = results[3] - results[1];
+
+            // var last = results[2] - results[5];
+
+            var last = results[3] - results[7];
+
+            //var last = results[11] - results[5];
+
+            //var last = results[3] - results[7];
 
             ideal.Add(last);
 
+
             Console.WriteLine($"\n\nDifference: {last}\n");
 
+
+            Console.WriteLine("\n\n\nInitial ideal with difference: ");
+            foreach (var p in ideal)
+            {
+                foreach (var key in p.Coeffs.Keys.ToList())
+                    p.Coeffs[key] &= (long)ModuloReducer.GetMask(w);
+
+                p.Simplify();
+                if (p.Coeffs.Count == 0)
+                    continue;
+                Console.WriteLine(p);
+            }
+
+            ideal = ideal.Where(x => x.Coeffs.Count > 0).ToList();
+
+
+            // For each bit i, we need to compute a carry bit expression for each bit [i+1..N]
+            // Reduce each carry bit.. check if equivalent..
+            // Problem (a&b&0).. at each bit, how do we even identify the incoming carry?
+            // How do you get the carry when its inside of a bitwise expression?
 
             //var r = Validate(ideal, ctx.GetWidth(before));
             //Debug.Assert(r == true);
 
             var mmask = ModuloReducer.GetMask(w);
             var solver = new LinearCongruenceSolver(mmask);
+
 
             bool changed = true;
             while (changed)
@@ -847,9 +1023,78 @@ namespace Mba.Simplifier.Verification
 
             ideal = ideal.Where(x => x.Coeffs.Count > 0).ToList();
 
-            BackwardsEliminate(ideal);
+
+            for (int i = 0; i < ideal.Count - 1; i++)
+            {
+                //continue;
+
+                var p = ideal[i];
+
+
+                BackwardsEliminate(ideal, i, linearOnly: false, singleUseOnly: true);
+
+                Console.WriteLine($"ROUND {i}");
+                //if (p.Lm.SymVars.Count == 1 && (p.Lm.SortedVars.Single().Name.Contains("cout") || p.Lm.SortedVars.Single().Name.Contains("sum")))
+                //    BackwardsEliminate(ideal, i);
+            }
+
+            LinElim(ideal);
+            LinElim(ideal);
+            LinElim(ideal);
+
+
+
+            Console.WriteLine("\n\n\nBack reduced ideal: ");
+            foreach (var p in ideal)
+            {
+                foreach (var key in p.Coeffs.Keys.ToList())
+                    p.Coeffs[key] &= (long)ModuloReducer.GetMask(w);
+
+                p.Simplify();
+                if (p.Coeffs.Count == 0)
+                    continue;
+                Console.WriteLine(p);
+            }
+
+
+
+            for (int i = 0; i < ideal.Count - 1; i++)
+            {
+                //continue;
+
+                var p = ideal[i];
+
+
+                BackwardsEliminate(ideal, i, linearOnly: false, singleUseOnly: true);
+
+                Console.WriteLine($"ROUND {i}");
+                //if (p.Lm.SymVars.Count == 1 && (p.Lm.SortedVars.Single().Name.Contains("cout") || p.Lm.SortedVars.Single().Name.Contains("sum")))
+                //    BackwardsEliminate(ideal, i);
+            }
+
+
+
+
+            Console.WriteLine("\n\n\nFinal reduced ideal: ");
+            foreach (var p in ideal)
+            {
+                foreach (var key in p.Coeffs.Keys.ToList())
+                    p.Coeffs[key] &= (long)ModuloReducer.GetMask(w);
+
+                p.Simplify();
+                if (p.Coeffs.Count == 0)
+                    continue;
+                Console.WriteLine(p);
+            }
+
+
+
 
             var rr = Validate(ideal, (int)w);
+
+            BackwardsEliminate(ideal, ideal.Count - 1);
+
+            rr = Validate(ideal, (int)w);
 
 
 
@@ -944,11 +1189,14 @@ namespace Mba.Simplifier.Verification
                 var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
                 update(cout);
 
-
+                /*
                 var sumLhs = sum;
                 var sumRhs = a + b + cin + (-2 * (a * b + b * cin + a * cin)) + 4 * (a * b * cin);
 
                 ideal.Add((bitIdx, totalOrder++, sumLhs - sumRhs));
+                   */
+
+
 
                 var carryLhs = cout;
                 var carryRhs = a * b + b * cin + a * cin + (-1 * (2 * a * b * cin));
