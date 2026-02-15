@@ -44,6 +44,12 @@ namespace Mba.Simplifier.Verification
                 Coeffs.Remove(del);
         }
 
+        public void ReduceMod(uint w)
+        {
+            foreach (var key in Coeffs.Keys.ToList())
+                Coeffs[key] &= (long)ModuloReducer.GetMask(w);
+        }
+
         public Poly(params Monomial[] coeffs) : this(coeffs.AsEnumerable())
         {
         }
@@ -368,11 +374,6 @@ namespace Mba.Simplifier.Verification
             //after = RustAstParser.Parse(ctx, "x&y", w);
         }
 
-        /// <summary>
-        /// Enumerates all input variable assignments (each bit is 0 or 1),
-        /// propagates through the ideal members to solve for gate variables,
-        /// and verifies that the last member always evaluates to zero.
-        /// </summary>
         public static bool Validate(List<Poly> ideal, int w)
         {
             // Collect all input variables across the entire ideal.
@@ -421,7 +422,7 @@ namespace Mba.Simplifier.Verification
                         if (unassigned == null)
                         {
                             // All variables are known; just verify this member is zero.
-                            long check = EvaluatePoly(poly, assignment);
+                            long check = EvaluatePoly(poly, assignment) & (long)ModuloReducer.GetMask((uint)w);
                             if (check != 0)
                                 return false;
                             continue;
@@ -457,7 +458,7 @@ namespace Mba.Simplifier.Verification
                     else
                     {
                         // Last member: evaluate and check it equals zero.
-                        long result = EvaluatePoly(poly, assignment);
+                        long result = EvaluatePoly(poly, assignment) & (long)ModuloReducer.GetMask((uint)w);
                         if (result != 0)
                             return false;
                     }
@@ -488,8 +489,89 @@ namespace Mba.Simplifier.Verification
             return termVal;
         }
 
+        private void BackwardsEliminate(List<Poly> ideal)
+        {
+
+            var mmask = ModuloReducer.GetMask(w);
+            var solver = new LinearCongruenceSolver(mmask);
+
+
+            //while (ideal.Last().Coeffs.Count != 0)
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+                for (int i = 0; i < ideal.Count - 1; i++)
+                {
+                    var next = ideal.Last().Clone();
+                    var curr = ideal[i].Clone();
+                    //if (!ideal.Any(x => x.Lm.SymVars.Count == 1 && x)))
+                    //    continue;
+                    var v = next.Lm.SortedVars.First();
+                    var currLm = new Monomial(v);
+                    if (!curr.Coeffs.ContainsKey(currLm))
+                        continue;
+
+                    var nextLm = next.Lm;
+
+                    var lc = solver.LinearCongruence((UInt128)curr.Coeffs[currLm] & mmask, (UInt128)(next.Coeffs[nextLm]) & mmask, mmask + 1);
+                    if (lc == null)
+                        continue;
+
+                    var sol = solver.GetSolution(0, lc);
+
+                    // Move the value over to the RHS
+                    var currRhs = curr.Clone();
+                    currRhs.Remove(currLm);
+                    currRhs = -1L * currRhs;
+
+                    var temp = new Poly();
+
+                    if (nextLm.SymVars.Count == 1)
+                    {
+                        temp.Add(Monomial.Constant(), 1);
+                    }
+                    else
+                    {
+                        var map = nextLm.SymVars.ToHashSet();
+                        map.Remove(v);
+
+                        // Now temp has the monomial without the variable..
+                        temp.Add(new Monomial(map), 1);
+                    }
+
+                    next.Remove(nextLm);
+
+
+                    next = next + ((long)sol * (currRhs * temp));
+
+                    next.ReduceMod(w);
+                    next.Simplify();
+                    changed = true;
+                    ideal[ideal.Count - 1] = next;
+
+
+                    Console.WriteLine($"Intermediate product: {next}\n");
+                    //var rr = Validate(ideal, (int)w);
+
+
+                    //break;
+
+
+                    //Debugger.Break();
+                }
+                //var curr = ideal.First(x => x.Lm.SymVars.Contains(last.Lm.SymVars.First()));
+
+
+
+            }
+
+            Debugger.Break();
+        }
+
         public void Run()
         {
+
             var idealArr = new List<(int, uint, Poly)>();
 
             uint totalOrder = 0;
@@ -517,7 +599,7 @@ namespace Mba.Simplifier.Verification
                 Console.WriteLine(member);
             }
 
-       
+
 
             //var target = ideal[3].Item3;
             //var bar = target.Coeffs.Keys.ToList();
@@ -530,6 +612,10 @@ namespace Mba.Simplifier.Verification
             // 63 - 127
             //var last = results[results.Count - 2] - results[results.Count - 1];
 
+            //var last = results[15] - results[7];
+
+            //var last = results[15] - results[31];
+
             var last = results[3] - results[1];
 
             ideal.Add(last);
@@ -537,8 +623,11 @@ namespace Mba.Simplifier.Verification
             Console.WriteLine($"\n\nDifference: {last}\n");
 
 
-            var r = Validate(ideal, ctx.GetWidth(before));
-            Debug.Assert(r == true);
+            //var r = Validate(ideal, ctx.GetWidth(before));
+            //Debug.Assert(r == true);
+
+            var mmask = ModuloReducer.GetMask(w);
+            var solver = new LinearCongruenceSolver(mmask);
 
             bool changed = true;
             while (changed)
@@ -547,34 +636,93 @@ namespace Mba.Simplifier.Verification
 
                 for (int i = 0; i < ideal.Count; i++)
                 {
+                    ideal[i].Simplify();
                     if (ideal[i].Coeffs.Count == 0)
                         continue;
 
-                    var curr = ideal[i].Clone();
-                    var lm = curr.Lm;
 
 
 
                     for (int j = i + 1; j < ideal.Count; j++)
                     {
+                        var curr = ideal[i].Clone();
+                        var lm = curr.Lm;
+
                         var next = ideal[j].Clone();
+                        bool onlyOne = curr.Coeffs.Count == 1;
+                        if (onlyOne && next.Coeffs.Keys.Any(x => lm.SymVars.IsSubsetOf(x.SymVars)))
+                        {
+                            var targets = next.Coeffs.Keys.Where(x => lm.SymVars.IsSubsetOf(x.SymVars)).ToList();
+                            foreach (var t in targets)
+                                next.Remove(t);
+
+                            ideal[j] = next;
+                            changed = true;
+                            continue;
+                        }
+
+
                         if (!next.Coeffs.ContainsKey(lm))
                             continue;
                         //if (next.Lm.CompareTo(lm) == -1)
                         //    continue;
 
-                        var first = curr.Clone();
+                        Console.WriteLine("\n\n\n\n\n\n");
 
+
+
+                        Console.WriteLine($"{curr}\n{next}");
+
+                        var lc = solver.LinearCongruence((UInt128)curr.Coeffs[lm] & mmask, (UInt128)(next.Coeffs[lm]) & mmask, mmask + 1);
+                        if (lc == null)
+                            continue;
+                        Console.WriteLine($"c1*{curr.Coeffs[lm]} == {next.Coeffs[lm]}");
+                        if (lc.n == 0)
+                            continue;
+
+                        var sol = solver.GetSolution(0, lc);
+                        Console.WriteLine($"Solution: {sol}");
+
+                        // Delete the monomial
+                        next.Remove(lm);
+
+                        // Move the value over to the RHS
+                        curr.Remove(lm);
+                        curr = -1L * curr;
+
+                        // Substitute the RHS back in 
+                        next = next + ((long)(ulong)sol * curr);
+
+                        next.Simplify();
+                        next.ReduceMod(w);
+
+                        Console.WriteLine($"=> \n{next}");
+
+
+                        ideal[j] = next;
+
+                        //next = Poly.Add(next, (long)(ulong)sol * curr);
+
+
+                        /*
+                         * 
+                         *  var first = curr.Clone();
                         if (first.Coeffs[lm] != 1 && first.Coeffs[lm] != -1)
                         {
                             Console.WriteLine($"todo: fix with coeff {first.Coeffs[lm]}");
                             continue;
                         }
+
+
                         //Debug.Assert(first.Coeffs[lm] == 1);
+
+                        var factor = first.Coeffs[lm] == 1 ? -1L : 1L;
+
+                        Console.WriteLine($"c1*{-first.Coeffs[lm]} == {-next.Coeffs[lm]}. Solution={factor * next.Coeffs[lm]}");
+
 
                         first.Sub(lm, first.Coeffs[lm]);
 
-                        var factor = first.Coeffs[lm] == 1 ? -1L : 1L;
 
                         //first = -1L * first;
                         first = factor * first;
@@ -587,12 +735,12 @@ namespace Mba.Simplifier.Verification
                         ideal[j] = next;
                         //last.Simplify();
                         changed = true;
-
+                        */
                     }
                 }
             }
 
-            changed = true;
+            changed = false;
             while (changed)
             {
                 changed = false;
@@ -685,15 +833,23 @@ namespace Mba.Simplifier.Verification
             }
             */
 
-            Console.WriteLine("\n\n\n");
+            Console.WriteLine("\n\n\nReduced ideal: ");
             foreach (var p in ideal)
             {
                 foreach (var key in p.Coeffs.Keys.ToList())
                     p.Coeffs[key] &= (long)ModuloReducer.GetMask(w);
 
                 p.Simplify();
+                if (p.Coeffs.Count == 0)
+                    continue;
                 Console.WriteLine(p);
             }
+
+            ideal = ideal.Where(x => x.Coeffs.Count > 0).ToList();
+
+            BackwardsEliminate(ideal);
+
+            var rr = Validate(ideal, (int)w);
 
 
 
