@@ -361,15 +361,15 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 4;
+        uint w = 2;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
         public GroebnerVerifier()
         {
             before = RustAstParser.Parse(ctx, "x+y", w);
-            //after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
-            after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
+            //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
 
 
             //before = RustAstParser.Parse(ctx, "x+x+x+x", w);
@@ -542,9 +542,18 @@ namespace Mba.Simplifier.Verification
 
                     var nextLm = next.Lm;
 
+                    var cmp = curr.Lm.CompareTo(nextLm);
+                    if (cmp == 1)
+                    {
+                        continue;
+                    }
+
+
                     var lc = solver.LinearCongruence((UInt128)curr.Coeffs[currLm] & mmask, (UInt128)(next.Coeffs[nextLm]) & mmask, mmask + 1);
                     if (lc == null)
                         continue;
+
+
 
                     var sol = solver.GetSolution(0, lc);
 
@@ -606,37 +615,30 @@ namespace Mba.Simplifier.Verification
             while (changed)
             {
                 changed = false;
-                // Identify linear equations of the form c1*v1 + c2*v2 = 0 (or constant)
-                // And substitute them forward into other ideals.
+                // Find ideal members with two terms c1*v1 + c2*v2 = 0 
+                // and substitute the rhs in 
                 for (int i = 0; i < ideal.Count; i++)
                 {
                     var curr = ideal[i];
                     if (curr.Coeffs.Count != 2 && curr.Coeffs.Count != 1)
                         continue;
 
-                    // Check if we have (v1) and (v2) or (v1) and (constant)
                     var mons = curr.Coeffs.Keys.ToList();
                     var m1 = mons[0];
            
-                    // One of them must be a single variable leading term we want to eliminate.
-                    // Usually the leading monomial is the one we want to substitute out.
                     var lm = curr.Lm;
                     if (lm.SymVars.Count != 1)
                         continue;
 
-                    // The other term must be "simpler", which implies it should be smaller or equal in order,
-                    // but if it's in the ideal, we are just looking for structure `c * v + rest = 0`.
-                    // The example `1*op + 3*x0` implies `op = -3*x0`.
-
                     var variable = lm.SymVars.Single();
                     var coeff = curr.Coeffs[lm]; // c1
 
-                    // Find the "rhs" poly (which is just the other term negated)
+                    // Compute rhs
                     var rhs = curr.Clone();
                     rhs.Remove(lm);
                     rhs = -1L * rhs; // -c2*v2
 
-                    // Now substitute 'variable' in all subsequent polynomials
+                    // Substitute assignment into all polynomials
                     for (int j = i + 1; j < ideal.Count; j++)
                     {
                         if (i == j) continue;
@@ -654,20 +656,9 @@ namespace Mba.Simplifier.Verification
                             continue;
                         }
 
-                        // We are looking for occurrences of 'lm' (the variable v1) in 'next'.
-                        // Since 'lm' is a single variable, we look for monomials containing it?
-                        // Or just linear occurrences? Groebner basis usually eliminates leading monomials.
-                        // But if we have `x = y`, we want to replace `x` everywhere.
-
-                        // Let's filter for monomials in 'next' that contain 'variable'.
                         var targets = next.Coeffs.Keys.Where(k => k.SymVars.Contains(variable)).ToList();
                         if (targets.Count == 0)
                             continue;
-
-                        // Substitute v = (rhs / coeff)
-                        // For each term T = c_T * v * M (where M is monomial without v)
-                        // We have c_T * (rhs / coeff) * M
-                        // We need solution s such that s * coeff = c_T (mod m)
 
                         bool instantiated = false;
                         foreach (var targetM in targets)
@@ -676,14 +667,14 @@ namespace Mba.Simplifier.Verification
                             var lc = solver.LinearCongruence((UInt128)coeff & mmask, (UInt128)targetCoeff & mmask, mmask + 1);
 
                             if (lc == null || lc.n == 0)
-                                continue; // Cannot divide
+                                continue; 
 
                             var s = solver.GetSolution(0, lc);
 
                             // The term T is removed
                             next.Remove(targetM);
 
-                            // Construct M (monomial without variable)
+                            // Remove M from the monomial
                             var map = targetM.SymVars.ToHashSet();
                             map.Remove(variable);
                             var remainderM = new Monomial(map);
@@ -699,7 +690,6 @@ namespace Mba.Simplifier.Verification
 
                             next = next + increment;
 
-                            // Keep clean
                             next.ReduceMod(w);
                             next.Simplify();
                             instantiated = true;
@@ -762,17 +752,21 @@ namespace Mba.Simplifier.Verification
 
             //var last = results[15] - results[31];
 
-            //var last = results[3] - results[1];
+            var last = results[3] - results[1];
 
             // var last = results[2] - results[5];
 
-            var last = results[3] - results[7];
+            //var last = results[3] - results[7];
 
             //var last = results[11] - results[5];
 
             //var last = results[3] - results[7];
-
-            ideal.Add(last);
+            
+            // UNCOMMENT THIS
+            //
+            //
+            Console.WriteLine("Uncomment this if you want an actual resuolt");
+            //ideal.Add(last);
 
 
             Console.WriteLine($"\n\nDifference: {last}\n");
@@ -804,7 +798,7 @@ namespace Mba.Simplifier.Verification
             var mmask = ModuloReducer.GetMask(w);
             var solver = new LinearCongruenceSolver(mmask);
 
-
+            bool rr = false;
             bool changed = true;
             while (changed)
             {
@@ -1056,7 +1050,7 @@ namespace Mba.Simplifier.Verification
                 Console.WriteLine(p);
             }
 
-
+            //rr = Validate(ideal, (int)w);
 
             for (int i = 0; i < ideal.Count - 1; i++)
             {
@@ -1090,9 +1084,22 @@ namespace Mba.Simplifier.Verification
 
 
 
-            var rr = Validate(ideal, (int)w);
+            //rr = Validate(ideal, (int)w);
 
             BackwardsEliminate(ideal, ideal.Count - 1);
+
+
+            Console.WriteLine("\n\n\nFinal reduced ideal: ");
+            foreach (var p in ideal)
+            {
+                foreach (var key in p.Coeffs.Keys.ToList())
+                    p.Coeffs[key] &= (long)ModuloReducer.GetMask(w);
+
+                p.Simplify();
+                if (p.Coeffs.Count == 0)
+                    continue;
+                Console.WriteLine(p);
+            }
 
             rr = Validate(ideal, (int)w);
 
