@@ -1206,11 +1206,11 @@ namespace Mba.Simplifier.Verification
 
 
                 var carryLhs = cout;
-                var carryRhs = a * b + b * cin + a * cin + (-1 * (2 * a * b * cin));
+                var carryRhs = a*b + b*cin + a*cin + (-1*(2*a*b*cin));
                 ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
 
 
-                var member = (2L * cout) + sum - a - b - cin;
+                var member = (2L*cout)+sum-a-b-cin;
                 ideal.Add((bitIdx, totalOrder, member));
 
                 arithInfo.Add(new(cin, cout, sum));
