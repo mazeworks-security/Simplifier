@@ -542,12 +542,13 @@ namespace Mba.Simplifier.Verification
 
                     var nextLm = next.Lm;
 
+                    /*
                     var cmp = curr.Lm.CompareTo(nextLm);
                     if (cmp == 1)
                     {
                         continue;
                     }
-
+                    */
 
                     var lc = solver.LinearCongruence((UInt128)curr.Coeffs[currLm] & mmask, (UInt128)(next.Coeffs[nextLm]) & mmask, mmask + 1);
                     if (lc == null)
@@ -707,6 +708,12 @@ namespace Mba.Simplifier.Verification
 
         public void Run()
         {
+            RunOld();
+        }
+
+        // Old version attempting to implement the old paper
+        public void RunOld()
+        {
 
             var idealArr = new List<(int, uint, Poly)>();
 
@@ -720,12 +727,23 @@ namespace Mba.Simplifier.Verification
                 for (int i = 0; i < w; i++)
                     results.Add(GetSpecification(curr, i, idealArr, firstSeen, ref totalOrder, true));
 
+                foreach(var m in idealArr)
+                {
+                    m.Item3.Simplify();
+                    Console.WriteLine(m.Item3);
+                }
+
+                //break;
+
+
                 //foreach (var member in ideal)
                 //    Console.WriteLine(member);
 
                 //ideal.Clear();
             }
 
+            //var vars = firstSeen.OrderBy(x => x.Value).ToList();
+       
 
             //var ideal = idealArr.OrderBy(x => x.Item1).ThenBy(x => x.Item3.Lm).ThenBy(x => x.Item2).ToList().Select(x => x.Item3).ToList();
             var ideal = idealArr.ToList().Select(x => x.Item3).ToList();
@@ -754,6 +772,18 @@ namespace Mba.Simplifier.Verification
 
             var last = results[3] - results[1];
 
+
+            //ideal.Insert(0, spec);
+            //var vars = ctx.CollectVariables(before);
+            //var x0 = GetSpecification(vars[0], 0, idealArr, firstSeen, ref totalOrder, false);
+            //var x1 = GetSpecification(vars[0], 1, idealArr, firstSeen, ref totalOrder, false);
+            //var y0 = GetSpecification(vars[1], 0, idealArr, firstSeen, ref totalOrder, false);
+            //var y1 = GetSpecification(vars[1], 1, idealArr, firstSeen, ref totalOrder, false);
+
+
+            //var spec = x0 + y0 + 2 * x1 + 2 * y1;
+            //var last = (results[0] + 2*results[1]) - spec;
+
             // var last = results[2] - results[5];
 
             //var last = results[3] - results[7];
@@ -761,12 +791,12 @@ namespace Mba.Simplifier.Verification
             //var last = results[11] - results[5];
 
             //var last = results[3] - results[7];
-            
+
             // UNCOMMENT THIS
             //
             //
-            Console.WriteLine("Uncomment this if you want an actual resuolt");
-            //ideal.Add(last);
+            //Console.WriteLine("Uncomment this if you want an actual resuolt");
+            ideal.Add(last);
 
 
             Console.WriteLine($"\n\nDifference: {last}\n");
@@ -1054,7 +1084,7 @@ namespace Mba.Simplifier.Verification
 
             for (int i = 0; i < ideal.Count - 1; i++)
             {
-                //continue;
+                continue;
 
                 var p = ideal[i];
 
@@ -1196,12 +1226,12 @@ namespace Mba.Simplifier.Verification
                 var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
                 update(cout);
 
-                /*
+                
                 var sumLhs = sum;
                 var sumRhs = a + b + cin + (-2 * (a * b + b * cin + a * cin)) + 4 * (a * b * cin);
 
                 ideal.Add((bitIdx, totalOrder++, sumLhs - sumRhs));
-                   */
+                   
 
 
 
