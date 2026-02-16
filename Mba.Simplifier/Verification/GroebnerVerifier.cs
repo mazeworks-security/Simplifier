@@ -1226,12 +1226,12 @@ namespace Mba.Simplifier.Verification
                 var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
                 update(cout);
 
-                
+                /*
                 var sumLhs = sum;
                 var sumRhs = a + b + cin + (-2 * (a * b + b * cin + a * cin)) + 4 * (a * b * cin);
 
                 ideal.Add((bitIdx, totalOrder++, sumLhs - sumRhs));
-                   
+                */
 
 
 
