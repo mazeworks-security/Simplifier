@@ -381,10 +381,10 @@ namespace Mba.Simplifier.Verification
             //after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
             //after = RustAstParser.Parse(ctx, "x+x+x+y", w);
 
-            //before = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            before = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             //before = RustAstParser.Parse(ctx, "(x+x+x+x+x+x+x+x+y)&(x+y)", w);
             //before = RustAstParser.Parse(ctx, "(x+y) & (y+x)", w);
-            before = RustAstParser.Parse(ctx, "x+y", w);
+            //before = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x+y", w);
             after = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x&y", w);
