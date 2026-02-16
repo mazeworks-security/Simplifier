@@ -368,7 +368,8 @@ namespace Mba.Simplifier.Verification
         public GroebnerVerifier()
         {
             before = RustAstParser.Parse(ctx, "x+y", w);
-            after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
+            //after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
+            after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
 
 
@@ -1236,11 +1237,13 @@ namespace Mba.Simplifier.Verification
 
 
                 var carryLhs = cout;
-                var carryRhs = a*b + b*cin + a*cin + (-1*(2*a*b*cin));
+                //var carryRhs = a*b + b*cin + a*cin + (-1*(2*a*b*cin));
+                var carryRhs = a * b + b * cin + a * cin + (-1 * (2 * a * b * cin));
                 ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
 
 
-                var member = (2L*cout)+sum-a-b-cin;
+                //var member = (2L*cout)+sum-a-b-cin;
+                var member = (2L * cout) + sum - a - b - cin;
                 ideal.Add((bitIdx, totalOrder, member));
 
                 arithInfo.Add(new(cin, cout, sum));
