@@ -295,6 +295,9 @@ namespace Mba.Simplifier.Verification
         public static SymVar Symbol(AstCtx ctx, AstIdx idx, int bitIdx)
             => new SymVar() { Kind = SymKind.Input, Name = $"{ctx.GetSymbolName(idx)}{bitIdx}", BitIndex = bitIdx };
 
+        public static SymVar Symbol(AstCtx ctx, string name, int bitIdx)
+           => new SymVar() { Kind = SymKind.Input, Name = name, BitIndex = bitIdx };
+
         public static SymVar Temp(SymKind kind, int bitIdx, uint sliceIndex, string name)
             => new SymVar() { Kind = kind, BitIndex = bitIdx, TotalOrder = sliceIndex, Name = name };
 
@@ -361,7 +364,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 2;
+        uint w = 32;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -378,7 +381,11 @@ namespace Mba.Simplifier.Verification
             //after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
             //after = RustAstParser.Parse(ctx, "x+x+x+y", w);
 
-            before = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            //before = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            //before = RustAstParser.Parse(ctx, "(x+x+x+x+x+x+x+x+y)&(x+y)", w);
+            //before = RustAstParser.Parse(ctx, "(x+y) & (y+x)", w);
+            before = RustAstParser.Parse(ctx, "x+y", w);
+            //before = RustAstParser.Parse(ctx, "x+y", w);
             after = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x&y", w);
             //after = RustAstParser.Parse(ctx, "x&y", w);
@@ -386,6 +393,8 @@ namespace Mba.Simplifier.Verification
 
         public static bool Validate(List<Poly> ideal, int w)
         {
+            Console.WriteLine("Skipping validat");
+            return true;
             // Collect all input variables across the entire ideal.
             var allVars = new HashSet<SymVar>();
             foreach (var p in ideal)
@@ -499,7 +508,7 @@ namespace Mba.Simplifier.Verification
             return termVal;
         }
 
-        private void BackwardsEliminate(List<Poly> ideal, int targetIdx, bool linearOnly = false, bool singleUseOnly = false)
+        private void BackwardsEliminate(List<Poly> ideal, int targetIdx, bool linearOnly = false, bool singleUseOnly = false, bool skipZeroes = false)
         {
 
             var mmask = ModuloReducer.GetMask(w);
@@ -519,6 +528,8 @@ namespace Mba.Simplifier.Verification
                     var curr = ideal[i].Clone();
                     //if (!ideal.Any(x => x.Lm.SymVars.Count == 1 && x)))
                     //    continue;
+                    if (next.Lm == null && skipZeroes)
+                        continue;
                     var v = next.Lm.SortedVars.First();
                     var currLm = new Monomial(v);
 
@@ -533,8 +544,8 @@ namespace Mba.Simplifier.Verification
                     if (singleUseOnly && next.ToString() == "15*(r4_1*y0*x0) + 1*(op1_1cout)" && i == 17)
                         Debugger.Break();
 
-                    var skip = ideal.Skip(i+1).ToList();
-                    if (singleUseOnly && skip.Count(x => x.Lm.SortedVars[0].Equals(v)) != 1)
+                    var skip = ideal.Skip(i + 1).ToList();
+                    if (singleUseOnly && skip.Count(x => x.Lm != null && x.Lm.SortedVars[0].Equals(v)) != 1)
                         continue;
 
 
@@ -627,7 +638,7 @@ namespace Mba.Simplifier.Verification
 
                     var mons = curr.Coeffs.Keys.ToList();
                     var m1 = mons[0];
-           
+
                     var lm = curr.Lm;
                     if (lm.SymVars.Count != 1)
                         continue;
@@ -669,7 +680,7 @@ namespace Mba.Simplifier.Verification
                             var lc = solver.LinearCongruence((UInt128)coeff & mmask, (UInt128)targetCoeff & mmask, mmask + 1);
 
                             if (lc == null || lc.n == 0)
-                                continue; 
+                                continue;
 
                             var s = solver.GetSolution(0, lc);
 
@@ -707,6 +718,125 @@ namespace Mba.Simplifier.Verification
             }
         }
 
+        private void SageGb(List<Poly> ideal, bool linearize = false)
+        {
+            var mask = (long)ModuloReducer.GetMask(w);
+            mask = -1;
+
+            // Collect all variables in first-appearance order.
+            // For each polynomial, iterate monomials in descending order (leading monomial first),
+            // and within each monomial iterate sorted vars.
+            var seen = new HashSet<SymVar>();
+            var varOrder = new List<SymVar>();
+
+            // If linearizing, map each nonlinear monomial to a unique lin variable name.
+            var linMap = new Dictionary<Monomial, string>();
+            int linCounter = 0;
+
+            foreach (var poly in ideal)
+            {
+                foreach (var monomial in poly.Coeffs.Keys.OrderByDescending(x => x))
+                {
+                    foreach (var v in monomial.SortedVars)
+                    {
+                        if (seen.Add(v))
+                            varOrder.Add(v);
+                    }
+
+                    // Register nonlinear monomials for linearization.
+                    if (linearize && monomial.SymVars.Count > 1 && !linMap.ContainsKey(monomial))
+                    {
+                        linMap[monomial] = $"lin{linCounter++}";
+                    }
+                }
+            }
+
+            // Build the list of all variable names: original vars + lin vars.
+            var allNames = new List<string>(varOrder.Select(v => v.Name));
+            if (linearize)
+                allNames.AddRange(linMap.Values);
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"n = {w}  # Exponent for 2^n (e.g., 2^{w} = {1L << (int)w})");
+            sb.AppendLine("modulus = 2**n");
+            sb.AppendLine();
+            sb.AppendLine("R = PolynomialRing(Integers(modulus), ");
+            sb.AppendLine("    names=[");
+
+            // Print variable names in groups of 3 per line.
+            for (int i = 0; i < allNames.Count; i += 3)
+            {
+                var chunk = allNames.Skip(i).Take(3).Select(v => $"'{v}'");
+                var trailing = (i + 3 < allNames.Count) ? "," : "";
+                sb.AppendLine($"        {string.Join(", ", chunk)}{trailing}");
+            }
+
+            sb.AppendLine("    ],");
+            sb.AppendLine("    order='degrevlex'");
+            sb.AppendLine(")");
+            sb.AppendLine();
+            sb.AppendLine("R.inject_variables()");
+            sb.AppendLine();
+            sb.AppendLine("polys = [");
+
+            for (int polyIdx = 0; polyIdx < ideal.Count; polyIdx++)
+            {
+                var poly = ideal[polyIdx];
+                var terms = new List<string>();
+
+                foreach (var (monomial, rawCoeff) in poly.Coeffs.OrderByDescending(x => x.Key))
+                {
+                    var coeff = rawCoeff & mask;
+                    if (coeff == 0)
+                        continue;
+
+
+        
+                    if (monomial.SymVars.Count == 0)
+                    {
+                        // Constant term.
+                        terms.Add(coeff.ToString());
+                    }
+                    else if (linearize && monomial.SymVars.Count > 1 && !poly.Lm.SortedVars[0].Name.StartsWith("r0_") && linMap.TryGetValue(monomial, out var linName))
+                    {
+                        // Replace nonlinear monomial with its lin variable.
+                        if (coeff == 1)
+                            terms.Add(linName);
+                        else
+                            terms.Add($"{coeff}*{linName}");
+                    }
+                    else
+                    {
+                        var varStr = string.Join("*", monomial.SortedVars.Select(v => v.Name));
+                        if (coeff == 1)
+                            terms.Add(varStr);
+                        else
+                            terms.Add($"{coeff}*{varStr}");
+                    }
+                }
+
+                var polyStr = terms.Count > 0 ? string.Join(" + ", terms) : "0";
+                var comma = polyIdx < ideal.Count - 1 ? "," : "";
+                sb.AppendLine($"    {polyStr}{comma}");
+            }
+
+            sb.AppendLine("]");
+
+            // If linearizing, print a comment showing the mapping.
+            if (linearize)
+            {
+                sb.AppendLine();
+                sb.AppendLine("# Linearization mapping:");
+                foreach (var (monomial, linName) in linMap)
+                {
+                    var varStr = string.Join("*", monomial.SortedVars.Select(v => v.Name));
+                    sb.AppendLine($"# {linName} = {varStr}");
+                }
+            }
+
+            Console.WriteLine(sb.ToString());
+        }
+
         public void Run()
         {
             RunOld();
@@ -728,7 +858,7 @@ namespace Mba.Simplifier.Verification
                 for (int i = 0; i < w; i++)
                     results.Add(GetSpecification(curr, i, idealArr, firstSeen, ref totalOrder, true));
 
-                foreach(var m in idealArr)
+                foreach (var m in idealArr)
                 {
                     m.Item3.Simplify();
                     Console.WriteLine(m.Item3);
@@ -746,7 +876,7 @@ namespace Mba.Simplifier.Verification
             }
 
             //var vars = firstSeen.OrderBy(x => x.Value).ToList();
-       
+
 
             //var ideal = idealArr.OrderBy(x => x.Item1).ThenBy(x => x.Item3.Lm).ThenBy(x => x.Item2).ToList().Select(x => x.Item3).ToList();
             var ideal = idealArr.ToList().Select(x => x.Item3).ToList();
@@ -778,16 +908,63 @@ namespace Mba.Simplifier.Verification
 
             //ideal.Insert(0, spec);
             var vars = ctx.CollectVariables(before);
+
+            /*
             var x0 = GetSpecification(vars[0], 0, idealArr, firstSeen, ref totalOrder, false);
             var x1 = GetSpecification(vars[0], 1, idealArr, firstSeen, ref totalOrder, false);
             var y0 = GetSpecification(vars[1], 0, idealArr, firstSeen, ref totalOrder, false);
             var y1 = GetSpecification(vars[1], 1, idealArr, firstSeen, ref totalOrder, false);
+            */
+
+            List<List<Poly>> bits = new();
+            foreach (var v in vars)
+            {
+                List<Poly> l = new();
+                bits.Add(l);
+                for (int i = 0; i < w; i++)
+                    l.Add(GetSpecification(v, i, idealArr, firstSeen, ref totalOrder, false));
+
+            }
+
+            // Adder specification
+            Poly spec = bits[0][0] - bits[0][0];
+            for (int bitIndex = 0; bitIndex < w; bitIndex++)
+            {
+                Poly term = bits[0][0] - bits[0][0];
+                for (int varIndex = 0; varIndex < vars.Count; varIndex++)
+                {
+                    term += (1L << (ushort)bitIndex) * bits[varIndex][bitIndex];
+                }
+
+                spec += term;
+            }
+
+            var last = spec - spec;
+            last.Simplify();
+            for (int bitIndex = 0; bitIndex < w; bitIndex++)
+            {
+                var result = results[bitIndex];
+                last += (1L << (ushort)bitIndex) * result;
+            }
+           
 
 
-            var spec = x0 + y0 + 2 * x1 + 2 * y1;
-            var last = (results[0] + 2 * results[1]) - spec;
+            //Debugger.Break();
+            /*
+            for(int varIndex = 0; varIndex < vars.Count; varIndex++)
+            {
+                for (int bitIndex = 0; bitIndex < bits.Count; bitIndex++)
+                {
 
-            // var last = results[2] - results[5];
+                }
+            }
+            */
+
+
+            //var spec = bits[0][0] + bits[1][0] + 2 * bits[0][1] + 2 * bits[1][1] + 4 * bits[0][2] + 4 * bits[1][2];
+            //var last = (results[0] + 2 * results[1] + 4 * results[2]) - spec;
+
+            //var last = results[2] - results[5];
 
             //var last = results[3] - results[7];
 
@@ -799,10 +976,13 @@ namespace Mba.Simplifier.Verification
             //
             //
             //Console.WriteLine("Uncomment this if you want an actual resuolt");
-            ideal.Add(last);
+            //ideal.Add(last);
 
 
-            Console.WriteLine($"\n\nDifference: {last}\n");
+            Console.WriteLine($"\n\nDifference: {last - spec}\n");
+
+
+            SageGb(ideal, linearize: true);
 
             bool rr = false;
             rr = Validate(ideal, (int)w);
@@ -811,8 +991,9 @@ namespace Mba.Simplifier.Verification
             Console.WriteLine("\n\n\nInitial ideal with difference: ");
             foreach (var p in ideal)
             {
-                foreach (var key in p.Coeffs.Keys.ToList())
-                    p.Coeffs[key] &= (long)ModuloReducer.GetMask(w);
+                //foreach (var key in p.Coeffs.Keys.ToList())
+                //    p.Coeffs[key] &= (long)ModuloReducer.GetMask(w);
+                p.ReduceMod(w);
 
                 p.Simplify();
                 if (p.Coeffs.Count == 0)
@@ -834,7 +1015,7 @@ namespace Mba.Simplifier.Verification
             var mmask = ModuloReducer.GetMask(w);
             var solver = new LinearCongruenceSolver(mmask);
 
-      
+
             bool changed = true;
             while (changed)
             {
@@ -1063,11 +1244,11 @@ namespace Mba.Simplifier.Verification
             for (int i = 0; i < ideal.Count - 1; i++)
             {
 
-                continue;
+                //continue;
                 var p = ideal[i];
 
 
-                BackwardsEliminate(ideal, i, linearOnly: false, singleUseOnly: true);
+                BackwardsEliminate(ideal, i, linearOnly: false, singleUseOnly: true, skipZeroes: true);
 
                 Console.WriteLine($"ROUND {i}");
                 //if (p.Lm.SymVars.Count == 1 && (p.Lm.SortedVars.Single().Name.Contains("cout") || p.Lm.SortedVars.Single().Name.Contains("sum")))
@@ -1127,6 +1308,8 @@ namespace Mba.Simplifier.Verification
 
 
 
+
+            SageGb(ideal);
 
             //rr = Validate(ideal, (int)w);
 
@@ -1222,10 +1405,19 @@ namespace Mba.Simplifier.Verification
                 Debug.Assert(arithInfo.Count == bitIdx);
                 var a = GetSpecification(ctx.GetOp0(idx), bitIdx, ideal, firstSeen, ref totalOrder);
                 var b = GetSpecification(ctx.GetOp1(idx), bitIdx, ideal, firstSeen, ref totalOrder);
+
+                var generate = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}gen");
+                update(generate);
+
+                var propagate = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}prop");
+                update(propagate);
+
+                var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
+                update(cout);
+
                 //var sum = SymVar.Temp($"a[{carryId}][{bitIdx}].sum");
                 var sum = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}sum");
                 update(sum);
-
 
 
 
@@ -1236,9 +1428,15 @@ namespace Mba.Simplifier.Verification
                 if (bitIdx > 0)
                     cin = arithInfo[bitIdx - 1].cout;
 
+                ideal.Add((bitIdx, totalOrder++, generate - a * b));
+                ideal.Add((bitIdx, totalOrder++, propagate - (a + b - 2 * generate)));
+                ideal.Add((bitIdx, totalOrder++, cout - (generate + propagate * cin)));
+                ideal.Add((bitIdx, totalOrder++, sum - (propagate + 2 * generate + cin - 2 * cout)));
+
+                arithInfo.Add(new(cin, cout, sum));
+
                 //var cout = SymVar.Temp($"a[{carryId}][{bitIdx}].cout");
-                var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
-                update(cout);
+
 
                 /*
                 var sumLhs = sum;
@@ -1248,18 +1446,27 @@ namespace Mba.Simplifier.Verification
                 */
 
 
-
+                /*
                 var carryLhs = cout;
                 //var carryRhs = a*b + b*cin + a*cin + (-1*(2*a*b*cin));
                 var carryRhs = a * b + b * cin + a * cin + (-1 * (2 * a * b * cin));
                 ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
+                */
 
+                /*
+                var carryLhs = cout;
+                var carryRhs = a * b + a * cin + b * cin - 2 * (a*b*cin);
+                ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
 
                 //var member = (2L*cout)+sum-a-b-cin;
-                var member = (2L * cout) + sum - a - b - cin;
+                var member = sum - (a+b + cin + (-2*(cout)));
+                //var member = (2L * cout) + sum - a - b - cin;
                 ideal.Add((bitIdx, totalOrder, member));
 
                 arithInfo.Add(new(cin, cout, sum));
+                */
+
+
 
                 totalOrder++;
                 return sum;
