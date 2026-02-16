@@ -367,9 +367,9 @@ namespace Mba.Simplifier.Verification
 
         public GroebnerVerifier()
         {
-            before = RustAstParser.Parse(ctx, "x+y", w);
-            //after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
-            after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            // only works with x+y, mba currently... x+x+x+x+x+y mod 2 does notwork
+            //before = RustAstParser.Parse(ctx, "x+y", w);
+            //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
 
 
@@ -378,8 +378,8 @@ namespace Mba.Simplifier.Verification
             //after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
             //after = RustAstParser.Parse(ctx, "x+x+x+y", w);
 
-            //before = RustAstParser.Parse(ctx, "x+y", w);
-            //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            before = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            after = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x&y", w);
             //after = RustAstParser.Parse(ctx, "x&y", w);
         }
@@ -734,6 +734,8 @@ namespace Mba.Simplifier.Verification
                     Console.WriteLine(m.Item3);
                 }
 
+                break;
+
                 //break;
 
 
@@ -771,19 +773,19 @@ namespace Mba.Simplifier.Verification
 
             //var last = results[15] - results[31];
 
-            var last = results[3] - results[1];
+            //var last = results[3] - results[1];
 
 
             //ideal.Insert(0, spec);
-            //var vars = ctx.CollectVariables(before);
-            //var x0 = GetSpecification(vars[0], 0, idealArr, firstSeen, ref totalOrder, false);
-            //var x1 = GetSpecification(vars[0], 1, idealArr, firstSeen, ref totalOrder, false);
-            //var y0 = GetSpecification(vars[1], 0, idealArr, firstSeen, ref totalOrder, false);
-            //var y1 = GetSpecification(vars[1], 1, idealArr, firstSeen, ref totalOrder, false);
+            var vars = ctx.CollectVariables(before);
+            var x0 = GetSpecification(vars[0], 0, idealArr, firstSeen, ref totalOrder, false);
+            var x1 = GetSpecification(vars[0], 1, idealArr, firstSeen, ref totalOrder, false);
+            var y0 = GetSpecification(vars[1], 0, idealArr, firstSeen, ref totalOrder, false);
+            var y1 = GetSpecification(vars[1], 1, idealArr, firstSeen, ref totalOrder, false);
 
 
-            //var spec = x0 + y0 + 2 * x1 + 2 * y1;
-            //var last = (results[0] + 2*results[1]) - spec;
+            var spec = x0 + y0 + 2 * x1 + 2 * y1;
+            var last = (results[0] + 2 * results[1]) - spec;
 
             // var last = results[2] - results[5];
 
@@ -801,6 +803,9 @@ namespace Mba.Simplifier.Verification
 
 
             Console.WriteLine($"\n\nDifference: {last}\n");
+
+            bool rr = false;
+            rr = Validate(ideal, (int)w);
 
 
             Console.WriteLine("\n\n\nInitial ideal with difference: ");
@@ -829,7 +834,7 @@ namespace Mba.Simplifier.Verification
             var mmask = ModuloReducer.GetMask(w);
             var solver = new LinearCongruenceSolver(mmask);
 
-            bool rr = false;
+      
             bool changed = true;
             while (changed)
             {
@@ -941,6 +946,8 @@ namespace Mba.Simplifier.Verification
                 }
             }
 
+            rr = Validate(ideal, (int)w);
+
             changed = false;
             while (changed)
             {
@@ -1034,6 +1041,8 @@ namespace Mba.Simplifier.Verification
             }
             */
 
+            rr = Validate(ideal, (int)w);
+
             Console.WriteLine("\n\n\nReduced ideal: ");
             foreach (var p in ideal)
             {
@@ -1046,13 +1055,15 @@ namespace Mba.Simplifier.Verification
                 Console.WriteLine(p);
             }
 
-            ideal = ideal.Where(x => x.Coeffs.Count > 0).ToList();
+            rr = Validate(ideal, (int)w);
+
+            //ideal = ideal.Where(x => x.Coeffs.Count > 0).ToList();
 
 
             for (int i = 0; i < ideal.Count - 1; i++)
             {
-                //continue;
 
+                continue;
                 var p = ideal[i];
 
 
@@ -1062,6 +1073,8 @@ namespace Mba.Simplifier.Verification
                 //if (p.Lm.SymVars.Count == 1 && (p.Lm.SortedVars.Single().Name.Contains("cout") || p.Lm.SortedVars.Single().Name.Contains("sum")))
                 //    BackwardsEliminate(ideal, i);
             }
+
+            rr = Validate(ideal, (int)w);
 
             LinElim(ideal);
             LinElim(ideal);
