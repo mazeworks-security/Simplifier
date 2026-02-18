@@ -69,7 +69,7 @@ namespace Mba.Simplifier.Verification
         private static long EvaluateMonomial(Monomial monomial, long coeff, Dictionary<SymVar, long> assignment)
         {
             long termVal = coeff;
-            foreach (var v in monomial.SymVars)
+            foreach (var v in monomial.SortedVars)
             {
                 if (!assignment.TryGetValue(v, out var val))
                     throw new InvalidOperationException($"Variable {v} is not assigned.");
@@ -141,13 +141,13 @@ namespace Mba.Simplifier.Verification
 
                     var temp = new Poly();
 
-                    if (nextLm.SymVars.Count == 1)
+                    if (nextLm.SortedVars.Count == 1)
                     {
                         temp.Add(Monomial.Constant(), 1);
                     }
                     else
                     {
-                        var map = nextLm.SymVars.ToHashSet();
+                        var map = nextLm.SortedVars.ToHashSet();
                         map.Remove(v);
 
                         // Now temp has the monomial without the variable..
@@ -204,10 +204,10 @@ namespace Mba.Simplifier.Verification
                     var m1 = mons[0];
 
                     var lm = curr.Lm;
-                    if (lm.SymVars.Count != 1)
+                    if (lm.SortedVars.Count != 1)
                         continue;
 
-                    var variable = lm.SymVars.Single();
+                    var variable = lm.SortedVars.Single();
                     var coeff = curr.Coeffs[lm]; // c1
 
                     // Compute rhs
@@ -222,9 +222,9 @@ namespace Mba.Simplifier.Verification
 
                         var next = ideal[j].Clone();
                         bool onlyOne = curr.Coeffs.Count == 1;
-                        if (onlyOne && next.Coeffs.Keys.Any(x => lm.SymVars.IsSubsetOf(x.SymVars)))
+                        if (onlyOne && next.Coeffs.Keys.Any(x => lm.Divides(x)))
                         {
-                            var banned = next.Coeffs.Keys.Where(x => lm.SymVars.IsSubsetOf(x.SymVars)).ToList();
+                            var banned = next.Coeffs.Keys.Where(x => lm.Divides(x)).ToList();
                             foreach (var t in banned)
                                 next.Remove(t);
 
@@ -233,7 +233,7 @@ namespace Mba.Simplifier.Verification
                             continue;
                         }
 
-                        var targets = next.Coeffs.Keys.Where(k => k.SymVars.Contains(variable)).ToList();
+                        var targets = next.Coeffs.Keys.Where(k => k.SortedVars.Contains(variable)).ToList();
                         if (targets.Count == 0)
                             continue;
 
@@ -252,7 +252,7 @@ namespace Mba.Simplifier.Verification
                             next.Remove(targetM);
 
                             // Remove M from the monomial
-                            var map = targetM.SymVars.ToHashSet();
+                            var map = targetM.SortedVars.ToHashSet();
                             map.Remove(variable);
                             var remainderM = new Monomial(map);
 
@@ -304,7 +304,7 @@ namespace Mba.Simplifier.Verification
                             varOrder.Add(v);
                     }
 
-                    if (linearize && monomial.SymVars.Count > 1 && !linMap.ContainsKey(monomial))
+                    if (linearize && monomial.SortedVars.Count > 1 && !linMap.ContainsKey(monomial))
                     {
                         linMap[monomial] = $"lin{linCounter++}";
                     }
@@ -352,11 +352,11 @@ namespace Mba.Simplifier.Verification
 
 
         
-                    if (monomial.SymVars.Count == 0)
+                    if (monomial.SortedVars.Count == 0)
                     {
                         terms.Add(coeff.ToString());
                     }
-                    else if (linearize && monomial.SymVars.Count > 1 && !(skipAND && poly.Lm.SortedVars[0].Name.StartsWith("r0_")) && linMap.TryGetValue(monomial, out var linName))
+                    else if (linearize && monomial.SortedVars.Count > 1 && !(skipAND && poly.Lm.SortedVars[0].Name.StartsWith("r0_")) && linMap.TryGetValue(monomial, out var linName))
                     {
                         if (coeff == 1)
                             terms.Add(linName);
@@ -595,9 +595,9 @@ namespace Mba.Simplifier.Verification
 
                         var next = ideal[j].Clone();
                         bool onlyOne = curr.Coeffs.Count == 1;
-                        if (onlyOne && next.Coeffs.Keys.Any(x => lm.SymVars.IsSubsetOf(x.SymVars)))
+                        if (onlyOne && next.Coeffs.Keys.Any(x => lm.Divides(x)))
                         {
-                            var targets = next.Coeffs.Keys.Where(x => lm.SymVars.IsSubsetOf(x.SymVars)).ToList();
+                            var targets = next.Coeffs.Keys.Where(x => lm.Divides(x)).ToList();
                             foreach (var t in targets)
                                 next.Remove(t);
 
@@ -699,15 +699,15 @@ namespace Mba.Simplifier.Verification
                     var curr = ideal[i].Clone();
                     var lm = curr.Lm;
 
-                    if (lm.SymVars.Count != 1)
+                    if (lm.SortedVars.Count != 1)
                         continue;
 
-                    var v = lm.SymVars.Single();
+                    var v = lm.SortedVars.Single();
 
                     for (int j = i + 1; j < ideal.Count; j++)
                     {
                         var next = ideal[j].Clone();
-                        var targets = next.Coeffs.Keys.Where(x => x.SymVars.Contains(lm.SymVars.Single())).ToList();
+                        var targets = next.Coeffs.Keys.Where(x => x.SortedVars.Contains(lm.SortedVars.Single())).ToList();
                         if (targets.Count == 0)
                             continue;
 
@@ -733,13 +733,13 @@ namespace Mba.Simplifier.Verification
                         var temp = new Poly();
                         foreach (var m in targets)
                         {
-                            if (m.SymVars.Count == 1)
+                            if (m.SortedVars.Count == 1)
                             {
                                 temp.Add(Monomial.Constant(), next.Coeffs[m]);
                                 continue;
                             }
 
-                            var map = m.SymVars.ToHashSet();
+                            var map = m.SortedVars.ToHashSet();
                             map.Remove(v);
 
                             temp.Add(new Monomial(map), next.Coeffs[m]);
@@ -1070,7 +1070,7 @@ namespace Mba.Simplifier.Verification
             var allVars = new HashSet<SymVar>();
             foreach (var p in ideal)
                 foreach (var m in p.Coeffs.Keys)
-                    foreach (var v in m.SymVars)
+                    foreach (var v in m.SortedVars)
                         allVars.Add(v);
 
             var inputVars = allVars.Where(v => v.Kind == SymKind.Input).OrderBy(v => v).ToList();
@@ -1098,9 +1098,9 @@ namespace Mba.Simplifier.Verification
                         SymVar? unassigned = null;
                         foreach (var m in poly.Coeffs.Keys)
                         {
-                            if (m.SymVars.Count == 1)
+                            if (m.SortedVars.Count == 1)
                             {
-                                var v = m.SymVars.First();
+                                var v = m.SortedVars.First();
                                 if (!assignment.ContainsKey(v))
                                 {
                                     unassigned = v;
@@ -1126,11 +1126,11 @@ namespace Mba.Simplifier.Verification
                         long gateCoeff = 0;
                         foreach (var (monomial, coeff) in poly.Coeffs)
                         {
-                            if (monomial.SymVars.Contains(gate))
+                            if (monomial.SortedVars.Contains(gate))
                             {
                                 // This term contains the gate variable.
                                 // It should be of the form coeff * gate (linear in gate).
-                                Debug.Assert(monomial.SymVars.Count == 1, $"Gate variable {gate} appears in higher-degree monomial {monomial}");
+                                Debug.Assert(monomial.SortedVars.Count == 1, $"Gate variable {gate} appears in higher-degree monomial {monomial}");
                                 gateCoeff += coeff;
                             }
                             else

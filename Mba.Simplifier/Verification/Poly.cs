@@ -116,7 +116,7 @@ namespace Mba.Simplifier.Verification
 
         public static bool IsConstant(Monomial m)
         {
-            return m.SymVars.Count == 0;
+            return m.SortedVars.Count == 0;
         }
 
 
@@ -165,15 +165,11 @@ namespace Mba.Simplifier.Verification
 
     public class Monomial : IEquatable<Monomial>, IComparable<Monomial>
     {
-        public readonly HashSet<SymVar> SymVars = new();
-
         public readonly List<SymVar> SortedVars;
 
         public Monomial(IEnumerable<SymVar> vars)
         {
-            SymVars = vars.ToHashSet();
-            SortedVars = SymVars.ToList();
-            SortedVars = SymVars.OrderByDescending(x => x).ToList();
+            SortedVars = vars.Distinct().OrderByDescending(x => x).ToList();
         }
 
         public Monomial(params SymVar[] vars) : this(vars.AsEnumerable())
@@ -191,7 +187,7 @@ namespace Mba.Simplifier.Verification
 
         public static Monomial operator *(Monomial a, Monomial b)
         {
-            return new Monomial(a.SymVars.AsEnumerable().Concat(b.SymVars));
+            return new Monomial(a.SortedVars.AsEnumerable().Concat(b.SortedVars));
         }
 
         public static bool operator ==(Monomial? left, Monomial? right)
@@ -231,6 +227,27 @@ namespace Mba.Simplifier.Verification
         public bool Equals(Monomial? other)
         {
             return SortedVars.SequenceEqual(other.SortedVars);
+        }
+
+        
+        public bool Divides(Monomial other)
+        {
+            if (SortedVars.Count > other.SortedVars.Count)
+                return false;
+
+            int j = 0;
+            for (int i = 0; i < SortedVars.Count; i++)
+            {
+                while (j < other.SortedVars.Count && other.SortedVars[j].CompareTo(SortedVars[i]) > 0)
+                    j++;
+
+                if (j >= other.SortedVars.Count || !other.SortedVars[j].Equals(SortedVars[i]))
+                    return false;
+
+                j++;
+            }
+
+            return true;
         }
 
         public int CompareTo(Monomial? other)
