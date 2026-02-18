@@ -13,14 +13,21 @@ namespace Mba.Simplifier.Verification
 
     public class Poly
     {
-        public Dictionary<Monomial, long> Coeffs { get; private set; }
+        public SortedDictionary<Monomial, long> Coeffs { get; private set; }
 
-        public Monomial Lm => Coeffs.Keys.Max();
+        public Monomial Lm => Coeffs.First().Key;
 
         public Poly(Dictionary<Monomial, long> coeffs)
         {
-            Coeffs = coeffs.ToDictionary();
+            Coeffs = new SortedDictionary<Monomial, long>(coeffs);
         }
+
+        public Poly(SortedDictionary<Monomial, long> coeffs) : this(coeffs.ToDictionary())
+        {
+          
+        }
+
+
 
         public Poly(IEnumerable<Monomial> coeffs)
         {
@@ -167,9 +174,13 @@ namespace Mba.Simplifier.Verification
     {
         public readonly List<SymVar> SortedVars;
 
+        private readonly int hash = 17;
+
         public Monomial(IEnumerable<SymVar> vars)
         {
             SortedVars = vars.Distinct().OrderByDescending(x => x).ToList();
+            foreach(var v in SortedVars)
+                hash = hash * 23 + v.GetHashCode();
         }
 
         public Monomial(params SymVar[] vars) : this(vars.AsEnumerable())
@@ -211,9 +222,6 @@ namespace Mba.Simplifier.Verification
 
         public override int GetHashCode()
         {
-            var hash = 17;
-            foreach (var v in SortedVars)
-                hash += 31 * v.GetHashCode();
             return hash;
         }
 
@@ -228,7 +236,6 @@ namespace Mba.Simplifier.Verification
         {
             return SortedVars.SequenceEqual(other.SortedVars);
         }
-
         
         public bool Divides(Monomial other)
         {
