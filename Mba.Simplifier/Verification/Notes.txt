@@ -1,0 +1,35 @@
+
+# "Formal Verification of Multiplier Circuits using Computer Algebra"
+- https://danielakaufmann.at/wp-content/uploads/2020/11/Kaufmann-PhD-Thesis-2020.pdf
+
+Works for multiplier circuits but is I think impossible to extend to circuits like `(a+b) & (c+d)`
+Maybe?
+
+
+"Extracting Linear Relations from Gröbner Bases for Formal Verification of And-Inverter Graphs
+- https://arxiv.org/pdf/2411.16348
+
+More general
+
+`l[i]` == internal gate?
+`t[i]` == ith extension variable representing nonlinear multiplication
+`a[i]`, `b[i]` == primary inputs
+`s[i]` == output
+`i` corresponding to the number of the respective AIG node
+
+Uses degree reverse lexicographic monomial ordering. `x3 
+Sorted by total degree first, then last variable exponent
+
+
+Calculate remainder of the specification modulo the linear elements of the groebner basis(page 9) until no further reduction is possible. Return whether the final result is zero.
+
+
+
+
+# Other papers
+- "FastPoly: An Efficient Polynomial Package for the Verification of Integer Arithmetic Circuits
+- https://repositum.tuwien.at/bitstream/20.500.12708/219550/1/Konrad%20Alexander%20-%202025%20-%20FastPoly%20An%20Efficient%20Polynomial%20Package%20for%20the...pdf
+
+- "Symbolic Computer Algebra for Multipliers Revisited - It's All About Orders and Phases" 
+- https://abs.informatik.uni-freiburg.de/papers/2024/KS_2024.pdf
+- DynPhaseOrderOpt. Optimizing substitution order and optionally negating some variables to reduce intermediate swell

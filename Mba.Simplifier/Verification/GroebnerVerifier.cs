@@ -177,8 +177,6 @@ namespace Mba.Simplifier.Verification
             SymVars = vars.ToHashSet();
             SortedVars = SymVars.ToList();
             SortedVars = SymVars.OrderByDescending(x => x).ToList();
-
-
         }
 
         public Monomial(params SymVar[] vars) : this(vars.AsEnumerable())
@@ -364,12 +362,13 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 32;
+        uint w = 3;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
         public GroebnerVerifier()
         {
+            AstIdx.ctx = ctx;
             // only works with x+y, mba currently... x+x+x+x+x+y mod 2 does notwork
             //before = RustAstParser.Parse(ctx, "x+y", w);
             //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
@@ -383,108 +382,12 @@ namespace Mba.Simplifier.Verification
 
             before = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             //before = RustAstParser.Parse(ctx, "(x+x+x+x+x+x+x+x+y)&(x+y)", w);
-            //before = RustAstParser.Parse(ctx, "(x+y) & (y+x)", w);
+            before = RustAstParser.Parse(ctx, "((x+y) & (y+x)) & ((x+x+x+x+x+x+x+x+x+y)&(x+y))", w);
             //before = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x+y", w);
             after = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x&y", w);
             //after = RustAstParser.Parse(ctx, "x&y", w);
-        }
-
-        public static bool Validate(List<Poly> ideal, int w)
-        {
-            Console.WriteLine("Skipping validat");
-            return true;
-            // Collect all input variables across the entire ideal.
-            var allVars = new HashSet<SymVar>();
-            foreach (var p in ideal)
-                foreach (var m in p.Coeffs.Keys)
-                    foreach (var v in m.SymVars)
-                        allVars.Add(v);
-
-            var inputVars = allVars.Where(v => v.Kind == SymKind.Input).OrderBy(v => v).ToList();
-            int numInputs = inputVars.Count;
-
-            // Enumerate all 2^numInputs boolean assignments.
-            for (ulong combo = 0; combo < (1UL << numInputs); combo++)
-            {
-                var assignment = new Dictionary<SymVar, long>();
-                for (int i = 0; i < numInputs; i++)
-                    assignment[inputVars[i]] = (long)((combo >> i) & 1);
-
-                // Process each ideal member in order.
-                // Each non-last member defines a gate variable in terms of previously known variables.
-                // The last member is the specification / difference polynomial to check.
-                for (int i = 0; i < ideal.Count; i++)
-                {
-                    var poly = ideal[i];
-
-                    if (i < ideal.Count - 1)
-                    {
-                        // Find the unassigned gate variable defined by this polynomial.
-                        // The ideal member has the form: coeff*gate + f(known_vars) = 0
-                        // So gate = -f(known_vars) / coeff
-                        SymVar? unassigned = null;
-                        foreach (var m in poly.Coeffs.Keys)
-                        {
-                            if (m.SymVars.Count == 1)
-                            {
-                                var v = m.SymVars.First();
-                                if (!assignment.ContainsKey(v))
-                                {
-                                    unassigned = v;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (unassigned == null)
-                        {
-                            // All variables are known; just verify this member is zero.
-                            long check = EvaluatePoly(poly, assignment) & (long)ModuloReducer.GetMask((uint)w);
-                            if (check != 0)
-                                return false;
-                            continue;
-                        }
-
-                        var gate = unassigned.Value;
-                        var gateMono = new Monomial(gate);
-
-                        // Evaluate all terms that don't contain the gate variable.
-                        long restSum = 0;
-                        long gateCoeff = 0;
-                        foreach (var (monomial, coeff) in poly.Coeffs)
-                        {
-                            if (monomial.SymVars.Contains(gate))
-                            {
-                                // This term contains the gate variable.
-                                // It should be of the form coeff * gate (linear in gate).
-                                Debug.Assert(monomial.SymVars.Count == 1, $"Gate variable {gate} appears in higher-degree monomial {monomial}");
-                                gateCoeff += coeff;
-                            }
-                            else
-                            {
-                                restSum += EvaluateMonomial(monomial, coeff, assignment);
-                            }
-                        }
-
-                        // coeff * gate + rest = 0  =>  gate = -rest / coeff
-                        Debug.Assert(gateCoeff != 0);
-                        Debug.Assert(restSum % gateCoeff == 0 || (gateCoeff == 1 || gateCoeff == -1),
-                            $"Non-unit coefficient {gateCoeff} for gate {gate}");
-                        assignment[gate] = -restSum / gateCoeff;
-                    }
-                    else
-                    {
-                        // Last member: evaluate and check it equals zero.
-                        long result = EvaluatePoly(poly, assignment) & (long)ModuloReducer.GetMask((uint)w);
-                        if (result != 0)
-                            return false;
-                    }
-                }
-            }
-
-            return true;
         }
 
         private static long EvaluatePoly(Poly poly, Dictionary<SymVar, long> assignment)
@@ -718,18 +621,15 @@ namespace Mba.Simplifier.Verification
             }
         }
 
-        private void SageGb(List<Poly> ideal, bool linearize = false)
+        private void SageGb(List<Poly> ideal, bool linearize = true)
         {
             var mask = (long)ModuloReducer.GetMask(w);
             mask = -1;
 
-            // Collect all variables in first-appearance order.
-            // For each polynomial, iterate monomials in descending order (leading monomial first),
-            // and within each monomial iterate sorted vars.
+
             var seen = new HashSet<SymVar>();
             var varOrder = new List<SymVar>();
 
-            // If linearizing, map each nonlinear monomial to a unique lin variable name.
             var linMap = new Dictionary<Monomial, string>();
             int linCounter = 0;
 
@@ -743,7 +643,6 @@ namespace Mba.Simplifier.Verification
                             varOrder.Add(v);
                     }
 
-                    // Register nonlinear monomials for linearization.
                     if (linearize && monomial.SymVars.Count > 1 && !linMap.ContainsKey(monomial))
                     {
                         linMap[monomial] = $"lin{linCounter++}";
@@ -751,7 +650,6 @@ namespace Mba.Simplifier.Verification
                 }
             }
 
-            // Build the list of all variable names: original vars + lin vars.
             var allNames = new List<string>(varOrder.Select(v => v.Name));
             if (linearize)
                 allNames.AddRange(linMap.Values);
@@ -760,10 +658,9 @@ namespace Mba.Simplifier.Verification
             sb.AppendLine($"n = {w}  # Exponent for 2^n (e.g., 2^{w} = {1L << (int)w})");
             sb.AppendLine("modulus = 2**n");
             sb.AppendLine();
-            sb.AppendLine("R = PolynomialRing(Integers(modulus), ");
+            sb.AppendLine("R = PolynomialRing(QQ, ");
             sb.AppendLine("    names=[");
 
-            // Print variable names in groups of 3 per line.
             for (int i = 0; i < allNames.Count; i += 3)
             {
                 var chunk = allNames.Skip(i).Take(3).Select(v => $"'{v}'");
@@ -779,6 +676,8 @@ namespace Mba.Simplifier.Verification
             sb.AppendLine();
             sb.AppendLine("polys = [");
 
+
+            bool skipAND = false;
             for (int polyIdx = 0; polyIdx < ideal.Count; polyIdx++)
             {
                 var poly = ideal[polyIdx];
@@ -794,12 +693,10 @@ namespace Mba.Simplifier.Verification
         
                     if (monomial.SymVars.Count == 0)
                     {
-                        // Constant term.
                         terms.Add(coeff.ToString());
                     }
-                    else if (linearize && monomial.SymVars.Count > 1 && !poly.Lm.SortedVars[0].Name.StartsWith("r0_") && linMap.TryGetValue(monomial, out var linName))
+                    else if (linearize && monomial.SymVars.Count > 1 && !(skipAND && poly.Lm.SortedVars[0].Name.StartsWith("r0_")) && linMap.TryGetValue(monomial, out var linName))
                     {
-                        // Replace nonlinear monomial with its lin variable.
                         if (coeff == 1)
                             terms.Add(linName);
                         else
@@ -822,7 +719,6 @@ namespace Mba.Simplifier.Verification
 
             sb.AppendLine("]");
 
-            // If linearizing, print a comment showing the mapping.
             if (linearize)
             {
                 sb.AppendLine();
@@ -855,7 +751,7 @@ namespace Mba.Simplifier.Verification
             foreach (var curr in new AstIdx[] { before, after })
             {
                 Console.WriteLine("\n\n");
-                for (int i = 0; i < w; i++)
+                for (int i = 0; i < 1; i++)
                     results.Add(GetSpecification(curr, i, idealArr, firstSeen, ref totalOrder, true));
 
                 foreach (var m in idealArr)
@@ -939,6 +835,7 @@ namespace Mba.Simplifier.Verification
                 spec += term;
             }
 
+            /*
             var last = spec - spec;
             last.Simplify();
             for (int bitIndex = 0; bitIndex < w; bitIndex++)
@@ -948,7 +845,7 @@ namespace Mba.Simplifier.Verification
             }
            
 
-
+            */
             //Debugger.Break();
             /*
             for(int varIndex = 0; varIndex < vars.Count; varIndex++)
@@ -979,10 +876,10 @@ namespace Mba.Simplifier.Verification
             //ideal.Add(last);
 
 
-            Console.WriteLine($"\n\nDifference: {last - spec}\n");
+            //Console.WriteLine($"\n\nDifference: {last - spec}\n");
 
 
-            SageGb(ideal, linearize: true);
+            SageGb(ideal, linearize: false);
 
             bool rr = false;
             rr = Validate(ideal, (int)w);
@@ -1501,6 +1398,103 @@ namespace Mba.Simplifier.Verification
 
             throw new InvalidOperationException();
 
+        }
+
+
+        public static bool Validate(List<Poly> ideal, int w)
+        {
+            Console.WriteLine("Skipping validat");
+            return true;
+            // Collect all input variables across the entire ideal.
+            var allVars = new HashSet<SymVar>();
+            foreach (var p in ideal)
+                foreach (var m in p.Coeffs.Keys)
+                    foreach (var v in m.SymVars)
+                        allVars.Add(v);
+
+            var inputVars = allVars.Where(v => v.Kind == SymKind.Input).OrderBy(v => v).ToList();
+            int numInputs = inputVars.Count;
+
+            // Enumerate all 2^numInputs boolean assignments.
+            for (ulong combo = 0; combo < (1UL << numInputs); combo++)
+            {
+                var assignment = new Dictionary<SymVar, long>();
+                for (int i = 0; i < numInputs; i++)
+                    assignment[inputVars[i]] = (long)((combo >> i) & 1);
+
+                // Process each ideal member in order.
+                // Each non-last member defines a gate variable in terms of previously known variables.
+                // The last member is the specification / difference polynomial to check.
+                for (int i = 0; i < ideal.Count; i++)
+                {
+                    var poly = ideal[i];
+
+                    if (i < ideal.Count - 1)
+                    {
+                        // Find the unassigned gate variable defined by this polynomial.
+                        // The ideal member has the form: coeff*gate + f(known_vars) = 0
+                        // So gate = -f(known_vars) / coeff
+                        SymVar? unassigned = null;
+                        foreach (var m in poly.Coeffs.Keys)
+                        {
+                            if (m.SymVars.Count == 1)
+                            {
+                                var v = m.SymVars.First();
+                                if (!assignment.ContainsKey(v))
+                                {
+                                    unassigned = v;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (unassigned == null)
+                        {
+                            // All variables are known; just verify this member is zero.
+                            long check = EvaluatePoly(poly, assignment) & (long)ModuloReducer.GetMask((uint)w);
+                            if (check != 0)
+                                return false;
+                            continue;
+                        }
+
+                        var gate = unassigned.Value;
+                        var gateMono = new Monomial(gate);
+
+                        // Evaluate all terms that don't contain the gate variable.
+                        long restSum = 0;
+                        long gateCoeff = 0;
+                        foreach (var (monomial, coeff) in poly.Coeffs)
+                        {
+                            if (monomial.SymVars.Contains(gate))
+                            {
+                                // This term contains the gate variable.
+                                // It should be of the form coeff * gate (linear in gate).
+                                Debug.Assert(monomial.SymVars.Count == 1, $"Gate variable {gate} appears in higher-degree monomial {monomial}");
+                                gateCoeff += coeff;
+                            }
+                            else
+                            {
+                                restSum += EvaluateMonomial(monomial, coeff, assignment);
+                            }
+                        }
+
+                        // coeff * gate + rest = 0  =>  gate = -rest / coeff
+                        Debug.Assert(gateCoeff != 0);
+                        Debug.Assert(restSum % gateCoeff == 0 || (gateCoeff == 1 || gateCoeff == -1),
+                            $"Non-unit coefficient {gateCoeff} for gate {gate}");
+                        assignment[gate] = -restSum / gateCoeff;
+                    }
+                    else
+                    {
+                        // Last member: evaluate and check it equals zero.
+                        long result = EvaluatePoly(poly, assignment) & (long)ModuloReducer.GetMask((uint)w);
+                        if (result != 0)
+                            return false;
+                    }
+                }
+            }
+
+            return true;
         }
 
         // TODO: Canonicalize 123*a into 7 shifted add circuits
