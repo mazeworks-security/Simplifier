@@ -24,10 +24,8 @@ namespace Mba.Simplifier.Verification
 
         public Poly(SortedDictionary<Monomial, long> coeffs) : this(coeffs.ToDictionary())
         {
-          
+
         }
-
-
 
         public Poly(IEnumerable<Monomial> coeffs)
         {
@@ -40,6 +38,71 @@ namespace Mba.Simplifier.Verification
         {
             Coeffs = new();
         }
+
+        public static Poly Reduce(Poly f, List<Poly> basis)
+        {
+            return NormalForm(f, basis);
+        }
+
+        public static Poly NormalForm(Poly f, List<Poly> basis)
+        {
+            if (f.ToString() == "1*(y0*y0) + -1*(y0)")
+                Debugger.Break();
+            var p = f.Clone();
+            var r = new Poly();
+
+            // Cache LMs of basis for efficiency
+            var basisEntries = basis.Where(b => b.Coeffs.Count > 0)
+                                    .Select(b => new { Poly = b, Lm = b.Lm, Lc = b.Coeffs[b.Lm] })
+                                    .Reverse()
+                                    .ToList();
+
+            while (p.Coeffs.Count > 0)
+            {
+                p.Simplify();
+                if (p.Coeffs.Count == 0) break;
+
+                var lt_p_monom = p.Lm;
+                var lt_p_coeff = p.Coeffs[lt_p_monom];
+
+                bool divided = false;
+                foreach (var entry in basisEntries)
+                {
+                    if (entry.Lm.Divides(lt_p_monom))
+                    {
+                        if (lt_p_coeff % entry.Lc == 0)
+                        {
+                            long c = lt_p_coeff / entry.Lc;
+                            var m = lt_p_monom.Divide(entry.Lm);
+
+                            var subC = -1 * c;
+                            var subM = m;
+                            var g = entry.Poly;
+
+                            foreach (var kp in g.Coeffs)
+                            {
+                                var newCoeff = subC * kp.Value;
+                                var newMonom = subM * kp.Key;
+                                p.Add(newMonom, newCoeff);
+                            }
+
+                            divided = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!divided)
+                {
+                    // No divisor found for LT(p), move it to remainder
+                    r.Add(lt_p_monom, lt_p_coeff);
+                    p.Remove(lt_p_monom);
+                }
+            }
+            r.Simplify();
+            return r;
+        }
+
 
         public void Simplify()
         {
@@ -166,7 +229,7 @@ namespace Mba.Simplifier.Verification
 
         public override string ToString()
         {
-            return String.Join(" + ", Coeffs.OrderByDescending(x => x.Key).Select(x => $"{x.Value}*({x.Key})"));
+            return String.Join(" + ", Coeffs.Select(x => $"{x.Value}*({x.Key})"));
         }
     }
 
@@ -176,10 +239,11 @@ namespace Mba.Simplifier.Verification
 
         private readonly int hash = 17;
 
+        // TODO: If a variable is boolean, eliminate x*x constraints
         public Monomial(IEnumerable<SymVar> vars)
         {
-            SortedVars = vars.Distinct().OrderByDescending(x => x).ToList();
-            foreach(var v in SortedVars)
+            SortedVars = vars.OrderByDescending(x => x).ToList();
+            foreach (var v in SortedVars)
                 hash = hash * 23 + v.GetHashCode();
         }
 
@@ -236,7 +300,17 @@ namespace Mba.Simplifier.Verification
         {
             return SortedVars.SequenceEqual(other.SortedVars);
         }
-        
+
+        public Monomial Divide(Monomial other)
+        {
+            var vars = new List<SymVar>(SortedVars);
+            foreach (var v in other.SortedVars)
+            {
+                vars.Remove(v);
+            }
+            return new Monomial(vars);
+        }
+
         public bool Divides(Monomial other)
         {
             if (SortedVars.Count > other.SortedVars.Count)
@@ -257,27 +331,54 @@ namespace Mba.Simplifier.Verification
             return true;
         }
 
-        public int CompareTo(Monomial? other)
+        public int CompareTo(Monomial? o)
         {
-            var below = 1;
-            var above = -1;
+            var (t, other) = (this, o);
+            // Degrevlex ordering, negated so that the mathematically largest
+            // monomial comes first in SortedDictionary (for use as Lm).
+            //
+            // Degrevlex: higher total degree = greater. For equal degree,
+            // the rightmost (smallest variable) differing exponent being
+            // smaller means the monomial is greater.
 
-            if (this == other)
+            if (t.Equals(other))
                 return 0;
 
-            for (int i = 0; i < Math.Min(SortedVars.Count, other.SortedVars.Count); i++)
+            // 1. Total degree: higher degree comes first (return negative)
+            int degDiff = t.SortedVars.Count - other.SortedVars.Count;
+            if (degDiff != 0)
+                return -degDiff;
+
+            // 2. Same total degree: degrevlex tiebreaker via exponent vectors
+            var allVars = new SortedSet<SymVar>();
+            var thisExp = new Dictionary<SymVar, int>();
+            var otherExp = new Dictionary<SymVar, int>();
+
+            foreach (var v in t.SortedVars)
             {
-                var a = SortedVars[i];
-                var b = other.SortedVars[i];
-                var cmp = a.CompareTo(b);
-                if (cmp != 0)
-                    return cmp;
+                allVars.Add(v);
+                thisExp.TryGetValue(v, out int c);
+                thisExp[v] = c + 1;
+            }
+            foreach (var v in other.SortedVars)
+            {
+                allVars.Add(v);
+                otherExp.TryGetValue(v, out int c);
+                otherExp[v] = c + 1;
             }
 
-            var tie = SortedVars.Count.CompareTo(other.SortedVars.Count);
-            if (tie == 0)
-                Debugger.Break();
-            return tie;
+            // Iterate from smallest variable (rightmost in degrevlex convention).
+            // If (this_exp - other_exp) is negative at the rightmost differing
+            // position, then this >_degrevlex other, so return negative.
+            foreach (var v in allVars.Reverse())
+            {
+                thisExp.TryGetValue(v, out int a);
+                otherExp.TryGetValue(v, out int b);
+                if (a != b)
+                    return a - b;
+            }
+
+            return 0;
         }
     }
 
@@ -329,19 +430,21 @@ namespace Mba.Simplifier.Verification
 
         public int CompareTo(SymVar other)
         {
+            var (v0, v1) = (this, other);
+
             var below = 1;
             var above = -1;
 
-            var cmp = Kind.CompareTo(other.Kind);
+            var cmp = v0.Kind.CompareTo(v1.Kind);
             if (cmp != 0)
                 return cmp;
-            cmp = BitIndex.CompareTo(other.BitIndex);
+            cmp = v0.BitIndex.CompareTo(v1.BitIndex);
             if (cmp != 0)
                 return cmp;
-            cmp = TotalOrder.CompareTo(other.TotalOrder);
+            cmp = v0.TotalOrder.CompareTo(v1.TotalOrder);
             if (cmp != 0)
                 return cmp;
-            cmp = Name.CompareTo(other.Name);
+            cmp = v0.Name.CompareTo(v1.Name);
             if (cmp != 0)
                 return cmp;
 
