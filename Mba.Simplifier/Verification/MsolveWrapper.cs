@@ -41,7 +41,9 @@ namespace Mba.Simplifier.Verification
 
             // Assert that x*x == x for all boolean input variables
             // TODO: Maybe we can do this for output variables too?
-            foreach (var v in sortedVars.Where(x => x.Kind == SymKind.Input))
+            //foreach (var v in sortedVars.Where(x => x.Kind == SymKind.Input))
+            // Actually I think we can do this for all variables regardless
+            foreach(var v in sortedVars)
             {
                 Poly m = new Monomial(v);
                 polys.Add(new Monomial(v, v) - m);

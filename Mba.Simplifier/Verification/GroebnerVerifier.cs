@@ -23,15 +23,15 @@ namespace Mba.Simplifier.Verification
     {
         AstCtx ctx = new();
 
-        AstIdx before;
+        AstIdx obfuscated;
 
         List<AstIdx> beforeNodes = new();
 
-        AstIdx after;
+        AstIdx deob;
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 16;
+        uint w = 3;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -52,11 +52,12 @@ namespace Mba.Simplifier.Verification
             //before = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             //before = RustAstParser.Parse(ctx, "(x+x+x+x+x+x+x+x+y)&(x+y)", w);
             //before = RustAstParser.Parse(ctx, "((x+y) & (y+x)) & ((x+x+x+x+x+x+x+x+x+y)&(x+y))", w);
-            before = RustAstParser.Parse(ctx, "x+y", w);
+            obfuscated = RustAstParser.Parse(ctx, "((x+y) & (y+x)) & ((x+x+x+x+x+x+x+x+x+y)&(x+y))", w);
+            //obfuscated = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x+y", w);
             //after = RustAstParser.Parse(ctx, "x+y", w);
-            after = RustAstParser.Parse(ctx, "y+x", w);
+            deob = RustAstParser.Parse(ctx, "y+x", w);
             //before = RustAstParser.Parse(ctx, "x&y", w);
             //after = RustAstParser.Parse(ctx, "x&y", w);
         }
@@ -69,12 +70,21 @@ namespace Mba.Simplifier.Verification
             var idealArr = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
             var firstSeen = new Dictionary<SymVar, uint>();
-            var results = new List<Poly>();
+            var visit = new List<AstIdx>() { deob, obfuscated };
+            var results = new List<List<Poly>>();
+            foreach (var _ in visit)
+                results.Add(new());
             Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
+
+       
+
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
                 // Compute the polynomials corresponding to the ith output bit
-                results.Add(GetSpecification(before, sliceIdx, cache, idealArr, firstSeen, ref totalOrder, true));
+                for(int i = 0; i < visit.Count; i++)
+                {
+                    results[i].Add(GetSpecification(visit[i], sliceIdx, cache, idealArr, firstSeen, ref totalOrder, true));
+                }
 
                 var iArr = idealArr.Select(x => x.Item3).ToList();
                 //foreach (var p in iArr)
@@ -137,10 +147,12 @@ namespace Mba.Simplifier.Verification
                     cache[key] = r;
                 }
 
+                
 
 
-                var vars = ctx.CollectVariables(before);
 
+                var vars = ctx.CollectVariables(obfuscated);
+                /*
                 List<List<Poly>> bits = new();
                 foreach (var v in vars)
                 {
@@ -164,12 +176,35 @@ namespace Mba.Simplifier.Verification
                 }
 
                 Console.WriteLine(spec);
+                */
+
+                Poly spec0 = Monomial.Constant();
+                Poly spec1 = Monomial.Constant();
+                /*
+                for (int bitIndex = 0; bitIndex < sliceIdx + 1; bitIndex++)
+                {
+                    spec0 += results[0][bitIndex];
+                    spec1 += results[1][bitIndex];
+                }
+                */
+
+                spec0 += results[0][sliceIdx];
+                spec1 += results[1][sliceIdx];
+
+                //Console.WriteLine($"Spec: ({spec0}) - ({spec1})");
+
+                var specDiff = spec0 - spec1;
+                var reducedSpec = Poly.Reduce(specDiff, gb);
+                if (reducedSpec.Coeffs.Count != 0)
+                    Debugger.Break();
+
+                Console.WriteLine("Round");
 
                 idealArr.Clear();
 
                 // Then any intermediate product that might be called on
 
-                Console.WriteLine("Round");
+
 
             }
 
@@ -189,7 +224,7 @@ namespace Mba.Simplifier.Verification
             Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
 
             var results = new List<Poly>();
-            foreach (var curr in new AstIdx[] { before, after })
+            foreach (var curr in new AstIdx[] { obfuscated, deob })
             {
                 Console.WriteLine("\n\n");
                 for (int i = 0; i < w; i++)
@@ -211,7 +246,7 @@ namespace Mba.Simplifier.Verification
                 Console.WriteLine(member);
             }
 
-            var vars = ctx.CollectVariables(before);
+            var vars = ctx.CollectVariables(obfuscated);
 
             List<List<Poly>> bits = new();
             foreach (var v in vars)
