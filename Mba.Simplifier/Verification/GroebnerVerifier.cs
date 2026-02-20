@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
@@ -31,7 +32,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 3;
+        uint w = 64;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -40,7 +41,7 @@ namespace Mba.Simplifier.Verification
             AstIdx.ctx = ctx;
             // only works with x+y, mba currently... x+x+x+x+x+y mod 2 does notwork
             //before = RustAstParser.Parse(ctx, "x+y", w);
-            //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            obfuscated = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
 
 
@@ -52,7 +53,7 @@ namespace Mba.Simplifier.Verification
             //before = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             //before = RustAstParser.Parse(ctx, "(x+x+x+x+x+x+x+x+y)&(x+y)", w);
             //before = RustAstParser.Parse(ctx, "((x+y) & (y+x)) & ((x+x+x+x+x+x+x+x+x+y)&(x+y))", w);
-            obfuscated = RustAstParser.Parse(ctx, "((x+y) & (y+x)) & ((x+x+x+x+x+x+x+x+x+y)&(x+y))", w);
+            //obfuscated = RustAstParser.Parse(ctx, "((x+y) & (y+x)) & ((x+x+x+x+x+x+x+x+x+y)&(x+y))", w);
             //obfuscated = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x+y", w);
@@ -292,6 +293,7 @@ namespace Mba.Simplifier.Verification
             if (cache.TryGetValue(key, out var existing))
                 return existing;
 
+
             var opc = ctx.GetOpcode(idx);
             if (opc == AstOp.Symbol)
             {
@@ -324,14 +326,22 @@ namespace Mba.Simplifier.Verification
                 return sym;
             };
 
+            var getOp = (uint index, ref uint totalOrder) =>
+            {
+                if(index == 0)
+                    return GetSpecification(ctx.GetOp0(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
+                Debug.Assert(index == 1);
+                return GetSpecification(ctx.GetOp1(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
+            };
+
             var (carryId, arithInfo) = carryIdentifiers[idx];
             if (opc == AstOp.Add)
             {
                 if (arithInfo.Count > bitIdx)
                     return arithInfo[bitIdx].result;
                 Debug.Assert(arithInfo.Count == bitIdx);
-                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
-                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
+                var a = getOp(0, ref totalOrder);
+                var b = getOp(1, ref totalOrder);
 
                 var generate = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}gen");
                 update(generate);
@@ -407,8 +417,8 @@ namespace Mba.Simplifier.Verification
 
             if (opc == AstOp.And)
             {
-                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
-                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
+                var a = getOp(0, ref totalOrder);
+                var b = getOp(1, ref totalOrder);
 
                 var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
                 update(y);
@@ -419,10 +429,24 @@ namespace Mba.Simplifier.Verification
                 return y;
             }
 
+            if (opc == AstOp.Or)
+            {
+                var a = getOp(0, ref totalOrder);
+                var b = getOp(1, ref totalOrder);
+
+                var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
+                update(y);
+                ideal.Add((bitIdx, totalOrder, y - (a - b + a*b)));
+
+                totalOrder++;
+                cache[key] = y;
+                return y;
+            }
+
             if (opc == AstOp.Xor)
             {
-                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
-                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
+                var a = getOp(0, ref totalOrder);
+                var b = getOp(1, ref totalOrder);
 
                 var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
                 update(y);
@@ -431,7 +455,18 @@ namespace Mba.Simplifier.Verification
                 totalOrder++;
                 cache[key] = y;
                 return y;
+            }
 
+            if (opc == AstOp.Neg)
+            {
+                var a = getOp(0, ref totalOrder);
+                var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
+                update(y);
+                ideal.Add((bitIdx, totalOrder, y + (a - Poly.Constant(1))));
+
+                totalOrder++;
+                cache[key] = y;
+                return y;
             }
 
             throw new InvalidOperationException();
