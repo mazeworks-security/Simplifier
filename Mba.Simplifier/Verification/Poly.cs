@@ -46,8 +46,6 @@ namespace Mba.Simplifier.Verification
 
         public static Poly NormalForm(Poly f, List<Poly> basis)
         {
-            if (f.ToString() == "1*(y0*y0) + -1*(y0)")
-                Debugger.Break();
             var p = f.Clone();
             var r = new Poly();
 
@@ -430,7 +428,8 @@ namespace Mba.Simplifier.Verification
 
         public int CompareTo(SymVar other)
         {
-            var (v0, v1) = (this, other);
+            //var (v0, v1) = (this, other);
+            var (v1, v0) = (this, other);
 
             var below = 1;
             var above = -1;

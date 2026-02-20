@@ -31,7 +31,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 3;
+        uint w = 16;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -49,55 +49,131 @@ namespace Mba.Simplifier.Verification
             //after = RustAstParser.Parse(ctx, "x+x+x+x+x+y", w);
             //after = RustAstParser.Parse(ctx, "x+x+x+y", w);
 
-            before = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            //before = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             //before = RustAstParser.Parse(ctx, "(x+x+x+x+x+x+x+x+y)&(x+y)", w);
             //before = RustAstParser.Parse(ctx, "((x+y) & (y+x)) & ((x+x+x+x+x+x+x+x+x+y)&(x+y))", w);
+            before = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x+y", w);
-            after = RustAstParser.Parse(ctx, "x+y", w);
+            //after = RustAstParser.Parse(ctx, "x+y", w);
+            after = RustAstParser.Parse(ctx, "y+x", w);
             //before = RustAstParser.Parse(ctx, "x&y", w);
             //after = RustAstParser.Parse(ctx, "x&y", w);
         }
 
 
+        // Now we need to figure out how to prune dead elements from the groebner basis
+        // "Cone of influence", only problem is that `x0*x1` gets rewritten as 
         public void Run()
         {
             var idealArr = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
             var firstSeen = new Dictionary<SymVar, uint>();
             var results = new List<Poly>();
+            Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
                 // Compute the polynomials corresponding to the ith output bit
-                results.Add(GetSpecification(before, sliceIdx, idealArr, firstSeen, ref totalOrder, true));
+                results.Add(GetSpecification(before, sliceIdx, cache, idealArr, firstSeen, ref totalOrder, true));
 
                 var iArr = idealArr.Select(x => x.Item3).ToList();
-                foreach (var p in iArr)
-                    p.Simplify();
+                //foreach (var p in iArr)
+                //    p.Simplify();
                 //LinElim(iArr);
 
                 SageGb(iArr, false);
+
+
 
                 var gb = MsolveWrapper.Run(iArr);
 
                 //Poly deleteMe = new Monomial(iArr.SelectMany(x => x.Coeffs.Keys.SelectMany(x => x.SortedVars)).First(x => x.Name.Contains("op3_0cout")));
                 //var del = Poly.Reduce(deleteMe.Clone(), gb);
 
+                /*
                 for (int i = 0; i < iArr.Count; i++)
                 {
-
-                    
-
                     var p = iArr[i];
                     var r = Poly.Reduce(p.Clone(), gb);
                     Console.WriteLine($"{p}\n=>\n{r}\n\n");
                 }
+                */
 
-                Debugger.Break();
+                
+
+                  /*
+                for (int i = 0; i < idealArr.Count; i++)
+                {
+                    var bar = idealArr[i];
+                    idealArr[i] = (bar.Item1, bar.Item2, Poly.Reduce(bar.Item3.Clone(), gb));
+                }
+                  */
+              
+
+                // Simplify the carry in info
+                foreach(var (_, (bitIdx, arithInfos)) in carryIdentifiers.ToList())
+                {
+                    // Skip if there's no carry info
+                    if(arithInfos.Count == 0)
+                            continue;
+
+                    var arithInfo = arithInfos.Last();
+                    //if (bitIdx != sliceIdx)
+                    //    continue;
+
+                    var cin = Poly.Reduce(arithInfo.cin, gb);
+                    var cout = Poly.Reduce(arithInfo.cout, gb);
+                    var result = Poly.Reduce(arithInfo.result, gb);
+                    arithInfos[arithInfos.Count - 1] = new(cin, cout, result);
+                }
 
 
+                
+                foreach(var (key, input) in cache.ToList())
+                {
+                    var p = input;
+                    var r = Poly.Reduce(p.Clone(), gb);
+                    Console.WriteLine($"{input}=>\n{r}\n\n");
+                    cache[key] = r;
+                }
+
+
+
+                var vars = ctx.CollectVariables(before);
+
+                List<List<Poly>> bits = new();
+                foreach (var v in vars)
+                {
+                    List<Poly> l = new();
+                    bits.Add(l);
+                    for (int i = 0; i <= sliceIdx; i++)
+                        l.Add(GetSpecification(v, i, cache, idealArr, firstSeen, ref totalOrder, false));
+
+                }
+                // Adder specification
+                Poly spec = bits[0][0] - bits[0][0];
+                for (int bitIndex = 0; bitIndex < sliceIdx + 1; bitIndex++)
+                {
+                    Poly term = bits[0][0] - bits[0][0];
+                    for (int varIndex = 0; varIndex < vars.Count; varIndex++)
+                    {
+                        term += (1L << (ushort)bitIndex) * bits[varIndex][bitIndex];
+                    }
+
+                    spec += term;
+                }
+
+                Console.WriteLine(spec);
+
+                idealArr.Clear();
+
+                // Then any intermediate product that might be called on
+
+                Console.WriteLine("Round");
 
             }
+
+            Debugger.Break();
         }
 
 
@@ -105,18 +181,19 @@ namespace Mba.Simplifier.Verification
         // Old version attempting to implement the old paper
         public void RunOld()
         {
-
             var idealArr = new List<(int, uint, Poly)>();
 
             uint totalOrder = 0;
             var firstSeen = new Dictionary<SymVar, uint>();
+
+            Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
 
             var results = new List<Poly>();
             foreach (var curr in new AstIdx[] { before, after })
             {
                 Console.WriteLine("\n\n");
                 for (int i = 0; i < w; i++)
-                    results.Add(GetSpecification(curr, i, idealArr, firstSeen, ref totalOrder, true));
+                    results.Add(GetSpecification(curr, i, cache, idealArr, firstSeen, ref totalOrder, true));
 
                 foreach (var m in idealArr)
                 {
@@ -142,7 +219,7 @@ namespace Mba.Simplifier.Verification
                 List<Poly> l = new();
                 bits.Add(l);
                 for (int i = 0; i < w; i++)
-                    l.Add(GetSpecification(v, i, idealArr, firstSeen, ref totalOrder, false));
+                    l.Add(GetSpecification(v, i, cache, idealArr, firstSeen, ref totalOrder, false));
 
             }
             // Adder specification
@@ -174,19 +251,25 @@ namespace Mba.Simplifier.Verification
         }
 
         // Each node gets an x, y, carry in, carry out bits
-        private Poly GetSpecification(AstIdx idx, int bitIdx, List<(int bitIndex, uint opIndex, Poly poly)> ideal, Dictionary<SymVar, uint> firstSeen, ref uint totalOrder, bool isOutput = false)
+        private Poly GetSpecification(AstIdx idx, int bitIdx, Dictionary<(AstIdx, int bitIdx), Poly> cache, List<(int bitIndex, uint opIndex, Poly poly)> ideal, Dictionary<SymVar, uint> firstSeen, ref uint totalOrder, bool isOutput = false)
         {
+            var key = (idx, bitIdx);
+            if (cache.TryGetValue(key, out var existing))
+                return existing;
+
             var opc = ctx.GetOpcode(idx);
             if (opc == AstOp.Symbol)
             {
                 totalOrder++;
-                return new Poly(new Monomial(SymVar.Symbol(ctx, idx, bitIdx)));
+                cache[key] = new Poly(new Monomial(SymVar.Symbol(ctx, idx, bitIdx)));
+                return cache[key];
             }
 
             if (opc == AstOp.Constant)
             {
                 totalOrder++;
-                return Poly.Constant((long)ctx.GetConstantValue(idx));
+                cache[key] = Poly.Constant((long)ctx.GetConstantValue(idx));
+                return cache[key];
             }
 
             if (!carryIdentifiers.ContainsKey(idx))
@@ -212,8 +295,8 @@ namespace Mba.Simplifier.Verification
                 if (arithInfo.Count > bitIdx)
                     return arithInfo[bitIdx].result;
                 Debug.Assert(arithInfo.Count == bitIdx);
-                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, ideal, firstSeen, ref totalOrder);
-                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, ideal, firstSeen, ref totalOrder);
+                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
+                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
 
                 var generate = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}gen");
                 update(generate);
@@ -281,32 +364,37 @@ namespace Mba.Simplifier.Verification
 
 
                 totalOrder++;
+
+                cache[key] = sum;
+
                 return sum;
             }
 
             if (opc == AstOp.And)
             {
-                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, ideal, firstSeen, ref totalOrder);
-                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, ideal, firstSeen, ref totalOrder);
+                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
+                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
 
                 var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
                 update(y);
                 ideal.Add((bitIdx, totalOrder, y - (a * b)));
 
                 totalOrder++;
+                cache[key] = y;
                 return y;
             }
 
             if (opc == AstOp.Xor)
             {
-                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, ideal, firstSeen, ref totalOrder);
-                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, ideal, firstSeen, ref totalOrder);
+                var a = GetSpecification(ctx.GetOp0(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
+                var b = GetSpecification(ctx.GetOp1(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
 
                 var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
                 update(y);
                 ideal.Add((bitIdx, totalOrder, (y - (a + b - (2 * (a * b))))));
 
                 totalOrder++;
+                cache[key] = y;
                 return y;
 
             }
