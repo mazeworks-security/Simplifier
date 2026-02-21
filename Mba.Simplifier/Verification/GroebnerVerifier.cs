@@ -218,6 +218,7 @@ namespace Mba.Simplifier.Verification
             Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
 
             var linearFacts = new List<Poly>();
+            var allSeen = new List<Poly>();
 
             var roundIdx = 0;
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
@@ -244,6 +245,7 @@ namespace Mba.Simplifier.Verification
                 SageGb(iArr, false);
 
 
+
                 var allVars = MsolveWrapper.GetSortedVars(iArr);
                 var boolVars = new List<SymVar>();
                 var skip = new List<SymVar>();
@@ -268,7 +270,25 @@ namespace Mba.Simplifier.Verification
                     skip.Add(v);
                 }
 
+
+
+
+                var vars = ctx.CollectVariables(obfuscated);
+                Poly spec0 = Monomial.Constant();
+                Poly spec1 = Monomial.Constant();
+                spec0 += results[0][sliceIdx];
+                spec1 += results[1][sliceIdx];
+
+
+                var specDiff = spec0 - spec1;
+                allSeen.AddRange(iArr);
+                var tempGb = MsolveWrapper.Run(iArr, boolVars);
+                var reduction = Poly.Reduce(specDiff, tempGb);
+                continue;
+
+
                 var gb = MsolveWrapper.Run(iArr, boolVars);
+
 
                 Console.WriteLine("GB: ");
                 foreach(var p in gb)
@@ -376,24 +396,17 @@ namespace Mba.Simplifier.Verification
 
                 
 
-
-
-                var vars = ctx.CollectVariables(obfuscated);
-   
-
-                Poly spec0 = Monomial.Constant();
-                Poly spec1 = Monomial.Constant();
-    
-
-                spec0 += results[0][sliceIdx];
-                spec1 += results[1][sliceIdx];
-
-  
-                var specDiff = spec0 - spec1;
                 var reducedSpec = Poly.Reduce(specDiff, gb);
                 reducedSpec = Poly.Reduce(reducedSpec, gb);
                 if (reducedSpec.Coeffs.Count != 0)
+                {
+                    SageGb(allSeen, false);
+
+                    var r = MsolveWrapper.Run(allSeen, MsolveWrapper.GetSortedVars(allSeen).Where(x => x.Kind == SymKind.Input).ToList());
+                    var reduced = Poly.Reduce(specDiff, r);
+
                     Debugger.Break();
+                }
 
                 Console.WriteLine($"Round {roundIdx}");
                 roundIdx++;
@@ -450,6 +463,8 @@ namespace Mba.Simplifier.Verification
             var firstSeen = new Dictionary<SymVar, uint>();
 
             Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
+
+            var allSeen = new List<Poly>();
 
             var results = new List<Poly>();
             foreach (var curr in new AstIdx[] { obfuscated, deob })
