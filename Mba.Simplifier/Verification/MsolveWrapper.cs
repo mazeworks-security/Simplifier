@@ -8,6 +8,112 @@ using System.Threading.Tasks;
 
 namespace Mba.Simplifier.Verification
 {
+    /// <summary>
+    /// Comparer that orders monomials in graded reverse lexicographic (grevlex) order,
+    /// with the "largest" monomial first (negative return = first arg is larger).
+    /// </summary>
+    public class GrevlexComparer : IComparer<Monomial>
+    {
+        public static readonly GrevlexComparer Instance = new();
+
+        public int Compare(Monomial? t, Monomial? other)
+        {
+            if (ReferenceEquals(t, other)) return 0;
+            if (t is null) return 1;
+            if (other is null) return -1;
+            if (t.Equals(other)) return 0;
+
+            // 1. Higher total degree is "larger" (comes first → negative)
+            int degDiff = t.SortedVars.Count - other.SortedVars.Count;
+            if (degDiff != 0)
+                return -degDiff;
+
+            // 2. Same degree: build exponent vectors and compare from the
+            //    smallest variable upward. At the first difference, the
+            //    monomial with the *smaller* exponent is larger in grevlex.
+            var allVars = new SortedSet<SymVar>();
+            var thisExp = new Dictionary<SymVar, int>();
+            var otherExp = new Dictionary<SymVar, int>();
+
+            foreach (var v in t.SortedVars)
+            {
+                allVars.Add(v);
+                thisExp.TryGetValue(v, out int c);
+                thisExp[v] = c + 1;
+            }
+            foreach (var v in other.SortedVars)
+            {
+                allVars.Add(v);
+                otherExp.TryGetValue(v, out int c);
+                otherExp[v] = c + 1;
+            }
+
+            // Iterate from the smallest variable (rightmost in grevlex convention).
+            foreach (var v in allVars.Reverse())
+            {
+                thisExp.TryGetValue(v, out int a);
+                otherExp.TryGetValue(v, out int b);
+                if (a != b)
+                    return a - b; // smaller exponent here → "larger" monomial
+            }
+
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Comparer that orders monomials in graded lexicographic (grlex) order,
+    /// with the "largest" monomial first (negative return = first arg is larger).
+    /// </summary>
+    public class GrlexComparer : IComparer<Monomial>
+    {
+        public static readonly GrlexComparer Instance = new();
+
+        public int Compare(Monomial? t, Monomial? other)
+        {
+            if (ReferenceEquals(t, other)) return 0;
+            if (t is null) return 1;
+            if (other is null) return -1;
+            if (t.Equals(other)) return 0;
+
+            // 1. Higher total degree is "larger" (comes first → negative)
+            int degDiff = t.SortedVars.Count - other.SortedVars.Count;
+            if (degDiff != 0)
+                return -degDiff;
+
+            // 2. Same degree: standard lexicographic tiebreaker.
+            //    Compare from the largest variable downward; the monomial
+            //    with a higher exponent at the first difference is larger.
+            var allVars = new SortedSet<SymVar>();
+            var thisExp = new Dictionary<SymVar, int>();
+            var otherExp = new Dictionary<SymVar, int>();
+
+            foreach (var v in t.SortedVars)
+            {
+                allVars.Add(v);
+                thisExp.TryGetValue(v, out int c);
+                thisExp[v] = c + 1;
+            }
+            foreach (var v in other.SortedVars)
+            {
+                allVars.Add(v);
+                otherExp.TryGetValue(v, out int c);
+                otherExp[v] = c + 1;
+            }
+
+            // Iterate from the largest variable first (lex convention).
+            foreach (var v in allVars)
+            {
+                thisExp.TryGetValue(v, out int a);
+                otherExp.TryGetValue(v, out int b);
+                if (a != b)
+                    return -(a - b); // higher exponent here → "larger" monomial
+            }
+
+            return 0;
+        }
+    }
+
     public class MsolveWrapper
     {
         private readonly string msolvePath = @"C:\Users\colton\Downloads\msolve-win64\bin\msolve.exe";
@@ -19,7 +125,7 @@ namespace Mba.Simplifier.Verification
 
         private MsolveWrapper()
         {
-            
+
         }
 
         public static List<SymVar> GetSortedVars(List<Poly> polys)
@@ -49,7 +155,7 @@ namespace Mba.Simplifier.Verification
             // TODO: Maybe we can do this for output variables too?
             //foreach (var v in sortedVars.Where(x => x.Kind == SymKind.Input))
             // Actually I think we can do this for all variables regardless
-            foreach(var v in boolVars)
+            foreach (var v in boolVars)
             {
                 Poly m = new Monomial(v);
                 polys.Add(new Monomial(v, v) - m);
@@ -116,7 +222,8 @@ namespace Mba.Simplifier.Verification
                 return "0";
 
             var sb = new List<string>();
-            foreach (var kvp in p.Coeffs)
+            // Sort terms in grevlex order for msolve
+            foreach (var kvp in p.Coeffs.OrderBy(x => x.Key, GrlexComparer.Instance))
             {
                 var m = kvp.Key;
                 var coeff = kvp.Value;

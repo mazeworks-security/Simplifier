@@ -12,6 +12,7 @@ using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
@@ -124,6 +125,9 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             deob = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
 
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
 
@@ -209,7 +213,123 @@ namespace Mba.Simplifier.Verification
             return acc;
         }
 
+        private void SimplifyViaMapping(Poly toSimplify, Dictionary<Monomial, Poly> mapping)
+        {
+            foreach (var (monomial, value) in mapping)
+                toSimplify.ReplaceSubset(monomial, value);
+        }
+
         public void Run()
+        {
+            var throwaway = new List<(int, uint, Poly)>();
+            uint totalOrder = 0;
+            var firstSeen = new Dictionary<SymVar, uint>();
+            var visit = new List<AstIdx>() { deob, obfuscated };
+
+            List<int> counts = new();
+            Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
+
+            var simplificationMapping = new Dictionary<Monomial, Poly>();
+
+            for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
+            {
+                var results = new List<List<Poly>>();
+                foreach (var _ in visit)
+                    results.Add(new());
+
+                // Compute the polynomials corresponding to the ith output bit
+                for (int i = 0; i < visit.Count; i++)
+                {
+                    results[i].Add(GetSpecification(visit[i], sliceIdx, cache, throwaway, firstSeen, ref totalOrder, true));
+                }
+
+                var ideal = throwaway.Select(x => x.Item3).ToList();
+                foreach (var p in ideal)
+                    SimplifyViaMapping(p, simplificationMapping);
+
+                var currIdeal = ReduceLexGroebnerBasis(ideal.Skip(counts.LastOrDefault()).ToList());
+
+                var gradedGb = MsolveWrapper.Run(currIdeal, MsolveWrapper.GetSortedVars(currIdeal));
+                gradedGb.Sort();
+
+                
+                // Learn obvious facts
+                for(int i = 0; i < currIdeal.Count; i++)
+                {
+                    var p0 = currIdeal[i];
+                    if (p0.Coeffs.Count == 1)
+                    {
+                        simplificationMapping.Add(p0.Lm, Poly.Constant(0));
+                        continue;
+                    }
+
+                    for (int j = i + 1; j < currIdeal.Count; j++)
+                    {
+                        var p1 = currIdeal[j];
+                        if (simplificationMapping.ContainsKey(p1.Lm))
+                            continue;
+
+                        var diff0 = p0.Clone() - p0.Lm;
+                        var diff1 = p1.Clone() - p1.Lm;
+                        var final = (diff0 - diff1);
+                        final.Simplify();
+                        if (final.Coeffs.Count == 0)
+                        {
+                            simplificationMapping[p1.Lm] = p0.Lm;
+                            continue;
+                        }
+                    }
+                }
+                
+
+                // Update the cache with learned facts
+                foreach (var p in cache.Values)
+                    SimplifyViaMapping(p, simplificationMapping);
+
+                foreach(var list in results)
+                {
+                    foreach (var p in list)
+                        SimplifyViaMapping(p, simplificationMapping);
+                }
+
+                var diff = results[0][0] - results[1][0];
+
+                var rDiff = LexReduce(diff, currIdeal);
+
+                SageGb(currIdeal, false);
+
+                Console.WriteLine($"Difference: {rDiff}");
+
+                Debugger.Break();
+
+                // Keep track of the "slice" corresponding to this bit
+                counts.Add(throwaway.Count);
+
+           
+
+                Console.WriteLine("");
+
+
+
+                /*
+              
+
+
+                var reduced = ReduceLexGroebnerBasis(tempIdeal);
+
+                var diff = results[0][sliceIdx] - results[1][sliceIdx];
+
+                var rDiff = LexReduce(diff, tempIdeal);
+
+                Console.WriteLine($"Difference: {rDiff}");
+
+                Debugger.Break();
+                */
+            }
+        }
+
+
+        public void RunSpecification()
         {
             var throwaway = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
@@ -218,7 +338,7 @@ namespace Mba.Simplifier.Verification
             var results = new List<Poly>();
             Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
 
-            var COLUMN = 6;
+            var COLUMN = w;
 
             var roundIdx = 0;
             for (int sliceIdx = 0; sliceIdx < COLUMN; sliceIdx++)
@@ -232,43 +352,125 @@ namespace Mba.Simplifier.Verification
 
             var ideal = throwaway.Select(x => x.Item3).ToList();
 
-
-            List<List<Poly>> bits = new();
-            var vars = ctx.CollectVariables(obfuscated);
-            foreach (var v in vars)
+            var cin = Poly.Constant(0);
+            for (int bitIdx = 0; bitIdx < w; bitIdx++)
             {
-                List<Poly> l = new();
-                bits.Add(l);
-                for (int i = 0; i < w; i++)
-                    l.Add(GetSpecification(v, i, cache, throwaway, firstSeen, ref totalOrder, false));
-
-            }
-            Poly spec = bits[0][0] - bits[0][0];
-            for (int bitIndex = 0; bitIndex < COLUMN; bitIndex++)
-            {
-                Poly term = bits[0][0] - bits[0][0];
-                for (int varIndex = 0; varIndex < vars.Count; varIndex++)
+                List<List<Poly>> bits = new();
+                var vars = ctx.CollectVariables(obfuscated);
+                foreach (var v in vars)
                 {
-                    term += (1L << (ushort)bitIndex) * bits[varIndex][bitIndex];
+                    List<Poly> l = new();
+                    bits.Add(l);
+                    for (int vIdx = 0; vIdx < w; vIdx++)
+                        l.Add(GetSpecification(v, vIdx, cache, throwaway, firstSeen, ref totalOrder, false));
+
+                }
+                Poly spec = bits[0][0] - bits[0][0];
+                for (int bitIndex = bitIdx; bitIndex <= bitIdx; bitIndex++)
+                {
+                    Poly term = bits[0][0] - bits[0][0];
+                    for (int varIndex = 0; varIndex < vars.Count; varIndex++)
+                    {
+                        //term += (1L << (ushort)bitIndex) * bits[varIndex][bitIndex];
+                        var b = bits[varIndex][bitIndex];
+                        term += b;
+                    }
+
+                    spec += term;
                 }
 
-                spec += term;
+                spec += cin;
+
+                //Poly result = Poly.Constant(0);
+                //foreach (var r in results)
+                //    result += r;
+                var result = results[bitIdx];
+
+                var diff = spec - result;
+
+                SageGb(ideal, false);
+
+                foreach (var p in ideal)
+                    p.Simplify();
+                //var rrr = Reduce(diff, ideal);
+                var rrr = LexReduce(diff, ideal);
+
+                var tempCin = Poly.Constant(0);
+                foreach (var (monom, coeff) in rrr.Coeffs)
+                {
+                    if (coeff % 2 != 0)
+                        throw new InvalidOperationException();
+
+                    tempCin += ((coeff / 2) * monom);
+                }
+
+                Console.WriteLine(rrr);
+
+                cin = tempCin;
+
+            }
+            Debugger.Break();
+        }
+
+        public List<Poly> ReduceLexGroebnerBasis(List<Poly> ideal)
+        {
+            var reduced = new List<Poly>();
+
+            // 1. Remove polynomials whose leading monomial is divisible by the leading monomial of another polynomial in the basis
+            var sorted = ideal.Where(p => p.Coeffs.Count > 0).OrderBy(p => p).ToList();
+            var minimalBasis = new List<Poly>();
+
+            foreach (var p in sorted)
+            {
+                bool isRedundant = false;
+                foreach (var m in minimalBasis)
+                {
+                    if (m.Lm.Divides(p.Lm))
+                    {
+                        isRedundant = true;
+                        break;
+                    }
+                }
+
+                if (!isRedundant)
+                {
+                    minimalBasis.Add(p);
+                }
             }
 
-            Poly result = Poly.Constant(0);
-            foreach (var r in results)
-                result += r;
+            // 2. Make the basis monic (leading coefficient = 1)
+            // Since we are working over Z or Z/2^w, we might not always be able to divide by the leading coefficient.
+            // Assuming we are working over a field or the leading coefficients are already 1 or -1.
+            for (int i = 0; i < minimalBasis.Count; i++)
+            {
+                var p = minimalBasis[i].Clone();
+                var lc = p.Coeffs[p.Lm];
+                if (lc == -1)
+                {
+                    p = -1L * p;
+                }
+                else if (lc != 1)
+                {
+                    // If we can't make it monic, we just leave it as is for now.
+                    // In a true field, we would multiply by the modular inverse.
+                }
+                minimalBasis[i] = p;
+            }
 
-            var diff = result - spec;
+            // 3. Fully reduce each polynomial against the rest of the basis
+            for (int i = 0; i < minimalBasis.Count; i++)
+            {
+                var p = minimalBasis[i];
+                var others = minimalBasis.Where((_, index) => index != i).ToList();
 
-            SageGb(ideal, false);
+                var reducedP = LexReduce(p, others);
+                if (reducedP.Coeffs.Count > 0)
+                {
+                    reduced.Add(reducedP);
+                }
+            }
 
-            foreach (var p in ideal)
-                p.Simplify();
-            //var rrr = Reduce(diff, ideal);
-            var rrr = LexReduce(diff, ideal);
-
-            Debugger.Break();
+            return reduced.OrderBy(p => p).ToList();
         }
 
         public Poly LexReduce(Poly poly, List<Poly> ideal)
