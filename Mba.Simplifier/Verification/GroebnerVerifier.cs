@@ -117,6 +117,9 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "3*x + 3*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "4*x + 4*y", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
+            deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
             obfuscated = Canonicalize(obfuscated, cache);
@@ -412,20 +415,27 @@ namespace Mba.Simplifier.Verification
             if (!cout.IsEq(before))
                 return cout;
 
+            //if (before.ToString().Contains("op13_1cout"))
+            //    Debugger.Break();
             var prevMonomial = cout.Coeffs.Keys.Single();
+
             if (prevMonomial.SortedVars.Count == 1)
             {
                 foreach (var p in gb)
                 {
                     if (p.Coeffs.Count != 1)
                         continue;
-                    var mm = p.Coeffs.Keys.Single();
+                    //var mm = p.Coeffs.Keys.Single();
+                    var mm = p.Lm;
                     if (!mm.SortedVars.Contains(prevMonomial.SortedVars.Single()))
                         continue;
 
+                    Console.WriteLine($"Added linear fact: {p}");
                     linearFacts.Add(p);
                 }
             }
+
+           
 
             return cout;
         }
