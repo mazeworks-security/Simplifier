@@ -200,6 +200,8 @@ namespace Mba.Simplifier.Verification
                 }
             }
 
+            this.Simplify();
+
             return true;
         }
 

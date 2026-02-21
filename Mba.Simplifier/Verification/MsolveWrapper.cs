@@ -223,7 +223,7 @@ namespace Mba.Simplifier.Verification
 
             var sb = new List<string>();
             // Sort terms in grevlex order for msolve
-            foreach (var kvp in p.Coeffs.OrderBy(x => x.Key, GrlexComparer.Instance))
+            foreach (var kvp in p.Coeffs.OrderBy(x => x.Key, GrevlexComparer.Instance))
             {
                 var m = kvp.Key;
                 var coeff = kvp.Value;

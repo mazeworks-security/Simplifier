@@ -125,7 +125,8 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
             deob = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
 
-            deob = RustAstParser.Parse(ctx, "x+y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(((x&y) + (x&y)) + (x^y)) & (x+y)", w);
             deob = RustAstParser.Parse(ctx, "x+y", w);
 
             var cache = new Dictionary<AstIdx, AstIdx>();
@@ -219,6 +220,153 @@ namespace Mba.Simplifier.Verification
                 toSimplify.ReplaceSubset(monomial, value);
         }
 
+        private Dictionary<Monomial, Poly> LearnLinearSimplifications(List<Poly> graded, List<Poly> original)
+        {
+            var mapping = new Dictionary<Monomial, Poly>();
+
+            var update = (int start, Monomial lm, Poly v) =>
+            {
+                mapping.Add(lm, v);
+                for (int i = start + 1; i < graded.Count; i++)
+                {
+                    graded[i].ReplaceSubset(lm, v);
+                }
+            };
+
+        start:
+            bool changed = true;
+            while (changed)
+            {
+                changed = false;
+                graded.Sort();
+
+                for(int i = 0; i < graded.Count; i++)
+                {
+                    var curr = graded[i].Clone();
+                    if (mapping.ContainsKey(curr.Lm))
+                        continue;
+
+                    // If the polynomial is zero, update it accordingly.
+                    var lm = curr.Lm;
+                    if (curr.Coeffs.Count == 1)
+                    {
+                        var v = Poly.Constant(0);
+                        update(i, lm, v);
+                        changed = true;
+                        goto start;
+                    }
+
+                    var other = graded[i].Clone();
+                    if (mapping.ContainsKey(other.Lm))
+                        continue;
+
+                    var rhs = other.Clone();
+                    rhs.Remove(other.Lm);
+                    rhs = -1L * rhs;
+
+                    if (other.Coeffs[other.Lm] == -1)
+                        rhs = -1L * rhs;
+                    else
+                        Debug.Assert(other.Coeffs[other.Lm] == 1);
+
+
+
+                    update(i, other.Lm, rhs);
+                    changed = true;
+                    goto start;
+
+                    /*
+                    for(int j = i + 1; j < graded.Count; j++)
+                    {
+                        var other = graded[j].Clone();
+                        if (mapping.ContainsKey(other.Lm))
+                            continue;
+
+                        var rhs = other.Clone();
+                        rhs.Remove(other.Lm);
+                        rhs = -1L * rhs;
+
+                        if (other.Coeffs[other.Lm] == -1)
+                            rhs = -1L * rhs;
+                        else
+                            Debug.Assert(other.Coeffs[other.Lm] == 1);
+
+                        
+
+                        update(j, other.Lm, rhs);
+                        changed = true;
+                        goto start;
+                    }
+                    */
+                }
+
+
+            }
+
+            // Debugger.Break();
+
+            return mapping;
+
+            /*
+            var mapping = new Dictionary<Monomial, Poly>();
+
+            // Process polynomials from the graded lex GB that are purely linear
+            // (all monomials have degree <= 1). These have the form:
+            //   c0*v_largest + c1*v1 + c2*v2 + ... + constant = 0
+            // We rewrite as: v_largest = -(c1*v1 + c2*v2 + ... + constant) / c0
+            foreach (var poly in graded)
+            {
+                // Skip non-linear polynomials
+                if (poly.Coeffs.Keys.Any(m => m.SortedVars.Count > 1))
+                    continue;
+
+                // Skip zero or constant-only polynomials
+                var variableTerms = poly.Coeffs.Where(kv => kv.Key.SortedVars.Count == 1).ToList();
+                if (variableTerms.Count == 0)
+                    continue;
+
+                // The leading monomial (largest variable in lex order) is the rewrite target.
+                var lm = poly.Lm;
+                if (lm.SortedVars.Count != 1)
+                    continue;
+
+                var lc = poly.Coeffs[lm];
+
+                // We need the leading coefficient to be +/-1 to solve exactly over Z.
+                if (lc != 1 && lc != -1)
+                    continue;
+
+                // Already have a mapping for this monomial
+                if (mapping.ContainsKey(lm))
+                    continue;
+
+                // Compute the RHS: v_largest = -(rest) / lc
+                var rhs = poly.Clone();
+                rhs.Remove(lm);
+                rhs = (-1L / lc) * rhs;
+                rhs.Simplify();
+
+                // Only rewrite if the RHS contains strictly smaller variables
+                bool allSmaller = rhs.Coeffs.Keys.All(m =>
+                    m.SortedVars.Count == 0 || m.SortedVars.All(v =>
+                    {
+                        var cmp = new Monomial(v).CompareTo(lm);
+                        // In our lex order, CompareTo is negated so that
+                        // "larger" monomials come first (negative return).
+                        // cmp > 0 means 'v' monomial is smaller than lm.
+                        return cmp > 0;
+                    }));
+
+                if (!allSmaller)
+                    continue;
+
+                mapping[lm] = rhs;
+            }
+
+            return mapping;
+            */
+        }
+
         public void Run()
         {
             var throwaway = new List<(int, uint, Poly)>();
@@ -249,10 +397,18 @@ namespace Mba.Simplifier.Verification
 
                 var currIdeal = ReduceLexGroebnerBasis(ideal.Skip(counts.LastOrDefault()).ToList());
 
-                var gradedGb = MsolveWrapper.Run(currIdeal, MsolveWrapper.GetSortedVars(currIdeal));
-                gradedGb.Sort();
+                // Compute a groebner basis in graded lex order to learn linear facts.
+                // i.e. rewrite polynomials in terms of each other
+                var linearFacts = MsolveWrapper.Run(currIdeal.Select(x => x.Clone()).ToList(), MsolveWrapper.GetSortedVars(currIdeal));
+                var nonlinearFacts = linearFacts.Select(x => x.Clone()).ToList();
+                linearFacts.RemoveAll(x => x.Coeffs.Keys.Any(x => x.SortedVars.Count > 1));
+                linearFacts.Sort();
 
-                
+                var other = LearnLinearSimplifications(linearFacts, currIdeal);
+
+
+
+                /*
                 // Learn obvious facts
                 for(int i = 0; i < currIdeal.Count; i++)
                 {
@@ -280,13 +436,18 @@ namespace Mba.Simplifier.Verification
                         }
                     }
                 }
+                */
+
+                foreach (var (k, v) in other)
+                    simplificationMapping.Add(k, v);
                 
+
 
                 // Update the cache with learned facts
                 foreach (var p in cache.Values)
                     SimplifyViaMapping(p, simplificationMapping);
 
-                foreach(var list in results)
+                foreach (var list in results)
                 {
                     foreach (var p in list)
                         SimplifyViaMapping(p, simplificationMapping);
@@ -305,7 +466,7 @@ namespace Mba.Simplifier.Verification
                 // Keep track of the "slice" corresponding to this bit
                 counts.Add(throwaway.Count);
 
-           
+
 
                 Console.WriteLine("");
 
