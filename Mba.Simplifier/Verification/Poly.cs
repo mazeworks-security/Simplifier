@@ -247,6 +247,8 @@ namespace Mba.Simplifier.Verification
 
     public class Monomial : IEquatable<Monomial>, IComparable<Monomial>
     {
+        public const bool LEXORDER = true;
+
         public readonly List<SymVar> SortedVars;
 
         private readonly int hash = 17;
@@ -254,7 +256,15 @@ namespace Mba.Simplifier.Verification
         // TODO: If a variable is boolean, eliminate x*x constraints
         public Monomial(IEnumerable<SymVar> vars)
         {
-            SortedVars = vars.OrderByDescending(x => x).ToList();
+            vars = vars.Distinct();
+
+            if (LEXORDER)
+                SortedVars = vars.OrderByDescending(x => x).ToList();
+            else
+                SortedVars = vars.OrderByDescending(x => x).ToList();
+
+         
+
             foreach (var v in SortedVars)
                 hash = hash * 23 + v.GetHashCode();
         }
@@ -345,23 +355,30 @@ namespace Mba.Simplifier.Verification
 
         public int CompareTo(Monomial? o)
         {
+
+
             var (t, other) = (this, o);
-            // Degrevlex ordering, negated so that the mathematically largest
-            // monomial comes first in SortedDictionary (for use as Lm).
-            //
-            // Degrevlex: higher total degree = greater. For equal degree,
-            // the rightmost (smallest variable) differing exponent being
-            // smaller means the monomial is greater.
+
+
+            if (LEXORDER)
+            {
+                int minLen = Math.Min(t.SortedVars.Count, other.SortedVars.Count);
+                for (int i = 0; i < minLen; i++)
+                {
+                    int cmp = t.SortedVars[i].CompareTo(other.SortedVars[i]);
+                    if (cmp != 0)
+                        return -cmp;
+                }
+                return -(t.SortedVars.Count.CompareTo(other.SortedVars.Count));
+            }
 
             if (t.Equals(other))
                 return 0;
 
-            // 1. Total degree: higher degree comes first (return negative)
             int degDiff = t.SortedVars.Count - other.SortedVars.Count;
             if (degDiff != 0)
                 return -degDiff;
 
-            // 2. Same total degree: degrevlex tiebreaker via exponent vectors
             var allVars = new SortedSet<SymVar>();
             var thisExp = new Dictionary<SymVar, int>();
             var otherExp = new Dictionary<SymVar, int>();
@@ -379,9 +396,6 @@ namespace Mba.Simplifier.Verification
                 otherExp[v] = c + 1;
             }
 
-            // Iterate from smallest variable (rightmost in degrevlex convention).
-            // If (this_exp - other_exp) is negative at the rightmost differing
-            // position, then this >_degrevlex other, so return negative.
             foreach (var v in allVars.Reverse())
             {
                 thisExp.TryGetValue(v, out int a);
@@ -396,8 +410,8 @@ namespace Mba.Simplifier.Verification
 
     public enum SymKind
     {
-        Input = 1,
-        InternalGate = 2,
+        Input = 0,
+        InternalGate = 1,
         Output = 2, // This is highly dubious, change this.
     }
 
@@ -442,8 +456,8 @@ namespace Mba.Simplifier.Verification
 
         public int CompareTo(SymVar other)
         {
-            //var (v0, v1) = (this, other);
-            var (v1, v0) = (this, other);
+            var (v0, v1) = (this, other);
+            //var (v1, v0) = (this, other);
 
             var below = 1;
             var above = -1;

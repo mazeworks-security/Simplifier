@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata.Ecma335;
@@ -33,7 +34,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 64;
+        uint w = 3;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -120,7 +121,11 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
             deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            deob = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
+
 
             obfuscated = Canonicalize(obfuscated, cache);
             deob = Canonicalize(deob, cache);
@@ -204,9 +209,58 @@ namespace Mba.Simplifier.Verification
             return acc;
         }
 
+        public void Run()
+        {
+            var throwaway = new List<(int, uint, Poly)>();
+            uint totalOrder = 0;
+            var firstSeen = new Dictionary<SymVar, uint>();
+            var visit = new List<AstIdx>() { obfuscated };
+            var results = new List<Poly>();
+            foreach (var _ in visit)
+                results.Add(new());
+            Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
+
+            var roundIdx = 0;
+            for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
+            {
+                // Compute the polynomials corresponding to the ith output bit
+                for (int i = 0; i < visit.Count; i++)
+                {
+                    results.Add(GetSpecification(visit[i], sliceIdx, cache, throwaway, firstSeen, ref totalOrder, true));
+                }
+            }
+
+            var ideal = throwaway.Select(x => x.Item3).ToList();
+
+
+            List<List<Poly>> bits = new();
+            var vars = ctx.CollectVariables(obfuscated);
+            foreach (var v in vars)
+            {
+                List<Poly> l = new();
+                bits.Add(l);
+                for (int i = 0; i < w; i++)
+                    l.Add(GetSpecification(v, i, cache, throwaway, firstSeen, ref totalOrder, false));
+
+            }
+            Poly spec = bits[0][0] - bits[0][0];
+            for (int bitIndex = 0; bitIndex < w; bitIndex++)
+            {
+                Poly term = bits[0][0] - bits[0][0];
+                for (int varIndex = 0; varIndex < vars.Count; varIndex++)
+                {
+                    term += (1L << (ushort)bitIndex) * bits[varIndex][bitIndex];
+                }
+
+                spec += term;
+            }
+
+            Debugger.Break();
+        }
+
         // Now we need to figure out how to prune dead elements from the groebner basis
         // "Cone of influence", only problem is that `x0*x1` gets rewritten as 
-        public void Run()
+        public void RunOld()
         {
             var idealArr = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
@@ -428,8 +482,6 @@ namespace Mba.Simplifier.Verification
             if (!cout.IsEq(before))
                 return cout;
 
-            //if (before.ToString().Contains("op13_1cout"))
-            //    Debugger.Break();
             var prevMonomial = cout.Coeffs.Keys.Single();
 
             if (prevMonomial.SortedVars.Count == 1)
@@ -448,85 +500,10 @@ namespace Mba.Simplifier.Verification
                 }
             }
 
-           
 
             return cout;
         }
 
-
-        // Old version attempting to implement the old paper
-        public void RunOld()
-        {
-            var idealArr = new List<(int, uint, Poly)>();
-
-            uint totalOrder = 0;
-            var firstSeen = new Dictionary<SymVar, uint>();
-
-            Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
-
-            var allSeen = new List<Poly>();
-
-            var results = new List<Poly>();
-            foreach (var curr in new AstIdx[] { obfuscated, deob })
-            {
-                Console.WriteLine("\n\n");
-                for (int i = 0; i < w; i++)
-                    results.Add(GetSpecification(curr, i, cache, idealArr, firstSeen, ref totalOrder, true));
-
-                foreach (var m in idealArr)
-                {
-                    m.Item3.Simplify();
-                    Console.WriteLine(m.Item3);
-                }
-
-                break;
-            }
-
-            var ideal = idealArr.ToList().Select(x => x.Item3).ToList();
-            foreach (var member in ideal)
-            {
-                member.Simplify();
-                Console.WriteLine(member);
-            }
-
-            var vars = ctx.CollectVariables(obfuscated);
-
-            List<List<Poly>> bits = new();
-            foreach (var v in vars)
-            {
-                List<Poly> l = new();
-                bits.Add(l);
-                for (int i = 0; i < w; i++)
-                    l.Add(GetSpecification(v, i, cache, idealArr, firstSeen, ref totalOrder, false));
-
-            }
-            // Adder specification
-            Poly spec = bits[0][0] - bits[0][0];
-            for (int bitIndex = 0; bitIndex < w; bitIndex++)
-            {
-                Poly term = bits[0][0] - bits[0][0];
-                for (int varIndex = 0; varIndex < vars.Count; varIndex++)
-                {
-                    term += (1L << (ushort)bitIndex) * bits[varIndex][bitIndex];
-                }
-
-                spec += term;
-            }
-
-            // Compute groebner basis using msolve
-            var ourGb = MsolveWrapper.Run(ideal, null);
-
-            // Linear linearFacts
-            var linearTerms = ourGb.Where(x => x.Coeffs.Keys.All(x => x.SortedVars.Count <= 1)).ToList();
-
-            Debugger.Break();
-
-            //SageGb(ideal, linearize: false);
-
-
-
-
-        }
 
         // Each node gets an x, y, carry in, carry out bits
         private Poly GetSpecification(AstIdx idx, int bitIdx, Dictionary<(AstIdx, int bitIdx), Poly> cache, List<(int bitIndex, uint opIndex, Poly poly)> ideal, Dictionary<SymVar, uint> firstSeen, ref uint totalOrder, bool isOutput = false)
