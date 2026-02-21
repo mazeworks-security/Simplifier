@@ -90,7 +90,7 @@ namespace Mba.Simplifier.Verification
             deob = RustAstParser.Parse(ctx, "x&~x", w);
 
 
-            
+
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
 
@@ -190,7 +190,7 @@ namespace Mba.Simplifier.Verification
             if (c == 1)
                 return x;
 
-       
+
             int highBit = 63;
             while (highBit > 0 && ((c >> highBit) & 1) == 0)
                 highBit--;
@@ -198,10 +198,10 @@ namespace Mba.Simplifier.Verification
             AstIdx acc = x;
             for (int i = highBit - 1; i >= 0; i--)
             {
-               
+
                 acc = ctx.Add(acc, acc);
 
-                
+
                 if (((c >> i) & 1) == 1)
                     acc = ctx.Add(acc, x);
             }
@@ -216,12 +216,12 @@ namespace Mba.Simplifier.Verification
             var firstSeen = new Dictionary<SymVar, uint>();
             var visit = new List<AstIdx>() { obfuscated };
             var results = new List<Poly>();
-            foreach (var _ in visit)
-                results.Add(new());
             Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
 
+            var COLUMN = 1;
+
             var roundIdx = 0;
-            for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
+            for (int sliceIdx = 0; sliceIdx < COLUMN; sliceIdx++)
             {
                 // Compute the polynomials corresponding to the ith output bit
                 for (int i = 0; i < visit.Count; i++)
@@ -244,7 +244,7 @@ namespace Mba.Simplifier.Verification
 
             }
             Poly spec = bits[0][0] - bits[0][0];
-            for (int bitIndex = 0; bitIndex < w; bitIndex++)
+            for (int bitIndex = 0; bitIndex < COLUMN; bitIndex++)
             {
                 Poly term = bits[0][0] - bits[0][0];
                 for (int varIndex = 0; varIndex < vars.Count; varIndex++)
@@ -255,8 +255,117 @@ namespace Mba.Simplifier.Verification
                 spec += term;
             }
 
+            Poly result = Poly.Constant(0);
+            foreach (var r in results)
+                result += r;
+
+            var diff = result - spec;
+
+            SageGb(ideal, false);
+
+            foreach (var p in ideal)
+                p.Simplify();
+            var rrr = Reduce(diff, ideal);
+            //var rrr = LexReduce(diff, ideal);
+
             Debugger.Break();
         }
+
+        public Poly LexReduce(Poly poly, List<Poly> ideal)
+        {
+            poly = poly.Clone();
+            poly.Simplify();
+            if (poly.Coeffs.Count == 0)
+                return poly;
+
+            var sorted = ideal.Where(g => g.Coeffs.Count > 0).OrderBy(g => g).ToList();
+
+            var remainder = new Poly();
+            bool changed = true;
+            while (poly.Coeffs.Count > 0 && changed)
+            {
+                changed = false;
+                poly.Simplify();
+                if (poly.Coeffs.Count == 0)
+                    break;
+
+                var lm = poly.Lm;
+                var lc = poly.Coeffs[lm];
+
+                foreach (var g in sorted)
+                {
+                    var gLm = g.Lm;
+                    var gLc = g.Coeffs[gLm];
+
+                    if (gLm.Divides(lm) && lc % gLc == 0)
+                    {
+                        long c = lc / gLc;
+                        var quotientMonom = lm.Divide(gLm);
+
+                        foreach (var kp in g.Coeffs)
+                        {
+                            poly.Add(quotientMonom * kp.Key, -c * kp.Value);
+                        }
+
+                        poly.Simplify();
+                        changed = true;
+                        break;
+                    }
+                }
+
+                if (!changed)
+                {
+                    remainder.Add(lm, lc);
+                    poly.Remove(lm);
+                    changed = poly.Coeffs.Count > 0;
+                }
+            }
+
+            // Append leftover terms
+            foreach (var (m, c) in poly.Coeffs)
+                remainder.Add(m, c);
+
+            remainder.Simplify();
+            return remainder;
+        }
+
+        public Poly Reduce(Poly poly, List<Poly> ideal)
+        {
+            poly.Simplify();
+            poly = poly.Clone();
+            if (poly.Coeffs.Count == 0)
+                return poly;
+
+            if (poly.Coeffs.Keys.All(x => x.SortedVars.All(x => x.Kind == SymKind.Input)))
+                return poly;
+
+            var lm = poly.Lm;
+            var target = ideal.FirstOrDefault(x => x.Lm == lm && x.Coeffs[lm] == 1)?.Clone();
+            if (target == null)
+            {
+                var cand = ideal.First(x => x.Coeffs.ContainsKey(lm) && x.Coeffs[lm] == 1).Clone();
+                Debug.Assert(cand.Lm <= lm);
+
+                cand.Remove(lm);
+
+                target = Reduce(cand, ideal);
+            }
+
+            else
+            {
+                target.Remove(lm);
+            }
+
+            var subst = -1L * target;
+
+            var replaced = poly.Clone();
+            replaced.Replace(lm, subst);
+
+            return Reduce(replaced, ideal);
+
+            //Debugger.Break();
+        }
+
 
         // Now we need to figure out how to prune dead elements from the groebner basis
         // "Cone of influence", only problem is that `x0*x1` gets rewritten as 
@@ -278,12 +387,12 @@ namespace Mba.Simplifier.Verification
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
                 // Compute the polynomials corresponding to the ith output bit
-                for(int i = 0; i < visit.Count; i++)
+                for (int i = 0; i < visit.Count; i++)
                 {
                     results[i].Add(GetSpecification(visit[i], sliceIdx, cache, idealArr, firstSeen, ref totalOrder, true));
                 }
 
-        
+
 
 
                 var iArr = idealArr.Select(x => x.Item3).ToList();
@@ -303,19 +412,19 @@ namespace Mba.Simplifier.Verification
                 var allVars = MsolveWrapper.GetSortedVars(iArr);
                 var boolVars = new List<SymVar>();
                 var skip = new List<SymVar>();
-                foreach(var v in allVars)
+                foreach (var v in allVars)
                 {
                     // Adding all variables seems to yield huge performance benefits for some reason
                     boolVars.Add(v);
                     continue;
 
-                    if(v.Kind == SymKind.Input)
+                    if (v.Kind == SymKind.Input)
                     {
                         boolVars.Add(v);
                         continue;
                     }
 
-                    if(v.BitIndex < sliceIdx)
+                    if (v.BitIndex < sliceIdx)
                     {
                         boolVars.Add(v);
                         continue;
@@ -345,7 +454,7 @@ namespace Mba.Simplifier.Verification
 
 
                 Console.WriteLine("GB: ");
-                foreach(var p in gb)
+                foreach (var p in gb)
                 {
                     Console.WriteLine($"    {p}");
                 }
@@ -353,11 +462,11 @@ namespace Mba.Simplifier.Verification
 
                 linearFacts.Clear();
                 // Simplify the carry in info
-                foreach(var (_, (bitIdx, arithInfos)) in carryIdentifiers.ToList())
+                foreach (var (_, (bitIdx, arithInfos)) in carryIdentifiers.ToList())
                 {
                     // Skip if there's no carry info
-                    if(arithInfos.Count == 0)
-                            continue;
+                    if (arithInfos.Count == 0)
+                        continue;
 
                     var arithInfo = arithInfos.Last();
                     //if (bitIdx != sliceIdx)
@@ -439,8 +548,8 @@ namespace Mba.Simplifier.Verification
                 }
 
 
-                
-                foreach(var (key, input) in cache.ToList())
+
+                foreach (var (key, input) in cache.ToList())
                 {
                     var p = input;
                     var r = Poly.Reduce(p.Clone(), gb);
@@ -448,7 +557,7 @@ namespace Mba.Simplifier.Verification
                     cache[key] = r;
                 }
 
-                
+
 
                 var reducedSpec = Poly.Reduce(specDiff, gb);
                 reducedSpec = Poly.Reduce(reducedSpec, gb);
@@ -535,7 +644,7 @@ namespace Mba.Simplifier.Verification
             if (!carryIdentifiers.ContainsKey(idx))
                 carryIdentifiers.Add(idx, ((uint)carryIdentifiers.Count, new()));
 
-            var update = (SymVar sym) =>
+            var update = (ref SymVar sym) =>
             {
                 var existing = firstSeen.TryGetValue(sym, out var val);
                 if (existing)
@@ -549,15 +658,17 @@ namespace Mba.Simplifier.Verification
                 return sym;
             };
 
+            var (carryId, arithInfo) = carryIdentifiers[idx];
+
             var getOp = (uint index, ref uint totalOrder) =>
             {
-                if(index == 0)
+                if (index == 0)
                     return GetSpecification(ctx.GetOp0(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
                 Debug.Assert(index == 1);
                 return GetSpecification(ctx.GetOp1(idx), bitIdx, cache, ideal, firstSeen, ref totalOrder);
             };
 
-            var (carryId, arithInfo) = carryIdentifiers[idx];
+            /*
             if(opc == AstOp.Add)
             {
                 var a = getOp(0, ref totalOrder);
@@ -609,8 +720,8 @@ namespace Mba.Simplifier.Verification
                 return sum;
          
             }
-            //if (opc == AstOp.Add)
-            if (false)
+            */
+            if (opc == AstOp.Add)
             {
                 if (arithInfo.Count > bitIdx)
                     return arithInfo[bitIdx].result;
@@ -619,17 +730,17 @@ namespace Mba.Simplifier.Verification
                 var b = getOp(1, ref totalOrder);
 
                 var generate = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}gen");
-                update(generate);
+                update(ref generate);
 
                 var propagate = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}prop");
-                update(propagate);
+                update(ref propagate);
 
                 var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
-                update(cout);
+                update(ref cout);
 
                 //var sum = SymVar.Temp($"a[{carryId}][{bitIdx}].sum");
                 var sum = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}sum");
-                update(sum);
+                update(ref sum);
 
 
 
@@ -696,7 +807,7 @@ namespace Mba.Simplifier.Verification
                 var b = getOp(1, ref totalOrder);
 
                 var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
-                update(y);
+                update(ref y);
                 ideal.Add((bitIdx, totalOrder, y - (a * b)));
 
                 totalOrder++;
@@ -710,8 +821,8 @@ namespace Mba.Simplifier.Verification
                 var b = getOp(1, ref totalOrder);
 
                 var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
-                update(y);
-                ideal.Add((bitIdx, totalOrder, y - (a - b + a*b)));
+                update(ref y);
+                ideal.Add((bitIdx, totalOrder, y - (a - b + a * b)));
 
                 totalOrder++;
                 cache[key] = y;
@@ -724,7 +835,7 @@ namespace Mba.Simplifier.Verification
                 var b = getOp(1, ref totalOrder);
 
                 var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
-                update(y);
+                update(ref y);
                 ideal.Add((bitIdx, totalOrder, (y - (a + b - (2 * (a * b))))));
 
                 totalOrder++;
@@ -736,7 +847,7 @@ namespace Mba.Simplifier.Verification
             {
                 var a = getOp(0, ref totalOrder);
                 var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
-                update(y);
+                update(ref y);
                 ideal.Add((bitIdx, totalOrder, y + (a - Poly.Constant(1))));
 
                 totalOrder++;
@@ -1019,7 +1130,7 @@ namespace Mba.Simplifier.Verification
                 }
             }
 
-            varOrder.Sort();
+            varOrder = varOrder.OrderByDescending(x => x).ToList();
             var allNames = new List<string>(varOrder.Select(v => v.Name));
             if (linearize)
                 allNames.AddRange(linMap.Values);
@@ -1039,7 +1150,7 @@ namespace Mba.Simplifier.Verification
             }
 
             sb.AppendLine("    ],");
-            sb.AppendLine("    order='degrevlex'");
+            sb.AppendLine("    order='lex'");
             sb.AppendLine(")");
             sb.AppendLine();
             sb.AppendLine("R.inject_variables()");
@@ -1053,7 +1164,7 @@ namespace Mba.Simplifier.Verification
                 var poly = ideal[polyIdx];
                 var terms = new List<string>();
 
-                foreach (var (monomial, rawCoeff) in poly.Coeffs.OrderByDescending(x => x.Key))
+                foreach (var (monomial, rawCoeff) in poly.Coeffs)
                 {
                     var coeff = rawCoeff & mask;
                     if (coeff == 0)

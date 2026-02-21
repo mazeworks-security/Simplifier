@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 namespace Mba.Simplifier.Verification
 {
 
-    public class Poly
+    public class Poly : IComparable<Poly>
     {
         public SortedDictionary<Monomial, long> Coeffs { get; private set; }
 
@@ -169,6 +169,41 @@ namespace Mba.Simplifier.Verification
             Coeffs = sum.Coeffs;
         }
 
+        public bool ReplaceSubset(Monomial a, Poly other)
+        {
+            var toReplace = Coeffs.Where(x => a.Divides(x.Key))
+                                  .Select(x => (x.Key, x.Value))
+                                  .ToList();
+
+            if (toReplace.Count == 0)
+                return false;
+
+            foreach (var (m, coeff) in toReplace)
+            {
+                // Remove the original term
+                Coeffs.Remove(m);
+
+                // Compute the remainder: m / a
+                // Since a.Divides(m), the remainder is well-defined.
+                // Monomial.Divide computes this - other (multiset difference)
+                var remainder = m.Divide(a);
+
+                // Compute the replacement term: coeff * remainder * other
+                // 'other' is the polynomial that replaces 'a'
+                var termFactor = coeff * remainder;
+                var replacementPoly = termFactor * other;
+
+                // Add the expanded terms to the polynomial
+                foreach (var (pm, pc) in replacementPoly.Coeffs)
+                {
+                    Add(pm, pc);
+                }
+            }
+
+            return true;
+        }
+
+
         public void Remove(Monomial a) => Coeffs.Remove(a);
 
 
@@ -239,6 +274,36 @@ namespace Mba.Simplifier.Verification
             return new Poly() { Coeffs = { { new Monomial(), value } } };
         }
 
+        public int CompareTo(Poly? other)
+        {
+            if (other == null) return 1;
+
+            using var thisEnum = Coeffs.GetEnumerator();
+            using var otherEnum = other.Coeffs.GetEnumerator();
+
+            while (thisEnum.MoveNext())
+            {
+                if (!otherEnum.MoveNext())
+                    return 1;
+
+                var thisMonom = thisEnum.Current.Key;
+                var otherMonom = otherEnum.Current.Key;
+
+                int cmp = thisMonom.CompareTo(otherMonom);
+                if (cmp != 0)
+                    return -cmp; // Invert because Monomial.CompareTo is negated
+
+                int coeffCmp = thisEnum.Current.Value.CompareTo(otherEnum.Current.Value);
+                if (coeffCmp != 0)
+                    return coeffCmp;
+            }
+
+            if (otherEnum.MoveNext())
+                return -1;
+
+            return 0;
+        }
+
         public override string ToString()
         {
             return String.Join(" + ", Coeffs.Select(x => $"{x.Value}*({x.Key})"));
@@ -263,7 +328,7 @@ namespace Mba.Simplifier.Verification
             else
                 SortedVars = vars.OrderByDescending(x => x).ToList();
 
-         
+
 
             foreach (var v in SortedVars)
                 hash = hash * 23 + v.GetHashCode();
@@ -300,6 +365,18 @@ namespace Mba.Simplifier.Verification
         {
             return !(left == right);
         }
+
+        public static bool operator <(Monomial left, Monomial right)
+            => left.CompareTo(right) < 0;
+
+        public static bool operator >(Monomial left, Monomial right)
+            => left.CompareTo(right) > 0;
+
+        public static bool operator <=(Monomial left, Monomial right)
+            => left.CompareTo(right) <= 0;
+
+        public static bool operator >=(Monomial left, Monomial right)
+            => left.CompareTo(right) >= 0;
 
         public override string ToString()
         {
