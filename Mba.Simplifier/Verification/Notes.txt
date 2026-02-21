@@ -24,6 +24,25 @@ Sorted by total degree first, then last variable exponent
 Calculate remainder of the specification modulo the linear elements of the groebner basis(page 9) until no further reduction is possible. Return whether the final result is zero.
 
 
+# TODO:
+- Analyze 1-bit at a time. Then rewrite all upper bits in terms of lower bits.
+- Multipication substitution
+- Shill wrapper around msolve
+- Constant multiplication
+-
+- Compute polynomial for the ith bit
+-   Eliminate linear terms. Need to track this in a map for future
+-       Maintaing the map of simplifications is really annoying..
+-       ... we don't need a mapping. Just compute a groebner basis and then reduce everything by the GB
+-       Actually I don't think we can do that. Maybe? Think you can just take each non input and reduce it by the GB, then substitute it back in. It should be acyclic
+-       Reminder: Reverse order of variables. Express terms in simplest way(lower deg)
+
+
+- You should be able to compute a groebner basis and preserve only the wires that corresponds to output gates of BV nodes.
+    
+- Sometimes the groebner basis is simply too large even using incremental reduction. In those cases we should just gaussian elimination for linear parts.
+- Then degree 1 linearization + gaussian elimination. Vast majority of intermediate values will fold to zero.
+- Then we still might need substitution.
 
 
 # Other papers
@@ -33,3 +52,13 @@ Calculate remainder of the specification modulo the linear elements of the groeb
 - "Symbolic Computer Algebra for Multipliers Revisited - It's All About Orders and Phases" 
 - https://abs.informatik.uni-freiburg.de/papers/2024/KS_2024.pdf
 - DynPhaseOrderOpt. Optimizing substitution order and optionally negating some variables to reduce intermediate swell
+
+
+# Algorithm:
+(1) Lin elim
+    - while keeping track of the definition of output gates
+(2) Incremental linearization and solving
+    - Initially linearize everything
+    - 
+
+We could incrementally compute a groebner basis for the ith bit. If verification fails then expand to include bits+1.
