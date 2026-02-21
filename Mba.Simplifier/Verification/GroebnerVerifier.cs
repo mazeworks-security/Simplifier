@@ -34,7 +34,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 3;
+        uint w = 16;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -218,7 +218,7 @@ namespace Mba.Simplifier.Verification
             var results = new List<Poly>();
             Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
 
-            var COLUMN = 1;
+            var COLUMN = 6;
 
             var roundIdx = 0;
             for (int sliceIdx = 0; sliceIdx < COLUMN; sliceIdx++)
@@ -265,8 +265,8 @@ namespace Mba.Simplifier.Verification
 
             foreach (var p in ideal)
                 p.Simplify();
-            var rrr = Reduce(diff, ideal);
-            //var rrr = LexReduce(diff, ideal);
+            //var rrr = Reduce(diff, ideal);
+            var rrr = LexReduce(diff, ideal);
 
             Debugger.Break();
         }
