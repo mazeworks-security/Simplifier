@@ -42,7 +42,7 @@ Calculate remainder of the specification modulo the linear elements of the groeb
     
 - Sometimes the groebner basis is simply too large even using incremental reduction. In those cases we should just gaussian elimination for linear parts.
 - Then degree 1 linearization + gaussian elimination. Vast majority of intermediate values will fold to zero.
-- Then we still might need substitution.
+- Then we still might need substitution. 
 
 
 # Other papers
