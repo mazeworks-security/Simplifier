@@ -10,13 +10,14 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace Mba.Simplifier.Verification
 {
-    public record ArithInfo(Poly cin, Poly cout, Poly result);
+    public record ArithInfo(Poly cin, Poly cout, Poly pcout0, Poly pcout1, Poly result);
 
     // https://danielakaufmann.at/wp-content/uploads/2020/11/Kaufmann-PhD-Thesis-2020.pdf
     // "Formal Verification of Multiplier Circuits using Computer Algebra"
@@ -104,6 +105,17 @@ namespace Mba.Simplifier.Verification
 
             obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
             deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "3*x + 3*y + 1*x + 1*y", w);
+            deob = RustAstParser.Parse(ctx, "4*x + 4*y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(((x&y) + (x&y)) + (x^y)) & (x+y)", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "3*x + 3*y + 1*x + 1*y", w);
+            deob = RustAstParser.Parse(ctx, "4*x + 4*y", w);
 
             var cache = new Dictionary<AstIdx, AstIdx>();
 
@@ -275,8 +287,21 @@ namespace Mba.Simplifier.Verification
                     //    continue;
 
                     var cin = Poly.Reduce(arithInfo.cin, gb);
-                    var cout = Poly.Reduce(arithInfo.cout, gb);
                     var result = Poly.Reduce(arithInfo.result, gb);
+
+                    var cout = CollectLinearFacts(arithInfo.cout, gb, linearFacts);
+                    var pcout0 = CollectLinearFacts(arithInfo.pcout0, gb, linearFacts);
+                    var pcout1 = CollectLinearFacts(arithInfo.pcout1, gb, linearFacts);
+
+                    /*
+                    var cout = Poly.Reduce(arithInfo.cout, gb);
+                    var pcout0 = Poly.Reduce(arithInfo.pcout0, gb);
+                    if (pcout0.IsEq(arithInfo.pcout0))
+                        Debugger.Break();
+                    var pcout1 = Poly.Reduce(arithInfo.pcout1, gb);
+                    if (pcout1.IsEq(arithInfo.pcout1))
+                        Debugger.Break();
+             
 
                     if (result.IsEq(arithInfo.cout))
                         Debugger.Break();
@@ -305,7 +330,7 @@ namespace Mba.Simplifier.Verification
                             }
                         }
                     }
-                    
+                    */
 
                     // But the above is not always enough^
                     // So now we propagate any fact where this variable is in the leading monomial
@@ -333,7 +358,7 @@ namespace Mba.Simplifier.Verification
                     }
                     */
 
-                    arithInfos[arithInfos.Count - 1] = new(cin, cout, result);
+                    arithInfos[arithInfos.Count - 1] = new(cin, cout, pcout0, pcout1, result);
                 }
 
 
@@ -381,6 +406,29 @@ namespace Mba.Simplifier.Verification
             Debugger.Break();
         }
 
+        private Poly CollectLinearFacts(Poly before, List<Poly> gb, List<Poly> linearFacts)
+        {
+            var cout = Poly.Reduce(before, gb);
+            if (!cout.IsEq(before))
+                return cout;
+
+            var prevMonomial = cout.Coeffs.Keys.Single();
+            if (prevMonomial.SortedVars.Count == 1)
+            {
+                foreach (var p in gb)
+                {
+                    if (p.Coeffs.Count != 1)
+                        continue;
+                    var mm = p.Coeffs.Keys.Single();
+                    if (!mm.SortedVars.Contains(prevMonomial.SortedVars.Single()))
+                        continue;
+
+                    linearFacts.Add(p);
+                }
+            }
+
+            return cout;
+        }
 
 
         // Old version attempting to implement the old paper
@@ -508,7 +556,59 @@ namespace Mba.Simplifier.Verification
             };
 
             var (carryId, arithInfo) = carryIdentifiers[idx];
-            if (opc == AstOp.Add)
+            if(opc == AstOp.Add)
+            {
+                var a = getOp(0, ref totalOrder);
+                var b = getOp(1, ref totalOrder);
+
+                Poly cin = Poly.Constant(0);
+                if (bitIdx > 0)
+                    cin = arithInfo[bitIdx - 1].cout;
+
+                // 2. Declare INTERMEDIATE variables FIRST (Medium rank)
+                var psum = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}psum");
+                update(psum);
+
+                var pcout1 = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}pcout1");
+                update(pcout1);
+
+                var pcout2 = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}pcout2");
+                update(pcout2);
+
+ 
+                var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
+                update(cout);
+
+                var sum = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}sum");
+                update(sum);
+
+                // Half adder
+                ideal.Add((bitIdx, totalOrder++, psum - (a + b - 2 * a * b)));
+                ideal.Add((bitIdx, totalOrder++, pcout1 - (a * b)));
+
+                // 2nd half carry
+                ideal.Add((bitIdx, totalOrder++, pcout2 - (psum * cin)));
+
+                // Outputs
+                Poly pc1 = new Monomial(pcout1);
+                Poly pc2 = new Monomial(pcout2);
+                ideal.Add((bitIdx, totalOrder++, cout - (pc1 + pc2)));
+                ideal.Add((bitIdx, totalOrder++, sum - (psum + cin - 2 * psum * cin)));
+
+                // 5. Save to info tracking
+                arithInfo.Add(new(cin, cout, pc1, pc2, sum));
+
+
+
+                totalOrder++;
+
+                cache[key] = sum;
+
+                return sum;
+         
+            }
+            //if (opc == AstOp.Add)
+            if (false)
             {
                 if (arithInfo.Count > bitIdx)
                     return arithInfo[bitIdx].result;
@@ -576,7 +676,7 @@ namespace Mba.Simplifier.Verification
                 //var member = (2L * cout) + sum - a - b - cin;
                 ideal.Add((bitIdx, totalOrder, member));
 
-                arithInfo.Add(new(cin, cout, sum));
+                arithInfo.Add(new(cin, cout, null, null, sum));
 
 
 
