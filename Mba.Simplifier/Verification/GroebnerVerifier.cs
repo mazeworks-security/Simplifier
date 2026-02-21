@@ -75,10 +75,17 @@ namespace Mba.Simplifier.Verification
             //before = RustAstParser.Parse(ctx, "x&y", w);
             //after = RustAstParser.Parse(ctx, "x&y", w);
 
+
+            obfuscated = RustAstParser.Parse(ctx, "(x&((~x + 1)&(x+x)))", w);
+            deob = RustAstParser.Parse(ctx, "x&0", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
+            deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
-            //obfuscated = Canonicalize(obfuscated, cache);
-            //deob = Canonicalize(deob, cache);
+            obfuscated = Canonicalize(obfuscated, cache);
+            deob = Canonicalize(deob, cache);
 
         }
 
