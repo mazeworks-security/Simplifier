@@ -102,6 +102,9 @@ namespace Mba.Simplifier.Verification
             deob = RustAstParser.Parse(ctx, "4*x + 4*y", w);
 
 
+            obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
+            deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
             obfuscated = Canonicalize(obfuscated, cache);
@@ -273,13 +276,16 @@ namespace Mba.Simplifier.Verification
 
                     var cin = Poly.Reduce(arithInfo.cin, gb);
                     var cout = Poly.Reduce(arithInfo.cout, gb);
-                    if (cout.ToString().Contains("op15_1cout"))
+                    var result = Poly.Reduce(arithInfo.result, gb);
+
+                    if (result.IsEq(arithInfo.cout))
                         Debugger.Break();
+
 
                     // This works and gives us results
                     // Essentially we're finding facts like `op15_0cout = x0*y0` and propagating them up.
                     // This is enough usually..
-                    
+
                     if (cout.IsEq(arithInfo.cout) && arithInfo.cout.Coeffs.Count == 1)
                     {
                         var prevMonomial = arithInfo.cout.Coeffs.Keys.Single();
@@ -327,7 +333,6 @@ namespace Mba.Simplifier.Verification
                     }
                     */
 
-                    var result = Poly.Reduce(arithInfo.result, gb);
                     arithInfos[arithInfos.Count - 1] = new(cin, cout, result);
                 }
 
