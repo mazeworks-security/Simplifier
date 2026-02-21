@@ -76,11 +76,31 @@ namespace Mba.Simplifier.Verification
             //after = RustAstParser.Parse(ctx, "x&y", w);
 
 
+            //obfuscated = RustAstParser.Parse(ctx, "(x&((~x + 1)&(x+x)))", w);
+            //deob = RustAstParser.Parse(ctx, "x&0", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(((x&y) + (x&y)) + (x^y)) & (x+y)", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+
+
             obfuscated = RustAstParser.Parse(ctx, "(x&((~x + 1)&(x+x)))", w);
-            deob = RustAstParser.Parse(ctx, "x&0", w);
+            deob = RustAstParser.Parse(ctx, "x&~x", w);
+
+
+            
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
+            deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
+            deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
 
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "3*x + 3*y + 1*x + 1*y", w);
+            deob = RustAstParser.Parse(ctx, "4*x + 4*y", w);
+
 
             var cache = new Dictionary<AstIdx, AstIdx>();
 
@@ -194,14 +214,43 @@ namespace Mba.Simplifier.Verification
 
 
                 var iArr = idealArr.Select(x => x.Item3).ToList();
+                foreach (var p in iArr)
+                {
+                    p.PruneDuplicates();
+                    p.Simplify();
+                }
+
                 // Update the list of linear facts from the last GB
                 iArr.AddRange(linearFacts);
 
                 SageGb(iArr, false);
 
 
+                var allVars = MsolveWrapper.GetSortedVars(iArr);
+                var boolVars = new List<SymVar>();
+                var skip = new List<SymVar>();
+                foreach(var v in allVars)
+                {
+                    // Adding all variables seems to yield huge performance benefits for some reason
+                    boolVars.Add(v);
+                    continue;
 
-                var gb = MsolveWrapper.Run(iArr);
+                    if(v.Kind == SymKind.Input)
+                    {
+                        boolVars.Add(v);
+                        continue;
+                    }
+
+                    if(v.BitIndex < sliceIdx)
+                    {
+                        boolVars.Add(v);
+                        continue;
+                    }
+
+                    skip.Add(v);
+                }
+
+                var gb = MsolveWrapper.Run(iArr, boolVars);
 
                 Console.WriteLine("GB: ");
                 foreach(var p in gb)
@@ -224,6 +273,13 @@ namespace Mba.Simplifier.Verification
 
                     var cin = Poly.Reduce(arithInfo.cin, gb);
                     var cout = Poly.Reduce(arithInfo.cout, gb);
+                    if (cout.ToString().Contains("op15_1cout"))
+                        Debugger.Break();
+
+                    // This works and gives us results
+                    // Essentially we're finding facts like `op15_0cout = x0*y0` and propagating them up.
+                    // This is enough usually..
+                    
                     if (cout.IsEq(arithInfo.cout) && arithInfo.cout.Coeffs.Count == 1)
                     {
                         var prevMonomial = arithInfo.cout.Coeffs.Keys.Single();
@@ -243,6 +299,33 @@ namespace Mba.Simplifier.Verification
                             }
                         }
                     }
+                    
+
+                    // But the above is not always enough^
+                    // So now we propagate any fact where this variable is in the leading monomial
+                    /*
+                    if(cout.IsEq(arithInfo.cout) && arithInfo.cout.Coeffs.Count == 1)
+                    {
+                        var prevMonomial = arithInfo.cout.Coeffs.Keys.Single();
+                        foreach (var p in gb)
+                        {
+                            if (p.Coeffs.Count > 2)
+                                continue;
+
+                            var mm = p.Lm;
+                            var v = prevMonomial.SortedVars.Single();
+                            if (!mm.SortedVars.Contains(v))
+                                continue;
+
+                            if (p.Coeffs.Count == 2 && p.Coeffs.Keys.SequenceEqual(new List<Monomial>() { new Monomial(v, v), new Monomial(v) }))
+                                continue;
+
+                            linearFacts.Add(p);
+
+                            // Debugger.Break();
+                        }
+                    }
+                    */
 
                     var result = Poly.Reduce(arithInfo.result, gb);
                     arithInfos[arithInfos.Count - 1] = new(cin, cout, result);
@@ -353,7 +436,7 @@ namespace Mba.Simplifier.Verification
             }
 
             // Compute groebner basis using msolve
-            var ourGb = MsolveWrapper.Run(ideal);
+            var ourGb = MsolveWrapper.Run(ideal, null);
 
             // Linear linearFacts
             var linearTerms = ourGb.Where(x => x.Coeffs.Keys.All(x => x.SortedVars.Count <= 1)).ToList();

@@ -107,8 +107,17 @@ namespace Mba.Simplifier.Verification
             var toRemove = Coeffs.Where(x => x.Value == 0).Select(x => x.Key).ToList();
             foreach (var del in toRemove)
                 Coeffs.Remove(del);
+        }
 
-
+        public void PruneDuplicates()
+        {
+            var clone = Coeffs.ToDictionary(x => x.Key, x => x.Value);
+            Coeffs.Clear();
+            foreach (var (m, c) in clone)
+            {
+                Add(new Monomial(m.SortedVars.Distinct()), c);
+            }
+            //Coeffs = new(Coeffs.ToDictionary(x => new Monomial(x.Key.SortedVars.Distinct()), x => x.Value)); 
         }
 
         public void ReduceMod(uint w)

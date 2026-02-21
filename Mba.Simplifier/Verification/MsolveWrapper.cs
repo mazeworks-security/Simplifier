@@ -14,15 +14,15 @@ namespace Mba.Simplifier.Verification
         private readonly string outputFile = "out.ms";
         private readonly string inputFile = "in.ms";
 
-        public static List<Poly> Run(List<Poly> polys)
-            => new MsolveWrapper().ComputeGroebnerBasis(polys);
+        public static List<Poly> Run(List<Poly> polys, List<SymVar> boolVars)
+            => new MsolveWrapper().ComputeGroebnerBasis(polys, boolVars);
 
         private MsolveWrapper()
         {
             
         }
 
-        public List<Poly> ComputeGroebnerBasis(List<Poly> polys)
+        public static List<SymVar> GetSortedVars(List<Poly> polys)
         {
             // 1. Collect all unique variables
             var allVars = new HashSet<SymVar>();
@@ -37,13 +37,19 @@ namespace Mba.Simplifier.Verification
                 }
             }
             var sortedVars = allVars.OrderBy(v => v).ToList();
+            return sortedVars;
+        }
+
+        public List<Poly> ComputeGroebnerBasis(List<Poly> polys, List<SymVar> boolVars)
+        {
+            var sortedVars = GetSortedVars(polys);
             var varNames = sortedVars.Select(v => v.Name).ToList();
 
             // Assert that x*x == x for all boolean input variables
             // TODO: Maybe we can do this for output variables too?
             //foreach (var v in sortedVars.Where(x => x.Kind == SymKind.Input))
             // Actually I think we can do this for all variables regardless
-            foreach(var v in sortedVars)
+            foreach(var v in boolVars)
             {
                 Poly m = new Monomial(v);
                 polys.Add(new Monomial(v, v) - m);
