@@ -187,6 +187,11 @@ namespace Mba.Simplifier.Verification
             return m.SortedVars.Count == 0;
         }
 
+        public bool IsEq(Poly other)
+        {
+            return Coeffs.Count == other.Coeffs.Count && Coeffs.OrderBy(x => x.Key).SequenceEqual(other.Coeffs.OrderBy(x => x.Key));
+        }
+
 
         public Poly Clone()
         {

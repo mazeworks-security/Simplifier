@@ -41,7 +41,7 @@ namespace Mba.Simplifier.Verification
             AstIdx.ctx = ctx;
             // only works with x+y, mba currently... x+x+x+x+x+y mod 2 does notwork
             //before = RustAstParser.Parse(ctx, "x+y", w);
-            obfuscated = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+
             //after = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
 
 
@@ -58,11 +58,106 @@ namespace Mba.Simplifier.Verification
             //before = RustAstParser.Parse(ctx, "x+y", w);
             //before = RustAstParser.Parse(ctx, "x+y", w);
             //after = RustAstParser.Parse(ctx, "x+y", w);
-            deob = RustAstParser.Parse(ctx, "y+x", w);
+            //obfuscated = RustAstParser.Parse(ctx, "((x&y) + (x&y)) + (x^y)", w);
+            //deob = RustAstParser.Parse(ctx, "y+x", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(x&((~x + 1)&(x+x)))", w);
+            deob = RustAstParser.Parse(ctx, "x&~x", w);
+
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x&((~x + 1)&(x+x)))", w);
+            deob = RustAstParser.Parse(ctx, "x&0", w);
+
+            //obfuscated = RustAstParser.Parse(ctx, "~(~x + 1) + 1", w);
+            //deob = RustAstParser.Parse(ctx, "x", w);
+
             //before = RustAstParser.Parse(ctx, "x&y", w);
             //after = RustAstParser.Parse(ctx, "x&y", w);
+
+            var cache = new Dictionary<AstIdx, AstIdx>();
+
+            //obfuscated = Canonicalize(obfuscated, cache);
+            //deob = Canonicalize(deob, cache);
+
         }
 
+
+
+        private AstIdx Canonicalize(AstIdx idx, Dictionary<AstIdx, AstIdx> cache)
+        {
+            if (cache.TryGetValue(idx, out var existing))
+                return existing;
+
+            var opc = ctx.GetOpcode(idx);
+
+            if (opc == AstOp.Symbol || opc == AstOp.Constant)
+            {
+                cache[idx] = idx;
+                return idx;
+            }
+
+            if (opc == AstOp.Neg)
+            {
+                var result = ctx.Neg(Canonicalize(ctx.GetOp0(idx), cache));
+                cache[idx] = result;
+                return result;
+            }
+
+            var op0 = Canonicalize(ctx.GetOp0(idx), cache);
+            var op1 = Canonicalize(ctx.GetOp1(idx), cache);
+
+            if (opc == AstOp.Mul && ctx.GetOpcode(ctx.GetOp1(idx)) == AstOp.Constant)
+                (op0, op1) = (op1, op0);
+
+
+            if (opc == AstOp.Mul && ctx.GetOpcode(op0) == AstOp.Constant)
+            {
+
+                var c = ctx.GetConstantValue(op0);
+                var isNegative = (c & (1ul << (ushort)(w - 1)));
+                var result = ExpandMulAsRepeatedAdd(op1, c);
+
+
+
+                cache[idx] = result;
+
+                return result;
+            }
+
+
+            var rebuilt = ctx.Binop(opc, op0, op1);
+            cache[idx] = rebuilt;
+            return rebuilt;
+        }
+
+
+        // Rewrite c1*a as a DAG of add nodes 
+        private AstIdx ExpandMulAsRepeatedAdd(AstIdx x, ulong c)
+        {
+            if (c == 0)
+                return ctx.Constant(0, ctx.GetWidth(x));
+            if (c == 1)
+                return x;
+
+       
+            int highBit = 63;
+            while (highBit > 0 && ((c >> highBit) & 1) == 0)
+                highBit--;
+
+            AstIdx acc = x;
+            for (int i = highBit - 1; i >= 0; i--)
+            {
+               
+                acc = ctx.Add(acc, acc);
+
+                
+                if (((c >> i) & 1) == 1)
+                    acc = ctx.Add(acc, x);
+            }
+
+            return acc;
+        }
 
         // Now we need to figure out how to prune dead elements from the groebner basis
         // "Cone of influence", only problem is that `x0*x1` gets rewritten as 
@@ -77,8 +172,9 @@ namespace Mba.Simplifier.Verification
                 results.Add(new());
             Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
 
-       
+            var linearFacts = new List<Poly>();
 
+            var roundIdx = 0;
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
                 // Compute the polynomials corresponding to the ith output bit
@@ -87,10 +183,12 @@ namespace Mba.Simplifier.Verification
                     results[i].Add(GetSpecification(visit[i], sliceIdx, cache, idealArr, firstSeen, ref totalOrder, true));
                 }
 
+        
+
+
                 var iArr = idealArr.Select(x => x.Item3).ToList();
-                //foreach (var p in iArr)
-                //    p.Simplify();
-                //LinElim(iArr);
+                // Update the list of linear facts from the last GB
+                iArr.AddRange(linearFacts);
 
                 SageGb(iArr, false);
 
@@ -98,29 +196,14 @@ namespace Mba.Simplifier.Verification
 
                 var gb = MsolveWrapper.Run(iArr);
 
-                //Poly deleteMe = new Monomial(iArr.SelectMany(x => x.Coeffs.Keys.SelectMany(x => x.SortedVars)).First(x => x.Name.Contains("op3_0cout")));
-                //var del = Poly.Reduce(deleteMe.Clone(), gb);
-
-                /*
-                for (int i = 0; i < iArr.Count; i++)
+                Console.WriteLine("GB: ");
+                foreach(var p in gb)
                 {
-                    var p = iArr[i];
-                    var r = Poly.Reduce(p.Clone(), gb);
-                    Console.WriteLine($"{p}\n=>\n{r}\n\n");
+                    Console.WriteLine($"    {p}");
                 }
-                */
 
-                
 
-                  /*
-                for (int i = 0; i < idealArr.Count; i++)
-                {
-                    var bar = idealArr[i];
-                    idealArr[i] = (bar.Item1, bar.Item2, Poly.Reduce(bar.Item3.Clone(), gb));
-                }
-                  */
-              
-
+                linearFacts.Clear();
                 // Simplify the carry in info
                 foreach(var (_, (bitIdx, arithInfos)) in carryIdentifiers.ToList())
                 {
@@ -134,6 +217,26 @@ namespace Mba.Simplifier.Verification
 
                     var cin = Poly.Reduce(arithInfo.cin, gb);
                     var cout = Poly.Reduce(arithInfo.cout, gb);
+                    if (cout.IsEq(arithInfo.cout) && arithInfo.cout.Coeffs.Count == 1)
+                    {
+                        var prevMonomial = arithInfo.cout.Coeffs.Keys.Single();
+                        if (prevMonomial.SortedVars.Count == 1)
+                        {
+                            foreach (var p in gb)
+                            {
+                                if (p.Coeffs.Count != 1)
+                                    continue;
+                                var mm = p.Coeffs.Keys.Single();
+                                if (!mm.SortedVars.Contains(prevMonomial.SortedVars.Single()))
+                                    continue;
+
+                                linearFacts.Add(p);
+
+                                // Debugger.Break();
+                            }
+                        }
+                    }
+
                     var result = Poly.Reduce(arithInfo.result, gb);
                     arithInfos[arithInfos.Count - 1] = new(cin, cout, result);
                 }
@@ -153,53 +256,24 @@ namespace Mba.Simplifier.Verification
 
 
                 var vars = ctx.CollectVariables(obfuscated);
-                /*
-                List<List<Poly>> bits = new();
-                foreach (var v in vars)
-                {
-                    List<Poly> l = new();
-                    bits.Add(l);
-                    for (int i = 0; i <= sliceIdx; i++)
-                        l.Add(GetSpecification(v, i, cache, idealArr, firstSeen, ref totalOrder, false));
-
-                }
-                // Adder specification
-                Poly spec = bits[0][0] - bits[0][0];
-                for (int bitIndex = 0; bitIndex < sliceIdx + 1; bitIndex++)
-                {
-                    Poly term = bits[0][0] - bits[0][0];
-                    for (int varIndex = 0; varIndex < vars.Count; varIndex++)
-                    {
-                        term += (1L << (ushort)bitIndex) * bits[varIndex][bitIndex];
-                    }
-
-                    spec += term;
-                }
-
-                Console.WriteLine(spec);
-                */
+   
 
                 Poly spec0 = Monomial.Constant();
                 Poly spec1 = Monomial.Constant();
-                /*
-                for (int bitIndex = 0; bitIndex < sliceIdx + 1; bitIndex++)
-                {
-                    spec0 += results[0][bitIndex];
-                    spec1 += results[1][bitIndex];
-                }
-                */
+    
 
                 spec0 += results[0][sliceIdx];
                 spec1 += results[1][sliceIdx];
 
-                //Console.WriteLine($"Spec: ({spec0}) - ({spec1})");
-
+  
                 var specDiff = spec0 - spec1;
                 var reducedSpec = Poly.Reduce(specDiff, gb);
+                reducedSpec = Poly.Reduce(reducedSpec, gb);
                 if (reducedSpec.Coeffs.Count != 0)
                     Debugger.Break();
 
-                Console.WriteLine("Round");
+                Console.WriteLine($"Round {roundIdx}");
+                roundIdx++;
 
                 idealArr.Clear();
 
@@ -305,7 +379,11 @@ namespace Mba.Simplifier.Verification
             if (opc == AstOp.Constant)
             {
                 totalOrder++;
-                cache[key] = Poly.Constant((long)ctx.GetConstantValue(idx));
+
+                var v = ctx.GetConstantValue(idx);
+                var constant = (v & (1ul << (ushort)bitIdx)) == 0 ? 0ul : 1ul;
+
+                cache[key] = Poly.Constant((long)constant);
                 return cache[key];
             }
 
