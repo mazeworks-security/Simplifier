@@ -214,6 +214,15 @@ namespace Mba.Simplifier.Verification
             return acc;
         }
 
+        private void SimplifyMany(IEnumerable<Poly> toSimplify, Dictionary<Monomial, Poly> mapping)
+        {
+            foreach(var p in toSimplify)
+            {
+                foreach (var (monomial, value) in mapping)
+                    p.ReplaceSubset(monomial, value);
+            }
+        }
+
         private void SimplifyViaMapping(Poly toSimplify, Dictionary<Monomial, Poly> mapping)
         {
             foreach (var (monomial, value) in mapping)
@@ -379,6 +388,8 @@ namespace Mba.Simplifier.Verification
 
             var simplificationMapping = new Dictionary<Monomial, Poly>();
 
+            var nonlinearFacts = new HashSet<Poly>();
+
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
                 var results = new List<List<Poly>>();
@@ -392,10 +403,17 @@ namespace Mba.Simplifier.Verification
                 }
 
                 var ideal = throwaway.Select(x => x.Item3).ToList();
-                foreach (var p in ideal)
-                    SimplifyViaMapping(p, simplificationMapping);
+                SimplifyMany(ideal, simplificationMapping);
 
-                var currIdeal = ReduceLexGroebnerBasis(ideal.Skip(counts.LastOrDefault()).ToList());
+                // Add the set of nonlinear facts
+                var temp = ideal.Skip(counts.LastOrDefault()).ToList();
+                temp.AddRange(nonlinearFacts);
+                temp.Sort();
+
+                // Probably highly illegal: Rewrite the groebner basis based on learned facts from earlier..
+                SimplifyMany(temp, simplificationMapping);
+
+                var currIdeal = ReduceLexGroebnerBasis(temp);
 
                 // Compute a groebner basis in graded lex order to learn linear facts.
                 // i.e. rewrite polynomials in terms of each other
@@ -445,20 +463,14 @@ namespace Mba.Simplifier.Verification
                         }
                     }
                 }
-                
-
-         
-                
-
 
                 // Update the cache with learned facts
-                foreach (var p in cache.Values)
-                    SimplifyViaMapping(p, simplificationMapping);
+                SimplifyMany(cache.Values, simplificationMapping);
+    
 
                 foreach (var list in results)
                 {
-                    foreach (var p in list)
-                        SimplifyViaMapping(p, simplificationMapping);
+                        SimplifyMany(list, simplificationMapping);
                 }
 
                 var diff = results[0][0] - results[1][0];
@@ -469,6 +481,7 @@ namespace Mba.Simplifier.Verification
 
                 Console.WriteLine($"Difference: {rDiff}");
 
+                nonlinearFacts.Clear();
                 Dictionary<Monomial, Poly> seen = new();
                 for(int i = 0; i < currIdeal.Count; i++)
                 {
@@ -497,12 +510,35 @@ namespace Mba.Simplifier.Verification
 
                         var reduced = LexReduce(m, currIdeal);
                         Console.WriteLine($"{m} => {reduced}");
+
+                        //if (m.ToString().Contains("r4_1*op0_1cout"))
+                        //    Debugger.Break();
+
+                        if (reduced.Coeffs.Count == 0)
+                        {
+                            nonlinearFacts.Add(m - (reduced));
+                        }
+
+                        var r0 = LexReduce(p0.Lm, currIdeal);
+                        var r1 = LexReduce(p1.Lm, currIdeal);
+                        if (reduced == r0)
+                        {
+                            nonlinearFacts.Add(m - new Poly(p0.Lm));
+                        }
+
+                        
+                        if (reduced == r1)
+                        {
+                            nonlinearFacts.Add(m - new Poly(p1.Lm));
+                        }
+
+
                         seen[m] = reduced;
                     }
                 }
                 
 
-                Debugger.Break();
+                //Debugger.Break();
 
                 // Keep track of the "slice" corresponding to this bit
                 counts.Add(throwaway.Count);

@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 namespace Mba.Simplifier.Verification
 {
 
-    public class Poly : IComparable<Poly>
+    public class Poly : IComparable<Poly>, IEquatable<Poly>
     {
         public SortedDictionary<Monomial, long> Coeffs { get; private set; }
 
@@ -169,7 +169,7 @@ namespace Mba.Simplifier.Verification
             else
                 Debug.Assert(coeff == -1);
 
-                return p;
+            return p;
         }
 
         public void Replace(Monomial a, Poly other)
@@ -184,6 +184,8 @@ namespace Mba.Simplifier.Verification
 
         public bool ReplaceSubset(Monomial a, Poly other)
         {
+
+
             var toReplace = Coeffs.Where(x => a.Divides(x.Key))
                                   .Select(x => (x.Key, x.Value))
                                   .ToList();
@@ -323,6 +325,41 @@ namespace Mba.Simplifier.Verification
         {
             return String.Join(" + ", Coeffs.Select(x => $"{x.Value}*({x.Key})"));
         }
+
+        public override bool Equals(object? obj)
+        {
+            if (obj is Poly other)
+                return Equals(other);
+            return false;
+        }
+
+        public bool Equals(Poly? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return IsEq(other);
+        }
+
+        public override int GetHashCode()
+        {
+            int hash = 17;
+            foreach (var (m, c) in Coeffs)
+            {
+                hash = hash * 31 + m.GetHashCode();
+                hash = hash * 31 + c.GetHashCode();
+            }
+            return hash;
+        }
+
+        public static bool operator ==(Poly? left, Poly? right)
+        {
+            if (ReferenceEquals(left, right)) return true;
+            if (left is null || right is null) return false;
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(Poly? left, Poly? right)
+            => !(left == right);
     }
 
     public class Monomial : IEquatable<Monomial>, IComparable<Monomial>
