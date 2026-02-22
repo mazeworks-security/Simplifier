@@ -461,6 +461,23 @@ namespace Mba.Simplifier.Verification
 
                 Console.WriteLine($"Difference: {rDiff}");
 
+                /*
+                for(int i = 0; i < currIdeal.Count; i++)
+                {
+                    for(int j = 0; j < currIdeal.Count; j++)
+                    {
+                        if (i == j)
+                            continue;
+                        var p0 = currIdeal[i];
+                        var p1 = currIdeal[j];
+
+                        var m = p0.Lm * p1.Lm;
+                        var reduced = LexReduce(m, currIdeal);
+                        Console.WriteLine($"{m} => {reduced}");
+                    }
+                }
+                */
+
                 Debugger.Break();
 
                 // Keep track of the "slice" corresponding to this bit

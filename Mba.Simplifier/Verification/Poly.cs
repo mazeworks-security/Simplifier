@@ -159,6 +159,19 @@ namespace Mba.Simplifier.Verification
             Add(m, -1 * coeff);
         }
 
+        public Poly Rhs(Monomial m)
+        {
+            var coeff = Coeffs[m];
+            var p = Clone();
+            p.Remove(m);
+            if (coeff == 1)
+                p = -1L * p;
+            else
+                Debug.Assert(coeff == -1);
+
+                return p;
+        }
+
         public void Replace(Monomial a, Poly other)
         {
             var coeff = Coeffs[a];
