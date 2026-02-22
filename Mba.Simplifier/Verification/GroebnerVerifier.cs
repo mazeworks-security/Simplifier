@@ -429,7 +429,12 @@ namespace Mba.Simplifier.Verification
                 */
 
 
-                // Learn obvious facts
+                // Apply rewriting
+                var fixedIdeal = currIdeal.Select(x => x.Clone()).ToList();
+                SimplifyMany(fixedIdeal, simplificationMapping);
+
+
+                // Learn obvious facts (a*b = 0)
                 for (int i = 0; i < currIdeal.Count; i++)
                 {
                     var p0 = currIdeal[i];
