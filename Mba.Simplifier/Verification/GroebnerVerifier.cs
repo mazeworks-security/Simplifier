@@ -316,64 +316,11 @@ namespace Mba.Simplifier.Verification
 
             return mapping;
 
-            /*
-            var mapping = new Dictionary<Monomial, Poly>();
+        }
 
-            // Process polynomials from the graded lex GB that are purely linear
-            // (all monomials have degree <= 1). These have the form:
-            //   c0*v_largest + c1*v1 + c2*v2 + ... + constant = 0
-            // We rewrite as: v_largest = -(c1*v1 + c2*v2 + ... + constant) / c0
-            foreach (var poly in graded)
-            {
-                // Skip non-linear polynomials
-                if (poly.Coeffs.Keys.Any(m => m.SortedVars.Count > 1))
-                    continue;
+        public void Gauss(List<Poly> ideal)
+        {
 
-                // Skip zero or constant-only polynomials
-                var variableTerms = poly.Coeffs.Where(kv => kv.Key.SortedVars.Count == 1).ToList();
-                if (variableTerms.Count == 0)
-                    continue;
-
-                // The leading monomial (largest variable in lex order) is the rewrite target.
-                var lm = poly.Lm;
-                if (lm.SortedVars.Count != 1)
-                    continue;
-
-                var lc = poly.Coeffs[lm];
-
-                // We need the leading coefficient to be +/-1 to solve exactly over Z.
-                if (lc != 1 && lc != -1)
-                    continue;
-
-                // Already have a mapping for this monomial
-                if (mapping.ContainsKey(lm))
-                    continue;
-
-                // Compute the RHS: v_largest = -(rest) / lc
-                var rhs = poly.Clone();
-                rhs.Remove(lm);
-                rhs = (-1L / lc) * rhs;
-                rhs.Simplify();
-
-                // Only rewrite if the RHS contains strictly smaller variables
-                bool allSmaller = rhs.Coeffs.Keys.All(m =>
-                    m.SortedVars.Count == 0 || m.SortedVars.All(v =>
-                    {
-                        var cmp = new Monomial(v).CompareTo(lm);
-                        // In our lex order, CompareTo is negated so that
-                        // "larger" monomials come first (negative return).
-                        // cmp > 0 means 'v' monomial is smaller than lm.
-                        return cmp > 0;
-                    }));
-
-                if (!allSmaller)
-                    continue;
-
-                mapping[lm] = rhs;
-            }
-
-            return mapping;
-            */
         }
 
         public void Run()
@@ -415,24 +362,26 @@ namespace Mba.Simplifier.Verification
 
                 var currIdeal = ReduceLexGroebnerBasis(temp);
 
+                Gauss(currIdeal.Select(x => x.Clone()).ToList());
+
+
+                //var simplified = mm.LookupSimplification(new Monomial(myVar)); // query one variable
+
+
                 // Compute a groebner basis in graded lex order to learn linear facts.
                 // i.e. rewrite polynomials in terms of each other
-                /*
+                
                 var linearFacts = MsolveWrapper.Run(currIdeal.Select(x => x.Clone()).ToList(), MsolveWrapper.GetSortedVars(currIdeal));
-                var nonlinearFacts = linearFacts.Select(x => x.Clone()).ToList();
+                var otherFacts = linearFacts.Select(x => x.Clone()).ToList();
                 linearFacts.RemoveAll(x => x.Coeffs.Keys.Any(x => x.SortedVars.Count > 1));
                 linearFacts.Sort();
 
                 var other = LearnLinearSimplifications(linearFacts, currIdeal);
                 foreach (var (k, v) in other)
                     simplificationMapping.Add(k, v);
-                */
+                
 
-
-                // Apply rewriting
-                var fixedIdeal = currIdeal.Select(x => x.Clone()).ToList();
-                SimplifyMany(fixedIdeal, simplificationMapping);
-
+                Console.WriteLine("");
 
                 // Learn obvious facts (a*b = 0)
                 for (int i = 0; i < currIdeal.Count; i++)
@@ -440,13 +389,13 @@ namespace Mba.Simplifier.Verification
                     var p0 = currIdeal[i];
                     if (p0.Coeffs.Count == 1)
                     {
-                        simplificationMapping.Add(p0.Lm, Poly.Constant(0));
+                        simplificationMapping.TryAdd(p0.Lm, Poly.Constant(0));
                         continue;
                     }
 
                     if(p0.Coeffs.Count == 2 && p0.Coeffs.Last().Key.Degree == 1)
                     {
-                        simplificationMapping.Add(p0.Lm, p0.Rhs());
+                        simplificationMapping.TryAdd(p0.Lm, p0.Rhs());
                         continue;
                     }
 
@@ -463,11 +412,19 @@ namespace Mba.Simplifier.Verification
                         final.Simplify();
                         if (final.Coeffs.Count == 0)
                         {
-                            simplificationMapping[p1.Lm] = p0.Lm;
+                            //simplificationMapping[p1.Lm] = p0.Lm;
+                            simplificationMapping.TryAdd(p1.Lm, p0.Lm);
                             continue;
                         }
                     }
                 }
+
+                // Apply rewriting
+                var fixedIdeal = currIdeal.Select(x => x.Clone()).ToList();
+                SimplifyMany(fixedIdeal, simplificationMapping);
+                fixedIdeal = fixedIdeal.Distinct().ToList();
+
+
 
                 // Update the cache with learned facts
                 SimplifyMany(cache.Values, simplificationMapping);
