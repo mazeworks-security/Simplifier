@@ -399,18 +399,20 @@ namespace Mba.Simplifier.Verification
 
                 // Compute a groebner basis in graded lex order to learn linear facts.
                 // i.e. rewrite polynomials in terms of each other
+                /*
                 var linearFacts = MsolveWrapper.Run(currIdeal.Select(x => x.Clone()).ToList(), MsolveWrapper.GetSortedVars(currIdeal));
                 var nonlinearFacts = linearFacts.Select(x => x.Clone()).ToList();
                 linearFacts.RemoveAll(x => x.Coeffs.Keys.Any(x => x.SortedVars.Count > 1));
                 linearFacts.Sort();
 
                 var other = LearnLinearSimplifications(linearFacts, currIdeal);
+                foreach (var (k, v) in other)
+                    simplificationMapping.Add(k, v);
+                */
 
 
-
-                /*
                 // Learn obvious facts
-                for(int i = 0; i < currIdeal.Count; i++)
+                for (int i = 0; i < currIdeal.Count; i++)
                 {
                     var p0 = currIdeal[i];
                     if (p0.Coeffs.Count == 1)
@@ -418,6 +420,13 @@ namespace Mba.Simplifier.Verification
                         simplificationMapping.Add(p0.Lm, Poly.Constant(0));
                         continue;
                     }
+
+                    if(p0.Coeffs.Count == 2 && p0.Coeffs.Last().Key.Degree == 1)
+                    {
+                        simplificationMapping.Add(p0.Lm, p0.Rhs());
+                        continue;
+                    }
+
 
                     for (int j = i + 1; j < currIdeal.Count; j++)
                     {
@@ -436,10 +445,9 @@ namespace Mba.Simplifier.Verification
                         }
                     }
                 }
-                */
+                
 
-                foreach (var (k, v) in other)
-                    simplificationMapping.Add(k, v);
+         
                 
 
 
@@ -461,22 +469,38 @@ namespace Mba.Simplifier.Verification
 
                 Console.WriteLine($"Difference: {rDiff}");
 
-                /*
+                Dictionary<Monomial, Poly> seen = new();
                 for(int i = 0; i < currIdeal.Count; i++)
                 {
-                    for(int j = 0; j < currIdeal.Count; j++)
+                    for(int j = i + 1; j < currIdeal.Count; j++)
                     {
                         if (i == j)
                             continue;
-                        var p0 = currIdeal[i];
-                        var p1 = currIdeal[j];
+
+                        var before0 = currIdeal[i];
+                        var before1 = currIdeal[j];
+
+                        var p0 = currIdeal[i].Clone();
+                        var p1 = currIdeal[j].Clone();
+
+           
+                        SimplifyViaMapping(p0, simplificationMapping);
+                        SimplifyViaMapping(p1, simplificationMapping);
+                        if (p0.Coeffs.Count == 0 || p1.Coeffs.Count == 0)
+                            continue;
 
                         var m = p0.Lm * p1.Lm;
+                        if (p0.Lm == p1.Lm)
+                            continue;
+                        if (seen.ContainsKey(m))
+                            continue;
+
                         var reduced = LexReduce(m, currIdeal);
                         Console.WriteLine($"{m} => {reduced}");
+                        seen[m] = reduced;
                     }
                 }
-                */
+                
 
                 Debugger.Break();
 

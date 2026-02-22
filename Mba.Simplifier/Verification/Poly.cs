@@ -159,11 +159,11 @@ namespace Mba.Simplifier.Verification
             Add(m, -1 * coeff);
         }
 
-        public Poly Rhs(Monomial m)
+        public Poly Rhs()
         {
-            var coeff = Coeffs[m];
+            var coeff = Coeffs[Lm];
             var p = Clone();
-            p.Remove(m);
+            p.Remove(Lm);
             if (coeff == 1)
                 p = -1L * p;
             else
@@ -330,6 +330,8 @@ namespace Mba.Simplifier.Verification
         public const bool LEXORDER = true;
 
         public readonly List<SymVar> SortedVars;
+
+        public int Degree => SortedVars.Count;
 
         private readonly int hash = 17;
 
