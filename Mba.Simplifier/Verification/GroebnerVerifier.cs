@@ -431,7 +431,30 @@ namespace Mba.Simplifier.Verification
                     }
                 }
             }
+        }
 
+        private List<Poly> GetNonlinearFacts(List<Poly> currIdeal)
+        {
+            var facts = new List<Poly>();
+            for (int i = 0; i < currIdeal.Count; i++)
+            {
+                var p0 = currIdeal[i];
+                for (int j = i + 1; j < currIdeal.Count; j++)
+                {
+                    var p1 = currIdeal[j];
+                    if (p0.Coeffs.Count == 0 || p1.Coeffs.Count == 0)
+                        continue;
+
+                    var prod = p0.Lm * p1.Lm;
+                    var reduced = LexReduce(prod, currIdeal);
+                    if (reduced.Coeffs.Count != 0)
+                        continue;
+
+                    facts.Add(prod);
+                }
+            }
+
+            return facts;
         }
 
         public void SimplifyIdeal(List<Poly> ideal, Dictionary<Monomial, Poly> trivialFacts)
@@ -468,6 +491,7 @@ namespace Mba.Simplifier.Verification
 
             // Trivial identities (merge equivalent nodes and zero identities)
             var trivialFacts = new Dictionary<Monomial, Poly>();
+            var nonlinearFacts = new List<Poly>();
 
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
@@ -483,7 +507,8 @@ namespace Mba.Simplifier.Verification
 
                 // Update the ideal with previous facts
                 var all = throwaway.Select(x => x.Item3).ToList();
-                var ideal = all.Skip(counts.LastOrDefault()).ToList();
+                var ideal = all.Skip(counts.LastOrDefault()).Select(x => x.Clone()).ToList();
+
                 counts.Add(throwaway.Count);
                 SimplifyMany(ideal, trivialFacts);
 
@@ -498,9 +523,27 @@ namespace Mba.Simplifier.Verification
                 SimplifyIdeal(ideal, trivialFacts);
                 SimplifyIdeal(lexGb, trivialFacts);
 
+                // Update the ideal with nonlinear facts
+                ideal.AddRange(nonlinearFacts);
+                
+
+                var nfacts = GetNonlinearFacts(ideal);
+                nonlinearFacts.AddRange(nfacts);
+
                 Console.WriteLine($"Ideal: ");
                 foreach(var p in ideal)
                     Console.WriteLine($"    {p}");
+
+                var linearFacts = MsolveWrapper.Run(ideal.Select(x => x.Clone()).ToList(), MsolveWrapper.GetSortedVars(ideal));
+                foreach (var p in linearFacts)
+                    p.Simplify();
+                linearFacts.RemoveAll(x => x.Coeffs.Count == 0);
+                var otherFacts = linearFacts.Select(x => x.Clone()).ToList();
+                linearFacts.RemoveAll(x => x.Coeffs.Keys.Any(x => x.SortedVars.Count > 1));
+                linearFacts.Sort();
+
+
+                SageGb(ideal, false);
 
 
                 var before = results[0][0].Clone();
@@ -510,10 +553,15 @@ namespace Mba.Simplifier.Verification
                     SimplifyMany(list, trivialFacts);
                 }
 
+                var r0 = results[0][0];
+                var r1 = results[1][0];
+                SimplifyViaMapping(r0, trivialFacts);
+                SimplifyViaMapping(r1, trivialFacts);
+
 
                 var diff = results[0][0] - results[1][0];
 
-                var rDiff = LexReduce(diff, lexGb);
+                var rDiff = LexReduce(diff, ideal);
 
                 Debugger.Break();
 
