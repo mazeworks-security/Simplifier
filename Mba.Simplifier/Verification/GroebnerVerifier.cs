@@ -13,6 +13,7 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
@@ -137,6 +138,9 @@ namespace Mba.Simplifier.Verification
 
             obfuscated = RustAstParser.Parse(ctx, "(((x&y) + (x&y)) + (x^y)) & (x+y)", w);
             deob = RustAstParser.Parse(ctx, "x+y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "x+y+x", w);
+            deob = RustAstParser.Parse(ctx, "x+x+y", w);
 
             var cache = new Dictionary<AstIdx, AstIdx>();
 
@@ -342,7 +346,7 @@ namespace Mba.Simplifier.Verification
         {
             var temp = new List<Poly>();
             var seen = new HashSet<Monomial>(0);
-            foreach(var p in ideal.ToList())
+            foreach (var p in ideal.ToList())
             {
                 if (p.Coeffs.Count == 0)
                     continue;
@@ -357,6 +361,8 @@ namespace Mba.Simplifier.Verification
             ideal = temp;
 
             var changed = new bool[ideal.Count];
+
+            ideal = ideal.OrderBy(x => x.Coeffs.Count).ToList();
 
             for (int i = 0; i < ideal.Count; i++)
             {
@@ -386,7 +392,7 @@ namespace Mba.Simplifier.Verification
                     newValue += s * p0.Lm;
                     newValue.Simplify();
 
-                    if(newValue.Coeffs.Count <= p1.Coeffs.Count && p1 != newValue)
+                    if (newValue.Coeffs.Count <= p1.Coeffs.Count && p1 != newValue)
                     {
                         changed[j] = true;
                         ideal[j] = newValue;
@@ -394,7 +400,7 @@ namespace Mba.Simplifier.Verification
                 }
             }
 
-            for(int i = 0; i < ideal.Count; i++)
+            for (int i = 0; i < ideal.Count; i++)
             {
                 if (!changed[i])
                     continue;
@@ -416,6 +422,25 @@ namespace Mba.Simplifier.Verification
                     continue;
                 }
 
+                // Experiment: Forward trivial identities like `op1 = x`.
+                // I have a suspicion that we'll want to disable this unless it corresponds to an intermediate variable?
+                if (p0.Coeffs.Count == 2)
+                //if (false)
+                //if (false)
+                {
+                    var rhs = p0.Rhs();
+                    var lm = rhs.Lm;
+                    if (lm.SortedVars.Count > 1)
+                        goto skip;
+                    if (lm.SortedVars.Count != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Count != 1 || lm.SortedVars.Single().BitIndex == p0.Lm.SortedVars.Single().BitIndex)
+                        goto skip;
+
+                    simplificationMapping.TryAdd(p0.Lm, rhs);
+                    continue;
+                }
+
+
+            skip:
                 for (int j = i + 1; j < currIdeal.Count; j++)
                 {
                     var p1 = currIdeal[j];
@@ -533,13 +558,19 @@ namespace Mba.Simplifier.Verification
                 // Update the ideal with previous facts
                 var all = throwaway.Select(x => x.Item3).ToList();
                 var ideal = all.Skip(counts.LastOrDefault()).Select(x => x.Clone()).ToList();
+                ideal.AddRange(nonlinearFacts);
 
                 counts.Add(throwaway.Count);
                 SimplifyMany(ideal, trivialFacts);
 
+                var allLex = all.Select(x => x.Clone()).ToList();
+                SimplifyMany(all, trivialFacts);
+                allLex = ReduceLexGroebnerBasis(allLex);
+
                 // Compute a reduced lexicographic groebner basis
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
                 lexGb = ReduceLexGroebnerBasis(lexGb);
+
 
                 // Use this basis to learn new facts.
                 LearnTrivialFacts(lexGb, trivialFacts);
@@ -551,17 +582,21 @@ namespace Mba.Simplifier.Verification
                 var nfacts = GetNonlinearFacts(ideal);
                 nonlinearFacts.AddRange(nfacts);
 
-                // Update the ideal with nonlinear facts
-                ideal.AddRange(nonlinearFacts);
-                // Append the previous ideal
-                ideals.Add(ideal);
-                
-
-         
 
                 Console.WriteLine($"Ideal: ");
-                foreach(var p in ideal)
+                foreach (var p in ideal)
                     Console.WriteLine($"    {p}");
+
+            
+
+                // Update the ideal with nonlinear facts
+                //ideal.AddRange(nonlinearFacts);
+                // Append the previous ideal
+                ideals.Add(ideal);
+
+
+
+
 
                 var linearFacts = MsolveWrapper.Run(ideal.Select(x => x.Clone()).ToList(), MsolveWrapper.GetSortedVars(ideal));
                 foreach (var p in linearFacts)
@@ -596,9 +631,29 @@ namespace Mba.Simplifier.Verification
                 {
                     Console.WriteLine(rDiff);
                     var temp = rDiff;
-        
-                    for(int i = ideals.Count - 2; i > 0; i--)
+
+                    /*
+                    var rewrites = new Dictionary<Monomial, Poly>();
+                    Gauss(lexGb, rewrites);
+                    foreach (var (monomial, rhs) in rewrites)
                     {
+                        if (rhs.Coeffs.Keys.Any(x => x.SortedVars.Count > 1 || x.SortedVars.Single().BitIndex != sliceIdx || x.SortedVars.Single().Kind == SymKind.Input))
+                            continue;
+
+                        nonlinearFacts.Add(monomial - rhs);
+                    }
+                    */
+
+                    // It's hard to know upfront what linear facts we should learn.
+
+
+                    GeneralizeCarriedRelationships(rDiff, ideals, trivialFacts, nonlinearFacts);
+
+
+
+                    for (int i = ideals.Count - 2; i > 0; i--)
+                    {
+                        break;
                         temp = LexReduce(temp, ideals[i]);
                         Console.WriteLine(temp);
                         if (temp.Coeffs.Count == 0)
@@ -607,12 +662,70 @@ namespace Mba.Simplifier.Verification
                     //var other = LexReduce(rDiff, ideals[ideals.Count - 2]);
                     ///var other = LexReduce(rDiff, ideals[ideals.Count - 3]);
                     Debugger.Break();
-                }
 
 
                 }
+
+                else
+                {
+                    var m0 = r0.Coeffs.Single().Key;
+                    var m1 = r1.Coeffs.Single().Key;
+                    trivialFacts[m1] = m0;
+                    //trivialFacts[]
+                }
+
 
             }
+        }
+
+        // This is not gonna work.. exponential time again.
+        private void GeneralizeCarriedRelationships(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<Poly> nonlinearFacts)
+        {
+            var targets = rDiff.Coeffs.Keys.SelectMany(x => x.SortedVars).Where(x => x.Kind != SymKind.Input).Distinct().ToList();
+            var targetIdx = targets.First().BitIndex;
+
+            var ideal = ideals[targetIdx];
+
+            // Compute a reduced lexicographic groebner basis
+            var lexGb = ideal.Select(x => x.Clone()).ToList();
+            lexGb = ReduceLexGroebnerBasis(lexGb);
+
+
+            // Use this basis to learn new facts.
+            LearnTrivialFacts(lexGb, trivialFacts);
+
+            // Update both ideals
+            SimplifyIdeal(ideal, trivialFacts);
+            SimplifyIdeal(lexGb, trivialFacts);
+
+            //lexGb.RemoveAll(x => !targets.Contains(x.Lm.SortedVars.Single()));
+            lexGb.RemoveAll(x => x.Lm.SortedVars.Count > 1 || !targets.Contains(x.Lm.SortedVars.Single()));
+
+            var rewrites = new Dictionary<Monomial, Poly>();
+            Gauss(lexGb, rewrites);
+
+            foreach (var (monomial, rhs) in rewrites)
+            {
+                //if (rhs.Coeffs.Keys.Any(x => x.SortedVars.Count > 1 || x.SortedVars.Single().BitIndex != targetIdx || x.SortedVars.Single().Kind == SymKind.Input))
+                //     continue;
+                //if (rhs.Coeffs.Keys.Any(x => x.SortedVars.Count > 1 || x.SortedVars.Single().Kind == SymKind.Input))
+                //    continue;
+
+
+                    nonlinearFacts.Add(monomial - rhs);
+                ideal.Remove(ideal.Single(x => x.Lm == monomial));
+                ideal.Add(nonlinearFacts.Last());
+            }
+
+
+            var withNonlinear = ideal.ToList();
+            withNonlinear.AddRange(nonlinearFacts);
+
+            var other = LexReduce(rDiff, withNonlinear);
+
+            Debugger.Break();
+
+        }
 
         public void RunOld()
         {
@@ -657,7 +770,7 @@ namespace Mba.Simplifier.Verification
                     Console.WriteLine(p);
 
 
-      
+
                 //var simplified = mm.LookupSimplification(new Monomial(myVar)); // query one variable
 
 
@@ -706,7 +819,7 @@ namespace Mba.Simplifier.Verification
                     }
                 }
 
-         
+
 
 
                 // Apply rewriting
@@ -778,7 +891,7 @@ namespace Mba.Simplifier.Verification
                         var p0 = currIdeal[i].Clone();
                         var p1 = currIdeal[j].Clone();
 
-                 
+
                         //if (p1.Lm.ToString() == "op3_0cout")
                         //    Debugger.Break();
 
@@ -797,9 +910,9 @@ namespace Mba.Simplifier.Verification
                         Poly prod = (LexReduce(bar0, currIdeal) * LexReduce(bar1, currIdeal)) - LexReduce(bar1, currIdeal);
                         prod.Simplify();
                         prod = LexReduce(prod, currIdeal);
-                        if(bar0.Coeffs.Count > 0 && bar1.Coeffs.Count > 0 && prod.Coeffs.Count == 0)
+                        if (bar0.Coeffs.Count > 0 && bar1.Coeffs.Count > 0 && prod.Coeffs.Count == 0)
                         {
-                            nonlinearFacts.Add((bar0*bar1) - bar1);
+                            nonlinearFacts.Add((bar0 * bar1) - bar1);
                             //Debugger.Break();
                         }
 
@@ -1495,14 +1608,14 @@ namespace Mba.Simplifier.Verification
                     cin = arithInfo[bitIdx - 1].cout;
 
                 // I think this encoding is technically more optimal for the linear extraction idea
-                
+
                 ideal.Add((bitIdx, totalOrder++, generate - a * b));
                 ideal.Add((bitIdx, totalOrder++, propagate - (a + b - 2 * generate)));
                 ideal.Add((bitIdx, totalOrder++, cout - (generate + propagate * cin)));
                 ideal.Add((bitIdx, totalOrder++, sum - (propagate + 2 * generate + cin - 2 * cout)));
 
                 arithInfo.Add(new(cin, cout, propagate, generate, sum));
-                
+
 
                 //var cout = SymVar.Temp($"a[{carryId}][{bitIdx}].cout");
 
