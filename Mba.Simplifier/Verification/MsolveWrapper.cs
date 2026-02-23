@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Mba.Simplifier.Polynomial;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -158,7 +159,7 @@ namespace Mba.Simplifier.Verification
             foreach (var v in boolVars)
             {
                 Poly m = new Monomial(v);
-                polys.Add(new Monomial(v, v) - m);
+                polys.Add(Monomial.Quadratic(v) - m);
             }
 
             if (File.Exists(inputFile))

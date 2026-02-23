@@ -372,10 +372,14 @@ namespace Mba.Simplifier.Verification
 
         private readonly int hash = 17;
 
+        public static Monomial Quadratic(SymVar var)
+            => new Monomial(new SymVar[] { var, var}, distinct: false);
+
         // TODO: If a variable is boolean, eliminate x*x constraints
-        public Monomial(IEnumerable<SymVar> vars)
+        public Monomial(IEnumerable<SymVar> vars, bool distinct = true)
         {
-            vars = vars.Distinct();
+            if (distinct)
+                vars = vars.Distinct();
 
             if (LEXORDER)
                 SortedVars = vars.OrderByDescending(x => x).ToList();
@@ -466,8 +470,11 @@ namespace Mba.Simplifier.Verification
 
         public bool Divides(Monomial other)
         {
+
             if (SortedVars.Count > other.SortedVars.Count)
                 return false;
+
+            return SortedVars.ToHashSet().IsSubsetOf(other.SortedVars);
 
             int j = 0;
             for (int i = 0; i < SortedVars.Count; i++)

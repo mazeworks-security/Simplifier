@@ -227,7 +227,10 @@ namespace Mba.Simplifier.Verification
             foreach (var p in toSimplify)
             {
                 foreach (var (monomial, value) in mapping)
+                {
                     p.ReplaceSubset(monomial, value);
+                    p.Simplify();
+                }
             }
         }
 
@@ -359,6 +362,9 @@ namespace Mba.Simplifier.Verification
                     var p0 = ideal[i];
                     var p1 = ideal[j];
 
+                    if (p0.Coeffs.Count > 0 && p0.Coeffs[p0.Lm] != 1 && p0.Coeffs[p0.Lm] != -1)
+                        continue;
+
                     var rhs = p0.Rhs();
 
                     var shared = rhs.Coeffs.Keys.Intersect(p1.Coeffs.Keys).OrderBy(x => x).ToList().FirstOrDefault();
@@ -396,7 +402,127 @@ namespace Mba.Simplifier.Verification
             //Debugger.Break();
         }
 
+        private void LearnTrivialFacts(List<Poly> currIdeal, Dictionary<Monomial, Poly> simplificationMapping)
+        {
+            for (int i = 0; i < currIdeal.Count; i++)
+            {
+                var p0 = currIdeal[i];
+                if (p0.Coeffs.Count == 1)
+                {
+                    simplificationMapping.TryAdd(p0.Lm, Poly.Constant(0));
+                    continue;
+                }
+
+                for (int j = i + 1; j < currIdeal.Count; j++)
+                {
+                    var p1 = currIdeal[j];
+                    if (simplificationMapping.ContainsKey(p1.Lm))
+                        continue;
+
+                    var diff0 = p0.Clone() - p0.Lm;
+                    var diff1 = p1.Clone() - p1.Lm;
+                    var final = (diff0 - diff1);
+                    final.Simplify();
+                    if (final.Coeffs.Count == 0)
+                    {
+                        //simplificationMapping[p1.Lm] = p0.Lm;
+                        simplificationMapping.TryAdd(p1.Lm, p0.Lm);
+                        continue;
+                    }
+                }
+            }
+
+        }
+
+        public void SimplifyIdeal(List<Poly> ideal, Dictionary<Monomial, Poly> trivialFacts)
+        {
+            SimplifyMany(ideal, trivialFacts);
+            var temp = new List<Poly>();
+            var seen = new HashSet<Monomial>(0);
+            foreach (var p in ideal.ToList())
+            {
+                p.Simplify();
+                if (p.Coeffs.Count == 0)
+                    continue;
+
+                if (seen.Contains(p.Lm))
+                    continue;
+
+                seen.Add(p.Lm);
+                temp.Add(p);
+            }
+
+            ideal.Clear();
+            ideal.AddRange(temp);
+        }
+
         public void Run()
+        {
+            var throwaway = new List<(int, uint, Poly)>();
+            uint totalOrder = 0;
+            var firstSeen = new Dictionary<SymVar, uint>();
+            var visit = new List<AstIdx>() { deob, obfuscated };
+
+            List<int> counts = new();
+            Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
+
+            // Trivial identities (merge equivalent nodes and zero identities)
+            var trivialFacts = new Dictionary<Monomial, Poly>();
+
+            for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
+            {
+                var results = new List<List<Poly>>();
+                foreach (var _ in visit)
+                    results.Add(new());
+
+                // Compute the polynomials corresponding to the ith output bit
+                for (int i = 0; i < visit.Count; i++)
+                {
+                    results[i].Add(GetSpecification(visit[i], sliceIdx, cache, throwaway, firstSeen, ref totalOrder, true).Clone());
+                }
+
+                // Update the ideal with previous facts
+                var all = throwaway.Select(x => x.Item3).ToList();
+                var ideal = all.Skip(counts.LastOrDefault()).ToList();
+                counts.Add(throwaway.Count);
+                SimplifyMany(ideal, trivialFacts);
+
+                // Compute a reduced lexicographic groebner basis
+                var lexGb = ideal.Select(x => x.Clone()).ToList();
+                lexGb = ReduceLexGroebnerBasis(lexGb);
+
+                // Use this basis to learn new facts.
+                LearnTrivialFacts(lexGb, trivialFacts);
+
+                // Update both ideals
+                SimplifyIdeal(ideal, trivialFacts);
+                SimplifyIdeal(lexGb, trivialFacts);
+
+                Console.WriteLine($"Ideal: ");
+                foreach(var p in ideal)
+                    Console.WriteLine($"    {p}");
+
+
+                var before = results[0][0].Clone();
+                var after = results[1][0].Clone();
+                foreach (var list in results)
+                {
+                    SimplifyMany(list, trivialFacts);
+                }
+
+
+                var diff = results[0][0] - results[1][0];
+
+                var rDiff = LexReduce(diff, lexGb);
+
+                Debugger.Break();
+
+
+            }
+
+        }
+
+        public void RunOld()
         {
             var throwaway = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
@@ -423,10 +549,10 @@ namespace Mba.Simplifier.Verification
                 }
 
                 var ideal = throwaway.Select(x => x.Item3).ToList();
-                SimplifyMany(ideal, simplificationMapping);
 
                 // Add the set of nonlinear facts
                 var temp = ideal.Skip(counts.LastOrDefault()).ToList();
+                SimplifyMany(temp, simplificationMapping);
                 temp.AddRange(nonlinearFacts);
                 temp.Sort();
 
@@ -446,15 +572,6 @@ namespace Mba.Simplifier.Verification
                 // Compute a groebner basis in graded lex order to learn linear facts.
                 // i.e. rewrite polynomials in terms of each other
 
-                var linearFacts = MsolveWrapper.Run(currIdeal.Select(x => x.Clone()).ToList(), MsolveWrapper.GetSortedVars(currIdeal));
-                var otherFacts = linearFacts.Select(x => x.Clone()).ToList();
-                linearFacts.RemoveAll(x => x.Coeffs.Keys.Any(x => x.SortedVars.Count > 1));
-                linearFacts.Sort();
-
-                var other = LearnLinearSimplifications(linearFacts, currIdeal);
-                foreach (var (k, v) in other)
-                    simplificationMapping.Add(k, v);
-
 
                 Console.WriteLine("");
 
@@ -470,6 +587,9 @@ namespace Mba.Simplifier.Verification
 
                     if (p0.Coeffs.Count == 2 && p0.Coeffs.Last().Key.Degree == 1)
                     {
+                        if (p0.Coeffs.First().Value != 1 && p0.Coeffs.First().Value != -1)
+                            continue;
+
                         simplificationMapping.TryAdd(p0.Lm, p0.Rhs());
                         continue;
                     }
@@ -503,6 +623,19 @@ namespace Mba.Simplifier.Verification
                 fixedIdeal = fixedIdeal.Distinct().ToList();
 
                 Gauss(fixedIdeal.Select(x => x.Clone()).ToList(), simplificationMapping);
+                SimplifyMany(fixedIdeal, simplificationMapping);
+
+                var linearFacts = MsolveWrapper.Run(fixedIdeal.Select(x => x.Clone()).ToList(), MsolveWrapper.GetSortedVars(fixedIdeal));
+                foreach (var p in linearFacts)
+                    p.Simplify();
+                linearFacts.RemoveAll(x => x.Coeffs.Count == 0);
+                var otherFacts = linearFacts.Select(x => x.Clone()).ToList();
+                linearFacts.RemoveAll(x => x.Coeffs.Keys.Any(x => x.SortedVars.Count > 1));
+                linearFacts.Sort();
+
+                var other = LearnLinearSimplifications(linearFacts, fixedIdeal);
+                foreach (var (k, v) in other)
+                    simplificationMapping.TryAdd(k, v);
 
 
 
@@ -544,23 +677,34 @@ namespace Mba.Simplifier.Verification
                         if (i == j)
                             continue;
 
+                        //if (i == 4 && j == 5)
+                        //    Debugger.Break();
+
                         var before0 = currIdeal[i];
                         var before1 = currIdeal[j];
 
                         var p0 = currIdeal[i].Clone();
                         var p1 = currIdeal[j].Clone();
 
+                 
                         //if (p1.Lm.ToString() == "op3_0cout")
                         //    Debugger.Break();
 
 
                         Poly bar0 = p0.Lm;
                         Poly bar1 = p1.Lm;
+
+                        //if (bar0.Lm.ToString() == "op0_1cout" && bar1.Lm.ToString() == "op3_1cout")
+                        //{
+                        //    Debugger.Break();
+                        //}
+
+
                         SimplifyViaMapping(bar0, simplificationMapping);
                         SimplifyViaMapping(bar1, simplificationMapping);
                         Poly prod = (LexReduce(bar0, currIdeal) * LexReduce(bar1, currIdeal)) - LexReduce(bar1, currIdeal);
                         prod.Simplify();
-                        LexReduce(prod, currIdeal);
+                        prod = LexReduce(prod, currIdeal);
                         if(bar0.Coeffs.Count > 0 && bar1.Coeffs.Count > 0 && prod.Coeffs.Count == 0)
                         {
                             nonlinearFacts.Add((bar0*bar1) - bar1);
@@ -881,7 +1025,7 @@ namespace Mba.Simplifier.Verification
 
         // Now we need to figure out how to prune dead elements from the groebner basis
         // "Cone of influence", only problem is that `x0*x1` gets rewritten as 
-        public void RunOld()
+        public void DeprecatedRunOld()
         {
             var idealArr = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
@@ -1250,59 +1394,36 @@ namespace Mba.Simplifier.Verification
                 var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
                 update(ref cout);
 
-                //var sum = SymVar.Temp($"a[{carryId}][{bitIdx}].sum");
                 var sum = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}sum");
                 update(ref sum);
 
 
-
-                //Poly cin = SymVar.Temp($"arith[{carryId}][{bitIdx}].cin");
-                //if (bitIdx == 0)
-                //    cin = Poly.Constant(0);
                 Poly cin = Poly.Constant(0);
                 if (bitIdx > 0)
                     cin = arithInfo[bitIdx - 1].cout;
 
                 // I think this encoding is technically more optimal for the linear extraction idea
-                /*
+                
                 ideal.Add((bitIdx, totalOrder++, generate - a * b));
                 ideal.Add((bitIdx, totalOrder++, propagate - (a + b - 2 * generate)));
                 ideal.Add((bitIdx, totalOrder++, cout - (generate + propagate * cin)));
                 ideal.Add((bitIdx, totalOrder++, sum - (propagate + 2 * generate + cin - 2 * cout)));
 
-                arithInfo.Add(new(cin, cout, sum));
-                */
+                arithInfo.Add(new(cin, cout, propagate, generate, sum));
+                
 
                 //var cout = SymVar.Temp($"a[{carryId}][{bitIdx}].cout");
 
-
                 /*
-                var sumLhs = sum;
-                var sumRhs = a + b + cin + (-2 * (a * b + b * cin + a * cin)) + 4 * (a * b * cin);
-
-                ideal.Add((bitIdx, totalOrder++, sumLhs - sumRhs));
-                */
-
-
-                /*
-                var carryLhs = cout;
-                //var carryRhs = a*b + b*cin + a*cin + (-1*(2*a*b*cin));
-                var carryRhs = a * b + b * cin + a * cin + (-1 * (2 * a * b * cin));
-                ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
-                */
-
-
                 var carryLhs = cout;
                 var carryRhs = a * b + a * cin + b * cin - 2 * (a * b * cin);
                 ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
 
-                //var member = (2L*cout)+sum-a-b-cin;
                 var member = sum - (a + b + cin + (-2 * (cout)));
-                //var member = (2L * cout) + sum - a - b - cin;
                 ideal.Add((bitIdx, totalOrder, member));
 
                 arithInfo.Add(new(cin, cout, null, null, sum));
-
+                */
 
 
 
