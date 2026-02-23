@@ -135,6 +135,9 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "x+y+x", w);
             deob = RustAstParser.Parse(ctx, "x+x+y", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "(((x&y) + (x&y)) + (x^y)) & (x+y)", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
 
@@ -447,10 +450,29 @@ namespace Mba.Simplifier.Verification
 
                     var prod = p0.Lm * p1.Lm;
                     var reduced = LexReduce(prod, currIdeal);
-                    if (reduced.Coeffs.Count != 0)
+                    if (reduced.Coeffs.Count == 0)
+                    {
+                        facts.Add(prod);
+                        continue;
+                    }
+
+                    var cand0 = prod - new Poly(p0.Lm);
+                    var diff0 = LexReduce(cand0, currIdeal);
+                    if (diff0.Coeffs.Count == 0)
+                    {
+                        facts.Add(cand0);
                         continue;
 
-                    facts.Add(prod);
+                    }
+
+                    var cand1 = prod - new Poly(p1.Lm);
+                    var diff1 = LexReduce(cand1, currIdeal);
+                    if (diff1.Coeffs.Count == 0)
+                    {
+                        facts.Add(cand1);
+                        continue;
+
+                    }
                 }
             }
 
@@ -493,6 +515,9 @@ namespace Mba.Simplifier.Verification
             var trivialFacts = new Dictionary<Monomial, Poly>();
             var nonlinearFacts = new List<Poly>();
 
+
+            List<List<Poly>> ideals = new();
+
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
                 var results = new List<List<Poly>>();
@@ -523,12 +548,16 @@ namespace Mba.Simplifier.Verification
                 SimplifyIdeal(ideal, trivialFacts);
                 SimplifyIdeal(lexGb, trivialFacts);
 
-                // Update the ideal with nonlinear facts
-                ideal.AddRange(nonlinearFacts);
-                
-
                 var nfacts = GetNonlinearFacts(ideal);
                 nonlinearFacts.AddRange(nfacts);
+
+                // Update the ideal with nonlinear facts
+                ideal.AddRange(nonlinearFacts);
+                // Append the previous ideal
+                ideals.Add(ideal);
+                
+
+         
 
                 Console.WriteLine($"Ideal: ");
                 foreach(var p in ideal)
@@ -561,14 +590,29 @@ namespace Mba.Simplifier.Verification
 
                 var diff = results[0][0] - results[1][0];
 
+                Console.WriteLine("Reductions: ");
                 var rDiff = LexReduce(diff, ideal);
+                if (rDiff.Coeffs.Count != 0)
+                {
+                    Console.WriteLine(rDiff);
+                    var temp = rDiff;
+        
+                    for(int i = ideals.Count - 2; i > 0; i--)
+                    {
+                        temp = LexReduce(temp, ideals[i]);
+                        Console.WriteLine(temp);
+                        if (temp.Coeffs.Count == 0)
+                            break;
+                    }
+                    //var other = LexReduce(rDiff, ideals[ideals.Count - 2]);
+                    ///var other = LexReduce(rDiff, ideals[ideals.Count - 3]);
+                    Debugger.Break();
+                }
 
-                Debugger.Break();
 
+                }
 
             }
-
-        }
 
         public void RunOld()
         {
