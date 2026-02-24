@@ -164,6 +164,12 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y) & (4*(x+y))", w);
             deob = RustAstParser.Parse(ctx, "4*x+4*y", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "3*x + 3*y + 4*x + 4*y", w);
+            deob = RustAstParser.Parse(ctx, "7*x + 7*y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
+            deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
 
             var cache = new Dictionary<AstIdx, AstIdx>();
 
@@ -740,7 +746,7 @@ namespace Mba.Simplifier.Verification
 
                     //GeneralizeCarriedRelationships(rDiff, ideals, trivialFacts, nonlinearFacts);
 
-                    var reduc = ReduceRec(rDiff, ideals, trivialFacts, nonlinearFacts, rcache);
+                    var reduc = ReduceRec(rDiff, ideals, trivialFacts, nonlinearFactLists, rcache);
 
                     for (int i = ideals.Count - 2; i > 0; i--)
                     {
@@ -773,17 +779,23 @@ namespace Mba.Simplifier.Verification
             }
         }
 
-        private Poly ReduceRec(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<Poly> nonlinearFacts, HashSet<Poly> cache)
+        private Poly ReduceRec(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<List<Poly>> nonlinearFacts, HashSet<Poly> cache)
         {
+
             var zero = Poly.Constant(0);
             zero.Simplify();
             if (cache.Contains(rDiff))
                 return zero;
 
+            Console.WriteLine($"Reducing {rDiff}");
+
             var targets = rDiff.Coeffs.Keys.SelectMany(x => x.SortedVars).Where(x => x.Kind != SymKind.Input).Distinct().ToHashSet();
             var targetIdx = targets.First().BitIndex;
 
             var ideal = ideals[targetIdx];
+
+            var nlFacts = nonlinearFacts[targetIdx];
+
 
             //var linearTerms = rDiff.Coeffs.Where(x => x.Key.SortedVars.All(x => targets.Contains(x))).ToDictionary(x => x.Key, x => x.Value);
             var groups = new Dictionary<Monomial, Poly>();
