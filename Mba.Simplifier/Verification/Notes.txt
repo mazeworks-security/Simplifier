@@ -62,3 +62,103 @@ Calculate remainder of the specification modulo the linear elements of the groeb
     - 
 
 We could incrementally compute a groebner basis for the ith bit. If verification fails then expand to include bits+1.
+
+# Equivalence class aliasing
+We could compute some kind of signature vector for low degree terms and use that to merge structurally identical terms. 
+
+
+You were forgetting to update the `cache` variable in your iterative graded ordering thing
+
+
+# Rewriting algorithm:
+(1). Compute reduced lex groebner basis of current column.
+(2). Identify equivalent variables and merge them into one variable
+
+Then we either need to compute nonlinear relations(x*y == 0) OR rewrite everything in terms of each other.
+Nonlinear rewriting should come after I guess. Though if we do that then it becomes hard to express like `r4_1*op0_1cout => 1*(y1*x1)`, because `r4_1` might be a linear combination. Actually nvm it should be fine..
+
+# Dynamic reordering
+https://tsapps.nist.gov/publication/get_pdf.cfm?pub_id=908384
+```
+1*(op3_0cout) + -1*(y0*x0)
+1*(op3_0sum) + 2*(y0*x0) + -1*(y0) + -1*(x0)
+1*(op2_0cout) + 1*(y0*x0) + -1*(x0)
+```
+
+Given some ideal like this we want to express variables in terms of each other. This would require some kind of dynamic variable reordering (or insertion of new variables) for optimal results.
+- Standard greedy rewriting algorithm is probably best.
+- Maybe you dont need all of this... just do substitution of degree
+- Also after proving that the difference is zero, substitute one output variable for the other. Then you only need to compute carry differences
+
+TODO: You inverted the order of `cout` and `sum` nodes
+
+TODO: Rewriting should work. You just need to ensure that no nonlinear variables appear in the cache / groebner basis.
+- Somewhere the code is substituting in nonlinear stuff.. need to fix that
+- The remaining cases where the groebner basis engine fails are like ` -4*(op3_0cout*y1*x0) + 4*(op3_0cout*y1) + 2*(op3_0cout*x0) + -2*(op3_0cout)`
+`for (int j = 0; j < currIdeal.Count; j++)` undo possibly wrong quadratic thingy.. should be i..j not 0..i and 0..j.. maybe
+
+TODO:
+```
+1*(op3_1cout) + 2*(op3_0cout*y1*x1) + -1*(op3_0cout*y1) + -1*(op3_0cout*x1) + -1*(y1*x1)
+1*(op0_1cout) + -1*(y1*x0)
+```
+
+These can't be rewritten in terms of each other because they're ordered differently. Dynamic reordering should  fix though. 
+Also TODO: Fix monomial blowupe
+Also TODO use nonlinear relations from GB
+
+
+# 2/23/2026
+- Computing a reduced lexicographic groebner basis is the opposite of what we want. It will inline nonlinear terms like `y0*x0` into all of their uses
+```
+1*(op1_0gen) + -1*(x0)
+1*(op1_0prop)
+1*(op1_0cout) + -1*(x0)
+1*(op1_0sum)
+1*(op0_0gen)
+1*(op0_0prop) + -1*(y0)
+1*(op0_0cout)
+1*(op3_0gen) + -1*(y0*x0)
+1*(op3_0prop) + 2*(y0*x0) + -1*(y0) + -1*(x0)
+1*(op3_0cout) + -1*(y0*x0)
+1*(op3_0sum) + 2*(y0*x0) + -1*(y0) + -1*(x0)
+1*(op2_0gen) + 1*(y0*x0) + -1*(x0)
+1*(op2_0prop) + -1*(y0)
+1*(op2_0cout) + 1*(y0*x0) + -1*(x0)
+1*(op0_0sum) + -1*(y0)
+1*(op2_0sum) + -1*(y0)
+```
+
+Though I guess it's nice because it gives a canonical form for variable merging and rewriting.
+
+"Adding Dual Variables to Algebraic Reasoning for Gate-Level Multiplier Verification"
+https://homes.cs.washington.edu/~beame/papers/dual-verify.pdf
+    - Tail substitution. If the tail of one polynomial is divisble by the tail of another, rewrite them.
+    - Negation substitution. Polynomials can become exponentially more compact after negating a variable. E.g. `a|b|c` is `~(~a&~b&~c)`.
+        - They define variables representing the negation of gates and somehow use this to avoid intermediate product blowup. 
+
+# New algorithm:
+Incremental for each bit index:
+    - Extremely restricted simplifications.
+        - Merge identical variables
+        - Zero polynomials
+        - Back substitute in trivial identities from previous indices.
+            - Must be trivial. Cannot only include obvious
+    - Maybe negation identication from the paper: 
+        - Use identify `~x * x == 0' to simplify things
+        - Similarly `x + ~x = 1'
+
+
+New algorithm seems to be working - last improvement necessary is to automatically derive linear relations.
+```
+1*(op0_1gen) + -1*(y1*x1)
+1*(op2_1gen) + 2*(op0_0gen*y1*x1) + -1*(op0_0gen*y1) + -1*(op0_0gen*x1)
+1*(op0_1cout) + 2*(op0_0gen*y1*x1) + -1*(op0_0gen*y1) + -1*(op0_0gen*x1) + -1*(y1*x1)
+```
+
+can derive the identity: 
+    op0_1cout = (op0_1gen + op2_1gen)
+
+
+Identifying linear relations only kind of worked. Stopped scaling after the first few bits. Need some better method of doing it. Alternatively there miught be equivalences we're missng.
+Or factoring and recursive simplification could do. If factoring works then there's definitely a way to do it without factoring andsome relationsip were msing. relationhip between carries
