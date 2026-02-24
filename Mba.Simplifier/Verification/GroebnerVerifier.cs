@@ -148,8 +148,21 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "(((x&y) + (x&y)) + (x^y)) & (x+y)", w);
             deob = RustAstParser.Parse(ctx, "x+y", w);
 
-            obfuscated = RustAstParser.Parse(ctx, "x+x", w);
-            deob = RustAstParser.Parse(ctx, "x+x", w);
+            obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
+            deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(((x&y) + (x&y)) + (x^y)) & (x+y)", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "3*x + 3*y + 4*x + 4*y", w);
+            deob = RustAstParser.Parse(ctx, "7*x + 7*y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "2*x + y + y", w);
+            deob = RustAstParser.Parse(ctx, "x+x+y+y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y) & (4*(x+y))", w);
+            deob = RustAstParser.Parse(ctx, "4*x+4*y", w);
 
 
             var cache = new Dictionary<AstIdx, AstIdx>();
@@ -471,7 +484,7 @@ namespace Mba.Simplifier.Verification
             }
         }
 
-        private List<Poly> GetNonlinearFacts(List<Poly> currIdeal)
+        private List<Poly> GetNonlinearFacts(List<Poly> currIdeal, Dictionary<Poly, Poly> lexCache)
         {
             var facts = new HashSet<Poly>();
             for (int i = 0; i < currIdeal.Count; i++)
@@ -489,7 +502,7 @@ namespace Mba.Simplifier.Verification
                         continue;
 
                     var prod = p0.Lm * p1.Lm;
-                    var reduced = LexReduce(prod, currIdeal);
+                    var reduced = LexReduce(prod, currIdeal, lexCache);
                     if (reduced.Coeffs.Count == 0)
                     {
                         facts.Add(prod);
@@ -497,7 +510,7 @@ namespace Mba.Simplifier.Verification
                     }
 
                     var cand0 = prod - new Poly(p0.Lm);
-                    var diff0 = LexReduce(cand0, currIdeal);
+                    var diff0 = LexReduce(cand0, currIdeal, lexCache);
                     if (diff0.Coeffs.Count == 0)
                     {
                         facts.Add(cand0);
@@ -506,7 +519,7 @@ namespace Mba.Simplifier.Verification
                     }
 
                     var cand1 = prod - new Poly(p1.Lm);
-                    var diff1 = LexReduce(cand1, currIdeal);
+                    var diff1 = LexReduce(cand1, currIdeal, lexCache);
                     if (diff1.Coeffs.Count == 0)
                     {
                         facts.Add(cand1);
@@ -595,8 +608,13 @@ namespace Mba.Simplifier.Verification
 
             HashSet<Poly> rcache = new();
 
+ 
+
+
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
+                Dictionary<Poly, Poly> lexCache = new();
+
                 var results = new List<List<Poly>>();
                 foreach (var _ in visit)
                     results.Add(new());
@@ -620,7 +638,7 @@ namespace Mba.Simplifier.Verification
 
                 // Compute a reduced lexicographic groebner basis
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
-                lexGb = ReduceLexGroebnerBasis(lexGb);
+                lexGb = ReduceLexGroebnerBasis(lexGb, lexCache);
 
                 // Use this basis to learn new facts.
                 LearnTrivialFacts(lexGb, trivialFacts);
@@ -637,20 +655,20 @@ namespace Mba.Simplifier.Verification
 
 
                 lexGb.AddRange(nullspaceFacts);
-                var bar = Nullspace.FindLinearIdentities(lexGb);
-                nullspaceFacts.AddRange(bar);
+                //var bar = Nullspace.FindLinearIdentities(lexGb);
+                //nullspaceFacts.AddRange(bar);
                 
 
                 
                 ideals.Add(ideal.ToList());
 
-                ideal.AddRange(nonlinearFacts);
-
                 // Problem: We're simplifying
-                var nfacts = GetNonlinearFacts(ideal);
-                nfacts.AddRange(bar);
+                var nfacts = GetNonlinearFacts(ideal, lexCache);
+                //nfacts.AddRange(bar);
                 //SimplifyIdeal(nfacts, trivialFacts);
                 nonlinearFactLists.Add(nfacts);
+
+                ideal.AddRange(nonlinearFacts);
 
 
                 Console.WriteLine($"Ideal: ");
@@ -666,7 +684,7 @@ namespace Mba.Simplifier.Verification
 
 
 
-
+                /*
 
                 var linearFacts = MsolveWrapper.Run(ideal.Select(x => x.Clone()).ToList(), MsolveWrapper.GetSortedVars(ideal));
                 foreach (var p in linearFacts)
@@ -675,7 +693,7 @@ namespace Mba.Simplifier.Verification
                 var otherFacts = linearFacts.Select(x => x.Clone()).ToList();
                 linearFacts.RemoveAll(x => x.Coeffs.Keys.Any(x => x.SortedVars.Count > 1));
                 linearFacts.Sort();
-
+                */
 
                 SageGb(ideal, false);
 
@@ -741,9 +759,12 @@ namespace Mba.Simplifier.Verification
 
                 else
                 {
-                    var m0 = r0.Coeffs.Single().Key;
-                    var m1 = r1.Coeffs.Single().Key;
-                    trivialFacts[m1] = m0;
+                    if (r0.Coeffs.Count != 0 && r1.Coeffs.Count != 0)
+                    {
+                        var m0 = r0.Coeffs.Single().Key;
+                        var m1 = r1.Coeffs.Single().Key;
+                        trivialFacts[m1] = m0;
+                    }
                     //trivialFacts[]
                 }
 
@@ -858,7 +879,7 @@ namespace Mba.Simplifier.Verification
         }
 
         // This is not gonna work.. exponential time again.
-        private void GeneralizeCarriedRelationships(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<Poly> nonlinearFacts)
+        private void GeneralizeCarriedRelationships(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<Poly> nonlinearFacts, Dictionary<Poly, Poly> cache)
         {
             var targets = rDiff.Coeffs.Keys.SelectMany(x => x.SortedVars).Where(x => x.Kind != SymKind.Input).Distinct().ToList();
             var targetIdx = targets.First().BitIndex;
@@ -867,7 +888,7 @@ namespace Mba.Simplifier.Verification
 
             // Compute a reduced lexicographic groebner basis
             var lexGb = ideal.Select(x => x.Clone()).ToList();
-            lexGb = ReduceLexGroebnerBasis(lexGb);
+            lexGb = ReduceLexGroebnerBasis(lexGb, cache);
 
 
             // Use this basis to learn new facts.
@@ -943,7 +964,7 @@ namespace Mba.Simplifier.Verification
                 // Probably highly illegal: Rewrite the groebner basis based on learned facts from earlier..
                 SimplifyMany(temp, simplificationMapping);
 
-                var currIdeal = ReduceLexGroebnerBasis(temp);
+                var currIdeal = ReduceLexGroebnerBasis(temp, null);
                 Console.WriteLine($"Lex ideal: ");
                 foreach (var p in currIdeal)
                     Console.WriteLine(p);
@@ -1250,7 +1271,7 @@ namespace Mba.Simplifier.Verification
             Debugger.Break();
         }
 
-        public List<Poly> ReduceLexGroebnerBasis(List<Poly> ideal)
+        public List<Poly> ReduceLexGroebnerBasis(List<Poly> ideal, Dictionary<Poly, Poly> cache)
         {
             var reduced = new List<Poly>();
 
@@ -1301,7 +1322,7 @@ namespace Mba.Simplifier.Verification
                 var p = minimalBasis[i];
                 var others = minimalBasis.Where((_, index) => index != i).ToList();
 
-                var reducedP = LexReduce(p, others);
+                var reducedP = LexReduce(p, others, cache);
                 if (reducedP.Coeffs.Count > 0)
                 {
                     reduced.Add(reducedP);
@@ -1311,15 +1332,16 @@ namespace Mba.Simplifier.Verification
             return reduced.OrderBy(p => p).ToList();
         }
 
-        public Poly LexReduce(Poly poly, List<Poly> ideal)
+        public Poly LexReduce(Poly poly, List<Poly> ideal, Dictionary<Poly, Poly> cache = null)
         {
-            if (poly.ToString() == "2*(op2_2cout*y3*x3) + -1*(op2_2cout*y3) + 2*(op3_2cout*y3*x3) + -1*(op3_2cout*y3) + -2*(op0_2cout*y3*x3) + 1*(op0_2cout*y3) + -2*(op1_2gen*y3*x3) + 1*(op1_2gen*y3)")
-                Debugger.Break();
-
+            var clone = poly.Clone();
             poly = poly.Clone();
             poly.Simplify();
             if (poly.Coeffs.Count == 0)
                 return poly;
+
+            if (cache != null && cache.TryGetValue(poly, out var existing))
+                return existing;
 
             var sorted = ideal.Where(g => g.Coeffs.Count > 0).OrderBy(g => g).ToList();
 
@@ -1369,6 +1391,8 @@ namespace Mba.Simplifier.Verification
                 remainder.Add(m, c);
 
             remainder.Simplify();
+
+            cache?.TryAdd(clone, remainder.Clone());
             return remainder;
         }
 
