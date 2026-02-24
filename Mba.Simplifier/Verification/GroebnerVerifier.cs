@@ -463,14 +463,19 @@ namespace Mba.Simplifier.Verification
 
         private List<Poly> GetNonlinearFacts(List<Poly> currIdeal)
         {
-            var facts = new List<Poly>();
+            var facts = new HashSet<Poly>();
             for (int i = 0; i < currIdeal.Count; i++)
             {
                 var p0 = currIdeal[i];
                 for (int j = i + 1; j < currIdeal.Count; j++)
                 {
                     var p1 = currIdeal[j];
+
                     if (p0.Coeffs.Count == 0 || p1.Coeffs.Count == 0)
+                        continue;
+
+                    // Limit exponential growth of learned facts
+                    if (p0.Lm.SortedVars.Concat(p1.Lm.SortedVars).Distinct().Count() > 2)
                         continue;
 
                     var prod = p0.Lm * p1.Lm;
@@ -501,7 +506,12 @@ namespace Mba.Simplifier.Verification
                 }
             }
 
-            return facts;
+            foreach (var f in facts)
+                f.Simplify();
+
+            facts.RemoveWhere(x => x.Coeffs.Count == 0);
+
+            return facts.ToList();
         }
 
         public void SimplifyIdeal(List<Poly> ideal, Dictionary<Monomial, Poly> trivialFacts)
@@ -512,6 +522,34 @@ namespace Mba.Simplifier.Verification
             foreach (var p in ideal.ToList())
             {
                 p.Simplify();
+                if (p.Coeffs.Count == 0)
+                    continue;
+
+                if (seen.Contains(p.Lm))
+                    continue;
+
+                seen.Add(p.Lm);
+                temp.Add(p);
+            }
+
+            ideal.Clear();
+            ideal.AddRange(temp);
+        }
+
+
+        public void ReduceIdeal(List<Poly> ideal, List<Poly> nonlinearFacts)
+        {
+            var temp = new List<Poly>();
+            var seen = new HashSet<Monomial>(0);
+            foreach (var _p in ideal.ToList())
+            {
+                // Reduce and update coefficients
+                _p.Simplify();
+                var p = LexReduce(_p, nonlinearFacts);
+                p.Simplify();
+                _p.Coeffs = p.Clone().Coeffs;
+
+
                 if (p.Coeffs.Count == 0)
                     continue;
 
@@ -538,10 +576,14 @@ namespace Mba.Simplifier.Verification
 
             // Trivial identities (merge equivalent nodes and zero identities)
             var trivialFacts = new Dictionary<Monomial, Poly>();
-            var nonlinearFacts = new List<Poly>();
 
 
             List<List<Poly>> ideals = new();
+            List<List<Poly>> nonlinearFactLists = new();
+
+            List<Poly> nullspaceFacts = new();
+
+            HashSet<Poly> rcache = new();
 
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
@@ -558,29 +600,47 @@ namespace Mba.Simplifier.Verification
                 // Update the ideal with previous facts
                 var all = throwaway.Select(x => x.Item3).ToList();
                 var ideal = all.Skip(counts.LastOrDefault()).Select(x => x.Clone()).ToList();
-                ideal.AddRange(nonlinearFacts);
 
                 counts.Add(throwaway.Count);
                 SimplifyMany(ideal, trivialFacts);
 
-                var allLex = all.Select(x => x.Clone()).ToList();
-                SimplifyMany(all, trivialFacts);
-                allLex = ReduceLexGroebnerBasis(allLex);
+                //var allLex = all.Select(x => x.Clone()).ToList();
+                //SimplifyMany(all, trivialFacts);
+                //allLex = ReduceLexGroebnerBasis(allLex);
 
                 // Compute a reduced lexicographic groebner basis
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
                 lexGb = ReduceLexGroebnerBasis(lexGb);
 
-
                 // Use this basis to learn new facts.
                 LearnTrivialFacts(lexGb, trivialFacts);
-
                 // Update both ideals
                 SimplifyIdeal(ideal, trivialFacts);
                 SimplifyIdeal(lexGb, trivialFacts);
 
+                var nonlinearFacts = new List<Poly>();
+                if (nonlinearFactLists.Count != 0)
+                    nonlinearFacts = nonlinearFactLists.Last();
+
+                ReduceIdeal(ideal, nonlinearFacts);
+                ReduceIdeal(lexGb, nonlinearFacts);
+
+
+                lexGb.AddRange(nullspaceFacts);
+                var bar = Nullspace.FindLinearIdentities(lexGb);
+                nullspaceFacts.AddRange(bar);
+                
+
+                
+                ideals.Add(ideal.ToList());
+
+                ideal.AddRange(nonlinearFacts);
+
+                // Problem: We're simplifying
                 var nfacts = GetNonlinearFacts(ideal);
-                nonlinearFacts.AddRange(nfacts);
+                nfacts.AddRange(bar);
+                //SimplifyIdeal(nfacts, trivialFacts);
+                nonlinearFactLists.Add(nfacts);
 
 
                 Console.WriteLine($"Ideal: ");
@@ -592,7 +652,7 @@ namespace Mba.Simplifier.Verification
                 // Update the ideal with nonlinear facts
                 //ideal.AddRange(nonlinearFacts);
                 // Append the previous ideal
-                ideals.Add(ideal);
+         
 
 
 
@@ -632,6 +692,8 @@ namespace Mba.Simplifier.Verification
                     Console.WriteLine(rDiff);
                     var temp = rDiff;
 
+
+
                     /*
                     var rewrites = new Dictionary<Monomial, Poly>();
                     Gauss(lexGb, rewrites);
@@ -647,9 +709,9 @@ namespace Mba.Simplifier.Verification
                     // It's hard to know upfront what linear facts we should learn.
 
 
-                    GeneralizeCarriedRelationships(rDiff, ideals, trivialFacts, nonlinearFacts);
+                    //GeneralizeCarriedRelationships(rDiff, ideals, trivialFacts, nonlinearFacts);
 
-
+                    var reduc = ReduceRec(rDiff, ideals, trivialFacts, nonlinearFacts, rcache);
 
                     for (int i = ideals.Count - 2; i > 0; i--)
                     {
@@ -661,7 +723,8 @@ namespace Mba.Simplifier.Verification
                     }
                     //var other = LexReduce(rDiff, ideals[ideals.Count - 2]);
                     ///var other = LexReduce(rDiff, ideals[ideals.Count - 3]);
-                    Debugger.Break();
+                    Console.WriteLine($"Reduction: {reduc}");
+                    // Debugger.Break();
 
 
                 }
@@ -676,6 +739,112 @@ namespace Mba.Simplifier.Verification
 
 
             }
+        }
+
+        private Poly ReduceRec(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<Poly> nonlinearFacts, HashSet<Poly> cache)
+        {
+            var zero = Poly.Constant(0);
+            zero.Simplify();
+            if (cache.Contains(rDiff))
+                return zero;
+
+            var targets = rDiff.Coeffs.Keys.SelectMany(x => x.SortedVars).Where(x => x.Kind != SymKind.Input).Distinct().ToHashSet();
+            var targetIdx = targets.First().BitIndex;
+
+            var ideal = ideals[targetIdx];
+
+            //var linearTerms = rDiff.Coeffs.Where(x => x.Key.SortedVars.All(x => targets.Contains(x))).ToDictionary(x => x.Key, x => x.Value);
+            var groups = new Dictionary<Monomial, Poly>();
+            var remainder = Poly.Constant(0);
+            foreach(var (monom, coeff) in rDiff.Coeffs)
+            {
+                if (!monom.SortedVars.Any(x => targets.Contains(x)))
+                {
+                    remainder += coeff * monom;
+                    continue;
+                }
+                // If its only variables then throw it in a group.
+                if(monom.SortedVars.All(x => targets.Contains(x)))
+                {
+                    groups.TryAdd(Monomial.Constant(), Poly.Constant(0));
+                    groups[Monomial.Constant()] += coeff * monom;
+                    continue;
+                }
+
+                var ourVars = new Monomial(monom.SortedVars.Where(x => targets.Contains(x)));
+                var factoredFactors = new Monomial(monom.SortedVars.Where(x => !targets.Contains(x)));
+                groups.TryAdd(factoredFactors, Poly.Constant(0));
+                groups[factoredFactors] += coeff * ourVars;
+
+            }
+
+
+            List<Poly> reducIdeal = new();
+            foreach (var best in groups.Values)
+            {
+                foreach (var p in groups.Values)
+                    p.Simplify();
+
+                var linearTerms = best.Coeffs;
+                var gcd = FindGCDOfList(linearTerms.Select(x => x.Value).ToList());
+                foreach (var key in linearTerms.Keys.ToList())
+                    linearTerms[key] /= gcd;
+
+
+                var slicePoly = new Poly(linearTerms);
+
+                if (linearTerms.Count == 0)
+                    continue;
+
+                var reduced = LexReduce(slicePoly, ideal);
+                if (reduced.Coeffs.Count != 0)
+                {
+                    var inter = ReduceRec(reduced, ideals, trivialFacts, nonlinearFacts, cache);
+                    reduced = inter;
+                    Debug.Assert(reduced.Coeffs.Count == 0);
+                }
+
+                reducIdeal.Add(slicePoly);
+                cache.Add(slicePoly);
+            }
+
+            remainder.Simplify();
+            if (remainder.Coeffs.Count > 0)
+                throw new InvalidOperationException();
+            cache.Add(rDiff);
+
+            return remainder;
+        }
+
+        public static long GCD(long a, long b)
+        {
+            while (b != 0)
+            {
+                long remainder = a % b;
+                a = b;
+                b = remainder;
+            }
+            return a;
+        }
+
+        // Include the FindGCDOfList function from step 2 here
+        public static long FindGCDOfList(List<long> numbers)
+        {
+            if (numbers == null || numbers.Count == 0)
+            {
+                throw new ArgumentException("The list of numbers cannot be null or empty.", nameof(numbers));
+            }
+
+            long result = numbers[0];
+            for (int i = 1; i < numbers.Count; i++)
+            {
+                result = GCD(result, numbers[i]);
+                if (result == 1)
+                {
+                    return 1;
+                }
+            }
+            return result;
         }
 
         // This is not gonna work.. exponential time again.
@@ -1134,6 +1303,9 @@ namespace Mba.Simplifier.Verification
 
         public Poly LexReduce(Poly poly, List<Poly> ideal)
         {
+            if (poly.ToString() == "2*(op2_2cout*y3*x3) + -1*(op2_2cout*y3) + 2*(op3_2cout*y3*x3) + -1*(op3_2cout*y3) + -2*(op0_2cout*y3*x3) + 1*(op0_2cout*y3) + -2*(op1_2gen*y3*x3) + 1*(op1_2gen*y3)")
+                Debugger.Break();
+
             poly = poly.Clone();
             poly.Simplify();
             if (poly.Coeffs.Count == 0)

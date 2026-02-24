@@ -13,7 +13,7 @@ namespace Mba.Simplifier.Verification
 
     public class Poly : IComparable<Poly>, IEquatable<Poly>
     {
-        public SortedDictionary<Monomial, long> Coeffs { get; private set; }
+        public SortedDictionary<Monomial, long> Coeffs { get; set; }
 
         public Monomial Lm => Coeffs.First().Key;
 
