@@ -663,7 +663,8 @@ namespace Mba.Simplifier.Verification
                 ideals.Add(ideal.ToList());
 
                 // Problem: We're simplifying
-                var nfacts = GetNonlinearFacts(ideal, lexCache);
+                // Using a lex reduced gb should make things much faster..
+                var nfacts = GetNonlinearFacts(lexGb, lexCache);
                 //nfacts.AddRange(bar);
                 //SimplifyIdeal(nfacts, trivialFacts);
                 nonlinearFactLists.Add(nfacts);
