@@ -638,9 +638,13 @@ namespace Mba.Simplifier.Verification
                 counts.Add(throwaway.Count);
                 SimplifyMany(ideal, trivialFacts);
 
-                //var allLex = all.Select(x => x.Clone()).ToList();
-                //SimplifyMany(all, trivialFacts);
-                //allLex = ReduceLexGroebnerBasis(allLex);
+                var allLex = all.Select(x => x.Clone()).ToList();
+                SimplifyMany(all, trivialFacts);
+                allLex = ReduceLexGroebnerBasis(allLex, new());
+                Console.WriteLine("All lex: ");
+                foreach(var p in allLex)
+                    Console.WriteLine($"    {p}");
+
 
                 // Compute a reduced lexicographic groebner basis
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
@@ -1830,17 +1834,18 @@ namespace Mba.Simplifier.Verification
 
                 // I think this encoding is technically more optimal for the linear extraction idea
 
+                /*
                 ideal.Add((bitIdx, totalOrder++, generate - a * b));
                 ideal.Add((bitIdx, totalOrder++, propagate - (a + b - 2 * generate)));
                 ideal.Add((bitIdx, totalOrder++, cout - (generate + propagate * cin)));
                 ideal.Add((bitIdx, totalOrder++, sum - (propagate + 2 * generate + cin - 2 * cout)));
 
                 arithInfo.Add(new(cin, cout, propagate, generate, sum));
-
+                */
 
                 //var cout = SymVar.Temp($"a[{carryId}][{bitIdx}].cout");
 
-                /*
+                
                 var carryLhs = cout;
                 var carryRhs = a * b + a * cin + b * cin - 2 * (a * b * cin);
                 ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
@@ -1849,7 +1854,7 @@ namespace Mba.Simplifier.Verification
                 ideal.Add((bitIdx, totalOrder, member));
 
                 arithInfo.Add(new(cin, cout, null, null, sum));
-                */
+                
 
 
 
