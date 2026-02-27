@@ -17,6 +17,11 @@ namespace Mba.Simplifier.Verification
 
         public Monomial Lm => Coeffs.First().Key;
 
+        public Poly(SymVar sv) : this(new Monomial(sv))
+        {
+
+        }
+
         public Poly(Dictionary<Monomial, long> coeffs)
         {
             Coeffs = new SortedDictionary<Monomial, long>(coeffs);
@@ -169,6 +174,16 @@ namespace Mba.Simplifier.Verification
             else
                 Debug.Assert(coeff == -1);
 
+            return p;
+        }
+
+        public Poly Lhs()
+        {
+            var p = Clone();
+            p.Coeffs.Clear();
+
+            var coeff = Coeffs[Lm];
+            p.Coeffs[Lm] = coeff;
             return p;
         }
 

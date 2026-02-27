@@ -18,6 +18,8 @@ namespace Mba.Simplifier.Minimization
 
         public readonly ulong[] arr;
 
+        public bool IsZero => arr.All(x => x == 0);
+
         public TruthTable(int numVars)
         {
             this.NumVars = numVars;
@@ -48,10 +50,22 @@ namespace Mba.Simplifier.Minimization
                 SetBit(i, GetBit(i) ? false : true);
         }
 
+        public void And(TruthTable other)
+        {
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] &= other.arr[i];
+        }
+
         public void Or(TruthTable other)
         {
             for (int i = 0; i < arr.Length; i++)
                 arr[i] |= other.arr[i];
+        }
+
+        public void Xor(TruthTable other)
+        {
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] ^= other.arr[i];
         }
 
         public void Clear()

@@ -1,5 +1,7 @@
 ﻿using Mba.Ast;
 using Mba.Simplifier.Bindings;
+using Mba.Simplifier.Fuzzing;
+using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Polynomial;
 using Mba.Simplifier.Utility;
@@ -490,47 +492,139 @@ namespace Mba.Simplifier.Verification
             }
         }
 
+        // TODO: The result vector pruning stuff could be incorrect. Have not tested heavily
         private List<Poly> GetNonlinearFacts(List<Poly> currIdeal, Dictionary<Poly, Poly> lexCache)
         {
+            // Compute like 64 input combinations.. for each variable store a result vector..
+            //var allVars = MsolveWrapper.GetSortedVars(currIdeal);
+            var inputVars = new List<SymVar>();
+            var otherVars = new List<SymVar>();
+            foreach (var p in currIdeal)
+            {
+                foreach(var m in p.Coeffs.Keys.Skip(1))
+                {
+                    foreach (var v in m.SortedVars)
+                        inputVars.Add(v);
+                }
+
+                otherVars.Add(p.Coeffs.Keys.First().SortedVars.Single());
+            }
+
+            inputVars = inputVars.Distinct().ToList();
+            otherVars = otherVars.Distinct().ToList();
+
+            // var numCombinations = 1ul << (ushort)Math.Max(inputVars.Count, 4);
+            var numCombinations = 1ul << 4;
+            var signatureVectors = otherVars.ToDictionary(x => x, x => new TruthTable(4));
+
+            // Ulongs can only fit 64 vars
+            Debug.Assert(inputVars.Count < 64);
+
+
+            var rand = new SeededRandom();
+
+            // 2^t input combinations... assigning values to each variable
+            for(ulong varComb = 0; varComb < numCombinations; varComb++)
+            {
+                // Assign values to the input combinations
+                Dictionary<SymVar, ulong> varValues = new();
+                for(int i = 0; i < inputVars.Count; i++)
+                {
+                    // Compute an assignment for this variable
+                    var value = (varComb >> (ushort)i) & 1;
+                    if (i > 16)
+                        value = rand.GetRandUlong() & 1;
+
+                    varValues[inputVars[i]] = value;
+                }
+
+                for (int pi = 0; pi < currIdeal.Count; pi++)
+                {
+                    var p = currIdeal[pi];
+                    if (p.Lm.SortedVars.Count != 1)
+                        continue;
+
+                    long result = 0;
+                    foreach(var (monom, coeff) in p.Coeffs.Skip(1))
+                    {
+                        long isSet = 1;
+                        foreach(var v in monom.SortedVars)
+                            isSet &= (long)varValues[v];
+
+                        result += coeff * isSet;
+                    }
+
+                    result *= -1L;
+
+                    //Debug.Assert(result == 0 || result == 1);
+                    var leadingVar = p.Lm.SortedVars.Single();
+                    varValues[leadingVar] = (ulong)result;
+                    signatureVectors[leadingVar].SetBit((int)varComb, result != 0);
+                }
+            }
+
+
             var facts = new HashSet<Poly>();
             for (int i = 0; i < currIdeal.Count; i++)
             {
                 var p0 = currIdeal[i];
+                if (p0.Coeffs.Count == 0)
+                    continue;
+
+                var tbl0 = signatureVectors[p0.Lm.SortedVars.Single()];
+
                 for (int j = i + 1; j < currIdeal.Count; j++)
                 {
                     var p1 = currIdeal[j];
 
-                    if (p0.Coeffs.Count == 0 || p1.Coeffs.Count == 0)
+                    if (p1.Coeffs.Count == 0)
                         continue;
 
                     // Limit exponential growth of learned facts
                     if (p0.Lm.SortedVars.Concat(p1.Lm.SortedVars).Distinct().Count() > 2)
                         continue;
 
+                    var tbl1 = signatureVectors[p1.Lm.SortedVars.Single()];
+
                     var prod = p0.Lm * p1.Lm;
-                    var reduced = LexReduce(prod, currIdeal, lexCache);
-                    if (reduced.Coeffs.Count == 0)
+                    var prodTbl = tbl0.Clone();
+                    prodTbl.And(tbl1);
+                    if (prodTbl.IsZero)
                     {
-                        facts.Add(prod);
-                        continue;
+                        var reduced = LexReduce(prod, currIdeal, lexCache);
+                        if (reduced.Coeffs.Count == 0)
+                        {
+                            facts.Add(prod);
+                            continue;
+                        }
                     }
 
-                    var cand0 = prod - new Poly(p0.Lm);
-                    var diff0 = LexReduce(cand0, currIdeal, lexCache);
-                    if (diff0.Coeffs.Count == 0)
+                    var cand0Tbl = prodTbl.Clone();
+                    cand0Tbl.Xor(tbl0);
+                    if (cand0Tbl.IsZero)
                     {
-                        facts.Add(cand0);
-                        continue;
 
+                        var cand0 = prod - new Poly(p0.Lm);
+                        var diff0 = LexReduce(cand0, currIdeal, lexCache);
+                        if (diff0.Coeffs.Count == 0)
+                        {
+                            facts.Add(cand0);
+                            continue;
+
+                        }
                     }
 
-                    var cand1 = prod - new Poly(p1.Lm);
-                    var diff1 = LexReduce(cand1, currIdeal, lexCache);
-                    if (diff1.Coeffs.Count == 0)
+                    var cand1Tbl = prodTbl.Clone();
+                    cand1Tbl.Xor(tbl1);
+                    if (cand1Tbl.IsZero)
                     {
-                        facts.Add(cand1);
-                        continue;
-
+                        var cand1 = prod - new Poly(p1.Lm);
+                        var diff1 = LexReduce(cand1, currIdeal, lexCache);
+                        if (diff1.Coeffs.Count == 0)
+                        {
+                            facts.Add(cand1);
+                            continue;
+                        }
                     }
                 }
             }
@@ -614,7 +708,7 @@ namespace Mba.Simplifier.Verification
 
             HashSet<Poly> rcache = new();
 
- 
+
 
 
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
@@ -638,13 +732,14 @@ namespace Mba.Simplifier.Verification
                 counts.Add(throwaway.Count);
                 SimplifyMany(ideal, trivialFacts);
 
+                /*
                 var allLex = all.Select(x => x.Clone()).ToList();
                 SimplifyMany(all, trivialFacts);
                 allLex = ReduceLexGroebnerBasis(allLex, new());
                 Console.WriteLine("All lex: ");
-                foreach(var p in allLex)
+                foreach (var p in allLex)
                     Console.WriteLine($"    {p}");
-
+                */
 
                 // Compute a reduced lexicographic groebner basis
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
@@ -667,10 +762,10 @@ namespace Mba.Simplifier.Verification
                 lexGb.AddRange(nullspaceFacts);
                 //var bar = Nullspace.FindLinearIdentities(lexGb);
                 //nullspaceFacts.AddRange(bar);
-                
 
-                
-             
+
+
+
 
                 // Problem: We're simplifying
                 // Using a lex reduced gb should make things much faster..
@@ -688,12 +783,12 @@ namespace Mba.Simplifier.Verification
                 foreach (var p in ideal)
                     Console.WriteLine($"    {p}");
 
-            
+
 
                 // Update the ideal with nonlinear facts
                 //ideal.AddRange(nonlinearFacts);
                 // Append the previous ideal
-         
+
 
 
 
@@ -727,6 +822,8 @@ namespace Mba.Simplifier.Verification
                 var diff = results[0][0] - results[1][0];
 
                 Console.WriteLine("Reductions: ");
+
+
                 var rDiff = LexReduce(diff, ideal);
                 if (rDiff.Coeffs.Count != 0)
                 {
@@ -764,7 +861,7 @@ namespace Mba.Simplifier.Verification
                     }
                     //var other = LexReduce(rDiff, ideals[ideals.Count - 2]);
                     ///var other = LexReduce(rDiff, ideals[ideals.Count - 3]);
-                    Console.WriteLine($"Reduction: {reduc}");
+                    Console.WriteLine($"REDUCED to: {reduc}\n\n");
                     // Debugger.Break();
 
 
@@ -793,7 +890,6 @@ namespace Mba.Simplifier.Verification
             if (cache.Contains(rDiff))
                 return zero;
 
-            Console.WriteLine($"Reducing {rDiff}");
 
             var targets = rDiff.Coeffs.Keys.SelectMany(x => x.SortedVars).Where(x => x.Kind != SymKind.Input).Distinct().ToHashSet();
             var targetIdx = targets.First().BitIndex;
@@ -803,10 +899,68 @@ namespace Mba.Simplifier.Verification
             var nlFacts = nonlinearFacts[targetIdx];
 
 
+
+            foreach (var v in rDiff.Coeffs.Keys.SelectMany(x => x.SortedVars).Distinct().ToList())
+            {
+                //if (v.Kind != SymKind.Input)
+                //    continue;
+                var withX = rDiff.Clone();
+                var withoutX = Poly.Constant(0);
+                withoutX.Simplify();
+                foreach (var key in rDiff.Coeffs.Keys.ToList())
+                {
+                    var hasVar = key.SortedVars.Contains(v);
+                    if (!hasVar)
+                    {
+                        withX.Remove(key);
+                        withoutX.Add(key, rDiff.Coeffs[key]);
+                    }
+                    /*
+                    if (!hasVar)
+                        withX.Coeffs.Remove(key);
+                    else
+                        withoutX.Add(key, withX.Coeffs[key]);
+                    */
+                }
+
+                withX.ReplaceSubset(new Monomial(v), Poly.Constant(1));
+
+
+
+                if (withX == -2L * withoutX)
+                {
+                    rDiff = withX;
+                }
+
+                else
+                {
+                    // if (withX.Lhs() == -2L * withoutX.Lhs())
+                    //    Debugger.Break();
+                }
+
+                /*
+                withX.ReplaceSubset(new Monomial(v), Poly.Constant(1));
+
+                var withoutX = rDiff.Clone();
+                withoutX.ReplaceSubset(new Monomial(v), Poly.Constant(1));
+
+                withX.Simplify();
+                withoutX.Simplify();
+                */
+
+                //if (withX == -1L * withoutX || withoutX == -1L * withX)
+                //   Debugger.Break();
+            }
+
+            rDiff.Simplify();
+
+            Console.WriteLine($"Reducing {rDiff}\n");
+
+
             //var linearTerms = rDiff.Coeffs.Where(x => x.Key.SortedVars.All(x => targets.Contains(x))).ToDictionary(x => x.Key, x => x.Value);
             var groups = new Dictionary<Monomial, Poly>();
             var remainder = Poly.Constant(0);
-            foreach(var (monom, coeff) in rDiff.Coeffs)
+            foreach (var (monom, coeff) in rDiff.Coeffs)
             {
                 if (!monom.SortedVars.Any(x => targets.Contains(x)))
                 {
@@ -814,7 +968,7 @@ namespace Mba.Simplifier.Verification
                     continue;
                 }
                 // If its only variables then throw it in a group.
-                if(monom.SortedVars.All(x => targets.Contains(x)))
+                if (monom.SortedVars.All(x => targets.Contains(x)))
                 {
                     groups.TryAdd(Monomial.Constant(), Poly.Constant(0));
                     groups[Monomial.Constant()] += coeff * monom;
@@ -846,7 +1000,11 @@ namespace Mba.Simplifier.Verification
                 if (linearTerms.Count == 0)
                     continue;
 
+
                 var reduced = LexReduce(slicePoly, ideal);
+
+
+
                 if (reduced.Coeffs.Count != 0)
                 {
                     var inter = ReduceRec(reduced, ideals, trivialFacts, nonlinearFacts, cache);
@@ -931,7 +1089,7 @@ namespace Mba.Simplifier.Verification
                 //    continue;
 
 
-                    nonlinearFacts.Add(monomial - rhs);
+                nonlinearFacts.Add(monomial - rhs);
                 ideal.Remove(ideal.Single(x => x.Lm == monomial));
                 ideal.Add(nonlinearFacts.Last());
             }
@@ -1845,7 +2003,7 @@ namespace Mba.Simplifier.Verification
 
                 //var cout = SymVar.Temp($"a[{carryId}][{bitIdx}].cout");
 
-                
+
                 var carryLhs = cout;
                 var carryRhs = a * b + a * cin + b * cin - 2 * (a * b * cin);
                 ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
@@ -1854,7 +2012,7 @@ namespace Mba.Simplifier.Verification
                 ideal.Add((bitIdx, totalOrder, member));
 
                 arithInfo.Add(new(cin, cout, null, null, sum));
-                
+
 
 
 
