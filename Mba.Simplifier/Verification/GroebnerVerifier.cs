@@ -172,6 +172,8 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
 
+            //obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
+            //deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
 
             var cache = new Dictionary<AstIdx, AstIdx>();
 
@@ -515,7 +517,7 @@ namespace Mba.Simplifier.Verification
 
             // var numCombinations = 1ul << (ushort)Math.Max(inputVars.Count, 4);
             var numCombinations = 1ul << 4;
-            var signatureVectors = otherVars.ToDictionary(x => x, x => new TruthTable(4));
+            var signatureVectors = otherVars.ToDictionary(x => x, x => new TruthTable(5));
 
             // Ulongs can only fit 64 vars
             Debug.Assert(inputVars.Count < 64);
@@ -732,14 +734,14 @@ namespace Mba.Simplifier.Verification
                 counts.Add(throwaway.Count);
                 SimplifyMany(ideal, trivialFacts);
 
-                /*
+                
                 var allLex = all.Select(x => x.Clone()).ToList();
                 SimplifyMany(all, trivialFacts);
                 allLex = ReduceLexGroebnerBasis(allLex, new());
                 Console.WriteLine("All lex: ");
                 foreach (var p in allLex)
                     Console.WriteLine($"    {p}");
-                */
+                
 
                 // Compute a reduced lexicographic groebner basis
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
@@ -882,8 +884,25 @@ namespace Mba.Simplifier.Verification
             }
         }
 
+
+        private Poly PCanon(Poly rDiff)
+        {
+            rDiff = rDiff.Clone();
+            rDiff.Simplify();
+
+            var gcd = FindGCDOfList(rDiff.Coeffs.Select(x => x.Value).ToList());
+            foreach (var key in rDiff.Coeffs.Keys.ToList())
+                rDiff.Coeffs[key] /= gcd;
+
+            if (rDiff.Coeffs[rDiff.Lm] < 0)
+                rDiff = -1L * rDiff;
+
+            return rDiff;
+        }
+
         private Poly ReduceRec(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<List<Poly>> nonlinearFacts, HashSet<Poly> cache)
         {
+            rDiff = PCanon(rDiff);
 
             var zero = Poly.Constant(0);
             zero.Simplify();
@@ -953,9 +972,14 @@ namespace Mba.Simplifier.Verification
             }
 
             rDiff.Simplify();
+            if (cache.Contains(rDiff))
+                return zero;
 
-            Console.WriteLine($"Reducing {rDiff}\n");
+            rDiff = PCanon(rDiff);
+            if (cache.Contains(rDiff))
+                return zero;
 
+            Console.WriteLine($"\nReducing {rDiff}\n");
 
             //var linearTerms = rDiff.Coeffs.Where(x => x.Key.SortedVars.All(x => targets.Contains(x))).ToDictionary(x => x.Key, x => x.Value);
             var groups = new Dictionary<Monomial, Poly>();
@@ -984,6 +1008,7 @@ namespace Mba.Simplifier.Verification
 
 
             List<Poly> reducIdeal = new();
+            Dictionary<Poly, Poly> rcache = new();
             foreach (var best in groups.Values)
             {
                 foreach (var p in groups.Values)
@@ -1001,7 +1026,7 @@ namespace Mba.Simplifier.Verification
                     continue;
 
 
-                var reduced = LexReduce(slicePoly, ideal);
+                var reduced = LexReduce(slicePoly, ideal, rcache);
 
 
 
@@ -1019,7 +1044,7 @@ namespace Mba.Simplifier.Verification
             remainder.Simplify();
             if (remainder.Coeffs.Count > 0)
                 throw new InvalidOperationException();
-            cache.Add(rDiff);
+            cache.Add(rDiff.Clone());
 
             return remainder;
         }
