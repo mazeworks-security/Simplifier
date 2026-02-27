@@ -120,7 +120,7 @@ namespace Mba.Simplifier.Verification
             Coeffs.Clear();
             foreach (var (m, c) in clone)
             {
-                Add(new Monomial(m.SortedVars.Distinct()), c);
+                Add(m, c);
             }
             //Coeffs = new(Coeffs.ToDictionary(x => new Monomial(x.Key.SortedVars.Distinct()), x => x.Value)); 
         }
@@ -260,7 +260,7 @@ namespace Mba.Simplifier.Verification
 
         public static bool IsConstant(Monomial m)
         {
-            return m.SortedVars.Count == 0;
+            return m.SortedVars.Length == 0;
         }
 
         public bool IsEq(Poly other)
@@ -381,14 +381,14 @@ namespace Mba.Simplifier.Verification
     {
         public const bool LEXORDER = true;
 
-        public readonly List<SymVar> SortedVars;
+        public readonly SymVar[] SortedVars;
 
-        public int Degree => SortedVars.Count;
+        public int Degree => SortedVars.Length;
 
         private readonly int hash = 17;
 
         public static Monomial Quadratic(SymVar var)
-            => new Monomial(new SymVar[] { var, var}, distinct: false);
+            => new Monomial(new SymVar[] { var, var }, distinct: false);
 
         // TODO: If a variable is boolean, eliminate x*x constraints
         public Monomial(IEnumerable<SymVar> vars, bool distinct = true)
@@ -397,12 +397,17 @@ namespace Mba.Simplifier.Verification
                 vars = vars.Distinct();
 
             if (LEXORDER)
-                SortedVars = vars.OrderByDescending(x => x).ToList();
+                SortedVars = vars.OrderByDescending(x => x).ToArray();
             else
-                SortedVars = vars.OrderByDescending(x => x).ToList();
+                SortedVars = vars.OrderByDescending(x => x).ToArray();
 
+            foreach (var v in SortedVars)
+                hash = hash * 23 + v.GetHashCode();
+        }
 
-
+        private Monomial(SymVar[] sortedVars, bool isSortedAndDistinct)
+        {
+            SortedVars = sortedVars;
             foreach (var v in SortedVars)
                 hash = hash * 23 + v.GetHashCode();
         }
@@ -413,7 +418,7 @@ namespace Mba.Simplifier.Verification
         }
 
         public static Monomial Constant()
-            => new Monomial();
+            => new Monomial(Array.Empty<SymVar>(), true);
 
         public static Poly operator *(long coeff, Monomial a)
         {
@@ -422,7 +427,50 @@ namespace Mba.Simplifier.Verification
 
         public static Monomial operator *(Monomial a, Monomial b)
         {
-            return new Monomial(a.SortedVars.AsEnumerable().Concat(b.SortedVars));
+            var res = new SymVar[a.SortedVars.Length + b.SortedVars.Length];
+            int i = 0, j = 0, k = 0;
+            while (i < a.SortedVars.Length && j < b.SortedVars.Length)
+            {
+                int cmp = a.SortedVars[i].CompareTo(b.SortedVars[j]);
+                if (cmp > 0)
+                {
+                    if (k == 0 || !res[k - 1].Equals(a.SortedVars[i]))
+                        res[k++] = a.SortedVars[i];
+                    i++;
+                }
+                else if (cmp < 0)
+                {
+                    if (k == 0 || !res[k - 1].Equals(b.SortedVars[j]))
+                        res[k++] = b.SortedVars[j];
+                    j++;
+                }
+                else
+                {
+                    if (k == 0 || !res[k - 1].Equals(a.SortedVars[i]))
+                        res[k++] = a.SortedVars[i];
+                    i++;
+                    j++;
+                }
+            }
+            while (i < a.SortedVars.Length)
+            {
+                if (k == 0 || !res[k - 1].Equals(a.SortedVars[i]))
+                    res[k++] = a.SortedVars[i];
+                i++;
+            }
+            while (j < b.SortedVars.Length)
+            {
+                if (k == 0 || !res[k - 1].Equals(b.SortedVars[j]))
+                    res[k++] = b.SortedVars[j];
+                j++;
+            }
+
+            if (k == res.Length)
+                return new Monomial(res, true);
+
+            var finalRes = new SymVar[k];
+            Array.Copy(res, finalRes, k);
+            return new Monomial(finalRes, true);
         }
 
         public static bool operator ==(Monomial? left, Monomial? right)
@@ -470,65 +518,97 @@ namespace Mba.Simplifier.Verification
 
         public bool Equals(Monomial? other)
         {
-            return SortedVars.SequenceEqual(other.SortedVars);
+            if (other is null) return false;
+            if (hash != other.hash) return false;
+            if (SortedVars.Length != other.SortedVars.Length) return false;
+            for (int i = 0; i < SortedVars.Length; i++)
+            {
+                if (!SortedVars[i].Equals(other.SortedVars[i]))
+                    return false;
+            }
+            return true;
         }
 
         public Monomial Divide(Monomial other)
         {
-            var vars = new List<SymVar>(SortedVars);
-            foreach (var v in other.SortedVars)
+            var res = new SymVar[SortedVars.Length];
+            int i = 0, j = 0, k = 0;
+            while (i < SortedVars.Length && j < other.SortedVars.Length)
             {
-                vars.Remove(v);
+                int cmp = SortedVars[i].CompareTo(other.SortedVars[j]);
+                if (cmp > 0)
+                {
+                    res[k++] = SortedVars[i++];
+                }
+                else if (cmp < 0)
+                {
+                    j++;
+                }
+                else
+                {
+                    i++;
+                    j++;
+                }
             }
-            return new Monomial(vars);
+            while (i < SortedVars.Length)
+            {
+                res[k++] = SortedVars[i++];
+            }
+
+            if (k == res.Length)
+                return new Monomial(res, true);
+
+            var finalRes = new SymVar[k];
+            Array.Copy(res, finalRes, k);
+            return new Monomial(finalRes, true);
         }
 
         public bool Divides(Monomial other)
         {
-
-            if (SortedVars.Count > other.SortedVars.Count)
+            if (SortedVars.Length > other.SortedVars.Length)
                 return false;
 
-            return SortedVars.ToHashSet().IsSubsetOf(other.SortedVars);
-
-            int j = 0;
-            for (int i = 0; i < SortedVars.Count; i++)
+            int i = 0, j = 0;
+            while (i < SortedVars.Length && j < other.SortedVars.Length)
             {
-                while (j < other.SortedVars.Count && other.SortedVars[j].CompareTo(SortedVars[i]) > 0)
-                    j++;
-
-                if (j >= other.SortedVars.Count || !other.SortedVars[j].Equals(SortedVars[i]))
+                int cmp = SortedVars[i].CompareTo(other.SortedVars[j]);
+                if (cmp > 0)
+                {
                     return false;
-
-                j++;
+                }
+                else if (cmp < 0)
+                {
+                    j++;
+                }
+                else
+                {
+                    i++;
+                    j++;
+                }
             }
-
-            return true;
+            return i == SortedVars.Length;
         }
 
         public int CompareTo(Monomial? o)
         {
-
-
             var (t, other) = (this, o);
-
 
             if (LEXORDER)
             {
-                int minLen = Math.Min(t.SortedVars.Count, other.SortedVars.Count);
+                int minLen = Math.Min(t.SortedVars.Length, other.SortedVars.Length);
                 for (int i = 0; i < minLen; i++)
                 {
                     int cmp = t.SortedVars[i].CompareTo(other.SortedVars[i]);
                     if (cmp != 0)
                         return -cmp;
                 }
-                return -(t.SortedVars.Count.CompareTo(other.SortedVars.Count));
+                return -(t.SortedVars.Length.CompareTo(other.SortedVars.Length));
             }
 
             if (t.Equals(other))
                 return 0;
 
-            int degDiff = t.SortedVars.Count - other.SortedVars.Count;
+            int degDiff = t.SortedVars.Length - other.SortedVars.Length;
             if (degDiff != 0)
                 return -degDiff;
 

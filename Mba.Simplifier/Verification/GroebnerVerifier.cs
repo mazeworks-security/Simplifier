@@ -463,9 +463,9 @@ namespace Mba.Simplifier.Verification
                 {
                     var rhs = p0.Rhs();
                     var lm = rhs.Lm;
-                    if (lm.SortedVars.Count > 1)
+                    if (lm.SortedVars.Length > 1)
                         goto skip;
-                    if (lm.SortedVars.Count != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Count != 1 || lm.SortedVars.Single().BitIndex == p0.Lm.SortedVars.Single().BitIndex)
+                    if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex == p0.Lm.SortedVars.Single().BitIndex)
                         goto skip;
 
                     simplificationMapping.TryAdd(p0.Lm, rhs);
@@ -543,7 +543,7 @@ namespace Mba.Simplifier.Verification
                 for (int pi = 0; pi < currIdeal.Count; pi++)
                 {
                     var p = currIdeal[pi];
-                    if (p.Lm.SortedVars.Count != 1)
+                    if (p.Lm.SortedVars.Length != 1)
                         continue;
 
                     long result = 0;
@@ -734,14 +734,14 @@ namespace Mba.Simplifier.Verification
                 counts.Add(throwaway.Count);
                 SimplifyMany(ideal, trivialFacts);
 
-                
+                /*
                 var allLex = all.Select(x => x.Clone()).ToList();
                 SimplifyMany(all, trivialFacts);
                 allLex = ReduceLexGroebnerBasis(allLex, new());
                 Console.WriteLine("All lex: ");
                 foreach (var p in allLex)
                     Console.WriteLine($"    {p}");
-                
+                */
 
                 // Compute a reduced lexicographic groebner basis
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
@@ -1101,7 +1101,7 @@ namespace Mba.Simplifier.Verification
             SimplifyIdeal(lexGb, trivialFacts);
 
             //lexGb.RemoveAll(x => !targets.Contains(x.Lm.SortedVars.Single()));
-            lexGb.RemoveAll(x => x.Lm.SortedVars.Count > 1 || !targets.Contains(x.Lm.SortedVars.Single()));
+            lexGb.RemoveAll(x => x.Lm.SortedVars.Length > 1 || !targets.Contains(x.Lm.SortedVars.Single()));
 
             var rewrites = new Dictionary<Monomial, Poly>();
             Gauss(lexGb, rewrites);
@@ -1237,7 +1237,7 @@ namespace Mba.Simplifier.Verification
                     p.Simplify();
                 linearFacts.RemoveAll(x => x.Coeffs.Count == 0);
                 var otherFacts = linearFacts.Select(x => x.Clone()).ToList();
-                linearFacts.RemoveAll(x => x.Coeffs.Keys.Any(x => x.SortedVars.Count > 1));
+                linearFacts.RemoveAll(x => x.Coeffs.Keys.Any(x => x.SortedVars.Length > 1));
                 linearFacts.Sort();
 
                 var other = LearnLinearSimplifications(linearFacts, fixedIdeal);
@@ -1862,7 +1862,7 @@ namespace Mba.Simplifier.Verification
 
             var prevMonomial = cout.Coeffs.Keys.Single();
 
-            if (prevMonomial.SortedVars.Count == 1)
+            if (prevMonomial.SortedVars.Length == 1)
             {
                 foreach (var p in gb)
                 {
@@ -2190,7 +2190,7 @@ namespace Mba.Simplifier.Verification
 
                     var temp = new Poly();
 
-                    if (nextLm.SortedVars.Count == 1)
+                    if (nextLm.SortedVars.Length == 1)
                     {
                         temp.Add(Monomial.Constant(), 1);
                     }
@@ -2256,7 +2256,7 @@ namespace Mba.Simplifier.Verification
 
                     var lm = curr.Lm;
 
-                    if (lm.SortedVars.Count != 1)
+                    if (lm.SortedVars.Length != 1)
                         continue;
 
                     var variable = lm.SortedVars.Single();
@@ -2370,7 +2370,7 @@ namespace Mba.Simplifier.Verification
                             varOrder.Add(v);
                     }
 
-                    if (linearize && monomial.SortedVars.Count > 1 && !linMap.ContainsKey(monomial))
+                    if (linearize && monomial.SortedVars.Length > 1 && !linMap.ContainsKey(monomial))
                     {
                         linMap[monomial] = $"lin{linCounter++}";
                     }
@@ -2419,11 +2419,11 @@ namespace Mba.Simplifier.Verification
 
 
 
-                    if (monomial.SortedVars.Count == 0)
+                    if (monomial.SortedVars.Length == 0)
                     {
                         terms.Add(coeff.ToString());
                     }
-                    else if (linearize && monomial.SortedVars.Count > 1 && !(skipAND && poly.Lm.SortedVars[0].Name.StartsWith("r0_")) && linMap.TryGetValue(monomial, out var linName))
+                    else if (linearize && monomial.SortedVars.Length > 1 && !(skipAND && poly.Lm.SortedVars[0].Name.StartsWith("r0_")) && linMap.TryGetValue(monomial, out var linName))
                     {
                         if (coeff == 1)
                             terms.Add(linName);
@@ -2497,7 +2497,7 @@ namespace Mba.Simplifier.Verification
                         SymVar? unassigned = null;
                         foreach (var m in poly.Coeffs.Keys)
                         {
-                            if (m.SortedVars.Count == 1)
+                            if (m.SortedVars.Length == 1)
                             {
                                 var v = m.SortedVars.First();
                                 if (!assignment.ContainsKey(v))
@@ -2529,7 +2529,7 @@ namespace Mba.Simplifier.Verification
                             {
                                 // This term contains the gate variable.
                                 // It should be of the form coeff * gate (linear in gate).
-                                Debug.Assert(monomial.SortedVars.Count == 1, $"Gate variable {gate} appears in higher-degree monomial {monomial}");
+                                Debug.Assert(monomial.SortedVars.Length == 1, $"Gate variable {gate} appears in higher-degree monomial {monomial}");
                                 gateCoeff += coeff;
                             }
                             else

@@ -25,7 +25,7 @@ namespace Mba.Simplifier.Verification
             if (t.Equals(other)) return 0;
 
             // 1. Higher total degree is "larger" (comes first → negative)
-            int degDiff = t.SortedVars.Count - other.SortedVars.Count;
+            int degDiff = t.SortedVars.Length - other.SortedVars.Length;
             if (degDiff != 0)
                 return -degDiff;
 
@@ -78,7 +78,7 @@ namespace Mba.Simplifier.Verification
             if (t.Equals(other)) return 0;
 
             // 1. Higher total degree is "larger" (comes first → negative)
-            int degDiff = t.SortedVars.Count - other.SortedVars.Count;
+            int degDiff = t.SortedVars.Length - other.SortedVars.Length;
             if (degDiff != 0)
                 return -degDiff;
 
@@ -232,7 +232,7 @@ namespace Mba.Simplifier.Verification
                 if (coeff == 0) continue;
 
                 string monStr = "";
-                if (m.SortedVars != null && m.SortedVars.Count > 0)
+                if (m.SortedVars != null && m.SortedVars.Length > 0)
                 {
                     // Group vars by name to reconstruct powers
                     var groups = m.SortedVars.GroupBy(v => v.Name);
