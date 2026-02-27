@@ -162,3 +162,42 @@ can derive the identity:
 
 Identifying linear relations only kind of worked. Stopped scaling after the first few bits. Need some better method of doing it. Alternatively there miught be equivalences we're missng.
 Or factoring and recursive simplification could do. If factoring works then there's definitely a way to do it without factoring andsome relationsip were msing. relationhip between carries
+
+Factoring isn't needed:
+```
+2*(op2_0gen*y1) + -1*(op2_0gen) + 2*(op3_0gen*y1) + -1*(op3_0gen) + -2*(op1_0gen*y1) + 1*(op1_0gen)
+```
+
+Just look at the linear terms referencing previous slices and find a linear relationship.
+
+
+```
+    1*(op1_0gen) + -1*(x0)
+    1*(op0_0prop) + -1*(y0)
+    1*(op3_0gen) + -1*(y0*x0)
+    1*(op3_0prop) + 2*(op3_0gen) + -1*(y0) + -1*(x0)
+    1*(op2_0gen) + -1*(op3_0prop*x0)
+```
+
+has the linear identities:
+```
+1*op1_0gen + -1*op3_0gen + -1*op2_0gen = 0
+1*op0_0prop + -1*op3_0gen + -1*op3_0prop + 1*op1_0gen = 0
+```
+I guess we could compute the left nullspace and use that to learn these identities. 
+
+Reduction is still taking a long time because of many duplicate queries. You should be able to generalize it though. Leading monomial cache.
+
+
+https://cca.informatik.uni-freiburg.de/papers/KaufmannBeameBiereNordstrom-DATE22.pdf
+
+You should also be able to add the dual variable merging idea to your algorithm. Try to identify polynomials that are products of a negated variable?
+    - Really need to implement tail substitution and dual variable merging. Tail substitution should not operate on the lex reduced groebner basis.
+    - https://cca.informatik.uni-freiburg.de/papers/KaufmannBeameBiereNordstrom-DATE22.pdf
+        - "Our goal is to rewrite the carries and restore the recursion of ci ; i.e., express the carries ci in terms of the previous carry ci−1 and the generate and propagate bits gi−1, pi−1. Therefore, the carry look-ahead unit is rewritten into a ripple-carry unit, which can easily be verified using computer algebra"
+        - For arbitrary MBAs the carries are not identical and thus not getting reweritten in terms of each other automatically
+            - But they're extremely simple (usually differing by only a few bits.. and actually a linear polynomial over the ith input variables)
+            - Should be able to rewrite them in terms of each other by substitution. Similar to tail merging.
+                - Maybe we only need to tail merge outgoing carries?
+        - Before tail merging we should reorder the polynomials based on size and their relationships to each other. Maybe gaussian elimination as preprocessing step like that one paper
+            - "2*x + 1*x + 2*y + 1*y" is easier to reason about compared to "2*x + 2*y + 1*x + 1*y".

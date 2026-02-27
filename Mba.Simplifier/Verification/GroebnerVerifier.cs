@@ -172,6 +172,9 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
+            deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
             //obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
             //deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
 

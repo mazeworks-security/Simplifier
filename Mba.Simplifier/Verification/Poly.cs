@@ -137,13 +137,11 @@ namespace Mba.Simplifier.Verification
 
         public static Poly Add(Poly a, Poly b)
         {
-            var output = new Poly();
-            foreach (var p in new Poly[] { a, b })
+            var output = a.Clone();
+            foreach (var (m, c) in b.Coeffs)
             {
-                foreach (var (m, c) in p.Coeffs)
-                    output.Add(m, c);
+                output.Add(m, c);
             }
-
             return output;
         }
 
@@ -154,14 +152,24 @@ namespace Mba.Simplifier.Verification
 
         public void Add(Monomial m, long coeff)
         {
-            Coeffs.TryGetValue(m, out var existing);
-            existing += coeff;
-            Coeffs[m] = existing;
+            if (coeff == 0) return;
+            if (Coeffs.TryGetValue(m, out var existing))
+            {
+                existing += coeff;
+                if (existing == 0)
+                    Coeffs.Remove(m);
+                else
+                    Coeffs[m] = existing;
+            }
+            else
+            {
+                Coeffs[m] = coeff;
+            }
         }
 
         public void Sub(Monomial m, long coeff)
         {
-            Add(m, -1 * coeff);
+            Add(m, -coeff);
         }
 
         public Poly Rhs()
@@ -641,7 +649,7 @@ namespace Mba.Simplifier.Verification
         }
     }
 
-    public enum SymKind
+    public enum SymKind : byte
     {
         Input = 0,
         InternalGate = 1,
@@ -695,7 +703,7 @@ namespace Mba.Simplifier.Verification
             var below = 1;
             var above = -1;
 
-            var cmp = v0.Kind.CompareTo(v1.Kind);
+            var cmp = ((byte)v0.Kind).CompareTo((byte)v1.Kind);
             if (cmp != 0)
                 return cmp;
             cmp = v0.BitIndex.CompareTo(v1.BitIndex);
