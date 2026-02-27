@@ -2217,7 +2217,7 @@ namespace Mba.Simplifier.Verification
                     ideal[targetIdx] = next;
 
 
-                    Console.WriteLine($"Intermediate product: {next}\n");
+                    Console.WriteLine($"Intermediate product:  {next}\n");
                     //var rr = Validate(ideal, (int)w);
 
 
