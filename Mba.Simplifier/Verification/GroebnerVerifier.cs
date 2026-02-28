@@ -1,4 +1,5 @@
 ﻿using Antlr4.Runtime;
+using Iced.Intel;
 using Mba.Ast;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Fuzzing;
@@ -826,7 +827,6 @@ namespace Mba.Simplifier.Verification
                 Console.WriteLine("Partial lex gb: ");
                 foreach (var p in lexGb)
                     Console.WriteLine($"    {p}");
-                TailMerge(lexGb);
 
 
                 lexGb.AddRange(nullspaceFacts);
@@ -1060,6 +1060,46 @@ namespace Mba.Simplifier.Verification
             }
         }
 
+        private Poly ReduceBySyzergies(Poly reduced, HashSet<Poly> cache, Dictionary<Monomial, Poly> definitions)
+        {
+            while (reduced.Coeffs.Count > 0 && definitions.ContainsKey(reduced.Lm))
+            {
+                var lm = reduced.Lm;
+                var reducer = definitions[lm];
+                if (reducer == reduced || cache.Contains(reduced))
+                {
+                    reduced = Poly.Constant(0);
+                    reduced.Simplify();
+                    break;
+                }
+
+                Debug.Assert(reducer != reduced);
+
+                var lcm = Lcm(reduced.Coeffs[lm], reducer.Coeffs[lm]);
+
+                var p1 = reducer.Clone();
+                var p2 = reduced.Clone();
+
+                if (p1.Lcoeff != lcm)
+                    p1 = (lcm / p1.Lcoeff) * p1;
+                if (p2.Lcoeff != lcm)
+                    p2 = (lcm / p2.Lcoeff) * p2;
+
+
+                var diff = p2.Clone();
+                diff -= p1;
+
+                Console.WriteLine("");
+                reduced = diff;
+                //var pNew = (lcm * p1) + 
+
+            }
+
+            return reduced;
+        }
+
+
+
         private Poly ReduceRec(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<List<Poly>> nonlinearFacts, HashSet<Poly> cache, Dictionary<Monomial, Poly> definitions)
         {
             rDiff = PCanon(rDiff);
@@ -1264,7 +1304,7 @@ namespace Mba.Simplifier.Verification
 
 
                 var slicePoly = new Poly(linearTerms);
-
+                slicePoly.Simplify();
                 if (linearTerms.Count == 0)
                     continue;
 
@@ -1278,41 +1318,13 @@ namespace Mba.Simplifier.Verification
                 if (!exists)
                 {
                     Console.WriteLine($"\nReducing {slicePoly}\n");
-                    reduced = LexReduce(slicePoly, ideal, rcache);
+                    reduced = slicePoly;
+                    // Don't uncomment this.. makes things way slower for some reason.
+                    //reduced = ReduceBySyzergies(slicePoly, cache, definitions);
 
-                    while (reduced.Coeffs.Count > 0 && definitions.ContainsKey(reduced.Lm))
-                    {
-                        var lm = reduced.Lm;
-                        var reducer = definitions[lm];
-                        if (reducer == reduced || cache.Contains(reduced))
-                        {
-                            reduced = Poly.Constant(0);
-                            reduced.Simplify();
-                            break;
-                        }
+                    reduced = LexReduce(reduced, ideal, rcache);
 
-                        Debug.Assert(reducer != reduced);
-
-                        var lcm = Lcm(reduced.Coeffs[lm], reducer.Coeffs[lm]);
-
-                        var p1 = reducer.Clone();
-                        var p2 = reduced.Clone();
-
-                        if (p1.Lcoeff != lcm)
-                            p1 = (lcm / p1.Lcoeff) * p1;
-                        if (p2.Lcoeff != lcm)
-                            p2 = (lcm / p2.Lcoeff) * p2;
-
-
-                        var diff = p2.Clone();
-                        diff -= p1;
-
-                        Console.WriteLine("");
-                        reduced = diff;
-                        //var pNew = (lcm * p1) + 
-
-
-                    }
+                    reduced = ReduceBySyzergies(reduced, cache, definitions);
 
                 }
                 if (reduced.Coeffs.Count != 0)

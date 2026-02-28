@@ -111,9 +111,33 @@ namespace Mba.Simplifier.Verification
 
         public void Simplify()
         {
-            var toRemove = Coeffs.Where(x => x.Value == 0).Select(x => x.Key).ToList();
-            foreach (var del in toRemove)
-                Coeffs.Remove(del);
+            bool any = false;
+            foreach(var c in Coeffs.Values)
+            {
+                any |= (c == 0);
+                if (any)
+                    break;
+            }
+
+            if (!any)
+                return;
+
+            var keys = new List<Monomial>();
+            foreach(var (m, c) in Coeffs)
+            {
+                if (c != 0)
+                    continue;
+
+                keys.Add(m);
+            }
+
+            foreach (var k in keys)
+                Coeffs.Remove(k);
+
+
+            //var toRemove = Coeffs.Where(x => x.Value == 0).Select(x => x.Key).ToList();
+            //foreach (var del in toRemove)
+            //    Coeffs.Remove(del);
         }
 
         public void PruneDuplicates()
