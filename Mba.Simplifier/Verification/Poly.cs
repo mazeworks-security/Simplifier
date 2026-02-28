@@ -17,6 +17,8 @@ namespace Mba.Simplifier.Verification
 
         public Monomial Lm => Coeffs.First().Key;
 
+        public long Lcoeff => Coeffs.First().Value;
+
         public Poly(SymVar sv) : this(new Monomial(sv))
         {
 

@@ -179,6 +179,17 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
+            deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "3*x + 3*y + 4*x + 4*y", w);
+            deob = RustAstParser.Parse(ctx, "7*x + 7*y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
+            deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
             //obfuscated = RustAstParser.Parse(ctx, "(((x&y) + (x&y)) + (x^y)) & (x+y)+0", w);
             //deob = RustAstParser.Parse(ctx, "x+y", w);
 
@@ -762,7 +773,7 @@ namespace Mba.Simplifier.Verification
 
 
 
-            var definitions = new Dictionary<Monomial, HashSet<Poly>>();
+            var definitions = new Dictionary<Monomial, Poly>();
 
 
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
@@ -833,7 +844,7 @@ namespace Mba.Simplifier.Verification
                 foreach (var p in allLex)
                     Console.WriteLine($"    {p}");
                 */
-                
+
                 //if(sliceIdx >= 2)
                 /*
                 if (false)
@@ -857,15 +868,16 @@ namespace Mba.Simplifier.Verification
 
                 }
                 */
-                
-                
+
+
 
                 //var stupidFacts = GetNonlinearFacts(allLex, new());
 
 
                 // Problem: We're simplifying
                 // Using a lex reduced gb should make things much faster..
-                var nfacts = GetNonlinearFacts(lexGb, lexCache);
+                //var nfacts = GetNonlinearFacts(lexGb, lexCache);
+                List<Poly> nfacts = new();
                 //nfacts.AddRange(bar);
                 //SimplifyIdeal(nfacts, trivialFacts);
                 nonlinearFactLists.Add(nfacts);
@@ -998,7 +1010,57 @@ namespace Mba.Simplifier.Verification
             return rDiff;
         }
 
-        private Poly ReduceRec(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<List<Poly>> nonlinearFacts, HashSet<Poly> cache, Dictionary<Monomial, HashSet<Poly>> definitions)
+        public static long Gcd(long a, long b)
+        {
+            a = Math.Abs(a);
+            b = Math.Abs(b);
+
+            while (b != 0)
+            {
+                long remainder = a % b;
+                a = b;
+                b = remainder;
+            }
+            return a;
+        }
+
+        public static long Lcm(long a, long b)
+        {
+            if (a == 0 || b == 0)
+            {
+                return 0; 
+            }
+
+            long gcd = Gcd(a, b);
+            return Math.Abs(a / gcd * b);
+        }
+
+        private void UpdateCache(Poly p, Dictionary<Monomial, Poly> definitions)
+        {
+            p = p.Clone();
+            var lm = p.Lm;
+            if (!definitions.TryGetValue(lm, out var existing))
+            {
+                definitions[lm] = p;
+                return;
+            }
+
+            var c = p.Coeffs[lm];
+            if (c == 1 && existing.Coeffs[lm] > 1)
+            {
+                definitions[lm] = p;
+                return;
+            }
+
+            // Only change the definition if it would reduce the number of terms
+            if (c == existing.Coeffs[lm] && p.Coeffs.Count < existing.Coeffs.Count)
+            {
+                definitions[lm] = p;
+                return;
+            }
+        }
+
+        private Poly ReduceRec(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<List<Poly>> nonlinearFacts, HashSet<Poly> cache, Dictionary<Monomial, Poly> definitions)
         {
             rDiff = PCanon(rDiff);
 
@@ -1006,6 +1068,10 @@ namespace Mba.Simplifier.Verification
             zero.Simplify();
             if (cache.Contains(rDiff))
                 return zero;
+
+            var clone = rDiff.Clone();
+
+            //while(rDiff)
 
             /*
             definitions.TryAdd(rDiff.Lm, new());
@@ -1134,75 +1200,6 @@ namespace Mba.Simplifier.Verification
 
 
 
-            /*
-            foreach (var v in rDiff.Coeffs.Keys.SelectMany(x => x.SortedVars).Distinct().ToList())
-            {
-   
-                var withX = rDiff.Clone();
-                var withoutX = Poly.Constant(0);
-                withoutX.Simplify();
-                foreach (var key in rDiff.Coeffs.Keys.ToList())
-                {
-                    var hasVar = key.SortedVars.Contains(v);
-                    if (!hasVar)
-                    {
-                        withX.Remove(key);
-                        withoutX.Add(key, rDiff.Coeffs[key]);
-                    }
-   
-                }
-
-                withX.ReplaceSubset(new Monomial(v), Poly.Constant(1));
-
-
-
-                if (withX == -2L * withoutX)
-                {
-                   
-                }
-
-                else
-                {
-                    var div = withX.Clone();
-                    foreach (var m in div.Coeffs.Keys.ToList())
-                    {
-                        if (div.Coeffs[m] % 2 != 0)
-                            goto end;
-
-                        div.Coeffs[m] /= 2;
-                    }
-
-                    Poly misses = Poly.Constant(0);
-                    Poly rr = Poly.Constant(0);
-                    foreach(var (m, c) in div.Coeffs)
-                    {
-                        if (m.SortedVars.Length == 0)
-                            continue;
-
-                        if (!withoutX.Coeffs.ContainsKey(m) || withoutX.Coeffs[m] != -c)
-                            misses.Add(m, c);
-                        else
-                            rr.Add(m, c);
-
-                    }
-
-                    misses.Simplify();
-                    rr.Simplify();
-
-                    if (misses.Coeffs.Count == 0)
-                        rDiff = rr;
-
-                    //if (withX.Lhs() == -2L * withoutX.Lhs())
-                    //    Debugger.Break();
-
-                }
-
-            end:
-                continue;
-
-            }
-            */
-
 
             rDiff.Simplify();
             if (cache.Contains(rDiff))
@@ -1211,8 +1208,6 @@ namespace Mba.Simplifier.Verification
             rDiff = PCanon(rDiff);
             if (cache.Contains(rDiff))
                 return zero;
-
-            Console.WriteLine($"\nReducing {rDiff}\n");
 
             /*
             var changed2 = true;
@@ -1274,13 +1269,52 @@ namespace Mba.Simplifier.Verification
                     continue;
 
 
+  
+
                 //var reduced = LexReduce(slicePoly, ideal, rcache);
                 var exists = cache.Contains(slicePoly);
                 Poly reduced = Poly.Constant(0);
                 reduced.Simplify();
-                if(!exists)
+                if (!exists)
+                {
+                    Console.WriteLine($"\nReducing {slicePoly}\n");
                     reduced = LexReduce(slicePoly, ideal, rcache);
 
+                    while (reduced.Coeffs.Count > 0 && definitions.ContainsKey(reduced.Lm))
+                    {
+                        var lm = reduced.Lm;
+                        var reducer = definitions[lm];
+                        if (reducer == reduced || cache.Contains(reduced))
+                        {
+                            reduced = Poly.Constant(0);
+                            reduced.Simplify();
+                            break;
+                        }
+
+                        Debug.Assert(reducer != reduced);
+
+                        var lcm = Lcm(reduced.Coeffs[lm], reducer.Coeffs[lm]);
+
+                        var p1 = reducer.Clone();
+                        var p2 = reduced.Clone();
+
+                        if (p1.Lcoeff != lcm)
+                            p1 = (lcm / p1.Lcoeff) * p1;
+                        if (p2.Lcoeff != lcm)
+                            p2 = (lcm / p2.Lcoeff) * p2;
+
+
+                        var diff = p2.Clone();
+                        diff -= p1;
+
+                        Console.WriteLine("");
+                        reduced = diff;
+                        //var pNew = (lcm * p1) + 
+
+
+                    }
+
+                }
                 if (reduced.Coeffs.Count != 0)
                 {
                     var inter = ReduceRec(reduced, ideals, trivialFacts, nonlinearFacts, cache, definitions);
@@ -1295,6 +1329,10 @@ namespace Mba.Simplifier.Verification
             if (remainder.Coeffs.Count > 0)
                 throw new InvalidOperationException();
             cache.Add(rDiff.Clone());
+            cache.Add(clone.Clone());
+            UpdateCache(rDiff, definitions);
+            UpdateCache(clone, definitions);
+
 
             return remainder;
         }
