@@ -191,6 +191,17 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
+            deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "3*x + 3*y + 4*x + 4*y", w);
+            deob = RustAstParser.Parse(ctx, "7*x + 7*y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
+            deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
             //obfuscated = RustAstParser.Parse(ctx, "(((x&y) + (x&y)) + (x^y)) & (x+y)+0", w);
             //deob = RustAstParser.Parse(ctx, "x+y", w);
 
@@ -876,8 +887,8 @@ namespace Mba.Simplifier.Verification
 
                 // Problem: We're simplifying
                 // Using a lex reduced gb should make things much faster..
-                //var nfacts = GetNonlinearFacts(lexGb, lexCache);
-                List<Poly> nfacts = new();
+                var nfacts = GetNonlinearFacts(lexGb, lexCache);
+                //List<Poly> nfacts = new();
                 //nfacts.AddRange(bar);
                 //SimplifyIdeal(nfacts, trivialFacts);
                 nonlinearFactLists.Add(nfacts);
@@ -1037,9 +1048,18 @@ namespace Mba.Simplifier.Verification
 
         private void UpdateCache(Poly p, Dictionary<Monomial, Poly> definitions)
         {
+            if (p.Coeffs.Count == 0)
+                return;
+
             p = p.Clone();
             var lm = p.Lm;
             if (!definitions.TryGetValue(lm, out var existing))
+            {
+                definitions[lm] = p;
+                return;
+            }
+
+            if (p.Coeffs.Count < existing.Coeffs.Count)
             {
                 definitions[lm] = p;
                 return;
@@ -1111,67 +1131,6 @@ namespace Mba.Simplifier.Verification
 
             var clone = rDiff.Clone();
 
-            //while(rDiff)
-
-            /*
-            definitions.TryAdd(rDiff.Lm, new());
-            definitions[rDiff.Lm].Add(rDiff.Clone());
-            bool changed = true;
-            while (changed)
-            {
-                if (rDiff.Coeffs.Count == 0)
-                    break;
-
-                var exists = definitions.TryGetValue(rDiff.Lm, out var candidates);
-                if (!exists)
-                    break;
-
-                candidates = candidates.ToHashSet();
-                candidates.Remove(rDiff);
-
-                if (candidates.Count == 0)
-                    break;
-
-                Poly best = null;
-                foreach (var cand in candidates)
-                {
-                    var cc = rDiff.Coeffs[rDiff.Lm];
-                    var dd = cand.Coeffs[cand.Lm];
-
-                    if (cc % dd != 0)
-                        continue;
-
-                    if(best == null)
-                    {
-                        best = cand;
-                        continue;
-                    }
-
-                    if (Math.Abs(cand.Coeffs[cand.Lm]) < Math.Abs(cand.Coeffs[best.Lm]))
-                        best = cand;
-                    
-                }
-
-                if (best == null)
-                    break;
-
-                var c = rDiff.Coeffs[rDiff.Lm];
-                var d = best.Coeffs[best.Lm];
-
-                if (c % d == 0)
-                {
-                    var factor = c / d;
-                    var toSub = factor * best;
-                    rDiff = rDiff - toSub;
-                }
-                else
-                {
-                    break;
-                }
-                
-                rDiff = PCanon(rDiff);
-            }
-            */
 
             if (rDiff.Coeffs.Count == 0)
                 return rDiff;
@@ -1309,7 +1268,9 @@ namespace Mba.Simplifier.Verification
                     continue;
 
 
-  
+
+
+                List<Poly> all = new();
 
                 //var reduced = LexReduce(slicePoly, ideal, rcache);
                 var exists = cache.Contains(slicePoly);
@@ -1319,22 +1280,36 @@ namespace Mba.Simplifier.Verification
                 {
                     Console.WriteLine($"\nReducing {slicePoly}\n");
                     reduced = slicePoly;
+                    all.Add(slicePoly);
                     // Don't uncomment this.. makes things way slower for some reason.
-                    //reduced = ReduceBySyzergies(slicePoly, cache, definitions);
+                    reduced = ReduceBySyzergies(reduced, cache, definitions);
+                    all.Add(reduced.Clone());
 
                     reduced = LexReduce(reduced, ideal, rcache);
+                    all.Add(reduced.Clone());
 
                     reduced = ReduceBySyzergies(reduced, cache, definitions);
+                    all.Add(reduced.Clone());
 
                 }
                 if (reduced.Coeffs.Count != 0)
                 {
                     var inter = ReduceRec(reduced, ideals, trivialFacts, nonlinearFacts, cache, definitions);
+                    Debug.Assert(inter.Coeffs.Count == 0);
+
+                    UpdateCache(reduced, definitions);
+                    cache.Add(reduced);
                     reduced = inter;
-                    Debug.Assert(reduced.Coeffs.Count == 0);
                 }
                 reducIdeal.Add(slicePoly);
                 cache.Add(slicePoly);
+                UpdateCache(slicePoly, definitions);
+                foreach (var p in all)
+                {
+                    p.Simplify();
+                    UpdateCache(p, definitions);
+                }
+
             }
 
             remainder.Simplify();
