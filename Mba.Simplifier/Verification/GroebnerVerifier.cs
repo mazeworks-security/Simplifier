@@ -179,6 +179,9 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
 
+            //obfuscated = RustAstParser.Parse(ctx, "(((x&y) + (x&y)) + (x^y)) & (x+y)+0", w);
+            //deob = RustAstParser.Parse(ctx, "x+y", w);
+
             //obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
             //deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
 
@@ -832,6 +835,7 @@ namespace Mba.Simplifier.Verification
                 */
                 
                 //if(sliceIdx >= 2)
+                /*
                 if (false)
                 //if (true)
                 {
@@ -852,6 +856,7 @@ namespace Mba.Simplifier.Verification
                     Debugger.Break();
 
                 }
+                */
                 
                 
 
@@ -909,6 +914,8 @@ namespace Mba.Simplifier.Verification
                 SimplifyViaMapping(r0, trivialFacts);
                 SimplifyViaMapping(r1, trivialFacts);
 
+
+                Console.WriteLine($"Result variables:\n    {r0}\n    {r1}\n");
 
                 var diff = results[0][0] - results[1][0];
 
@@ -1776,6 +1783,8 @@ namespace Mba.Simplifier.Verification
 
             return reduced.OrderBy(p => p).ToList();
         }
+
+        public static HashSet<Poly> allSeen = new();
 
         public Poly LexReduce(Poly poly, List<Poly> ideal, Dictionary<Poly, Poly> cache = null)
         {
