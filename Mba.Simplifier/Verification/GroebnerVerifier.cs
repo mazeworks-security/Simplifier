@@ -208,6 +208,13 @@ namespace Mba.Simplifier.Verification
             //obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
             //deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "3*x + 3*y + 4*x + 4*y", w);
+            deob = RustAstParser.Parse(ctx, "7*x + 7*y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
+            deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
 
@@ -1285,6 +1292,7 @@ namespace Mba.Simplifier.Verification
                     reduced = ReduceBySyzergies(reduced, cache, definitions);
                     all.Add(reduced.Clone());
 
+                    // TODO: After lex reduction there is sometimes more `2x - 1` factors
                     reduced = LexReduce(reduced, ideal, rcache);
                     all.Add(reduced.Clone());
 
