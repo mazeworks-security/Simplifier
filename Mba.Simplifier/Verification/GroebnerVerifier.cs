@@ -215,6 +215,13 @@ namespace Mba.Simplifier.Verification
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
 
 
+            obfuscated = RustAstParser.Parse(ctx, "3*x + 3*y + 4*x + 4*y", w);
+            deob = RustAstParser.Parse(ctx, "7*x + 7*y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 3*x + 3*y", w);
+            deob = RustAstParser.Parse(ctx, "5*x + 5*y", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
 
@@ -558,7 +565,7 @@ namespace Mba.Simplifier.Verification
             otherVars = otherVars.Distinct().ToList();
 
             // var numCombinations = 1ul << (ushort)Math.Max(inputVars.Count, 4);
-            var numCombinations = 1ul << 4;
+            var numCombinations = 1ul << 6;
             var signatureVectors = otherVars.ToDictionary(x => x, x => new TruthTable(5));
 
             // Ulongs can only fit 64 vars
@@ -894,10 +901,10 @@ namespace Mba.Simplifier.Verification
 
                 // Problem: We're simplifying
                 // Using a lex reduced gb should make things much faster..
-                var nfacts = GetNonlinearFacts(lexGb, lexCache);
-                //List<Poly> nfacts = new();
+                //var nfacts = GetNonlinearFacts(ideal, new());
+                List<Poly> nfacts = new();
                 //nfacts.AddRange(bar);
-                //SimplifyIdeal(nfacts, trivialFacts);
+                SimplifyIdeal(nfacts, trivialFacts);
                 nonlinearFactLists.Add(nfacts);
 
                 ideal.AddRange(nonlinearFacts);
