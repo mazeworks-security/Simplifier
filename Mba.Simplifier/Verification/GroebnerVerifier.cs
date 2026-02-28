@@ -1,4 +1,5 @@
-﻿using Mba.Ast;
+﻿using Antlr4.Runtime;
+using Mba.Ast;
 using Mba.Simplifier.Bindings;
 using Mba.Simplifier.Fuzzing;
 using Mba.Simplifier.Minimization;
@@ -171,6 +172,9 @@ namespace Mba.Simplifier.Verification
 
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "x+y+x", w);
+            deob = RustAstParser.Parse(ctx, "x+x+y", w);
 
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
@@ -470,6 +474,8 @@ namespace Mba.Simplifier.Verification
                         goto skip;
                     if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex == p0.Lm.SortedVars.Single().BitIndex)
                         goto skip;
+                    if (lm.SortedVars.Length != 1)
+                        goto skip;
 
                     simplificationMapping.TryAdd(p0.Lm, rhs);
                     continue;
@@ -506,7 +512,7 @@ namespace Mba.Simplifier.Verification
             var otherVars = new List<SymVar>();
             foreach (var p in currIdeal)
             {
-                foreach(var m in p.Coeffs.Keys.Skip(1))
+                foreach (var m in p.Coeffs.Keys.Skip(1))
                 {
                     foreach (var v in m.SortedVars)
                         inputVars.Add(v);
@@ -529,11 +535,11 @@ namespace Mba.Simplifier.Verification
             var rand = new SeededRandom();
 
             // 2^t input combinations... assigning values to each variable
-            for(ulong varComb = 0; varComb < numCombinations; varComb++)
+            for (ulong varComb = 0; varComb < numCombinations; varComb++)
             {
                 // Assign values to the input combinations
                 Dictionary<SymVar, ulong> varValues = new();
-                for(int i = 0; i < inputVars.Count; i++)
+                for (int i = 0; i < inputVars.Count; i++)
                 {
                     // Compute an assignment for this variable
                     var value = (varComb >> (ushort)i) & 1;
@@ -550,10 +556,10 @@ namespace Mba.Simplifier.Verification
                         continue;
 
                     long result = 0;
-                    foreach(var (monom, coeff) in p.Coeffs.Skip(1))
+                    foreach (var (monom, coeff) in p.Coeffs.Skip(1))
                     {
                         long isSet = 1;
-                        foreach(var v in monom.SortedVars)
+                        foreach (var v in monom.SortedVars)
                             isSet &= (long)varValues[v];
 
                         result += coeff * isSet;
@@ -578,6 +584,7 @@ namespace Mba.Simplifier.Verification
 
                 var tbl0 = signatureVectors[p0.Lm.SortedVars.Single()];
 
+                bool ignore = false;
                 for (int j = i + 1; j < currIdeal.Count; j++)
                 {
                     var p1 = currIdeal[j];
@@ -594,7 +601,7 @@ namespace Mba.Simplifier.Verification
                     var prod = p0.Lm * p1.Lm;
                     var prodTbl = tbl0.Clone();
                     prodTbl.And(tbl1);
-                    if (prodTbl.IsZero)
+                    if (ignore || prodTbl.IsZero)
                     {
                         var reduced = LexReduce(prod, currIdeal, lexCache);
                         if (reduced.Coeffs.Count == 0)
@@ -604,9 +611,37 @@ namespace Mba.Simplifier.Verification
                         }
                     }
 
+                    for (int k = j + 1; k < currIdeal.Count; k++)
+                    {
+                        break;
+                        var p2 = currIdeal[k];
+
+                        if (p2.Coeffs.Count == 0)
+                            continue;
+
+                        // Limit exponential growth of learned facts
+                        if (p0.Lm.SortedVars.Concat(p1.Lm.SortedVars).Concat(p2.Lm.SortedVars).Distinct().Count() > 3)
+                            continue;
+
+                        var tbl2 = signatureVectors[p2.Lm.SortedVars.Single()];
+                        var prod2 = p0.Lm * p1.Lm * p2.Lm;
+                        var prodTbl2 = tbl0.Clone();
+                        prodTbl2.And(tbl1);
+                        prodTbl2.And(tbl2);
+                        if (ignore || prodTbl2.IsZero)
+                        {
+                            var reduced = LexReduce(prod2, currIdeal, lexCache);
+                            if (reduced.Coeffs.Count == 0)
+                            {
+                                facts.Add(prod2);
+                                continue;
+                            }
+                        }
+                    }
+
                     var cand0Tbl = prodTbl.Clone();
                     cand0Tbl.Xor(tbl0);
-                    if (cand0Tbl.IsZero)
+                    if (ignore || cand0Tbl.IsZero)
                     {
 
                         var cand0 = prod - new Poly(p0.Lm);
@@ -621,7 +656,7 @@ namespace Mba.Simplifier.Verification
 
                     var cand1Tbl = prodTbl.Clone();
                     cand1Tbl.Xor(tbl1);
-                    if (cand1Tbl.IsZero)
+                    if (ignore || cand1Tbl.IsZero)
                     {
                         var cand1 = prod - new Poly(p1.Lm);
                         var diff1 = LexReduce(cand1, currIdeal, lexCache);
@@ -631,6 +666,8 @@ namespace Mba.Simplifier.Verification
                             continue;
                         }
                     }
+
+
                 }
             }
 
@@ -692,6 +729,12 @@ namespace Mba.Simplifier.Verification
             ideal.AddRange(temp);
         }
 
+        private void TailMerge(List<Poly> ideal)
+        {
+            var bar = Nullspace.FindLinearIdentities(ideal);
+            //Debugger.Break();
+        }
+
         public void Run()
         {
             var throwaway = new List<(int, uint, Poly)>();
@@ -714,6 +757,9 @@ namespace Mba.Simplifier.Verification
             HashSet<Poly> rcache = new();
 
 
+
+
+            var definitions = new Dictionary<Monomial, HashSet<Poly>>();
 
 
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
@@ -763,6 +809,11 @@ namespace Mba.Simplifier.Verification
                 ReduceIdeal(ideal, nonlinearFacts);
                 ReduceIdeal(lexGb, nonlinearFacts);
 
+                Console.WriteLine("Partial lex gb: ");
+                foreach (var p in lexGb)
+                    Console.WriteLine($"    {p}");
+                TailMerge(lexGb);
+
 
                 lexGb.AddRange(nullspaceFacts);
                 //var bar = Nullspace.FindLinearIdentities(lexGb);
@@ -770,6 +821,41 @@ namespace Mba.Simplifier.Verification
 
 
 
+
+                /*
+                var allLex = all.Select(x => x.Clone()).ToList();
+                SimplifyMany(all, trivialFacts);
+                allLex = ReduceLexGroebnerBasis(allLex, new());
+                Console.WriteLine("All lex: ");
+                foreach (var p in allLex)
+                    Console.WriteLine($"    {p}");
+                */
+                
+                //if(sliceIdx >= 2)
+                if (false)
+                //if (true)
+                {
+                    var prev = all.Skip(counts[counts.Count - 3]).Select(x => x.Clone()).ToList();
+                    SimplifyMany(prev, trivialFacts);
+                    var allLex = ReduceLexGroebnerBasis(prev, new());
+
+                    allLex.RemoveAll(x => x.Lm.SortedVars.Single().BitIndex != sliceIdx);
+
+                    ReduceIdeal(allLex, nonlinearFactLists[sliceIdx - 2]);
+
+                    Console.WriteLine("All lex: ");
+                    foreach (var p in allLex)
+                        Console.WriteLine($"    {p}");
+
+                    var otherFacts = GetNonlinearFacts(allLex, new());
+
+                    Debugger.Break();
+
+                }
+                
+                
+
+                //var stupidFacts = GetNonlinearFacts(allLex, new());
 
 
                 // Problem: We're simplifying
@@ -828,7 +914,6 @@ namespace Mba.Simplifier.Verification
 
                 Console.WriteLine("Reductions: ");
 
-
                 var rDiff = LexReduce(diff, ideal);
                 if (rDiff.Coeffs.Count != 0)
                 {
@@ -854,10 +939,10 @@ namespace Mba.Simplifier.Verification
 
                     //GeneralizeCarriedRelationships(rDiff, ideals, trivialFacts, nonlinearFacts);
 
-                    var reduc = ReduceRec(rDiff, ideals, trivialFacts, nonlinearFactLists, rcache);
+                    var reduc = ReduceRec(rDiff, ideals, trivialFacts, nonlinearFactLists, rcache, definitions);
 
                     for (int i = ideals.Count - 2; i > 0; i--)
-                    {
+                    { 
                         break;
                         temp = LexReduce(temp, ideals[i]);
                         Console.WriteLine(temp);
@@ -893,6 +978,9 @@ namespace Mba.Simplifier.Verification
             rDiff = rDiff.Clone();
             rDiff.Simplify();
 
+            if (rDiff.Coeffs.Count == 0)
+                return rDiff;
+
             var gcd = FindGCDOfList(rDiff.Coeffs.Select(x => x.Value).ToList());
             foreach (var key in rDiff.Coeffs.Keys.ToList())
                 rDiff.Coeffs[key] /= gcd;
@@ -903,7 +991,7 @@ namespace Mba.Simplifier.Verification
             return rDiff;
         }
 
-        private Poly ReduceRec(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<List<Poly>> nonlinearFacts, HashSet<Poly> cache)
+        private Poly ReduceRec(Poly rDiff, List<List<Poly>> ideals, Dictionary<Monomial, Poly> trivialFacts, List<List<Poly>> nonlinearFacts, HashSet<Poly> cache, Dictionary<Monomial, HashSet<Poly>> definitions)
         {
             rDiff = PCanon(rDiff);
 
@@ -912,6 +1000,68 @@ namespace Mba.Simplifier.Verification
             if (cache.Contains(rDiff))
                 return zero;
 
+            /*
+            definitions.TryAdd(rDiff.Lm, new());
+            definitions[rDiff.Lm].Add(rDiff.Clone());
+            bool changed = true;
+            while (changed)
+            {
+                if (rDiff.Coeffs.Count == 0)
+                    break;
+
+                var exists = definitions.TryGetValue(rDiff.Lm, out var candidates);
+                if (!exists)
+                    break;
+
+                candidates = candidates.ToHashSet();
+                candidates.Remove(rDiff);
+
+                if (candidates.Count == 0)
+                    break;
+
+                Poly best = null;
+                foreach (var cand in candidates)
+                {
+                    var cc = rDiff.Coeffs[rDiff.Lm];
+                    var dd = cand.Coeffs[cand.Lm];
+
+                    if (cc % dd != 0)
+                        continue;
+
+                    if(best == null)
+                    {
+                        best = cand;
+                        continue;
+                    }
+
+                    if (Math.Abs(cand.Coeffs[cand.Lm]) < Math.Abs(cand.Coeffs[best.Lm]))
+                        best = cand;
+                    
+                }
+
+                if (best == null)
+                    break;
+
+                var c = rDiff.Coeffs[rDiff.Lm];
+                var d = best.Coeffs[best.Lm];
+
+                if (c % d == 0)
+                {
+                    var factor = c / d;
+                    var toSub = factor * best;
+                    rDiff = rDiff - toSub;
+                }
+                else
+                {
+                    break;
+                }
+                
+                rDiff = PCanon(rDiff);
+            }
+            */
+
+            if (rDiff.Coeffs.Count == 0)
+                return rDiff;
 
             var targets = rDiff.Coeffs.Keys.SelectMany(x => x.SortedVars).Where(x => x.Kind != SymKind.Input).Distinct().ToHashSet();
             var targetIdx = targets.First().BitIndex;
@@ -956,8 +1106,9 @@ namespace Mba.Simplifier.Verification
 
                 else
                 {
-                    // if (withX.Lhs() == -2L * withoutX.Lhs())
+                    //if (withX.Lhs() == -2L * withoutX.Lhs())
                     //    Debugger.Break();
+
                 }
 
                 /*
@@ -974,6 +1125,78 @@ namespace Mba.Simplifier.Verification
                 //   Debugger.Break();
             }
 
+
+
+            /*
+            foreach (var v in rDiff.Coeffs.Keys.SelectMany(x => x.SortedVars).Distinct().ToList())
+            {
+   
+                var withX = rDiff.Clone();
+                var withoutX = Poly.Constant(0);
+                withoutX.Simplify();
+                foreach (var key in rDiff.Coeffs.Keys.ToList())
+                {
+                    var hasVar = key.SortedVars.Contains(v);
+                    if (!hasVar)
+                    {
+                        withX.Remove(key);
+                        withoutX.Add(key, rDiff.Coeffs[key]);
+                    }
+   
+                }
+
+                withX.ReplaceSubset(new Monomial(v), Poly.Constant(1));
+
+
+
+                if (withX == -2L * withoutX)
+                {
+                   
+                }
+
+                else
+                {
+                    var div = withX.Clone();
+                    foreach (var m in div.Coeffs.Keys.ToList())
+                    {
+                        if (div.Coeffs[m] % 2 != 0)
+                            goto end;
+
+                        div.Coeffs[m] /= 2;
+                    }
+
+                    Poly misses = Poly.Constant(0);
+                    Poly rr = Poly.Constant(0);
+                    foreach(var (m, c) in div.Coeffs)
+                    {
+                        if (m.SortedVars.Length == 0)
+                            continue;
+
+                        if (!withoutX.Coeffs.ContainsKey(m) || withoutX.Coeffs[m] != -c)
+                            misses.Add(m, c);
+                        else
+                            rr.Add(m, c);
+
+                    }
+
+                    misses.Simplify();
+                    rr.Simplify();
+
+                    if (misses.Coeffs.Count == 0)
+                        rDiff = rr;
+
+                    //if (withX.Lhs() == -2L * withoutX.Lhs())
+                    //    Debugger.Break();
+
+                }
+
+            end:
+                continue;
+
+            }
+            */
+
+
             rDiff.Simplify();
             if (cache.Contains(rDiff))
                 return zero;
@@ -983,6 +1206,21 @@ namespace Mba.Simplifier.Verification
                 return zero;
 
             Console.WriteLine($"\nReducing {rDiff}\n");
+
+            /*
+            var changed2 = true;
+            var ii = targetIdx;
+            while (changed2)
+            {
+                var reduced = LexReduce(rDiff, nonlinearFacts[ii]);
+                ii--;
+                changed2 = reduced != rDiff;
+                if (changed2)
+                    Debugger.Break();
+
+
+            }
+            */
 
             //var linearTerms = rDiff.Coeffs.Where(x => x.Key.SortedVars.All(x => targets.Contains(x))).ToDictionary(x => x.Key, x => x.Value);
             var groups = new Dictionary<Monomial, Poly>();
@@ -1029,17 +1267,19 @@ namespace Mba.Simplifier.Verification
                     continue;
 
 
-                var reduced = LexReduce(slicePoly, ideal, rcache);
-
-
+                //var reduced = LexReduce(slicePoly, ideal, rcache);
+                var exists = cache.Contains(slicePoly);
+                Poly reduced = Poly.Constant(0);
+                reduced.Simplify();
+                if(!exists)
+                    reduced = LexReduce(slicePoly, ideal, rcache);
 
                 if (reduced.Coeffs.Count != 0)
                 {
-                    var inter = ReduceRec(reduced, ideals, trivialFacts, nonlinearFacts, cache);
+                    var inter = ReduceRec(reduced, ideals, trivialFacts, nonlinearFacts, cache, definitions);
                     reduced = inter;
                     Debug.Assert(reduced.Coeffs.Count == 0);
                 }
-
                 reducIdeal.Add(slicePoly);
                 cache.Add(slicePoly);
             }
@@ -2020,18 +2260,19 @@ namespace Mba.Simplifier.Verification
 
                 // I think this encoding is technically more optimal for the linear extraction idea
 
-                /*
+
                 ideal.Add((bitIdx, totalOrder++, generate - a * b));
                 ideal.Add((bitIdx, totalOrder++, propagate - (a + b - 2 * generate)));
+                // Is there another encoding that would simplify things? 
                 ideal.Add((bitIdx, totalOrder++, cout - (generate + propagate * cin)));
                 ideal.Add((bitIdx, totalOrder++, sum - (propagate + 2 * generate + cin - 2 * cout)));
 
                 arithInfo.Add(new(cin, cout, propagate, generate, sum));
-                */
+
 
                 //var cout = SymVar.Temp($"a[{carryId}][{bitIdx}].cout");
 
-
+                /*
                 var carryLhs = cout;
                 var carryRhs = a * b + a * cin + b * cin - 2 * (a * b * cin);
                 ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
@@ -2040,7 +2281,7 @@ namespace Mba.Simplifier.Verification
                 ideal.Add((bitIdx, totalOrder, member));
 
                 arithInfo.Add(new(cin, cout, null, null, sum));
-
+                */
 
 
 

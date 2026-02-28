@@ -201,3 +201,15 @@ You should also be able to add the dual variable merging idea to your algorithm.
                 - Maybe we only need to tail merge outgoing carries?
         - Before tail merging we should reorder the polynomials based on size and their relationships to each other. Maybe gaussian elimination as preprocessing step like that one paper
             - "2*x + 1*x + 2*y + 1*y" is easier to reason about compared to "2*x + 2*y + 1*x + 1*y".
+        - Maybe do the dual merging thing after you've done variable elimination
+
+
+Dual variable implemenatation:
+    - Each SymVar should have a negation field. Negated definitions should not be added to the ideal. 
+    - Insert negations after doing your preprocessing.. then do preprocessing again
+
+
+- TODO: We could integrate the `1 - 2*x` identity directly into the intermediate reduction steps... might catch blowup.
+    - Still need to experiment with `(1-2*x)*subst + other` thing
+
+- Nonlinear facts analysis isn't working beyond the 2nd bit. Also might need some kind of special analysis to factor out (2x - 1) products
