@@ -15,21 +15,38 @@ namespace Mba.Simplifier.Verification
     {
         public SortedDictionary<Monomial, long> Coeffs { get; set; }
 
-        public Monomial Lm => Coeffs.First().Key;
+        public Monomial Lm
+        {
+            get
+            {
+                // Avoid boxing
+                var e = Coeffs.GetEnumerator();
+                e.MoveNext();
+                return e.Current.Key;
+            }
+        }
 
-        public long Lcoeff => Coeffs.First().Value;
+        public long Lcoeff
+        {
+            get
+            {
+                var e = Coeffs.GetEnumerator();
+                e.MoveNext();
+                return e.Current.Value;
+            }
+        }
 
         public Poly(SymVar sv) : this(new Monomial(sv))
         {
 
         }
 
-        
+
         public Poly(SortedDictionary<Monomial, long> coeffs) : this()
         {
             Coeffs = coeffs;
         }
-        
+
 
         public Poly(IEnumerable<Monomial> coeffs)
         {
@@ -261,12 +278,9 @@ namespace Mba.Simplifier.Verification
             var outPoly = new Poly();
             foreach (var (monomA, coeffA) in a.Coeffs)
             {
-                var isAConstant = IsConstant(monomA);
                 foreach (var (monomB, coeffB) in b.Coeffs)
                 {
                     var newCoeff = coeffA * coeffB;
-
-                    // Then we need to construct a new monomial.
                     Monomial newMonom = monomA * monomB;
                     outPoly.Add(newMonom, newCoeff);
                 }
@@ -282,7 +296,16 @@ namespace Mba.Simplifier.Verification
 
         public bool IsEq(Poly other)
         {
-            return Coeffs.Count == other.Coeffs.Count && Coeffs.OrderBy(x => x.Key).SequenceEqual(other.Coeffs.OrderBy(x => x.Key));
+            if (Coeffs.Count != other.Coeffs.Count) return false;
+            using var e1 = Coeffs.GetEnumerator();
+            using var e2 = other.Coeffs.GetEnumerator();
+            while (e1.MoveNext())
+            {
+                e2.MoveNext();
+                if (!e1.Current.Key.Equals(e2.Current.Key) || e1.Current.Value != e2.Current.Value)
+                    return false;
+            }
+            return true;
         }
 
 
@@ -296,7 +319,12 @@ namespace Mba.Simplifier.Verification
             => Poly.Add(a, b);
 
         public static Poly operator -(Poly a, Poly b)
-            => Poly.Add(a, -1 * b);
+        {
+            var output = a.Clone();
+            foreach (var (m, c) in b.Coeffs)
+                output.Add(m, -c);
+            return output;
+        }
 
         public static Poly operator +(Poly a, SymVar b)
             => Poly.Add(a, new Monomial(b));
@@ -306,9 +334,15 @@ namespace Mba.Simplifier.Verification
 
         public static Poly operator *(long coeff, Poly a)
         {
+            if (coeff == 0) return new Poly();
+            if (coeff == 1) return a.Clone();
             var output = new Poly();
-            foreach (var (m, c) in a.Coeffs.ToDictionary())
-                output.Add(m, c * coeff);
+            foreach (var (m, c) in a.Coeffs)
+            {
+                var nc = c * coeff;
+                if (nc != 0)
+                    output.Coeffs[m] = nc;
+            }
             return output;
         }
         public static Poly operator *(Poly a, Poly b)
@@ -408,16 +442,23 @@ namespace Mba.Simplifier.Verification
         public static Monomial Quadratic(SymVar var)
             => new Monomial(new SymVar[] { var, var }, distinct: false);
 
-        // TODO: If a variable is boolean, eliminate x*x constraints
+        public Monomial(SymVar var)
+        {
+            SortedVars = new[] { var };
+            hash = 17 * 23 + var.GetHashCode();
+        }
+
+        public Monomial()
+        {
+            SortedVars = Array.Empty<SymVar>();
+        }
+
         public Monomial(IEnumerable<SymVar> vars, bool distinct = true)
         {
             if (distinct)
                 vars = vars.Distinct();
 
-            if (LEXORDER)
-                SortedVars = vars.OrderByDescending(x => x).ToArray();
-            else
-                SortedVars = vars.OrderByDescending(x => x).ToArray();
+            SortedVars = vars.OrderByDescending(x => x).ToArray();
 
             foreach (var v in SortedVars)
                 hash = hash * 23 + v.GetHashCode();
@@ -435,8 +476,9 @@ namespace Mba.Simplifier.Verification
 
         }
 
-        public static Monomial Constant()
-            => new Monomial(Array.Empty<SymVar>(), true);
+        private static readonly Monomial _constant = new Monomial(Array.Empty<SymVar>(), true);
+
+        public static Monomial Constant() => _constant;
 
         public static Poly operator *(long coeff, Monomial a)
         {
@@ -607,55 +649,19 @@ namespace Mba.Simplifier.Verification
             return i == SortedVars.Length;
         }
 
-        public int CompareTo(Monomial? o)
+        public int CompareTo(Monomial? other)
         {
-            var (t, other) = (this, o);
 
-            if (LEXORDER)
+            var thisVars = SortedVars;
+            var otherVars = other.SortedVars;
+            int minLen = Math.Min(thisVars.Length, otherVars.Length);
+            for (int i = 0; i < minLen; i++)
             {
-                int minLen = Math.Min(t.SortedVars.Length, other.SortedVars.Length);
-                for (int i = 0; i < minLen; i++)
-                {
-                    int cmp = t.SortedVars[i].CompareTo(other.SortedVars[i]);
-                    if (cmp != 0)
-                        return -cmp;
-                }
-                return -(t.SortedVars.Length.CompareTo(other.SortedVars.Length));
+                int cmp = thisVars[i].CompareTo(otherVars[i]);
+                if (cmp != 0)
+                    return -cmp;
             }
-
-            if (t.Equals(other))
-                return 0;
-
-            int degDiff = t.SortedVars.Length - other.SortedVars.Length;
-            if (degDiff != 0)
-                return -degDiff;
-
-            var allVars = new SortedSet<SymVar>();
-            var thisExp = new Dictionary<SymVar, int>();
-            var otherExp = new Dictionary<SymVar, int>();
-
-            foreach (var v in t.SortedVars)
-            {
-                allVars.Add(v);
-                thisExp.TryGetValue(v, out int c);
-                thisExp[v] = c + 1;
-            }
-            foreach (var v in other.SortedVars)
-            {
-                allVars.Add(v);
-                otherExp.TryGetValue(v, out int c);
-                otherExp[v] = c + 1;
-            }
-
-            foreach (var v in allVars.Reverse())
-            {
-                thisExp.TryGetValue(v, out int a);
-                otherExp.TryGetValue(v, out int b);
-                if (a != b)
-                    return a - b;
-            }
-
-            return 0;
+            return otherVars.Length - thisVars.Length;
         }
     }
 
@@ -707,31 +713,21 @@ namespace Mba.Simplifier.Verification
 
         public int CompareTo(SymVar other)
         {
-            var (v0, v1) = (this, other);
-            //var (v1, v0) = (this, other);
-
-            var below = 1;
-            var above = -1;
-
-            var cmp = ((byte)v0.Kind).CompareTo((byte)v1.Kind);
+            int cmp = ((byte)Kind) - ((byte)other.Kind);
             if (cmp != 0)
                 return cmp;
-            cmp = v0.BitIndex.CompareTo(v1.BitIndex);
+            cmp = BitIndex.CompareTo(other.BitIndex);
             if (cmp != 0)
                 return cmp;
-            cmp = v0.TotalOrder.CompareTo(v1.TotalOrder);
+            cmp = TotalOrder.CompareTo(other.TotalOrder);
             if (cmp != 0)
                 return cmp;
-            cmp = v0.Name.CompareTo(v1.Name);
-            if (cmp != 0)
-                return cmp;
-
-            return 0;
+            return string.CompareOrdinal(Name, other.Name);
         }
 
         public override int GetHashCode()
         {
-            return Kind.GetHashCode() + Name.GetHashCode() + BitIndex.GetHashCode();
+            return HashCode.Combine(Kind, Name, BitIndex);
         }
     }
 
