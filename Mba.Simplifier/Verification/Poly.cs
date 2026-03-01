@@ -24,14 +24,11 @@ namespace Mba.Simplifier.Verification
 
         }
 
-        public Poly(Dictionary<Monomial, long> coeffs)
+        public Poly(SortedDictionary<Monomial, long> coeffs) : this()
         {
-            Coeffs = new SortedDictionary<Monomial, long>(coeffs);
-        }
-
-        public Poly(SortedDictionary<Monomial, long> coeffs) : this(coeffs.ToDictionary())
-        {
-
+            Coeffs = new();
+            foreach (var (m, c) in coeffs)
+                Add(m, c);
         }
 
         public Poly(IEnumerable<Monomial> coeffs)
@@ -111,33 +108,19 @@ namespace Mba.Simplifier.Verification
 
         public void Simplify()
         {
-            bool any = false;
-            foreach(var c in Coeffs.Values)
+            Monomial[] keys = null;
+            int count = 0;
+            foreach (var kv in Coeffs)
             {
-                any |= (c == 0);
-                if (any)
-                    break;
+                if (kv.Value == 0)
+                {
+                    keys ??= new Monomial[Coeffs.Count];
+                    keys[count++] = kv.Key;
+                }
             }
 
-            if (!any)
-                return;
-
-            var keys = new List<Monomial>();
-            foreach(var (m, c) in Coeffs)
-            {
-                if (c != 0)
-                    continue;
-
-                keys.Add(m);
-            }
-
-            foreach (var k in keys)
-                Coeffs.Remove(k);
-
-
-            //var toRemove = Coeffs.Where(x => x.Value == 0).Select(x => x.Key).ToList();
-            //foreach (var del in toRemove)
-            //    Coeffs.Remove(del);
+            for (int i = 0; i < count; i++)
+                Coeffs.Remove(keys[i]);
         }
 
         public void PruneDuplicates()
@@ -456,7 +439,7 @@ namespace Mba.Simplifier.Verification
 
         public static Poly operator *(long coeff, Monomial a)
         {
-            return new Poly(new Dictionary<Monomial, long>() { { a, coeff } });
+            return new Poly(new SortedDictionary<Monomial, long>() { { a, coeff } });
         }
 
         public static Monomial operator *(Monomial a, Monomial b)
@@ -703,7 +686,7 @@ namespace Mba.Simplifier.Verification
 
         public static Poly operator *(long coeff, SymVar a)
         {
-            return new Poly(new Dictionary<Monomial, long>() { { new Monomial(a), coeff } });
+            return new Poly(new SortedDictionary<Monomial, long>() { { new Monomial(a), coeff } });
         }
 
         public override string ToString()

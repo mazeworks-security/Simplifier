@@ -222,6 +222,9 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 3*x + 3*y", w);
             deob = RustAstParser.Parse(ctx, "5*x + 5*y", w);
 
+             //obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
+            //deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
 
@@ -1844,7 +1847,6 @@ namespace Mba.Simplifier.Verification
             while (poly.Coeffs.Count > 0 && changed)
             {
                 changed = false;
-                poly.Simplify();
                 if (poly.Coeffs.Count == 0)
                     break;
 
@@ -1866,7 +1868,6 @@ namespace Mba.Simplifier.Verification
                             poly.Add(quotientMonom * kp.Key, -c * kp.Value);
                         }
 
-                        poly.Simplify();
                         changed = true;
                         break;
                     }
