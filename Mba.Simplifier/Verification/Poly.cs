@@ -487,6 +487,11 @@ namespace Mba.Simplifier.Verification
 
         public static Monomial operator *(Monomial a, Monomial b)
         {
+            // Fast path: multiplying by constant monomial (degree 0) is identity.
+            // This is the most common case in LexReduce when the quotient monomial is 1.
+            if (a.SortedVars.Length == 0) return b;
+            if (b.SortedVars.Length == 0) return a;
+
             var res = new SymVar[a.SortedVars.Length + b.SortedVars.Length];
             int i = 0, j = 0, k = 0;
             while (i < a.SortedVars.Length && j < b.SortedVars.Length)
@@ -591,6 +596,8 @@ namespace Mba.Simplifier.Verification
 
         public Monomial Divide(Monomial other)
         {
+            if (other.SortedVars.Length == 0) return this;
+
             var res = new SymVar[SortedVars.Length];
             int i = 0, j = 0, k = 0;
             while (i < SortedVars.Length && j < other.SortedVars.Length)
@@ -615,6 +622,8 @@ namespace Mba.Simplifier.Verification
                 res[k++] = SortedVars[i++];
             }
 
+            if (k == 0) return _constant;
+
             if (k == res.Length)
                 return new Monomial(res, true);
 
@@ -625,6 +634,7 @@ namespace Mba.Simplifier.Verification
 
         public bool Divides(Monomial other)
         {
+            if (SortedVars.Length == 0) return true;
             if (SortedVars.Length > other.SortedVars.Length)
                 return false;
 

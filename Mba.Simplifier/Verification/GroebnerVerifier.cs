@@ -1268,7 +1268,8 @@ namespace Mba.Simplifier.Verification
 
             List<Poly> reducIdeal = new();
             Dictionary<Poly, Poly> rcache = new();
-            foreach (var best in groups.Values)
+            var sorted = groups.OrderByDescending(x => x.Value.Lm).ToList();
+            foreach (var (_, best) in sorted)
             {
                 foreach (var p in groups.Values)
                     p.Simplify();
