@@ -183,6 +183,9 @@ namespace Mba.Simplifier.Verification
 
         public void Add(Monomial m, long coeff)
         {
+            if (coeff >= 234423243234 || coeff <= -234423243234)
+                Debugger.Break();
+
             if (coeff == 0) return;
             if (Coeffs.TryGetValue(m, out var existing))
             {
@@ -196,6 +199,9 @@ namespace Mba.Simplifier.Verification
             {
                 Coeffs[m] = coeff;
             }
+
+            
+          
         }
 
         public void Sub(Monomial m, long coeff)
