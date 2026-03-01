@@ -41,6 +41,11 @@ namespace Mba.Simplifier.Verification
 
         }
 
+        public Poly(params SymVar[] sv) : this(new Monomial(sv))
+        {
+
+        }
+
 
         public Poly(SortedDictionary<Monomial, long> coeffs) : this()
         {
@@ -678,9 +683,9 @@ namespace Mba.Simplifier.Verification
     public enum SymKind : byte
     {
         Input = 0,
-        InternalGate = 1,
         Dual = 1,
-        Output = 3, // This is highly dubious, change this.
+        InternalGate = 2,
+        Output = 3,
     }
 
     public struct SymVar : IEquatable<SymVar>, IComparable<SymVar>
@@ -691,6 +696,8 @@ namespace Mba.Simplifier.Verification
 
         public uint TotalOrder { get; set; }
 
+        public bool IsDual { get; set; }
+
         public string Name { get; set; }
 
         public static SymVar Symbol(AstCtx ctx, AstIdx idx, int bitIdx)
@@ -699,8 +706,12 @@ namespace Mba.Simplifier.Verification
         public static SymVar Symbol(AstCtx ctx, string name, int bitIdx)
            => new SymVar() { Kind = SymKind.Input, Name = name, BitIndex = bitIdx };
 
-        public static SymVar Temp(SymKind kind, int bitIdx, uint sliceIndex, string name)
-            => new SymVar() { Kind = kind, BitIndex = bitIdx, TotalOrder = sliceIndex, Name = name };
+        public static SymVar Temp(SymKind kind, int bitIdx, uint sliceIndex, string name, bool isDual = false)
+        {
+            kind = isDual ? SymKind.Dual : kind;
+            var v = new SymVar() { Kind = kind, BitIndex = bitIdx, TotalOrder = sliceIndex, IsDual = isDual, Name = name };
+            return v;
+        }
 
         public static Poly operator *(long coeff, SymVar a)
         {
@@ -733,7 +744,13 @@ namespace Mba.Simplifier.Verification
             cmp = TotalOrder.CompareTo(other.TotalOrder);
             if (cmp != 0)
                 return cmp;
-            return string.CompareOrdinal(Name, other.Name);
+
+            cmp = string.CompareOrdinal(Name.Replace("dual", ""), other.Name.Replace("dual", ""));
+            if (cmp != 0)
+                return cmp;
+
+            //return other.IsDual.CompareTo(IsDual);
+            return IsDual.CompareTo(other.IsDual);
         }
 
         public override int GetHashCode()

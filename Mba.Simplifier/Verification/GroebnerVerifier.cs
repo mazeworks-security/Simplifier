@@ -868,14 +868,14 @@ namespace Mba.Simplifier.Verification
                 counts.Add(throwaway.Count);
                 SimplifyMany(ideal, trivialFacts);
 
-                
+                /*
                 var allLex = all.Select(x => x.Clone()).ToList();
                 SimplifyMany(all, trivialFacts);
                 allLex = ReduceLexGroebnerBasis(allLex, new());
                 Console.WriteLine("All lex: ");
                 foreach (var p in allLex)
                     Console.WriteLine($"    {p}");
-                
+                */
 
                 // Compute a reduced lexicographic groebner basis
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
@@ -1010,6 +1010,8 @@ namespace Mba.Simplifier.Verification
                 {
                     Console.WriteLine(rDiff);
                     var temp = rDiff;
+
+                    //continue;
 
 
 
@@ -2227,7 +2229,7 @@ namespace Mba.Simplifier.Verification
 
 
         // Each node gets an x, y, carry in, carry out bits
-        private Poly GetSpecification(AstIdx idx, int bitIdx, Dictionary<(AstIdx, int bitIdx), Poly> cache, List<(int bitIndex, uint opIndex, Poly poly)> ideal, Dictionary<SymVar, uint> firstSeen, ref uint totalOrder, bool isOutput = false)
+        private Poly  GetSpecification(AstIdx idx, int bitIdx, Dictionary<(AstIdx, int bitIdx), Poly> cache, List<(int bitIndex, uint opIndex, Poly poly)> ideal, Dictionary<SymVar, uint> firstSeen, ref uint totalOrder, bool isOutput = false)
         {
             var key = (idx, bitIdx);
             if (cache.TryGetValue(key, out var existing))
@@ -2378,9 +2380,123 @@ namespace Mba.Simplifier.Verification
                 return sum;
             }
 
-            //if (false)
             if (opc == AstOp.Add)
-            //if (false)
+            {
+                // XOR
+                // a+b - 2*a*b
+                // a*(1-b) + b*(1-a)
+
+                // OR = a - b + a*b
+                // (a-1)*(b-1)
+                if (arithInfo.Count > bitIdx)
+                    return arithInfo[bitIdx].result;
+                Debug.Assert(arithInfo.Count == bitIdx);
+                var a = getOp(0, ref totalOrder);
+                var b = getOp(1, ref totalOrder);
+
+                var dualA = a.Coeffs.Keys.Single().SortedVars.Single();
+                var dualB = b.Coeffs.Keys.Single().SortedVars.Single();
+                Debug.Assert(a.Coeffs.Values.First() == 1);
+                Debug.Assert(b.Coeffs.Values.First() == 1);
+
+                // You cannot skip inputs because then we fail to negate them
+                //if (dualA.Kind != SymKind.Input)
+                if (true)
+                {
+                    var before = dualA;
+
+
+                    //dualA.Kind = SymKind.Input;
+                    if (dualA.Kind == SymKind.Input)
+                        dualA.Kind = SymKind.InternalGate;
+
+                    dualA.Name += "dual";
+                    dualA.IsDual = true;
+
+                    var bar = dualA.CompareTo(before);
+                    var bar1 = before.CompareTo(dualA);
+
+
+                    if (before.Kind == SymKind.Input || firstSeen.TryAdd(dualA, firstSeen[before]))
+                    {
+                        ideal.Add((bitIdx, totalOrder++, new Poly(new Monomial(before, dualA))));
+
+                        ideal.Add((bitIdx, totalOrder++, dualA - (Poly.Constant(1) - a)));
+                    }
+                }
+
+                //if (dualB.Kind != SymKind.Input)
+                if (true)
+                {
+                    var before = dualB;
+
+                    if (dualB.Kind == SymKind.Input)
+                        dualB.Kind = SymKind.InternalGate;
+
+
+                    //dualB.Kind = SymKind.Input;
+                    dualB.Name += "dual";
+                    dualB.IsDual = true;
+
+                    if (before.Kind == SymKind.Input || firstSeen.TryAdd(dualB, firstSeen[before]))
+                    {
+                        //ideal.Add((bitIdx, totalOrder++, new Poly(new Monomial(before, dualB))));
+                        ideal.Add((bitIdx, totalOrder++, dualB - (Poly.Constant(1) - b)));
+                    }
+                }
+
+                /*
+                var dualA = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}dualA");
+                update(ref dualA);
+
+                var dualB = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}dualB");
+                update(ref dualB);
+                */
+
+
+
+
+                var generate = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}gen");
+                update(ref generate);
+                var propagate = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}prop");
+                update(ref propagate);
+                var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
+                update(ref cout);
+                var sum = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}sum");
+                update(ref sum);
+
+
+                Poly cin = Poly.Constant(0);
+                if (bitIdx > 0)
+                    cin = arithInfo[bitIdx - 1].cout;
+
+                
+                ideal.Add((bitIdx, totalOrder++, generate - a * b));
+                //ideal.Add((bitIdx, totalOrder++, propagate - (a + b - 2 * generate)));
+                ideal.Add((bitIdx, totalOrder++, propagate - ((a*dualB) + (b*dualA))));
+                //ideal.Add((bitIdx, totalOrder++, propagate - (generate + new Poly(dualA, dualB))));
+
+                var op0 = (a + b - 2 * (a * b));
+                var op1 = ((a * dualB) + (b * dualA));
+
+
+                ideal.Add((bitIdx, totalOrder++, cout - (generate + propagate * cin)));
+                ideal.Add((bitIdx, totalOrder++, sum - (propagate + 2 * generate + cin - 2 * cout)));
+
+                arithInfo.Add(new(cin, cout, propagate, generate, sum));
+
+
+
+                totalOrder++;
+
+                cache[key] = sum;
+
+                return sum;
+            }
+
+                //if (false)
+                //if (opc == AstOp.Add)
+            if (false)
             {
                 if (arithInfo.Count > bitIdx)
                     return arithInfo[bitIdx].result;
