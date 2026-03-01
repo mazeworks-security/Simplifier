@@ -222,7 +222,7 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 3*x + 3*y", w);
             deob = RustAstParser.Parse(ctx, "5*x + 5*y", w);
 
-             //obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
+            //obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             //deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
 
             var cache = new Dictionary<AstIdx, AstIdx>();
@@ -989,7 +989,7 @@ namespace Mba.Simplifier.Verification
                     var reduc = ReduceRec(rDiff, ideals, trivialFacts, nonlinearFactLists, rcache, definitions);
 
                     for (int i = ideals.Count - 2; i > 0; i--)
-                    { 
+                    {
                         break;
                         temp = LexReduce(temp, ideals[i]);
                         Console.WriteLine(temp);
@@ -1056,7 +1056,7 @@ namespace Mba.Simplifier.Verification
         {
             if (a == 0 || b == 0)
             {
-                return 0; 
+                return 0;
             }
 
             long gcd = Gcd(a, b);
@@ -1295,12 +1295,13 @@ namespace Mba.Simplifier.Verification
                 reduced.Simplify();
                 if (!exists)
                 {
-                    Console.WriteLine($"\nReducing {slicePoly}\n");
                     reduced = slicePoly;
                     all.Add(slicePoly);
                     // Don't uncomment this.. makes things way slower for some reason.
                     reduced = ReduceBySyzergies(reduced, cache, definitions);
                     all.Add(reduced.Clone());
+
+                    Console.WriteLine($"\nReducing {reduced}\n");
 
                     // TODO: After lex reduction there is sometimes more `2x - 1` factors
                     reduced = LexReduce(reduced, ideal, rcache);

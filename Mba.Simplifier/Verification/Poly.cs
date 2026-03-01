@@ -24,12 +24,12 @@ namespace Mba.Simplifier.Verification
 
         }
 
+        
         public Poly(SortedDictionary<Monomial, long> coeffs) : this()
         {
-            Coeffs = new();
-            foreach (var (m, c) in coeffs)
-                Add(m, c);
+            Coeffs = coeffs;
         }
+        
 
         public Poly(IEnumerable<Monomial> coeffs)
         {
@@ -288,7 +288,8 @@ namespace Mba.Simplifier.Verification
 
         public Poly Clone()
         {
-            return new Poly(Coeffs);
+            var copy = new SortedDictionary<Monomial, long>(Coeffs);
+            return new Poly(copy);
         }
 
         public static Poly operator +(Poly a, Poly b)
