@@ -1638,7 +1638,13 @@ namespace Mba.Simplifier.Verification
                                 p.Replace(key, new Poly(new Monomial(set)));
                                 changed = true;
                                 goto restart;
+                            }
 
+                            if (key.SortedVars.Length == 1)
+                            {
+                                p.Replace(key, existing);
+                                changed = true;
+                                goto restart;
                             }
 
                         }
