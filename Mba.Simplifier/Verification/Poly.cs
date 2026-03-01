@@ -679,7 +679,8 @@ namespace Mba.Simplifier.Verification
     {
         Input = 0,
         InternalGate = 1,
-        Output = 2, // This is highly dubious, change this.
+        Dual = 1,
+        Output = 3, // This is highly dubious, change this.
     }
 
     public struct SymVar : IEquatable<SymVar>, IComparable<SymVar>

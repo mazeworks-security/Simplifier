@@ -222,8 +222,21 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 3*x + 3*y", w);
             deob = RustAstParser.Parse(ctx, "5*x + 5*y", w);
 
+
+
+            obfuscated = RustAstParser.Parse(ctx, "x+y+x", w);
+            deob = RustAstParser.Parse(ctx, "x+x+y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
+            deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
+
             //obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             //deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 3*x + 3*y", w);
+            deob = RustAstParser.Parse(ctx, "5*x + 5*y", w);
 
             var cache = new Dictionary<AstIdx, AstIdx>();
 
@@ -2285,7 +2298,54 @@ namespace Mba.Simplifier.Verification
          
             }
             */
+
+       
+            // Dual variable encoding:
+            //if (opc == AstOp.Add)
+            if (false)
+            {
+                if (arithInfo.Count > bitIdx)
+                    return arithInfo[bitIdx].result;
+                Debug.Assert(arithInfo.Count == bitIdx);
+                var a = getOp(0, ref totalOrder);
+                var b = getOp(1, ref totalOrder);
+
+                var g1 = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}g1");
+                update(ref g1);
+                var g2 = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}g2");
+                update(ref g2);
+                var g3 = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}g3");
+                update(ref g3);
+                var f1 = SymVar.Temp(SymKind.Dual, bitIdx, 0, $"op{carryId}_{bitIdx}f1");
+                update(ref f1);
+                var f2 = SymVar.Temp(SymKind.Dual, bitIdx, 0, $"op{carryId}_{bitIdx}f2");
+                update(ref f2);
+                var f3 = SymVar.Temp(SymKind.Dual, bitIdx, 0, $"op{carryId}_{bitIdx}f3");
+                update(ref f3);
+                var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
+                update(ref cout);
+                var sum = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}sum");
+                update(ref sum);
+
+                Poly cin = Poly.Constant(0);
+                if (bitIdx > 0)
+                    cin = arithInfo[bitIdx - 1].cout;
+
+
+
+
+                arithInfo.Add(new(cin, cout, null, null, sum));
+
+                totalOrder++;
+
+                cache[key] = sum;
+
+                return sum;
+            }
+
+            //if (false)
             if (opc == AstOp.Add)
+            //if (false)
             {
                 if (arithInfo.Count > bitIdx)
                     return arithInfo[bitIdx].result;
