@@ -254,6 +254,8 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 1*x + 1*y", w);
             deob = RustAstParser.Parse(ctx, "3*x + 3*y", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 3*x + 3*y", w);
+            deob = RustAstParser.Parse(ctx, "5*x + 5*y", w);
 
             var cache = new Dictionary<AstIdx, AstIdx>();
 
@@ -535,6 +537,9 @@ namespace Mba.Simplifier.Verification
                     continue;
                 }
 
+                //if (p0.Lm.ToString() == "op8_1cout")
+                //    Debugger.Break();
+
                 // Experiment: Forward trivial identities like `op1 = x`.
                 // I have a suspicion that we'll want to disable this unless it corresponds to an intermediate variable?
                 if (p0.Coeffs.Count == 2)
@@ -545,7 +550,9 @@ namespace Mba.Simplifier.Verification
                     var lm = rhs.Lm;
                     if (lm.SortedVars.Length > 1)
                         goto skip;
-                    if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex == p0.Lm.SortedVars.Single().BitIndex)
+                    //if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex == p0.Lm.SortedVars.Single().BitIndex)
+                    //    goto skip;
+                    if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex != p0.Lm.SortedVars.Single().BitIndex)
                         goto skip;
                     if (lm.SortedVars.Length != 1)
                         goto skip;
