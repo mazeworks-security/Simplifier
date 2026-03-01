@@ -238,6 +238,14 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 3*x + 3*y", w);
             deob = RustAstParser.Parse(ctx, "5*x + 5*y", w);
 
+
+            obfuscated = RustAstParser.Parse(ctx, "x+y+x", w);
+            deob = RustAstParser.Parse(ctx, "x+x+y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y + 3*x + 3*y", w);
+            deob = RustAstParser.Parse(ctx, "5*x + 5*y", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
 
@@ -785,6 +793,27 @@ namespace Mba.Simplifier.Verification
             ideal.AddRange(temp);
         }
 
+        private void NegReduce(List<Poly> ideal)
+        {
+            ideal = ideal.Select(x => x.Clone()).ToList();
+
+            foreach(var bar in ideal)
+            {
+                var p = bar;
+                var allVars = bar.Coeffs.Keys.SelectMany(x => x.SortedVars).Distinct().ToList();
+                Console.WriteLine($"\n{p}");
+                foreach(var v in allVars)
+                {
+                    p.ReplaceSubset(new Monomial(v), new Poly(v) - Poly.Constant(1));
+                    Console.WriteLine($"    {p}");
+                }
+
+
+
+            }
+        }
+
+
         private void TailMerge(List<Poly> ideal)
         {
             var bar = Nullspace.FindLinearIdentities(ideal);
@@ -839,14 +868,14 @@ namespace Mba.Simplifier.Verification
                 counts.Add(throwaway.Count);
                 SimplifyMany(ideal, trivialFacts);
 
-                /*
+                
                 var allLex = all.Select(x => x.Clone()).ToList();
                 SimplifyMany(all, trivialFacts);
                 allLex = ReduceLexGroebnerBasis(allLex, new());
                 Console.WriteLine("All lex: ");
                 foreach (var p in allLex)
                     Console.WriteLine($"    {p}");
-                */
+                
 
                 // Compute a reduced lexicographic groebner basis
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
@@ -869,6 +898,8 @@ namespace Mba.Simplifier.Verification
                 foreach (var p in lexGb)
                     Console.WriteLine($"    {p}");
 
+
+                //NegReduce(lexGb);
 
                 lexGb.AddRange(nullspaceFacts);
                 //var bar = Nullspace.FindLinearIdentities(lexGb);
@@ -1316,6 +1347,10 @@ namespace Mba.Simplifier.Verification
                     all.Add(reduced.Clone());
 
                     Console.WriteLine($"\nReducing {reduced}\n");
+
+
+                    // NegReduce(new() { reduced });
+
 
                     // TODO: After lex reduction there is sometimes more `2x - 1` factors
                     reduced = LexReduce(reduced, ideal, rcache);
