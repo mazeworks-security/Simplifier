@@ -244,8 +244,6 @@ namespace Mba.Simplifier.Verification
 
         public bool ReplaceSubset(Monomial a, Poly other)
         {
-
-
             var toReplace = Coeffs.Where(x => a.Divides(x.Key))
                                   .Select(x => (x.Key, x.Value))
                                   .ToList();

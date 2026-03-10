@@ -213,3 +213,261 @@ Dual variable implemenatation:
     - Still need to experiment with `(1-2*x)*subst + other` thing
 
 - Nonlinear facts analysis isn't working beyond the 2nd bit. Also might need some kind of special analysis to factor out (2x - 1) products
+
+
+You have to identify relationships between the polynomials (tail merging). Nothing else is going to work
+
+
+(a&b)
+a+b
+
+there's a final uniting operator and then
+
+The problem is that there is no final carry bit...
+
+subtract the carry minus the sum... your linear ground truth has a carry bit
+
+but (a&b) does not have a carry bit
+
+
+need to rewrite the output and carry bits in terms of each other?
+
+
+
+
+
+Check the final gate... the outputs going to the next input expression
+
+adder(x,y)
+x&y
+x|y
+x^y
+
+
+But there isn't just one output bit. There's many.
+a & (b+c)
+
+bitwise is applying the same function over and over....
+arithmetic is applying a function with incoming carries
+
+
+You should be able to rewrite the difference.. look at the 
+
+a & (b+c)
+
+Identify the last user of the output bit... 
+a & (b+c)... in this case it would be
+
+if bitwise is on the outside then there is no last user? The last user goes directly to the carry receiver of (b+c)
+and the relationship is then blurred
+
+It has to use tail sharing
+
+
+but the relationships between tails are blurred..
+
+TODO:
+	- Node sharing. Just rewrite everything in terms of each other.
+	- Identify boundary nodes and propagate information up? Everything is a boundary node though
+	
+{1*(op0_0prop) + 2*(op0_0gen) + -1*(op4_0gen) + -1*(op2_0gen)}
+
++		[0]	{1*(op6_1prop) + 2*(op6_1gen) + -1*(op7_1prop) + -1*(op2_1gen)}	Mba.Simplifier.Verification.Poly
++		[1]	{2*(op5_1gen) + -1*(op6_1prop) + 1*(op0_1prop) + -1*(op4_1gen)}	Mba.Simplifier.Verification.Poly
++		[2]	{1*(op5_1cout) + 1*(op6_1gen) + 1*(op7_1gen) + -1*(op0_1cout) + -1*(op3_1gen) + -1*(op1_1gen)}	Mba.Simplifier.Verification.Poly
++		[3]	{1*(op5_1cout) + -1*(op5_1gen) + -1*(op0_1cout) + 1*(op0_1gen)}	Mba.Simplifier.Verification.Poly
++		[4]	{2*(op5_1cout) + -2*(op5_1gen) + -2*(op0_1cout) + -1*(op0_1prop) + 1*(op3_1prop) + 1*(op1_1prop)}	Mba.Simplifier.Verification.Poly
+
+4*(op5_1cout*op6_1gen*op4_1gen) 
+
+
+Sums are already written in terms of each other..
+
+cout = (generate + propagate * cin)
+sum = (propagate + 2 * generate + cin - 2 * cout)
+
+other = [...]
+sum == other
+
+
+
+You should be able to isolate the carry...
+how to get formula for carry of sum?
+
+
+if there is no carry.. you could probably take the outermost bitwise expression and then do some adhoc thing
+Look at the carries of the arithmetic
+What if you just did a bitwise AND of complex expression by the easy expression? Might make the problem structurally easier but would need a secondary step to eliminate
+
+
+Analyze outermost bitwise arithmetic..
+x & (a+b)
+Would need some kind of recursive step though
+(a+b) & (23432*(b+c))
+Can you just analyze carries? We technically computed the carry of the outermost arithmetic expressions..
+
+if its pure arithmetic then only the carry feeds in..
+even a linear combination of bitwise expressions would have the same property
+
+a+b
+=>
+a & (b+c)
+
+latter expressions does not have this property though. carry of b+c flows into itself, then into `a`.
+You could decompose into bitwise of arithmetic but then you would need to recursively prove subexpressions.
+	or maybe you dont need to decompose? Can they be treated as black boxes? 
+	
+You already substitue sums.. but youre discarding the carry difference you learned.
+Learned lemmas 
+what if you just asserted
+
+
+Intermediate products get really large. I guess you could store a graded GB and use that for each slice?
+
+Using syzergies worked to eliminate polynomials that are obvious multiples. But the intermediate polynomials get obnoxiously large
+
+Dual variables required. Will be immediately undone by sliced groebner basis thing unless w
+
+
+https://homes.cs.washington.edu/~beame/papers/dual-verify.pdf
+- carry rewriting step is exactly the problem we have. The carries of MBA expressions are not identical to the carries of pure arithmetic and need to be rewritten in terms of each other
+- TODO: `carry*sum == 0` constraint is free to add
+- xor rewriting in the context of  these papers is just representing XORs as a single expression (`-s + a + b - 2ab)`
+
+```
+
+8*(op11_3sumdual*op10_3sumdual*op6_3sumdual*op7_2cout*op8_2cout*op9_2cout*op3_2gen) + -4*(op11_3sumdual*op10_3sumdual*op6_3sumdual*op7_2cout*op8_2cout*op3_2gen) + -4*(op11_3sumdual*op10_3sumdual*op6_3sumdual*op7_2cout*op9_2cout*op3_2gen) + 2*(op11_3sumdual*op10_3sumdual*op6_3sumdual*op7_2cout*op3_2gen) + -4*(op11_3sumdual*op10_3sumdual*op6_3sumdual*op8_2cout*op9_2cout*op3_2gen) + 2*(op11_3sumdual*op10_3sumdual*op6_3sumdual*op8_2cout*op3_2gen) + 2*(op11_3sumdual*op10_3sumdual*op6_3sumdual*op9_2cout*op3_2gen) + -1*(op11_3sumdual*op10_3sumdual*op6_3sumdual*op3_2gen) + 8*(op11_3sumdual*op10_3sumdual*op3_3sumdual*op7_2cout*op8_2cout*op9_2cout*op6_2gen) + -4*(op11_3sumdual*op10_3sumdual*op3_3sumdual*op7_2cout*op8_2cout*op6_2gen) + -4*(op11_3sumdual*op10_3sumdual*op3_3sumdual*op7_2cout*op9_2cout*op6_2gen) + 2*(op11_3sumdual*op10_3sumdual*op3_3sumdual*op7_2cout*op6_2gen) + -4*(op11_3sumdual*op10_3sumdual*op3_3sumdual*op8_2cout*op9_2cout*op6_2gen) + 2*(op11_3sumdual*op10_3sumdual*op3_3sumdual*op8_2cout*op6_2gen) + 2*(op11_3sumdual*op10_3sumdual*op3_3sumdual*op9_2cout*op6_2gen) + -1*(op11_3sumdual*op10_3sumdual*op3_3sumdual*op6_2gen) + -4*(op11_3sumdual*op10_3sumdual*op7_2cout*op8_2cout*op9_2cout) + 2*(op11_3sumdual*op10_3sumdual*op7_2cout*op9_2cout) + 2*(op11_3sumdual*op10_3sumdual*op8_2cout*op9_2cout) + -1*(op11_3sumdual*op10_3sumdual*op9_2cout) + 8*(op11_3sumdual*op9_3sumdual*op3_3sumdual*op7_2cout*op8_2cout*op10_2cout*x3) + -4*(op11_3sumdual*op9_3sumdual*op3_3sumdual*op7_2cout*op8_2cout*x3) + -4*(op11_3sumdual*op9_3sumdual*op3_3sumdual*op7_2cout*op10_2cout*x3) + 2*(op11_3sumdual*op9_3sumdual*op3_3sumdual*op7_2cout*x3) + -4*(op11_3sumdual*op9_3sumdual*op3_3sumdual*op8_2cout*op10_2cout*x3) + 2*(op11_3sumdual*op9_3sumdual*op3_3sumdual*op8_2cout*x3) + 2*(op11_3sumdual*op9_3sumdual*op3_3sumdual*op10_2cout*x3) + -1*(op11_3sumdual*op9_3sumdual*op3_3sumdual*x3) + 8*(op11_3sumdual*op9_3sumdual*x3dual*op7_2cout*op8_2cout*op10_2cout*op3_2gen) + -4*(op11_3sumdual*op9_3sumdual*x3dual*op7_2cout*op8_2cout*op3_2gen) + -4*(op11_3sumdual*op9_3sumdual*x3dual*op7_2cout*op10_2cout*op3_2gen) + 2*(op11_3sumdual*op9_3sumdual*x3dual*op7_2cout*op3_2gen) + -4*(op11_3sumdual*op9_3sumdual*x3dual*op8_2cout*op10_2cout*op3_2gen) + 2*(op11_3sumdual*op9_3sumdual*x3dual*op8_2cout*op3_2gen) + 2*(op11_3sumdual*op9_3sumdual*x3dual*op10_2cout*op3_2gen) + -1*(op11_3sumdual*op9_3sumdual*x3dual*op3_2gen) + -4*(op11_3sumdual*op9_3sumdual*op7_2cout*op8_2cout*op10_2cout) + 2*(op11_3sumdual*op9_3sumdual*op7_2cout*op10_2cout) + 2*(op11_3sumdual*op9_3sumdual*op8_2cout*op10_2cout) + -1*(op11_3sumdual*op9_3sumdual*op10_2cout) + 2*(op11_3sumdual*op7_2cout*op8_2cout) + -1*(op11_3sumdual*op8_2cout) + -4*(op8_3sumdual*op6_3sumdual*op7_2cout*op11_2cout*y3) + 2*(op8_3sumdual*op6_3sumdual*op7_2cout*y3) + 2*(op8_3sumdual*op6_3sumdual*op11_2cout*y3) + -1*(op8_3sumdual*op6_3sumdual*y3) + -4*(op8_3sumdual*y3dual*op7_2cout*op11_2cout*op6_2gen) + 2*(op8_3sumdual*y3dual*op7_2cout*op6_2gen) + 2*(op8_3sumdual*y3dual*op11_2cout*op6_2gen) + -1*(op8_3sumdual*y3dual*op6_2gen) + 2*(op8_3sumdual*op7_2cout*op11_2cout) + -1*(op8_3sumdual*op11_2cout) + 4*(op4_3sumdual*op2_3sumdual*op0_2cout*op1_2cout*x3) + -2*(op4_3sumdual*op2_3sumdual*op0_2cout*x3) + -2*(op4_3sumdual*op2_3sumdual*op1_2cout*x3) + 1*(op4_3sumdual*op2_3sumdual*x3) + 4*(op4_3sumdual*x3dual*op0_2cout*op1_2cout*op2_2cout) + -2*(op4_3sumdual*x3dual*op0_2cout*op2_2cout) + -2*(op4_3sumdual*x3dual*op1_2cout*op2_2cout) + 1*(op4_3sumdual*x3dual*op2_2cout) + -2*(op4_3sumdual*op0_2cout*op1_2cout) + 1*(op4_3sumdual*op1_2cout) + 4*(op5_3sumdual*op1_3sumdual*op0_2cout*op4_2cout*y3) + -2*(op5_3sumdual*op1_3sumdual*op0_2cout*y3) + -2*(op5_3sumdual*op1_3sumdual*op4_2cout*y3) + 1*(op5_3sumdual*op1_3sumdual*y3) + 4*(op1_3sumdual*y3dual*op0_2cout*op4_2cout*op5_2cout) + -2*(op1_3sumdual*y3dual*op0_2cout*op5_2cout) + -2*(op1_3sumdual*y3dual*op4_2cout*op5_2cout) + 1*(op1_3sumdual*y3dual*op5_2cout) + -2*(op1_3sumdual*op0_2cout*op4_2cout) + 1*(op1_3sumdual*op4_2cout) + -1*(op7_2cout) + 1*(op0_2cout)
+8*(op11_4sumdual*op10_4sumdual*op6_4sumdual*op7_3cout*op8_3cout*op9_3cout*op3_3gen) + -4*(op11_4sumdual*op10_4sumdual*op6_4sumdual*op7_3cout*op8_3cout*op3_3gen) + -4*(op11_4sumdual*op10_4sumdual*op6_4sumdual*op7_3cout*op9_3cout*op3_3gen) + 2*(op11_4sumdual*op10_4sumdual*op6_4sumdual*op7_3cout*op3_3gen) + -4*(op11_4sumdual*op10_4sumdual*op6_4sumdual*op8_3cout*op9_3cout*op3_3gen) + 2*(op11_4sumdual*op10_4sumdual*op6_4sumdual*op8_3cout*op3_3gen) + 2*(op11_4sumdual*op10_4sumdual*op6_4sumdual*op9_3cout*op3_3gen) + -1*(op11_4sumdual*op10_4sumdual*op6_4sumdual*op3_3gen) + 8*(op11_4sumdual*op10_4sumdual*op3_4sumdual*op7_3cout*op8_3cout*op9_3cout*op6_3gen) + -4*(op11_4sumdual*op10_4sumdual*op3_4sumdual*op7_3cout*op8_3cout*op6_3gen) + -4*(op11_4sumdual*op10_4sumdual*op3_4sumdual*op7_3cout*op9_3cout*op6_3gen) + 2*(op11_4sumdual*op10_4sumdual*op3_4sumdual*op7_3cout*op6_3gen) + -4*(op11_4sumdual*op10_4sumdual*op3_4sumdual*op8_3cout*op9_3cout*op6_3gen) + 2*(op11_4sumdual*op10_4sumdual*op3_4sumdual*op8_3cout*op6_3gen) + 2*(op11_4sumdual*op10_4sumdual*op3_4sumdual*op9_3cout*op6_3gen) + -1*(op11_4sumdual*op10_4sumdual*op3_4sumdual*op6_3gen) + -4*(op11_4sumdual*op10_4sumdual*op7_3cout*op8_3cout*op9_3cout) + 2*(op11_4sumdual*op10_4sumdual*op7_3cout*op9_3cout) + 2*(op11_4sumdual*op10_4sumdual*op8_3cout*op9_3cout) + -1*(op11_4sumdual*op10_4sumdual*op9_3cout) + 8*(op11_4sumdual*op9_4sumdual*op3_4sumdual*op7_3cout*op8_3cout*op10_3cout*x4) + -4*(op11_4sumdual*op9_4sumdual*op3_4sumdual*op7_3cout*op8_3cout*x4) + -4*(op11_4sumdual*op9_4sumdual*op3_4sumdual*op7_3cout*op10_3cout*x4) + 2*(op11_4sumdual*op9_4sumdual*op3_4sumdual*op7_3cout*x4) + -4*(op11_4sumdual*op9_4sumdual*op3_4sumdual*op8_3cout*op10_3cout*x4) + 2*(op11_4sumdual*op9_4sumdual*op3_4sumdual*op8_3cout*x4) + 2*(op11_4sumdual*op9_4sumdual*op3_4sumdual*op10_3cout*x4) + -1*(op11_4sumdual*op9_4sumdual*op3_4sumdual*x4) + 8*(op11_4sumdual*op9_4sumdual*x4dual*op7_3cout*op8_3cout*op10_3cout*op3_3gen) + -4*(op11_4sumdual*op9_4sumdual*x4dual*op7_3cout*op8_3cout*op3_3gen) + -4*(op11_4sumdual*op9_4sumdual*x4dual*op7_3cout*op10_3cout*op3_3gen) + 2*(op11_4sumdual*op9_4sumdual*x4dual*op7_3cout*op3_3gen) + -4*(op11_4sumdual*op9_4sumdual*x4dual*op8_3cout*op10_3cout*op3_3gen) + 2*(op11_4sumdual*op9_4sumdual*x4dual*op8_3cout*op3_3gen) + 2*(op11_4sumdual*op9_4sumdual*x4dual*op10_3cout*op3_3gen) + -1*(op11_4sumdual*op9_4sumdual*x4dual*op3_3gen) + -4*(op11_4sumdual*op9_4sumdual*op7_3cout*op8_3cout*op10_3cout) + 2*(op11_4sumdual*op9_4sumdual*op7_3cout*op10_3cout) + 2*(op11_4sumdual*op9_4sumdual*op8_3cout*op10_3cout) + -1*(op11_4sumdual*op9_4sumdual*op10_3cout) + 2*(op11_4sumdual*op7_3cout*op8_3cout) + -1*(op11_4sumdual*op8_3cout) + -4*(op8_4sumdual*op6_4sumdual*op7_3cout*op11_3cout*y4) + 2*(op8_4sumdual*op6_4sumdual*op7_3cout*y4) + 2*(op8_4sumdual*op6_4sumdual*op11_3cout*y4) + -1*(op8_4sumdual*op6_4sumdual*y4) + -4*(op8_4sumdual*y4dual*op7_3cout*op11_3cout*op6_3gen) + 2*(op8_4sumdual*y4dual*op7_3cout*op6_3gen) + 2*(op8_4sumdual*y4dual*op11_3cout*op6_3gen) + -1*(op8_4sumdual*y4dual*op6_3gen) + 2*(op8_4sumdual*op7_3cout*op11_3cout) + -1*(op8_4sumdual*op11_3cout) + 4*(op4_4sumdual*op2_4sumdual*op0_3cout*op1_3cout*x4) + -2*(op4_4sumdual*op2_4sumdual*op0_3cout*x4) + -2*(op4_4sumdual*op2_4sumdual*op1_3cout*x4) + 1*(op4_4sumdual*op2_4sumdual*x4) + 4*(op4_4sumdual*x4dual*op0_3cout*op1_3cout*op2_3cout) + -2*(op4_4sumdual*x4dual*op0_3cout*op2_3cout) + -2*(op4_4sumdual*x4dual*op1_3cout*op2_3cout) + 1*(op4_4sumdual*x4dual*op2_3cout) + -2*(op4_4sumdual*op0_3cout*op1_3cout) + 1*(op4_4sumdual*op1_3cout) + 4*(op5_4sumdual*op1_4sumdual*op0_3cout*op4_3cout*y4) + -2*(op5_4sumdual*op1_4sumdual*op0_3cout*y4) + -2*(op5_4sumdual*op1_4sumdual*op4_3cout*y4) + 1*(op5_4sumdual*op1_4sumdual*y4) + 4*(op1_4sumdual*y4dual*op0_3cout*op4_3cout*op5_3cout) + -2*(op1_4sumdual*y4dual*op0_3cout*op5_3cout) + -2*(op1_4sumdual*y4dual*op4_3cout*op5_3cout) + 1*(op1_4sumdual*y4dual*op5_3cout) + -2*(op1_4sumdual*op0_3cout*op4_3cout) + 1*(op1_4sumdual*op4_3cout) + -1*(op7_3cout) + 1*(op0_3cout)
+8*(op11_5sumdual*op10_5sumdual*op6_5sumdual*op7_4cout*op8_4cout*op9_4cout*op3_4gen) + -4*(op11_5sumdual*op10_5sumdual*op6_5sumdual*op7_4cout*op8_4cout*op3_4gen) + -4*(op11_5sumdual*op10_5sumdual*op6_5sumdual*op7_4cout*op9_4cout*op3_4gen) + 2*(op11_5sumdual*op10_5sumdual*op6_5sumdual*op7_4cout*op3_4gen) + -4*(op11_5sumdual*op10_5sumdual*op6_5sumdual*op8_4cout*op9_4cout*op3_4gen) + 2*(op11_5sumdual*op10_5sumdual*op6_5sumdual*op8_4cout*op3_4gen) + 2*(op11_5sumdual*op10_5sumdual*op6_5sumdual*op9_4cout*op3_4gen) + -1*(op11_5sumdual*op10_5sumdual*op6_5sumdual*op3_4gen) + 8*(op11_5sumdual*op10_5sumdual*op3_5sumdual*op7_4cout*op8_4cout*op9_4cout*op6_4gen) + -4*(op11_5sumdual*op10_5sumdual*op3_5sumdual*op7_4cout*op8_4cout*op6_4gen) + -4*(op11_5sumdual*op10_5sumdual*op3_5sumdual*op7_4cout*op9_4cout*op6_4gen) + 2*(op11_5sumdual*op10_5sumdual*op3_5sumdual*op7_4cout*op6_4gen) + -4*(op11_5sumdual*op10_5sumdual*op3_5sumdual*op8_4cout*op9_4cout*op6_4gen) + 2*(op11_5sumdual*op10_5sumdual*op3_5sumdual*op8_4cout*op6_4gen) + 2*(op11_5sumdual*op10_5sumdual*op3_5sumdual*op9_4cout*op6_4gen) + -1*(op11_5sumdual*op10_5sumdual*op3_5sumdual*op6_4gen) + -4*(op11_5sumdual*op10_5sumdual*op7_4cout*op8_4cout*op9_4cout) + 2*(op11_5sumdual*op10_5sumdual*op7_4cout*op9_4cout) + 2*(op11_5sumdual*op10_5sumdual*op8_4cout*op9_4cout) + -1*(op11_5sumdual*op10_5sumdual*op9_4cout) + 8*(op11_5sumdual*op9_5sumdual*op3_5sumdual*op7_4cout*op8_4cout*op10_4cout*x5) + -4*(op11_5sumdual*op9_5sumdual*op3_5sumdual*op7_4cout*op8_4cout*x5) + -4*(op11_5sumdual*op9_5sumdual*op3_5sumdual*op7_4cout*op10_4cout*x5) + 2*(op11_5sumdual*op9_5sumdual*op3_5sumdual*op7_4cout*x5) + -4*(op11_5sumdual*op9_5sumdual*op3_5sumdual*op8_4cout*op10_4cout*x5) + 2*(op11_5sumdual*op9_5sumdual*op3_5sumdual*op8_4cout*x5) + 2*(op11_5sumdual*op9_5sumdual*op3_5sumdual*op10_4cout*x5) + -1*(op11_5sumdual*op9_5sumdual*op3_5sumdual*x5) + 8*(op11_5sumdual*op9_5sumdual*x5dual*op7_4cout*op8_4cout*op10_4cout*op3_4gen) + -4*(op11_5sumdual*op9_5sumdual*x5dual*op7_4cout*op8_4cout*op3_4gen) + -4*(op11_5sumdual*op9_5sumdual*x5dual*op7_4cout*op10_4cout*op3_4gen) + 2*(op11_5sumdual*op9_5sumdual*x5dual*op7_4cout*op3_4gen) + -4*(op11_5sumdual*op9_5sumdual*x5dual*op8_4cout*op10_4cout*op3_4gen) + 2*(op11_5sumdual*op9_5sumdual*x5dual*op8_4cout*op3_4gen) + 2*(op11_5sumdual*op9_5sumdual*x5dual*op10_4cout*op3_4gen) + -1*(op11_5sumdual*op9_5sumdual*x5dual*op3_4gen) + -4*(op11_5sumdual*op9_5sumdual*op7_4cout*op8_4cout*op10_4cout) + 2*(op11_5sumdual*op9_5sumdual*op7_4cout*op10_4cout) + 2*(op11_5sumdual*op9_5sumdual*op8_4cout*op10_4cout) + -1*(op11_5sumdual*op9_5sumdual*op10_4cout) + 2*(op11_5sumdual*op7_4cout*op8_4cout) + -1*(op11_5sumdual*op8_4cout) + -4*(op8_5sumdual*op6_5sumdual*op7_4cout*op11_4cout*y5) + 2*(op8_5sumdual*op6_5sumdual*op7_4cout*y5) + 2*(op8_5sumdual*op6_5sumdual*op11_4cout*y5) + -1*(op8_5sumdual*op6_5sumdual*y5) + -4*(op8_5sumdual*y5dual*op7_4cout*op11_4cout*op6_4gen) + 2*(op8_5sumdual*y5dual*op7_4cout*op6_4gen) + 2*(op8_5sumdual*y5dual*op11_4cout*op6_4gen) + -1*(op8_5sumdual*y5dual*op6_4gen) + 2*(op8_5sumdual*op7_4cout*op11_4cout) + -1*(op8_5sumdual*op11_4cout) + 4*(op4_5sumdual*op2_5sumdual*op0_4cout*op1_4cout*x5) + -2*(op4_5sumdual*op2_5sumdual*op0_4cout*x5) + -2*(op4_5sumdual*op2_5sumdual*op1_4cout*x5) + 1*(op4_5sumdual*op2_5sumdual*x5) + 4*(op4_5sumdual*x5dual*op0_4cout*op1_4cout*op2_4cout) + -2*(op4_5sumdual*x5dual*op0_4cout*op2_4cout) + -2*(op4_5sumdual*x5dual*op1_4cout*op2_4cout) + 1*(op4_5sumdual*x5dual*op2_4cout) + -2*(op4_5sumdual*op0_4cout*op1_4cout) + 1*(op4_5sumdual*op1_4cout) + 4*(op5_5sumdual*op1_5sumdual*op0_4cout*op4_4cout*y5) + -2*(op5_5sumdual*op1_5sumdual*op0_4cout*y5) + -2*(op5_5sumdual*op1_5sumdual*op4_4cout*y5) + 1*(op5_5sumdual*op1_5sumdual*y5) + 4*(op1_5sumdual*y5dual*op0_4cout*op4_4cout*op5_4cout) + -2*(op1_5sumdual*y5dual*op0_4cout*op5_4cout) + -2*(op1_5sumdual*y5dual*op4_4cout*op5_4cout) + 1*(op1_5sumdual*y5dual*op5_4cout) + -2*(op1_5sumdual*op0_4cout*op4_4cout) + 1*(op1_5sumdual*op4_4cout) + -1*(op7_4cout) + 1*(op0_4cout)
+```
+
+We're proving a recurrence relation. For most problems we shouldn't even need to do a lot of work on each bit. The expressions are identical. The syzergies thing is exploiting something related to this.. but there should be a linear time thing we can do.
+
+
+Expressions that are identical if you swap one variable..
+```
+1*(op8_1sumdual) + -2*(op6_0gen*x1) + 1*(op6_0gen) + 1*(x1) + -1*()
+1*(op11_1sumdual) + -2*(op6_0gen*y1) + 1*(op6_0gen) + 1*(y1) + -1*()
+```
+
+NPN cuts / boolean matching. There are symmetries we can exploit here. Each slice is symmetric to the previous slice and can be NPN reordered?
+Multipliers are extremely symmetric and there will be a Y heavy side and X heavy side. Sometimes see this in even simple MBA circuits.
+
+Next tasks:
+    - Not immediate but the trivial identities / nonlinear facts thing is just doing equivalence checking over the slice using a groebner basis algorithm. Should be possible to use some alternative fast algorithm
+    - Get linearization of gb working
+    - Rewriting GB in terms of each other
+
+3/1/2025 for when I get back:
+    - Extend linear substitution to handle cases where degree would not increase.
+    - When doing nonlinear fact calculation, remove unnecessary polynomials. if `x == y` then you can delete `y`
+
+The monomials just get too huge when reducing by the full groebner basis slice. We need to include some definitions... include the relations like `a = b+c`
+
+
+Directly lowering the bitvectors to polynomials is wasteful because there are a bunch of redundancies.
+`-(x&~4217008290214276792) + 15028023922214142641*~(x|~4217008290214276792) + 15028023922214142642*x + 3418720151495408976*(x|4217008290214276792)`
+this MBA is fairly easy to prove but allocates hundreds of nodes^
+https://mockturtle.readthedocs.io/en/latest/algorithms/functional_reduction.html
+
+https://people.eecs.berkeley.edu/~alanmi/research/fraigs/fraigs.pdf
+Functionally reduced AIGs. AIGs that are canonicalized on construction. One and two level rewriting on construction, then random simulation + equivalence classes + small incremental SAT
+
+https://arxiv.org/html/2403.14242v1
+List of rewrite rules and identities that our nonlinear facts algorithm could search for
+Could throw everything into one big egraph actually. Track word level and bit level equivalences.
+
+resubstitution and functional verification would help...
+
+
+
+Even on simple semi-linear MBAs, reducing the difference by the current window just does not work. The products of variables get too large.
+Looks like the size of the slice grows incrementally all the way up to n%2
+    - though this is with a terrible encoding of constant multiplication and probably at fault here...
+
+The product of all the carries becomes equal to the ground truth carry.. or a multiplication of all the carries or something if the RHS is like `x & (x+y)`. We just need to derive the relationship
+    - the multiplication by constant encoding i curretly have is definitely terrible.. not even using shifts proper;ly
+    
+https://ceur-ws.org/Vol-2908/short16.pdf
+
+https://arxiv.org/pdf/1901.02950
+```
+P1 = 2*c0 + s0
+P2 = 2*c1 + s1
+
+P1 = P2
+2*c0 + 2*c1 = 0
+```
+The carries are usually different but im not convinced they can't be rewritten in terms of each other
+```
+ Extraction of adder trees has important
+advantage over the computation of individual gates since the adder
+function can be represented by a linear relation: a+b+cin = 2C+S,
+where a,b,cin are the binary inputs and C, S are the carry-out
+and sum of of the full adder (FA), respectively. Similar formula
+can be obtained for a half-adder (HA), with cin = 0. With this,
+the signal weights, represented by coefficients Ci
+, needed to construct the spectrum can be computed by simply propagating the
+weights from the known linear polynomial of the output signature Siдout =
+Í
+2
+i
+r
+i
+through the adder tree, until they reach the
+non-linear partial product generator logic
+```
+
+Maybe some kind of substitution or linearization could speed up reductions? 
+
+Interpolation over the first bit to find the linear polynomial describing the circuit.
+
+https://agra.informatik.uni-bremen.de/doc/konf/2019DAC_RevSCA.pdf
+```
+(1) Detecting HAs in the multiplier architecture
+(2) Finding all the gates where outputs of HAs converge. These
+gates are denoted as Converging Gates (CGs).
+(3) Finding all cones starting from converging gates and ending
+in the related HA outputs. These cones are called Converging
+Gate Cones (CGCs).
+(4) Extracting polynomials locally for CGCs, and removing vanishing monomials containing the product of HA outputs.
+This local removal of vanishing monomials leads to a vanishing-free
+global backward rewriting.
+4 ATOMIC BLOCKS IN S
+```
+
+XOR majority graphs probably won't help?
+
+
+
+Going in circles..
+`(op7_1cout*op11_1cout*op8_1cout*op10_1cout*op9_1cout)`
+
+Largest TODO: The `GetNonlinearFacts` algorithm is failing with your heuristic truth table thing. This is eliminating some obvious nonlinear facts
+    - Problem is that youre substituting away the view of the previous bits.. and the nonlinear facts you pull forward (a*b == a) arent considered in your brute force. Need to include all previous input combinations 
+        - Cache signatures on per bit basis
+        - Syzygies
+
+
+https://scispace.com/pdf/formal-verification-of-integer-multipliers-by-combining-s0fist00cl.pdf
+XOR-AND rule is just your nonlinear fact preprocessing thing
+
+```
+Hence, we propose to carry out a
+further rewriting called common rewriting, which is similar
+to fanout rewriting, after XOR rewriting. Common rewriting
+simplifies the task of GB reduction by making the polynomials
+depend on shared variables. It rewrites the model obtained
+from XOR rewriting such that the polynomials depend only
+on variables that are used in more than one polynomial.
+```
+
+You can use slicing (cone of influence) to eliminate members of the ideal that are not related to the sum variable you're proving.
+
+Fix nonlinear facts stuff first.
+
+
+
+
+========================
+Python stuff
