@@ -40,7 +40,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        public static uint w = 16;
+        public static uint w = 6;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -261,6 +261,29 @@ namespace Mba.Simplifier.Verification
             //obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y", w);
             obfuscated = RustAstParser.Parse(ctx, "x+x+y+y", w);
             deob = RustAstParser.Parse(ctx, "x+y + y+x", w);
+            obfuscated = RustAstParser.Parse(ctx, "x+y", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "25*x + 25*y + 27*x + 27*y", w);
+            deob = RustAstParser.Parse(ctx, "52*x + 52*y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y) & (4*(x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y) & (4*(x+y))", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "21321312*(x) + 21321312*y", w);
+            deob = RustAstParser.Parse(ctx, "21321312*(x) + 21321312*y", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&(x+y)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*(x+y))", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "x+y", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "21321312*(x) + 21321312*y", w);
+            deob = RustAstParser.Parse(ctx, "21321312*(x) + 21321312*y", w);
+
             obfuscated = RustAstParser.Parse(ctx, "x+y", w);
             deob = RustAstParser.Parse(ctx, "x+y", w);
 
@@ -944,13 +967,13 @@ namespace Mba.Simplifier.Verification
 
             var definitions = new Dictionary<Monomial, Poly>();
 
+            var results = new List<List<Poly>>();
             long coeff = 1;
-            var result = Poly.Constant(0);
+            var gr = Poly.Constant(0);
             for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
                 Dictionary<Poly, Poly> lexCache = new();
 
-                var results = new List<List<Poly>>();
                 foreach (var _ in visit)
                     results.Add(new());
 
@@ -969,16 +992,51 @@ namespace Mba.Simplifier.Verification
                 foreach (var r in results)
                 {
                     if (r.Any())
-                        result += coeff * r.Last();
+                        gr += coeff * r.Last();
                 }
 
                 coeff *= 2;
             }
 
+            coeff /= 2;
+            var incomingCarry = Poly.Constant(0);
+            for(int i = ideals.Count - 1; i >= 0; i--)
+            {
+                var ideal = ideals[i];
 
+                var result = coeff * results[0][i];
+
+                var spec = Poly.Constant(0);
+                //var inputVars = firstSeen.Keys.Where(x => x.Kind == SymKind.Input && x.BitIndex == i).ToList();
+                var inputVars = new List<SymVar>();
+                foreach (var v in ctx.CollectVariables(visit[0]))
+                    inputVars.Add(cache[(v, i)].Coeffs.Keys.Single().SortedVars.Single());
+
+
+                foreach(var v in inputVars)
+                {
+                    spec += coeff * 1 * new Monomial(v);
+                }
+
+                coeff /= 2;
+
+
+                var combination = incomingCarry + result - spec;
+
+                var reduced = FastReduce(combination, ideal);
+
+                incomingCarry = reduced;
+
+                Debugger.Break();
+
+            }
+
+            Debugger.Break();
+
+            /*
             var allIdeal = ideals.SelectMany(x => x).ToList();
             Console.WriteLine($"Reducing {result}");
-            var reduced = LexReduce(result, allIdeal);
+            var reduced = FastReduce(gr, allIdeal);
             // reduced.ReduceMod(w)
 
             long a = -32768;
@@ -988,6 +1046,7 @@ namespace Mba.Simplifier.Verification
             reduced.Simplify();
 
             Debugger.Break();
+            */
         }
 
         public void RunNewer()
@@ -1795,6 +1854,31 @@ namespace Mba.Simplifier.Verification
 
         public static HashSet<Poly> allSeen = new();
 
+        public Poly FastReduce(Poly old, List<Poly> ideal)
+        {
+            var poly = old.Clone();
+            poly.Simplify();
+            bool changed = true;
+            while(poly.Coeffs.Count != 0 && changed)
+            {
+                Console.WriteLine($"{poly}\n\n\n");
+                changed = false;
+                var lm = poly.Lm;
+                var lv = lm.SortedVars.FirstOrDefault();
+                if (lv.Kind == SymKind.Input)
+                    break;
+                var src = ideal.FirstOrDefault(x => x.Lm == new Monomial(lv));
+                if (src == null)
+                    break;
+                poly.ReplaceSubset(new Monomial(lv), src.Rhs());
+                poly.Simplify();
+                changed = true;
+            }
+
+            return poly;
+                
+        }
+
         public Poly LexReduce(Poly poly, List<Poly> ideal, Dictionary<Poly, Poly> cache = null)
         {
             var clone = poly.Clone();
@@ -1826,7 +1910,8 @@ namespace Mba.Simplifier.Verification
 
                     if (gLm.Divides(lm) && lc % gLc == 0)
                     {
-                        long c = lc / gLc;
+                        //long c = lc / gLc;
+                        long c = (long)((ulong)lc / (ulong)gLc);
                         var quotientMonom = lm.Divide(gLm);
 
                         foreach (var kp in g.Coeffs)
@@ -2455,7 +2540,7 @@ namespace Mba.Simplifier.Verification
 
                 //var cout = SymVar.Temp($"a[{carryId}][{bitIdx}].cout");
 
-                /*
+                
                 var carryLhs = cout;
                 var carryRhs = a * b + a * cin + b * cin - 2 * (a * b * cin);
                 ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
@@ -2463,11 +2548,12 @@ namespace Mba.Simplifier.Verification
                 var member = sum - (a + b + cin + (-2 * (cout)));
                 ideal.Add((bitIdx, totalOrder, member));
                 arithInfo.Add(new(cin, cout, null, null, sum));
-                */
+                
 
 
                 
-
+                // This encoding is wrong
+                /*
                 var c = cin;
                 var member = sum - a + b + cin - 2 * (a * b + a * cin + b * c) + 4 * a * b * cin;
                 ideal.Add((bitIdx, totalOrder, member));
@@ -2480,7 +2566,7 @@ namespace Mba.Simplifier.Verification
 
                 arithInfo.Add(new(cin, cout, null, null, sum));
                 
-                
+                */
 
 
                 totalOrder++;
@@ -2494,6 +2580,12 @@ namespace Mba.Simplifier.Verification
             {
                 var a = getOp(0, ref totalOrder);
                 var b = getOp(1, ref totalOrder);
+
+                totalOrder++;
+                var and = (a * b);
+                cache[key] = and;
+                return and;
+
 
                 var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
                 update(ref y);

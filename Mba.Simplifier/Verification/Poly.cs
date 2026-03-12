@@ -96,7 +96,8 @@ namespace Mba.Simplifier.Verification
                     {
                         if (lt_p_coeff % entry.Lc == 0)
                         {
-                            long c = lt_p_coeff / entry.Lc;
+                            //long c = lt_p_coeff / entry.Lc;
+                            long c = (long)((ulong)lt_p_coeff / (ulong)entry.Lc);
                             var m = lt_p_monom.Divide(entry.Lm);
 
                             var subC = -1 * c;
@@ -161,21 +162,21 @@ namespace Mba.Simplifier.Verification
 
         public void ReduceMod(uint ingore = 0)
         {
-            
+            //return;
+            /*
             var w = GroebnerVerifier.w;
             var mod = ((long)ModuloReducer.GetMask(w)) + 1;
             foreach (var key in Coeffs.Keys.ToList())
                 Coeffs[key] %= mod;
-
-            /*
-            if (false)
-            {
-                var w = GroebnerVerifier.w;
-                var mod = ((long)ModuloReducer.GetMask(w));
-                foreach (var key in Coeffs.Keys.ToList())
-                    Coeffs[key] &= mod;
-            }
             */
+            
+        
+            var w = GroebnerVerifier.w;
+            var mod = ((long)ModuloReducer.GetMask(w));
+            foreach (var key in Coeffs.Keys.ToList())
+                Coeffs[key] &= mod;
+            
+            
             //foreach (var key in Coeffs.Keys.ToList())
             //   Coeffs[key] &= (long)ModuloReducer.GetMask(w);
         }
@@ -201,8 +202,8 @@ namespace Mba.Simplifier.Verification
 
         public void Add(Monomial m, long coeff)
         {
-            if (coeff >= 234423243234 || coeff <= -234423243234)
-                Debugger.Break();
+            //if (coeff >= 234423243234 || coeff <= -234423243234)
+            //    Debugger.Break();
 
             if (coeff == 0) return;
             if (Coeffs.TryGetValue(m, out var existing))
@@ -707,8 +708,8 @@ namespace Mba.Simplifier.Verification
     {
         Input = 0,
         Dual = 1,
-        InternalGate = 2,
-        Output = 3,
+        InternalGate = 1,
+        Output = 1,
     }
 
     public struct SymVar : IEquatable<SymVar>, IComparable<SymVar>
