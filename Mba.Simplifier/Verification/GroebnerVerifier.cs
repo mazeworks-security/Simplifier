@@ -40,7 +40,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        uint w = 64;
+        public static uint w = 16;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -258,8 +258,10 @@ namespace Mba.Simplifier.Verification
             deob = RustAstParser.Parse(ctx, "5*x + 5*y", w);
 
 
-            obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y", w);
+            //obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y", w);
+            obfuscated = RustAstParser.Parse(ctx, "x+x+y+y", w);
             deob = RustAstParser.Parse(ctx, "x+y + y+x", w);
+
 
             var cache = new Dictionary<AstIdx, AstIdx>();
 
@@ -916,6 +918,70 @@ namespace Mba.Simplifier.Verification
         }
 
         public void Run()
+        {
+            var throwaway = new List<(int, uint, Poly)>();
+            uint totalOrder = 0;
+            var firstSeen = new Dictionary<SymVar, uint>();
+            var visit = new List<AstIdx>() { deob, obfuscated };
+
+            List<int> counts = new();
+            Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
+
+            // Trivial identities (merge equivalent nodes and zero identities)
+            var trivialFacts = new Dictionary<Monomial, Poly>();
+
+
+            List<List<Poly>> ideals = new();
+            List<List<Poly>> nonlinearFactLists = new();
+
+            List<Poly> nullspaceFacts = new();
+
+            HashSet<Poly> rcache = new();
+
+
+
+
+            var definitions = new Dictionary<Monomial, Poly>();
+
+            long coeff = 1;
+            var result = Poly.Constant(0);
+            for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
+            {
+                Dictionary<Poly, Poly> lexCache = new();
+
+                var results = new List<List<Poly>>();
+                foreach (var _ in visit)
+                    results.Add(new());
+
+                // Compute the polynomials corresponding to the ith output bit
+                for (int i = 0; i < 1; i++)
+                {
+                    results[i].Add(GetSpecification(visit[i], sliceIdx, cache, throwaway, firstSeen, ref totalOrder, true).Clone());
+                }
+
+                // Update the ideal with previous facts
+                var all = throwaway.Select(x => x.Item3).ToList();
+                var ideal = all.Skip(counts.LastOrDefault()).Select(x => x.Clone()).ToList();
+                counts.Add(throwaway.Count);
+                ideals.Add(ideal);
+
+                foreach (var r in results)
+                {
+                    if (r.Any())
+                        result += coeff * r.Last();
+                }
+
+                coeff *= 2;
+            }
+
+
+            var allIdeal = ideals.SelectMany(x => x).ToList();
+            var reduced = LexReduce(result, allIdeal);
+           // reduced.ReduceMod(w)
+            Debugger.Break();
+        }
+
+        public void RunNewer()
         {
             var throwaway = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
@@ -2351,11 +2417,15 @@ namespace Mba.Simplifier.Verification
                 var propagate = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}prop");
                 update(ref propagate);
 
+
                 var cout = SymVar.Temp(SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}cout");
                 update(ref cout);
 
+
+
                 var sum = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"op{carryId}_{bitIdx}sum");
                 update(ref sum);
+
 
 
                 Poly cin = Poly.Constant(0);
@@ -2364,7 +2434,7 @@ namespace Mba.Simplifier.Verification
 
                 // I think this encoding is technically more optimal for the linear extraction idea
 
-
+                
                 ideal.Add((bitIdx, totalOrder++, generate - a * b));
                 ideal.Add((bitIdx, totalOrder++, propagate - (a + b - 2 * generate)));
                 // Is there another encoding that would simplify things? 
@@ -2372,7 +2442,7 @@ namespace Mba.Simplifier.Verification
                 ideal.Add((bitIdx, totalOrder++, sum - (propagate + 2 * generate + cin - 2 * cout)));
 
                 arithInfo.Add(new(cin, cout, propagate, generate, sum));
-
+                
 
                 //var cout = SymVar.Temp($"a[{carryId}][{bitIdx}].cout");
 
@@ -2383,10 +2453,25 @@ namespace Mba.Simplifier.Verification
 
                 var member = sum - (a + b + cin + (-2 * (cout)));
                 ideal.Add((bitIdx, totalOrder, member));
-
                 arithInfo.Add(new(cin, cout, null, null, sum));
                 */
 
+
+                /*
+
+                var c = cin;
+                var member = sum - a + b + cin - 2 * (a * b + a * cin + b * c) + 4 * a * b * cin;
+                ideal.Add((bitIdx, totalOrder, member));
+
+
+                var carryLhs = cout;
+                var carryRhs = a * b + a * cin + b * cin - 2 * (a * b * cin);
+                ideal.Add((bitIdx, totalOrder++, carryLhs - carryRhs));
+
+
+                arithInfo.Add(new(cin, cout, null, null, sum));
+                
+                */
 
 
                 totalOrder++;

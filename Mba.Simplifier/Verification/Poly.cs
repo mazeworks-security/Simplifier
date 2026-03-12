@@ -130,6 +130,9 @@ namespace Mba.Simplifier.Verification
 
         public void Simplify()
         {
+            ReduceMod(GroebnerVerifier.w);
+
+
             Monomial[] keys = null;
             int count = 0;
             foreach (var kv in Coeffs)
@@ -159,7 +162,9 @@ namespace Mba.Simplifier.Verification
         public void ReduceMod(uint w)
         {
             foreach (var key in Coeffs.Keys.ToList())
-                Coeffs[key] &= (long)ModuloReducer.GetMask(w);
+                Coeffs[key] %= ((long)ModuloReducer.GetMask(w)) + 1;
+             //foreach (var key in Coeffs.Keys.ToList())
+             //   Coeffs[key] &= (long)ModuloReducer.GetMask(w);
         }
 
         public Poly(params Monomial[] coeffs) : this(coeffs.AsEnumerable())
