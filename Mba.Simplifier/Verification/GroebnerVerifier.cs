@@ -261,7 +261,8 @@ namespace Mba.Simplifier.Verification
             //obfuscated = RustAstParser.Parse(ctx, "2*x + 2*y", w);
             obfuscated = RustAstParser.Parse(ctx, "x+x+y+y", w);
             deob = RustAstParser.Parse(ctx, "x+y + y+x", w);
-
+            obfuscated = RustAstParser.Parse(ctx, "x+y", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
 
             var cache = new Dictionary<AstIdx, AstIdx>();
 
@@ -976,8 +977,16 @@ namespace Mba.Simplifier.Verification
 
 
             var allIdeal = ideals.SelectMany(x => x).ToList();
+            Console.WriteLine($"Reducing {result}");
             var reduced = LexReduce(result, allIdeal);
-           // reduced.ReduceMod(w)
+            // reduced.ReduceMod(w)
+
+            long a = -32768;
+            long b = 65536;
+            var rem = a % b;
+
+            reduced.Simplify();
+
             Debugger.Break();
         }
 
@@ -2434,7 +2443,7 @@ namespace Mba.Simplifier.Verification
 
                 // I think this encoding is technically more optimal for the linear extraction idea
 
-                
+                /*
                 ideal.Add((bitIdx, totalOrder++, generate - a * b));
                 ideal.Add((bitIdx, totalOrder++, propagate - (a + b - 2 * generate)));
                 // Is there another encoding that would simplify things? 
@@ -2442,7 +2451,7 @@ namespace Mba.Simplifier.Verification
                 ideal.Add((bitIdx, totalOrder++, sum - (propagate + 2 * generate + cin - 2 * cout)));
 
                 arithInfo.Add(new(cin, cout, propagate, generate, sum));
-                
+                */
 
                 //var cout = SymVar.Temp($"a[{carryId}][{bitIdx}].cout");
 
@@ -2457,7 +2466,7 @@ namespace Mba.Simplifier.Verification
                 */
 
 
-                /*
+                
 
                 var c = cin;
                 var member = sum - a + b + cin - 2 * (a * b + a * cin + b * c) + 4 * a * b * cin;
@@ -2471,7 +2480,7 @@ namespace Mba.Simplifier.Verification
 
                 arithInfo.Add(new(cin, cout, null, null, sum));
                 
-                */
+                
 
 
                 totalOrder++;

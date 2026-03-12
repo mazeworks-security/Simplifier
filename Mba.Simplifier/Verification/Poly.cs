@@ -130,7 +130,7 @@ namespace Mba.Simplifier.Verification
 
         public void Simplify()
         {
-            ReduceMod(GroebnerVerifier.w);
+            ReduceMod();
 
 
             Monomial[] keys = null;
@@ -159,12 +159,25 @@ namespace Mba.Simplifier.Verification
             //Coeffs = new(Coeffs.ToDictionary(x => new Monomial(x.Key.SortedVars.Distinct()), x => x.Value)); 
         }
 
-        public void ReduceMod(uint w)
+        public void ReduceMod(uint ingore = 0)
         {
+            
+            var w = GroebnerVerifier.w;
+            var mod = ((long)ModuloReducer.GetMask(w)) + 1;
             foreach (var key in Coeffs.Keys.ToList())
-                Coeffs[key] %= ((long)ModuloReducer.GetMask(w)) + 1;
-             //foreach (var key in Coeffs.Keys.ToList())
-             //   Coeffs[key] &= (long)ModuloReducer.GetMask(w);
+                Coeffs[key] %= mod;
+
+            /*
+            if (false)
+            {
+                var w = GroebnerVerifier.w;
+                var mod = ((long)ModuloReducer.GetMask(w));
+                foreach (var key in Coeffs.Keys.ToList())
+                    Coeffs[key] &= mod;
+            }
+            */
+            //foreach (var key in Coeffs.Keys.ToList())
+            //   Coeffs[key] &= (long)ModuloReducer.GetMask(w);
         }
 
         public Poly(params Monomial[] coeffs) : this(coeffs.AsEnumerable())
@@ -205,7 +218,8 @@ namespace Mba.Simplifier.Verification
                 Coeffs[m] = coeff;
             }
 
-            
+            Simplify();
+            //ReduceMod();
           
         }
 
