@@ -344,6 +344,16 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "x+y", w);
             deob = RustAstParser.Parse(ctx, "x+y", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
+
+
+            //obfuscated = RustAstParser.Parse(ctx, "x+y+y", w);
+            //deob = RustAstParser.Parse(ctx, "x+y+y", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
 
@@ -1104,7 +1114,8 @@ namespace Mba.Simplifier.Verification
 
                 var reduction = LexReduceMod(diff, partialIdeal);
 
-                reduction = Poly.Lshr(reduction, 1);
+                if (ii != ww - 1)
+                    reduction = Poly.Lshr(reduction, 1);
 
                 Console.WriteLine($"Got remainder: {reduction} for bit {sliceIdx}");
                 incomingCarry = reduction;
@@ -1118,7 +1129,8 @@ namespace Mba.Simplifier.Verification
 
             }
 
-            var shiftedRemainder = (long)(2ul << (ushort)(w - 1)) * incomingCarry;
+            var shiftBy = (long)(2ul << (ushort)(w - 2));
+            var shiftedRemainder = shiftBy * incomingCarry;
             Console.WriteLine($"Shifted remainder: {shiftedRemainder}");
 
             var allIdeal = ideals.SelectMany(x => x).ToList();
