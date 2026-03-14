@@ -361,6 +361,89 @@ namespace Mba.Simplifier.Verification
             deob = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
 
 
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x) + (4&x)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x) + (4&x)", w);
+
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x) + (4&x)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x) + (4&x)", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "((2*x + 2*y)&(2*y + 2*x)) + (4&x)", w);
+            deob = RustAstParser.Parse(ctx, "((2*x + 2*y)&(2*y + 2*x)) + (4&x)", w);
+
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(((2*x)+(2*y))&(((2*y)+(2*x))+(4&x)))", w);
+            deob = RustAstParser.Parse(ctx, "(((2*x)+(2*y))&(((2*y)+(2*x))+(4&x)))", w);
+
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(((2*y)+(2*x))+(4&x))", w);
+            deob = RustAstParser.Parse(ctx, "(((2*y)+(2*x))+(4&x))", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&4))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&4))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&4))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&4))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&4))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&4))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&4))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&4))", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&1))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&1))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&1))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&1))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&1))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&1))", w);
+
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&1))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&1))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
+
             //obfuscated = RustAstParser.Parse(ctx, "x+y+y", w);
             //deob = RustAstParser.Parse(ctx, "x+y+y", w);
 
@@ -1027,6 +1110,9 @@ namespace Mba.Simplifier.Verification
 
         public void Run()
         {
+  
+            //RunNewer();
+            //return;
             var ww = GroebnerVerifier.w;
             //oebnerVerifier.w = 16;
             var throwaway = new List<(int, uint, Poly)>();
@@ -1097,7 +1183,7 @@ namespace Mba.Simplifier.Verification
                 var specEq = Poly.Constant(0);
                 foreach (var v in inputVars)
                 {
-                    specEq += coeff * 2 * new Monomial(v);
+                    specEq += coeff * 1 * new Monomial(v);
                 }
 
 
@@ -1125,6 +1211,19 @@ namespace Mba.Simplifier.Verification
                 var reduction = LexReducePartial(diff, partialIdeal);
 
                 Console.WriteLine($"Got remainder: {reduction} for bit {sliceIdx}");
+
+                /*
+                var allIdeal3 = ideals.SelectMany(x => x).ToList();
+                var final3 = LexReduce(reduction, allIdeal3, new());
+                Console.WriteLine($"Carry semantics: {final3}");
+                var r3 = LexReducePartial(r, partialIdeal);
+                Console.WriteLine($"Result semantics: {r3}");
+                var sanity = LexReduce(r3, allIdeal3, new());
+                Console.WriteLine($"Sanity check: {sanity}");
+                var r3Full = LexReduce(r, allIdeal3, new());
+                Console.WriteLine($"Fully reduced semantics: {r3Full}");
+                */
+
                 Debug.Assert(reduction.Coeffs.Values.All(x => BitOperations.TrailingZeroCount(x) >= 1));
 
                 if (ii != ww - 1)
@@ -1565,6 +1664,9 @@ namespace Mba.Simplifier.Verification
 
 
             }
+
+
+            Debugger.Break();
         }
 
 
@@ -2134,6 +2236,10 @@ namespace Mba.Simplifier.Verification
 
         public Poly LexReducePartial(Poly poly, List<Poly> ideal)
         {
+            return LexReduce(poly, ideal);
+
+            var clone = poly.Clone();
+
             poly = poly.Clone();
             poly.Simplify();
             bool changed = true;
@@ -2142,9 +2248,6 @@ namespace Mba.Simplifier.Verification
                 changed = false;
                 foreach (var lm in poly.Coeffs.Keys.ToList())
                 {
-                    //var target = ideal.FirstOrDefault(x => x.Lm.SortedVars.Single().Equals(lv));
-                    //var target = ideal.FirstOrDefault(x => x.Lm.SortedVars.Single().Equals(lv));
-
                     var target = ideal.FirstOrDefault(x => x.Lm.Divides(lm));
                     if (target == null)
                         continue;
@@ -2155,6 +2258,10 @@ namespace Mba.Simplifier.Verification
                     break;
                 }
             }
+
+            var bar = LexReduce(clone, ideal);
+            if (!poly.Equals(bar))
+                Debugger.Break();
 
             return poly;
         }
