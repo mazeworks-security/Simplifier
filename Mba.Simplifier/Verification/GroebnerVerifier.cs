@@ -40,7 +40,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        public static uint w = 16;
+        public static uint w = 3;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -305,6 +305,10 @@ namespace Mba.Simplifier.Verification
 
             obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y) & (2*(x+y))", w);
             deob = RustAstParser.Parse(ctx, "(2*x + 2*y) & (2*(x+y))", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "x+y", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+            //deob = RustAstParser.Parse(ctx, "x+y", w);
 
 
             //obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
@@ -967,7 +971,114 @@ namespace Mba.Simplifier.Verification
             //Debugger.Break();
         }
 
+
+
         public void Run()
+        {
+            var throwaway = new List<(int, uint, Poly)>();
+            uint totalOrder = 0;
+            var firstSeen = new Dictionary<SymVar, uint>();
+            var visit = new List<AstIdx>() { deob, obfuscated };
+
+            List<int> counts = new();
+            Dictionary<(AstIdx, int bitIdx), Poly> cache = new();
+
+            // Trivial identities (merge equivalent nodes and zero identities)
+            var trivialFacts = new Dictionary<Monomial, Poly>();
+
+
+            List<List<Poly>> ideals = new();
+            List<List<Poly>> nonlinearFactLists = new();
+
+            List<Poly> nullspaceFacts = new();
+
+            HashSet<Poly> rcache = new();
+
+
+
+
+            var definitions = new Dictionary<Monomial, Poly>();
+
+            var results = new List<List<Poly>>();
+            long coeff = 1;
+
+            var incomingCarry = Poly.Constant(0);
+
+            Console.WriteLine("Ideal: ");
+            for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
+            {
+                Dictionary<Poly, Poly> lexCache = new();
+
+                foreach (var _ in visit)
+                    results.Add(new());
+
+                // Compute the polynomials corresponding to the ith output bit
+                for (int i = 0; i < 1; i++)
+                {
+                    results[i].Add(GetSpecification(visit[i], sliceIdx, cache, throwaway, firstSeen, ref totalOrder, true).Clone());
+                }
+
+                // Update the ideal with previous facts
+                var all = throwaway.Select(x => x.Item3).ToList();
+                var ideal = all.Skip(counts.LastOrDefault()).Select(x => x.Clone()).ToList();
+                counts.Add(throwaway.Count);
+
+                ideals.Add(ideal);
+
+             
+                foreach(var p in ideal)
+                {
+                    Console.WriteLine($"    {p}");
+                }
+
+                //continue;
+
+                var inputVars = new List<SymVar>();
+                foreach (var v in ctx.CollectVariables(visit[0]))
+                    inputVars.Add(cache[(v, sliceIdx)].Coeffs.Keys.Single().SortedVars.Single());
+
+                //coeff = 1;
+
+                var specEq = Poly.Constant(0);
+                foreach (var v in inputVars)
+                {
+                    specEq += coeff * 1 * new Monomial(v);
+                }
+
+
+         
+                //var diff = (results[0][sliceIdx] - specEq) -  2*incomingCarry;
+
+                var r = coeff * (results[0][sliceIdx]);
+                //var diff = (r - specEq) - 2 * incomingCarry;
+                //var diff = r - (specEq + 2 * incomingCarry);
+
+                //var diff = r - specEq + incomingCarry;
+                var diff = r + (-1 * specEq) + incomingCarry;
+
+                var partialIdeal = ideal.Where(x => x.Coeffs.Count >= 1 && !x.Lm.SortedVars.Single().Name.Contains("cout")).ToList();
+
+                var reduction = LexReduceMod(diff, partialIdeal);
+
+                incomingCarry = reduction;
+
+                //var allIdeal = ideals.SelectMany(x => x).ToList();
+                //var final = LexReduce(incomingCarry, allIdeal, new());
+
+                //incomingCarry = Poly.Div(incomingCarry, 2);
+
+                coeff *= 2;
+
+            }
+
+            //var allIdeal = ideals.SelectMany(x => x).ToList();
+            //var final = LexReduce(incomingCarry, allIdeal, new());
+
+
+            Debugger.Break();
+        }
+
+        public void RunBackwards()
         {
             var throwaway = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
@@ -1076,7 +1187,7 @@ namespace Mba.Simplifier.Verification
 
                 foreach(var v in inputVars)
                 {
-                    spec += coeff * 2 * new Monomial(v);
+                    spec += coeff * 1 * new Monomial(v);
                 }
 
                 coeff /= 2;
@@ -1942,6 +2053,28 @@ namespace Mba.Simplifier.Verification
                 
         }
 
+        public Poly LexReduceMod(Poly poly, List<Poly> ideal)
+        {
+            poly = poly.Clone();
+            poly.Simplify();    
+            bool changed = true;
+            while(changed && poly.Coeffs.Count != 0)
+            {
+                changed = false;
+                var lv = poly.Lm.SortedVars.First();
+                var target = ideal.FirstOrDefault(x => x.Lm.SortedVars.Single().Equals(lv));
+                if (target == null)
+                    break;
+
+                var rhs = target.Rhs();
+                poly.ReplaceSubset(new Monomial(lv), rhs);
+                changed = true;
+            }
+
+            return poly;
+        }
+
+
         public Poly LexReduce(Poly poly, List<Poly> ideal, Dictionary<Poly, Poly> cache = null)
         {
             var clone = poly.Clone();
@@ -1971,7 +2104,7 @@ namespace Mba.Simplifier.Verification
                     var gLm = g.Lm;
                     var gLc = g.Coeffs[gLm];
 
-                    if (gLm.Divides(lm) && lc % gLc == 0)
+                    if (gLm.Divides(lm) && (ulong)lc % (ulong)gLc == 0)
                     {
                         //long c = lc / gLc;
                         long c = (long)((ulong)lc / (ulong)gLc);

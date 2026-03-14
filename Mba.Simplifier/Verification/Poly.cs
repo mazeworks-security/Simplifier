@@ -160,6 +160,14 @@ namespace Mba.Simplifier.Verification
             //Coeffs = new(Coeffs.ToDictionary(x => new Monomial(x.Key.SortedVars.Distinct()), x => x.Value)); 
         }
 
+        public long ReduceCoeff(long value)
+        {
+            var w = GroebnerVerifier.w;
+            var mod = ((long)ModuloReducer.GetMask(w));
+            return value & mod;
+
+        }
+
         public void ReduceMod(uint ingore = 0)
         {
             //return;
@@ -197,11 +205,13 @@ namespace Mba.Simplifier.Verification
 
         public void SetCoeff(Monomial m, long coeff)
         {
+            coeff = ReduceCoeff(coeff);
             Coeffs[m] = coeff;
         }
 
         public void Add(Monomial m, long coeff)
         {
+            coeff = ReduceCoeff(coeff);
             //if (coeff >= 234423243234 || coeff <= -234423243234)
             //    Debugger.Break();
 
@@ -318,6 +328,21 @@ namespace Mba.Simplifier.Verification
             return outPoly;
         }
 
+        public static Poly Div(Poly a, ulong value)
+        {
+            var outPoly = new Poly();
+            foreach(var (monom, coeff) in a.Coeffs)
+            {
+                if ((ulong)coeff % value != 0)
+                    throw new InvalidOperationException("Cannot div");
+
+                var d = (ulong)coeff / value;
+                outPoly.Add(monom, (long)d);
+            }
+
+            return outPoly;
+        }
+
         public static bool IsConstant(Monomial m)
         {
             return m.SortedVars.Length == 0;
@@ -363,12 +388,15 @@ namespace Mba.Simplifier.Verification
 
         public static Poly operator *(long coeff, Poly a)
         {
+            coeff = a.ReduceCoeff(coeff);
+
             if (coeff == 0) return new Poly();
             if (coeff == 1) return a.Clone();
             var output = new Poly();
             foreach (var (m, c) in a.Coeffs)
             {
                 var nc = c * coeff;
+                nc = a.ReduceCoeff(nc);
                 if (nc != 0)
                     output.Coeffs[m] = nc;
             }
