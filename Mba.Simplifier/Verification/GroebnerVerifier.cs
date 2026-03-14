@@ -338,6 +338,12 @@ namespace Mba.Simplifier.Verification
             deob = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
 
 
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "x+y", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
 
@@ -998,6 +1004,7 @@ namespace Mba.Simplifier.Verification
 
 
 
+
         public void Run()
         {
             var ww = GroebnerVerifier.w;
@@ -1052,6 +1059,7 @@ namespace Mba.Simplifier.Verification
 
                 ideals.Add(ideal);
 
+                coeff = 1;
              
                 foreach(var p in ideal)
                 {
@@ -1069,7 +1077,7 @@ namespace Mba.Simplifier.Verification
                 var specEq = Poly.Constant(0);
                 foreach (var v in inputVars)
                 {
-                    specEq += coeff * 2 * new Monomial(v);
+                    specEq += coeff * 1 * new Monomial(v);
                 }
 
 
@@ -1077,17 +1085,26 @@ namespace Mba.Simplifier.Verification
                 //var diff = (results[0][sliceIdx] - specEq) -  2*incomingCarry;
 
                 var r = coeff * (results[0][sliceIdx]);
+
+    
+
                 //var diff = (r - specEq) - 2 * incomingCarry;
                 //var diff = r - (specEq + 2 * incomingCarry);
 
                 //var diff = r - specEq + incomingCarry;
                 var diff = r + (-1 * specEq) + incomingCarry;
 
+
+                var ii = sliceIdx;
+                Console.WriteLine($"Output{ii} = {r}");
+                Console.WriteLine($"spec{ii} = {specEq}");
+                Console.WriteLine($"R{ii} = {incomingCarry}");
+
                 var partialIdeal = ideal.Where(x => x.Coeffs.Count >= 1 && !x.Lm.SortedVars.Single().Name.Contains("cout")).ToList();
 
                 var reduction = LexReduceMod(diff, partialIdeal);
 
-                //reduction = Poly.Lshr(reduction, 1);
+                reduction = Poly.Lshr(reduction, 1);
 
                 Console.WriteLine($"Got remainder: {reduction} for bit {sliceIdx}");
                 incomingCarry = reduction;
@@ -1101,13 +1118,16 @@ namespace Mba.Simplifier.Verification
 
             }
 
+            var shiftedRemainder = (long)(2ul << (ushort)(w - 1)) * incomingCarry;
+            Console.WriteLine($"Shifted remainder: {shiftedRemainder}");
+
             var allIdeal = ideals.SelectMany(x => x).ToList();
             var final = LexReduce(incomingCarry, allIdeal, new());
 
-            var final2 = LexReduce(2* incomingCarry, allIdeal, new());
+            //var final2 = LexReduce(2* incomingCarry, allIdeal, new());
 
             Console.WriteLine($"Final remainer: {final}");
-            Console.WriteLine($"Final shifted remainer: {final2}");
+            //Console.WriteLine($"Final shifted remainer: {final2}");
 
             Debugger.Break();
         }

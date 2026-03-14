@@ -342,6 +342,15 @@ namespace Mba.Simplifier.Verification
             return outPoly;
         }
 
+        public static ulong DivideByTwoMod(ulong c, int n)
+        {
+            ulong mask = (n == 64) ? ulong.MaxValue : (1UL << n) - 1;
+            c = c & mask;
+
+            ulong signBit = 1UL << (n - 1);
+            return (c >> 1) | (c & signBit);
+        }
+
         public static Poly Lshr(Poly a, ushort value)
         {
             var outPoly = new Poly();
@@ -350,7 +359,8 @@ namespace Mba.Simplifier.Verification
                 if ((ulong)coeff % value != 0)
                     throw new InvalidOperationException("Cannot div");
 
-                var d = (ulong)coeff >> value;
+                //var d = (ulong)coeff >> value;
+                var d = DivideByTwoMod((ulong)coeff, (int)GroebnerVerifier.w);
                 outPoly.Add(monom, (long)d);
             }
 
