@@ -314,6 +314,10 @@ namespace Mba.Simplifier.Verification
             //deob = RustAstParser.Parse(ctx, "x+y", w);
 
 
+            obfuscated = RustAstParser.Parse(ctx, "x+y", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+
+
             //obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
             //deob = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
             var cache = new Dictionary<AstIdx, AstIdx>();
@@ -978,9 +982,6 @@ namespace Mba.Simplifier.Verification
 
         public void Run()
         {
-            var ww = GroebnerVerifier.w;
-            //GroebnerVerifier.w = 64;
-
             var throwaway = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
             var firstSeen = new Dictionary<SymVar, uint>();
@@ -1011,9 +1012,7 @@ namespace Mba.Simplifier.Verification
             var incomingCarry = Poly.Constant(0);
 
             Console.WriteLine("Ideal: ");
-          
-
-            for (int sliceIdx = 0; sliceIdx < ww; sliceIdx++)
+            for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
             {
                 Dictionary<Poly, Poly> lexCache = new();
 
