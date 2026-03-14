@@ -14,6 +14,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Diagnostics.Metrics;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
@@ -349,6 +350,15 @@ namespace Mba.Simplifier.Verification
 
             obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
             deob = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(1*x + 1*y)", w);
+            deob = RustAstParser.Parse(ctx, "(1*x + 1*y)", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
 
 
             //obfuscated = RustAstParser.Parse(ctx, "x+y+y", w);
@@ -1018,7 +1028,7 @@ namespace Mba.Simplifier.Verification
         public void Run()
         {
             var ww = GroebnerVerifier.w;
-            //GroebnerVerifier.w = 16;
+            //oebnerVerifier.w = 16;
             var throwaway = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
             var firstSeen = new Dictionary<SymVar, uint>();
@@ -1087,7 +1097,7 @@ namespace Mba.Simplifier.Verification
                 var specEq = Poly.Constant(0);
                 foreach (var v in inputVars)
                 {
-                    specEq += coeff * 1 * new Monomial(v);
+                    specEq += coeff * 2 * new Monomial(v);
                 }
 
 
@@ -1112,12 +1122,15 @@ namespace Mba.Simplifier.Verification
 
                 var partialIdeal = ideal.Where(x => x.Coeffs.Count >= 1 && !x.Lm.SortedVars.Single().Name.Contains("cout")).ToList();
 
-                var reduction = LexReduceMod(diff, partialIdeal);
+                var reduction = LexReducePartial(diff, partialIdeal);
+
+                Console.WriteLine($"Got remainder: {reduction} for bit {sliceIdx}");
+                Debug.Assert(reduction.Coeffs.Values.All(x => BitOperations.TrailingZeroCount(x) >= 1));
 
                 if (ii != ww - 1)
                     reduction = Poly.Lshr(reduction, 1);
 
-                Console.WriteLine($"Got remainder: {reduction} for bit {sliceIdx}");
+                Console.WriteLine($"After shifting: {reduction}");
                 incomingCarry = reduction;
 
                 //var allIdeal = ideals.SelectMany(x => x).ToList();
@@ -1136,9 +1149,9 @@ namespace Mba.Simplifier.Verification
             var allIdeal = ideals.SelectMany(x => x).ToList();
             var final = LexReduce(incomingCarry, allIdeal, new());
 
-            //var final2 = LexReduce(2* incomingCarry, allIdeal, new());
+            var final2 = LexReduce(shiftedRemainder, allIdeal, new());
 
-            Console.WriteLine($"Final remainer: {final}");
+            Console.WriteLine($"Final remainer: {final2}");
             //Console.WriteLine($"Final shifted remainer: {final2}");
 
             Debugger.Break();
@@ -2117,6 +2130,33 @@ namespace Mba.Simplifier.Verification
 
             return poly;
                 
+        }
+
+        public Poly LexReducePartial(Poly poly, List<Poly> ideal)
+        {
+            poly = poly.Clone();
+            poly.Simplify();
+            bool changed = true;
+            while (changed && poly.Coeffs.Count != 0)
+            {
+                changed = false;
+                foreach (var lm in poly.Coeffs.Keys.ToList())
+                {
+                    //var target = ideal.FirstOrDefault(x => x.Lm.SortedVars.Single().Equals(lv));
+                    //var target = ideal.FirstOrDefault(x => x.Lm.SortedVars.Single().Equals(lv));
+
+                    var target = ideal.FirstOrDefault(x => x.Lm.Divides(lm));
+                    if (target == null)
+                        continue;
+
+                    var rhs = target.Rhs();
+                    poly.ReplaceSubset(lm, rhs);
+                    changed = true;
+                    break;
+                }
+            }
+
+            return poly;
         }
 
         public Poly LexReduceMod(Poly poly, List<Poly> ideal)

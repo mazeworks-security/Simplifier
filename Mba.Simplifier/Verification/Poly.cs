@@ -162,7 +162,7 @@ namespace Mba.Simplifier.Verification
 
         public long ReduceCoeff(long value)
         {
-            //return value;
+            // return value;
 
             var w = GroebnerVerifier.w;
             var mod = ((long)ModuloReducer.GetMask(w));
