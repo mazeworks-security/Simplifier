@@ -40,7 +40,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        public static uint w = 3;
+        public static uint w = 4;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -308,6 +308,9 @@ namespace Mba.Simplifier.Verification
 
             obfuscated = RustAstParser.Parse(ctx, "x+y", w);
             deob = RustAstParser.Parse(ctx, "x+y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&(y+x)", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&(y+x)", w);
             //deob = RustAstParser.Parse(ctx, "x+y", w);
 
 
@@ -975,6 +978,9 @@ namespace Mba.Simplifier.Verification
 
         public void Run()
         {
+            var ww = GroebnerVerifier.w;
+            //GroebnerVerifier.w = 64;
+
             var throwaway = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
             var firstSeen = new Dictionary<SymVar, uint>();
@@ -1005,7 +1011,9 @@ namespace Mba.Simplifier.Verification
             var incomingCarry = Poly.Constant(0);
 
             Console.WriteLine("Ideal: ");
-            for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
+          
+
+            for (int sliceIdx = 0; sliceIdx < ww; sliceIdx++)
             {
                 Dictionary<Poly, Poly> lexCache = new();
 
@@ -1060,6 +1068,7 @@ namespace Mba.Simplifier.Verification
 
                 var reduction = LexReduceMod(diff, partialIdeal);
 
+                Console.WriteLine($"Got remainder: {reduction} for bit {sliceIdx}");
                 incomingCarry = reduction;
 
                 //var allIdeal = ideals.SelectMany(x => x).ToList();
@@ -2062,7 +2071,9 @@ namespace Mba.Simplifier.Verification
             {
                 changed = false;
                 var lv = poly.Lm.SortedVars.First();
-                var target = ideal.FirstOrDefault(x => x.Lm.SortedVars.Single().Equals(lv));
+                //var target = ideal.FirstOrDefault(x => x.Lm.SortedVars.Single().Equals(lv));
+                //var target = ideal.FirstOrDefault(x => x.Lm.SortedVars.Single().Equals(lv));
+                var target = ideal.FirstOrDefault(x => x.Lm.Divides(poly.Lm));
                 if (target == null)
                     break;
 
