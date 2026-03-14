@@ -162,6 +162,8 @@ namespace Mba.Simplifier.Verification
 
         public long ReduceCoeff(long value)
         {
+            //return value;
+
             var w = GroebnerVerifier.w;
             var mod = ((long)ModuloReducer.GetMask(w));
             return value & mod;
@@ -178,11 +180,8 @@ namespace Mba.Simplifier.Verification
                 Coeffs[key] %= mod;
             */
             
-        
-            var w = GroebnerVerifier.w;
-            var mod = ((long)ModuloReducer.GetMask(w));
             foreach (var key in Coeffs.Keys.ToList())
-                Coeffs[key] &= mod;
+                Coeffs[key] = ReduceCoeff(Coeffs[key]);
             
             
             //foreach (var key in Coeffs.Keys.ToList())
@@ -331,7 +330,7 @@ namespace Mba.Simplifier.Verification
         public static Poly Div(Poly a, ulong value)
         {
             var outPoly = new Poly();
-            foreach(var (monom, coeff) in a.Coeffs)
+            foreach (var (monom, coeff) in a.Coeffs)
             {
                 if ((ulong)coeff % value != 0)
                     throw new InvalidOperationException("Cannot div");
@@ -342,6 +341,22 @@ namespace Mba.Simplifier.Verification
 
             return outPoly;
         }
+
+        public static Poly Lshr(Poly a, ushort value)
+        {
+            var outPoly = new Poly();
+            foreach (var (monom, coeff) in a.Coeffs)
+            {
+                if ((ulong)coeff % value != 0)
+                    throw new InvalidOperationException("Cannot div");
+
+                var d = (ulong)coeff >> value;
+                outPoly.Add(monom, (long)d);
+            }
+
+            return outPoly;
+        }
+
 
         public static bool IsConstant(Monomial m)
         {

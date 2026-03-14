@@ -325,8 +325,19 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
             deob = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
 
-            //obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
-            //deob = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)&(2*y + 2*x)", w);
+
+
             var cache = new Dictionary<AstIdx, AstIdx>();
 
 
@@ -989,6 +1000,8 @@ namespace Mba.Simplifier.Verification
 
         public void Run()
         {
+            var ww = GroebnerVerifier.w;
+            //GroebnerVerifier.w = 16;
             var throwaway = new List<(int, uint, Poly)>();
             uint totalOrder = 0;
             var firstSeen = new Dictionary<SymVar, uint>();
@@ -1019,7 +1032,7 @@ namespace Mba.Simplifier.Verification
             var incomingCarry = Poly.Constant(0);
 
             Console.WriteLine("Ideal: ");
-            for (int sliceIdx = 0; sliceIdx < w; sliceIdx++)
+            for (int sliceIdx = 0; sliceIdx < ww; sliceIdx++)
             {
                 Dictionary<Poly, Poly> lexCache = new();
 
@@ -1074,6 +1087,8 @@ namespace Mba.Simplifier.Verification
 
                 var reduction = LexReduceMod(diff, partialIdeal);
 
+                //reduction = Poly.Lshr(reduction, 1);
+
                 Console.WriteLine($"Got remainder: {reduction} for bit {sliceIdx}");
                 incomingCarry = reduction;
 
@@ -1089,6 +1104,10 @@ namespace Mba.Simplifier.Verification
             var allIdeal = ideals.SelectMany(x => x).ToList();
             var final = LexReduce(incomingCarry, allIdeal, new());
 
+            var final2 = LexReduce(2* incomingCarry, allIdeal, new());
+
+            Console.WriteLine($"Final remainer: {final}");
+            Console.WriteLine($"Final shifted remainer: {final2}");
 
             Debugger.Break();
         }
