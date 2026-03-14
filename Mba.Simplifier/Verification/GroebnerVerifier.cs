@@ -40,7 +40,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        public static uint w = 4;
+        public static uint w = 3;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -317,6 +317,13 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "x+y", w);
             deob = RustAstParser.Parse(ctx, "x+y", w);
 
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y)", w);
 
             //obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
             //deob = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
@@ -1049,7 +1056,7 @@ namespace Mba.Simplifier.Verification
                 var specEq = Poly.Constant(0);
                 foreach (var v in inputVars)
                 {
-                    specEq += coeff * 1 * new Monomial(v);
+                    specEq += coeff * 2 * new Monomial(v);
                 }
 
 
@@ -1079,8 +1086,8 @@ namespace Mba.Simplifier.Verification
 
             }
 
-            //var allIdeal = ideals.SelectMany(x => x).ToList();
-            //var final = LexReduce(incomingCarry, allIdeal, new());
+            var allIdeal = ideals.SelectMany(x => x).ToList();
+            var final = LexReduce(incomingCarry, allIdeal, new());
 
 
             Debugger.Break();
