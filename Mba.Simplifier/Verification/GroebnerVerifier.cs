@@ -40,7 +40,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        public static uint w = 6;
+        public static uint w = 16;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -284,10 +284,34 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "21321312*(x) + 21321312*y", w);
             deob = RustAstParser.Parse(ctx, "21321312*(x) + 21321312*y", w);
 
-            obfuscated = RustAstParser.Parse(ctx, "x+y", w);
-            deob = RustAstParser.Parse(ctx, "x+y", w);
+            obfuscated = RustAstParser.Parse(ctx, "x+y+ (64&x)", w);
+            deob = RustAstParser.Parse(ctx, "x+y+ (64&x)", w);
 
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y) & (4*(x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y) & (4*(x+y))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y) & (4*(x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y) & (4*(x+y))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y) & (4*(x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y) & (4*(x+y))", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y) & (2*(x+y))", w);
+            deob = RustAstParser.Parse(ctx, "(2*x + 2*y) & (2*(x+y))", w);
+
+
+            //obfuscated = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
+            //deob = RustAstParser.Parse(ctx, "(2*x + 2*y + 2*x + 2*y)", w);
             var cache = new Dictionary<AstIdx, AstIdx>();
+
+
 
 
             obfuscated = Canonicalize(obfuscated, cache);
@@ -582,7 +606,9 @@ namespace Mba.Simplifier.Verification
                         goto skip;
                     //if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex == p0.Lm.SortedVars.Single().BitIndex)
                     //    goto skip;
-                    if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex != p0.Lm.SortedVars.Single().BitIndex)
+                    //if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex != p0.Lm.SortedVars.Single().BitIndex)
+                    //    goto skip;
+                    if (lm.SortedVars.Length != 1 || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex != p0.Lm.SortedVars.Single().BitIndex)
                         goto skip;
                     if (lm.SortedVars.Length != 1)
                         goto skip;
@@ -987,7 +1013,33 @@ namespace Mba.Simplifier.Verification
                 var all = throwaway.Select(x => x.Item3).ToList();
                 var ideal = all.Skip(counts.LastOrDefault()).Select(x => x.Clone()).ToList();
                 counts.Add(throwaway.Count);
-                ideals.Add(ideal);
+
+
+                SimplifyMany(ideal, trivialFacts);
+
+                var lexGb = ideal.Select(x => x.Clone()).ToList();
+
+                // bug somewhere in linearize
+                lexGb = ReduceLexGroebnerBasis(lexGb, new());
+                LearnTrivialFacts(lexGb, trivialFacts);
+
+                SimplifyIdeal(ideal, trivialFacts);
+
+                var nonlinearFacts = new List<Poly>();
+                if (nonlinearFactLists.Count != 0)
+                    nonlinearFacts = nonlinearFactLists.Last();
+
+                ReduceIdeal(ideal, nonlinearFacts);
+                ReduceIdeal(lexGb, nonlinearFacts);
+
+                var nfacts = GetNonlinearFacts(lexGb.Select(x => x.Clone()).ToList(), new(), false);
+                //List<Poly> nfacts = new();
+                //nfacts.AddRange(bar);
+                SimplifyIdeal(nfacts, trivialFacts);
+                nonlinearFactLists.Add(nfacts);
+
+                ideal.AddRange(nonlinearFacts);
+
 
                 foreach (var r in results)
                 {
@@ -996,8 +1048,17 @@ namespace Mba.Simplifier.Verification
                 }
 
                 coeff *= 2;
+
+                ideals.Add(ideal);
+
             }
 
+            var allIdeal = ideals.SelectMany(x => x).ToList();
+
+            Console.WriteLine("Ideal: ");
+            foreach(var p in allIdeal)
+                Console.WriteLine($"    {p}");
+            
             coeff /= 2;
             var incomingCarry = Poly.Constant(0);
             for(int i = ideals.Count - 1; i >= 0; i--)
@@ -1015,26 +1076,26 @@ namespace Mba.Simplifier.Verification
 
                 foreach(var v in inputVars)
                 {
-                    spec += coeff * 1 * new Monomial(v);
+                    spec += coeff * 2 * new Monomial(v);
                 }
 
                 coeff /= 2;
 
 
+                // TODO: Maybe we don't reduce the nonlinear combination?
                 var combination = incomingCarry + result - spec;
 
                 var reduced = FastReduce(combination, ideal);
 
                 incomingCarry = reduced;
 
-                Debugger.Break();
+                //Debugger.Break();
 
             }
 
             Debugger.Break();
 
             /*
-            var allIdeal = ideals.SelectMany(x => x).ToList();
             Console.WriteLine($"Reducing {result}");
             var reduced = FastReduce(gr, allIdeal);
             // reduced.ReduceMod(w)
@@ -1108,6 +1169,8 @@ namespace Mba.Simplifier.Verification
 
                 // Compute a reduced lexicographic groebner basis
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
+
+
 
                 // bug somewhere in linearize
                 lexGb = LinearizeGb(lexGb);
