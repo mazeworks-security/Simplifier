@@ -160,14 +160,32 @@ namespace Mba.Simplifier.Verification
             //Coeffs = new(Coeffs.ToDictionary(x => new Monomial(x.Key.SortedVars.Distinct()), x => x.Value)); 
         }
 
-        public long ReduceCoeff(long value)
+        public long ReduceCoeff(long value, bool force = false)
         {
-            return value;
+            //return value;
 
             var w = GroebnerVerifier.w;
             var mod = ((long)ModuloReducer.GetMask(w));
             return value & mod;
 
+        }
+
+        public void ForceModulus()
+        {
+            //return;
+            /*
+            var w = GroebnerVerifier.w;
+            var mod = ((long)ModuloReducer.GetMask(w)) + 1;
+            foreach (var key in Coeffs.Keys.ToList())
+                Coeffs[key] %= mod;
+            */
+
+            foreach (var key in Coeffs.Keys.ToList())
+                Coeffs[key] = ((long)ModuloReducer.GetMask(GroebnerVerifier.w));
+
+
+            //foreach (var key in Coeffs.Keys.ToList())
+            //   Coeffs[key] &= (long)ModuloReducer.GetMask(w);
         }
 
         public void ReduceMod(uint ingore = 0)
@@ -228,7 +246,7 @@ namespace Mba.Simplifier.Verification
                 Coeffs[m] = coeff;
             }
 
-            Simplify();
+            //Simplify();
             //ReduceMod();
           
         }

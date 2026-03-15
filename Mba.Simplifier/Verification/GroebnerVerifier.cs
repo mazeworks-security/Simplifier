@@ -41,7 +41,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        public static uint w = 3;
+        public static uint w = 16;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -444,6 +444,42 @@ namespace Mba.Simplifier.Verification
             obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
             deob = RustAstParser.Parse(ctx, "(x+y)&((x+y))", w);
 
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&32))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&32))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&0))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&0))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((y+x))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((y+x))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((y+x))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((y+x))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(2*(x+y))&((2*x + 2*y))", w);
+            deob = RustAstParser.Parse(ctx, "(2*(x+y))&((2*x + 2*y))", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((y+x))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((y+x))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "x+y", w);
+            deob = RustAstParser.Parse(ctx, "x+y", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((y+x))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((y+x))", w);
+
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&1))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((x+y)+(x&1))", w);
+
+            obfuscated = RustAstParser.Parse(ctx, "(x+y)&((y+x))", w);
+            deob = RustAstParser.Parse(ctx, "(x+y)&((y+x))", w);
+
             //obfuscated = RustAstParser.Parse(ctx, "x+y+y", w);
             //deob = RustAstParser.Parse(ctx, "x+y+y", w);
 
@@ -744,10 +780,10 @@ namespace Mba.Simplifier.Verification
                         goto skip;
                     //if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex == p0.Lm.SortedVars.Single().BitIndex)
                     //    goto skip;
-                    //if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex != p0.Lm.SortedVars.Single().BitIndex)
-                    //    goto skip;
-                    if (lm.SortedVars.Length != 1 || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex != p0.Lm.SortedVars.Single().BitIndex)
+                    if (lm.SortedVars.Length != 1 || lm.SortedVars.Single().Kind == SymKind.Input || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex != p0.Lm.SortedVars.Single().BitIndex)
                         goto skip;
+                    //if (lm.SortedVars.Length != 1 || p0.Lm.SortedVars.Length != 1 || lm.SortedVars.Single().BitIndex != p0.Lm.SortedVars.Single().BitIndex)
+                     //   goto skip;
                     if (lm.SortedVars.Length != 1)
                         goto skip;
 
@@ -1110,7 +1146,9 @@ namespace Mba.Simplifier.Verification
 
         public void Run()
         {
-  
+
+            RunBackwards();
+            return;
             //RunNewer();
             //return;
             var ww = GroebnerVerifier.w;
@@ -1144,9 +1182,11 @@ namespace Mba.Simplifier.Verification
 
             var incomingCarry = Poly.Constant(0);
 
+      
             Console.WriteLine("Ideal: ");
             for (int sliceIdx = 0; sliceIdx < ww; sliceIdx++)
             {
+                Console.WriteLine("\n\n");
                 Dictionary<Poly, Poly> lexCache = new();
 
                 foreach (var _ in visit)
@@ -1163,14 +1203,22 @@ namespace Mba.Simplifier.Verification
                 var ideal = all.Skip(counts.LastOrDefault()).Select(x => x.Clone()).ToList();
                 counts.Add(throwaway.Count);
 
+                SimplifyMany(ideal, trivialFacts);
+
+                var lexGb = ideal.Select(x => x.Clone()).ToList();
+
+                // bug somewhere in linearize
+                lexGb = ReduceLexGroebnerBasis(lexGb, new());
+                LearnTrivialFacts(lexGb, trivialFacts);
+
+                SimplifyIdeal(ideal, trivialFacts);
+
                 ideals.Add(ideal);
 
                 coeff = 1;
-             
-                foreach(var p in ideal)
-                {
-                    Console.WriteLine($"    {p}");
-                }
+                //results[0][sliceIdx] = Simp
+                SimplifyIdeal(results[0], trivialFacts);
+
 
                 //continue;
 
@@ -1192,7 +1240,7 @@ namespace Mba.Simplifier.Verification
 
                 var r = coeff * (results[0][sliceIdx]);
 
-    
+                //r = LexReduce(r, ideal);
 
                 //var diff = (r - specEq) - 2 * incomingCarry;
                 //var diff = r - (specEq + 2 * incomingCarry);
@@ -1204,13 +1252,13 @@ namespace Mba.Simplifier.Verification
                 var ii = sliceIdx;
                 Console.WriteLine($"Output{ii} = {r}");
                 Console.WriteLine($"spec{ii} = {specEq}");
-                Console.WriteLine($"R{ii} = {incomingCarry}");
+                Console.WriteLine($"R{ii} = {incomingCarry}\n");
 
                 var partialIdeal = ideal.Where(x => x.Coeffs.Count >= 1 && !x.Lm.SortedVars.Single().Name.Contains("cout")).ToList();
 
                 var reduction = LexReducePartial(diff, partialIdeal);
 
-                Console.WriteLine($"Got remainder: {reduction} for bit {sliceIdx}");
+                Console.WriteLine($"Got remainder: {reduction} for bit {sliceIdx}\n");
 
                 /*
                 var allIdeal3 = ideals.SelectMany(x => x).ToList();
@@ -1229,7 +1277,7 @@ namespace Mba.Simplifier.Verification
                 if (ii != ww - 1)
                     reduction = Poly.Lshr(reduction, 1);
 
-                Console.WriteLine($"After shifting: {reduction}");
+                Console.WriteLine($"After shifting: {reduction}\n");
                 incomingCarry = reduction;
 
                 //var allIdeal = ideals.SelectMany(x => x).ToList();
@@ -1243,14 +1291,23 @@ namespace Mba.Simplifier.Verification
 
             var shiftBy = (long)(2ul << (ushort)(w - 2));
             var shiftedRemainder = shiftBy * incomingCarry;
-            Console.WriteLine($"Shifted remainder: {shiftedRemainder}");
+            Console.WriteLine($"Shifted remainder: {shiftedRemainder}\n");
 
             var allIdeal = ideals.SelectMany(x => x).ToList();
+
+            foreach (var p in allIdeal)
+            {
+                Console.WriteLine($"    {p}");
+            }
+
+            Console.WriteLine("Doing expensive full reduction");
             var final = LexReduce(incomingCarry, allIdeal, new());
 
             var final2 = LexReduce(shiftedRemainder, allIdeal, new());
 
             Console.WriteLine($"Final remainer: {final2}");
+
+ 
             //Console.WriteLine($"Final shifted remainer: {final2}");
 
             Debugger.Break();
@@ -1303,7 +1360,7 @@ namespace Mba.Simplifier.Verification
                 var ideal = all.Skip(counts.LastOrDefault()).Select(x => x.Clone()).ToList();
                 counts.Add(throwaway.Count);
 
-
+                /*
                 SimplifyMany(ideal, trivialFacts);
 
                 var lexGb = ideal.Select(x => x.Clone()).ToList();
@@ -1328,7 +1385,7 @@ namespace Mba.Simplifier.Verification
                 nonlinearFactLists.Add(nfacts);
 
                 ideal.AddRange(nonlinearFacts);
-
+                */
 
                 foreach (var r in results)
                 {
@@ -1374,13 +1431,34 @@ namespace Mba.Simplifier.Verification
                 // TODO: Maybe we don't reduce the nonlinear combination?
                 var combination = incomingCarry + result - spec;
 
-                var reduced = FastReduce(combination, ideal);
+
+                var partialIdeal = ideal.Where(x => x.Coeffs.Count >= 1 && !x.Lm.SortedVars.Single().Name.Contains("cout")).ToList();
+
+                //var reduced = LexReducePartial(combination, partialIdeal);
+                var reduced = LexReduce(combination, partialIdeal);
+
+
+                Console.WriteLine($"Intermediate carry: {reduced}");
+
+
+                var bar = reduced.Clone();
+                //bar.ForceModulus();
+                //Console.WriteLine($"Intermediate with reduced coeffs: {bar}");
+                //var temp = LexReduce(incomingCarry, allIdeal);
+                //Console.WriteLine($"Temp carry: {temp}");
+                //var reduced = FastReduce(combination, ideal);
 
                 incomingCarry = reduced;
 
                 //Debugger.Break();
 
             }
+
+
+            Console.WriteLine($"Incoming carry:\n{incomingCarry}\n");
+
+            var final = LexReduce(incomingCarry, allIdeal, new(), true);
+            //var final = LexReduce(incomingCarry, allIdeal);
 
             Debugger.Break();
 
@@ -2290,7 +2368,7 @@ namespace Mba.Simplifier.Verification
         }
 
 
-        public Poly LexReduce(Poly poly, List<Poly> ideal, Dictionary<Poly, Poly> cache = null)
+        public Poly LexReduce(Poly poly, List<Poly> ideal, Dictionary<Poly, Poly> cache = null, bool rev = false)
         {
             var clone = poly.Clone();
             poly = poly.Clone();
@@ -2312,6 +2390,8 @@ namespace Mba.Simplifier.Verification
                     break;
 
                 var lm = poly.Lm;
+                if (rev)
+                    lm = poly.Coeffs.Keys.Reverse().First(x => x.SortedVars.Any(x => x.Kind != SymKind.Input));
                 var lc = poly.Coeffs[lm];
 
                 foreach (var g in sorted)
@@ -2329,6 +2409,9 @@ namespace Mba.Simplifier.Verification
                         {
                             poly.Add(quotientMonom * kp.Key, -c * kp.Value);
                         }
+
+                        //if(rev)
+                         //   Console.WriteLine($"Rev: {poly}\n\n");
 
                         changed = true;
                         break;
@@ -2992,10 +3075,10 @@ namespace Mba.Simplifier.Verification
                 var a = getOp(0, ref totalOrder);
                 var b = getOp(1, ref totalOrder);
 
-                totalOrder++;
-                var and = (a * b);
-                cache[key] = and;
-                return and;
+                //totalOrder++;
+                //var and = (a * b);
+                //cache[key] = and;
+                //return and;
 
 
                 var y = SymVar.Temp(isOutput ? SymKind.Output : SymKind.InternalGate, bitIdx, 0, $"r{carryId}_{bitIdx}");
