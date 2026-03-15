@@ -41,7 +41,7 @@ namespace Mba.Simplifier.Verification
 
         List<AstIdx> afterNodes = new();
 
-        public static uint w = 16;
+        public static uint w = 3;
 
         public Dictionary<AstIdx, (uint, List<ArithInfo>)> carryIdentifiers = new();
 
@@ -1313,6 +1313,7 @@ namespace Mba.Simplifier.Verification
             Debugger.Break();
         }
 
+        // TODO: Do the reduction backwards and cache the leading monomial..
         public void RunBackwards()
         {
             var throwaway = new List<(int, uint, Poly)>();
@@ -2383,8 +2384,11 @@ namespace Mba.Simplifier.Verification
 
             var remainder = new Poly();
             bool changed = true;
+
+            int iii = 0;
             while (poly.Coeffs.Count > 0 && changed)
             {
+         
                 changed = false;
                 if (poly.Coeffs.Count == 0)
                     break;
@@ -2410,19 +2414,35 @@ namespace Mba.Simplifier.Verification
                             poly.Add(quotientMonom * kp.Key, -c * kp.Value);
                         }
 
+                        iii++;
+
+                        /*
+                        if(rev && iii % 500 == 0)
+                        {
+                            Console.WriteLine($"Length: {poly.ToString().Length}");
+                        }
+                        */
+
                         //if(rev)
-                         //   Console.WriteLine($"Rev: {poly}\n\n");
+                         Console.WriteLine($"Rev: {poly}\n\n");
 
                         changed = true;
                         break;
                     }
                 }
 
+         
+
                 if (!changed)
                 {
                     remainder.Add(lm, lc);
                     poly.Remove(lm);
                     changed = poly.Coeffs.Count > 0;
+                }
+
+                else
+                {
+                    //poly.Simplify();
                 }
             }
 

@@ -236,6 +236,7 @@ namespace Mba.Simplifier.Verification
             if (Coeffs.TryGetValue(m, out var existing))
             {
                 existing += coeff;
+                existing = ReduceCoeff(existing);
                 if (existing == 0)
                     Coeffs.Remove(m);
                 else
