@@ -17,7 +17,7 @@ bool printUsage = false;
 bool onlyLinear = false;
 uint bitWidth = 64;
 bool useEqsat = false;
-bool proveEquivalence = true;
+bool proveEquivalence = false;
 string inputText = null;
 
 var printHelp = () =>
