@@ -1,4 +1,5 @@
 ﻿using Iced.Intel;
+using Mba.Common.Ast;
 using Mba.Common.Minimization;
 using Mba.Common.MSiMBA;
 using Mba.Simplifier.Bindings;
@@ -180,10 +181,11 @@ namespace Mba.Simplifier.Interpreter
         public Amd64OptimizingJit(AstCtx ctx)
         {
             this.ctx = ctx;
-            seen = new AuxInfoStorage(ctx);
+            seen = new MapInfoStorage();
+            //seen = new AuxInfoStorage(ctx);
         }
 
-        public unsafe void Compile(AstIdx idx, List<AstIdx> variables, nint pagePtr, bool useIcedBackend = false)
+        public unsafe void Compile(AstIdx idx, IReadOnlyList<AstIdx> variables, nint pagePtr, bool useIcedBackend = false)
         {
             Assembler icedAssembler = useIcedBackend ? new Assembler(64) : null;
             assembler = useIcedBackend ? new IcedAmd64Assembler(icedAssembler) : new FastAmd64Assembler((byte*)pagePtr);
@@ -196,6 +198,8 @@ namespace Mba.Simplifier.Interpreter
             for (int i = 0; i < variables.Count; i++)
             {
                 var vIdx = variables[i];
+                if (!seen.Contains(vIdx))
+                    continue;
                 var data = seen.Get(vIdx);
                 data.varIdx = (byte)i;
                 seen.Set(vIdx, data);
@@ -253,13 +257,30 @@ namespace Mba.Simplifier.Interpreter
                 case AstOp.Or:
                 case AstOp.Xor:
                 case AstOp.Lshr:
-                    var op0 = ctx.GetOp0(idx);
-                    CollectInfo(ctx,op0, dfs, seen);
-                    var op1 = ctx.GetOp1(idx);
-                    CollectInfo(ctx, op1, dfs, seen);
+                case AstOp.ICmp:
+                    {
+                        var op0 = ctx.GetOp0(idx);
+                        CollectInfo(ctx, op0, dfs, seen);
+                        var op1 = ctx.GetOp1(idx);
+                        CollectInfo(ctx, op1, dfs, seen);
 
-                    seen.Set(op0, new NodeInfo(Inc(seen.Get(op0).numUses)));
-                    seen.Set(op1, new NodeInfo(Inc(seen.Get(op1).numUses)));
+                        seen.Set(op0, new NodeInfo(Inc(seen.Get(op0).numUses)));
+                        seen.Set(op1, new NodeInfo(Inc(seen.Get(op1).numUses)));
+                        break;
+                    }
+                case AstOp.Select:
+                    {
+                        var op0 = ctx.GetOp0(idx);
+                        CollectInfo(ctx, op0, dfs, seen);
+                        var op1 = ctx.GetOp1(idx);
+                        CollectInfo(ctx, op1, dfs, seen);
+                        var op2 = ctx.GetOp2(idx);
+                        CollectInfo(ctx, op2, dfs, seen);
+
+                        seen.Set(op0, new NodeInfo(Inc(seen.Get(op0).numUses)));
+                        seen.Set(op1, new NodeInfo(Inc(seen.Get(op1).numUses)));
+                        seen.Set(op2, new NodeInfo(Inc(seen.Get(op2).numUses)));
+                    }
                     break;
                 case AstOp.Neg:
                 case AstOp.Zext:
@@ -319,6 +340,8 @@ namespace Mba.Simplifier.Interpreter
                     case AstOp.Xor:
                     case AstOp.Pow:
                     case AstOp.Lshr:
+                    case AstOp.ICmp:
+                    case AstOp.Select:
                         LowerBinop(idx, opc, width, nodeInfo);
                         break;
 
@@ -396,6 +419,26 @@ namespace Mba.Simplifier.Interpreter
             else
                 assembler.PopReg(lhsDest);
 
+            // Select is a ternary operator, but I don't want to introduce a new "LowerTernary" function for one operator.
+            // Instead we just execute the comparison part of the select in-place, then treat cmov as a binop.
+            if (opc == AstOp.Select)
+            {
+                // Allocate a temporary register.
+                var tempReg = volatileRegs.First(x => x != lhsDest && x != rhsDest);
+                assembler.MovMem64Reg(localsRegister, 0, tempReg);
+
+                var condLoc = stack.Pop();
+                if (condLoc.IsRegister)
+                    assembler.MovRegReg(tempReg, condLoc.Register);
+                else
+                    assembler.PopReg(tempReg);
+
+                assembler.TestRegReg(tempReg, tempReg);
+                //assembler.MovMem64Reg(localsRegister, 0, tempReg);
+                assembler.MovRegMem64(tempReg, localsRegister, 0);
+            }
+
+
             // Now we have both values in registers
             // Execute the instruction
             switch (opc)
@@ -410,11 +453,13 @@ namespace Mba.Simplifier.Interpreter
                     assembler.OrRegReg(lhsDest, rhsDest); break;
                 case AstOp.Xor:
                     assembler.XorRegReg(lhsDest, rhsDest); break;
+                case AstOp.Select:
+                    assembler.CmoveRegReg(lhsDest, rhsDest); break;
 
                 case AstOp.Lshr:
                     // TODO: For logical shifts, we need to reduce the other side modulo some constant!
                     // Actually maybe not, we should have already reduced modulo?
-                    if (width % 8 != 0)
+                    if (width % 2 != 0)
                         throw new InvalidOperationException($"Cannot jit shr of non power of 2 width");
                     // Reduce shift count modulo bit width of operation
                     // TODO: Hand non power of two bit widths
@@ -449,6 +494,21 @@ namespace Mba.Simplifier.Interpreter
                     assembler.MovRegReg(lhsDest, scratch1);
 
                     break;
+                case AstOp.ICmp:
+                    assembler.CmpRegReg(lhsDest, rhsDest);
+                    var predicate = ctx.GetPredicate(idx);
+                    if (predicate == Predicate.Eq)
+                        assembler.SeteReg(lhsDest);
+                    else if (predicate == Predicate.Ne)
+                        assembler.SetneReg(lhsDest);
+                    else if (predicate == Predicate.Ugt)
+                        assembler.SetaReg(lhsDest);
+                    else if (predicate == Predicate.Ult)
+                        assembler.SetbReg(lhsDest);
+                    else
+                        throw new InvalidOperationException($"Cannot jit predicate {predicate}");
+
+                        break;
                 default:
                     throw new InvalidOperationException($"{opc} is not a valid binop ");
             }
