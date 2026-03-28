@@ -4,6 +4,7 @@ using Mba.Simplifier.Bindings;
 using Mba.Simplifier.DSL;
 using Mba.Simplifier.Fuzzing;
 using Mba.Simplifier.Interpreter;
+using Mba.Simplifier.Jit;
 using Mba.Simplifier.Minimization;
 using Mba.Simplifier.Pipeline;
 using Mba.Simplifier.Utility;
@@ -27,7 +28,6 @@ var printHelp = () =>
     Console.WriteLine("    -h:        print usage");
     Console.WriteLine("    -b:        specify the bit number of variables (default is 64)");
     Console.WriteLine("    -z:        enable a check for valid simplification using Z3");
-    Console.WriteLine("    -e:        enable equality saturation based simplification");
 };
 
 for (int i = 0; i < args.Length; i++)
@@ -81,7 +81,7 @@ var input = id;
 // Run only the linear simplifier if requested
 if (onlyLinear)
 {
-    id = LinearSimplifier.Run(bitWidth, ctx, input, false, true);
+    id = LinearSimplifier.Run(ctx.GetWidth(input), ctx, input, false, true);
     goto done;
 }
 
@@ -95,22 +95,6 @@ for (int i = 0; i < 3; i++)
     // Try to expand and reduce the polynomial parts(if any exist).
     if (ctx.GetHasPoly(id))
         id = simplifier.ExpandReduce(id);
-
-    if (!useEqsat)
-        continue;
-    if (bitWidth != 64)
-        throw new InvalidOperationException($"Equality saturation is only supported for 64-bit expressions");
-
-    // Apply equality saturation.
-    ulong timeout = 2000;
-    Console.WriteLine($"Running equality saturation with {timeout}ms timeout...");
-    var ast = AstParser.Parse(ctx.GetAstString(id), bitWidth);
-    var egg = EqualitySaturation.Run(ast, timeout);
-    id = RustAstParser.Parse(ctx, egg.ToString(), bitWidth);
-
-    // Apply term rewriting.
-    id = ctx.RecursiveSimplify(id);
-    Console.WriteLine($"Eqsat run {i} yielded: {ctx.GetAstString(id)}\n\n");
 }
 
 done:

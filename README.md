@@ -52,7 +52,7 @@ Building `Simplifier` requires .NET 8 and Visual Studio 2022 w/ ClangCL.
 `Simplifier` has reached a stage where it works quite well on general MBAs. That said, it is still under active development. 
 
 # Equality Saturation
-`Simplifier` contains an equality saturation based simplifier. To enable it alongside the standard simplification routine, use the `-e` flag.
+`Simplifier` contains an equality saturation based simplifier. It's currently disabled and will be re-enabled at a later point.
 
 Example:
 ```

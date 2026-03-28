@@ -12,15 +12,15 @@ namespace Mba.Simplifier.Minimization
 {
     public class GroebnerBasis
     {
-        private readonly TruthTable table;
+        private readonly BooleanTruthTable table;
 
         private readonly ulong[] variableCombinations;
 
         private readonly List<int> groupSizes;
 
-        public static (List<List<uint>> gb, bool negated) Compute(TruthTable table) => new GroebnerBasis(table).Compute();
+        public static (List<List<uint>> gb, bool negated) Compute(BooleanTruthTable table) => new GroebnerBasis(table).Compute();
 
-        private GroebnerBasis(TruthTable table)
+        private GroebnerBasis(BooleanTruthTable table)
         {
             this.table = table;
             variableCombinations = MultibitSiMBA.GetVariableCombinations(table.NumVars);
@@ -39,7 +39,7 @@ namespace Mba.Simplifier.Minimization
 
             // Construct a system of boolean polynomials out of the truth table(ignoring nil rows)
             var polys = new List<List<uint>>();
-            for(int i = 0; i < table.NumBits; i++)
+            for(int i = 0; i < table.NumCombinations; i++)
             {
                 // Skip nil rows
                 if (!table.GetBit(i))
@@ -71,7 +71,7 @@ namespace Mba.Simplifier.Minimization
         // Convert a single truth table row to algebraic normal form
         private unsafe List<uint> GetRowAnf(int idx)
         {
-            var resultVec = new ulong[table.NumBits];
+            var resultVec = new ulong[table.NumCombinations];
             resultVec[idx] = 1;
 
             // Keep track of which variables are demanded by which combination,

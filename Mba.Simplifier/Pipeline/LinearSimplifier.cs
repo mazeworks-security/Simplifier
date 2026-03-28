@@ -81,7 +81,9 @@ namespace Mba.Simplifier.Pipeline
         {
             if (variables == null)
                 variables = ctx.CollectVariables(ast.Value);
-            return new LinearSimplifier(ctx, ast, variables, bitSize, refine: true, multiBit, tryDecomposeMultiBitBases, resultVectorHook, inVec, depth, anfDemandedBits).Simplify(false, alreadySplit);
+
+            var r = new LinearSimplifier(ctx, ast, variables, bitSize, refine: true, multiBit, tryDecomposeMultiBitBases, resultVectorHook, inVec, depth, anfDemandedBits).Simplify(false, alreadySplit);
+            return r;
         }
 
         public LinearSimplifier(AstCtx ctx, AstIdx? ast, IReadOnlyList<AstIdx> variables, uint bitSize, bool refine = true, bool multiBit = false, bool tryDecomposeMultiBitBases = true, Action<ulong[], ApInt>? resultVectorHook = null, ApInt[] inVec = null, int depth = 0, Dictionary<ApInt, ApInt> anfDemandedBits = null)
@@ -226,6 +228,7 @@ namespace Mba.Simplifier.Pipeline
 
         private AstIdx Simplify(bool useZ3 = false, bool alreadySplit = false)
         {
+
             // Remove the constant offset
             var constant = SubtractConstantOffset(moduloMask, resultVector, (int)numCombinations);
 
@@ -329,7 +332,7 @@ namespace Mba.Simplifier.Pipeline
         private AstIdx SimplifyOneBitNew(ApInt constant, bool useZ3 = false, bool alreadySplit = false)
         {
             // Group each unique coefficient to a truth table.
-            var coeffToTable = new Dictionary<ApInt, TruthTable>();
+            var coeffToTable = new Dictionary<ApInt, BooleanTruthTable>();
             for (int i = 1; i < (int)numCombinations; i++)
             {
                 var coeff = resultVector[i];
@@ -338,7 +341,7 @@ namespace Mba.Simplifier.Pipeline
 
                 if (!coeffToTable.TryGetValue(coeff, out var table))
                 {
-                    table = new TruthTable(variables.Count);
+                    table = new BooleanTruthTable(variables.Count);
                     coeffToTable[coeff] = table;
                 }
 
@@ -536,7 +539,7 @@ namespace Mba.Simplifier.Pipeline
             return sum;
         }
 
-        private AstIdx SimplifyOneTerm(ApInt constant, ApInt coeff, TruthTable truthTable)
+        private AstIdx SimplifyOneTerm(ApInt constant, ApInt coeff, BooleanTruthTable truthTable)
         {
             // If there is no constant offset, we can just yield the boolean expression.
             if(constant == 0)
@@ -560,7 +563,7 @@ namespace Mba.Simplifier.Pipeline
             return ctx.Add(ctx.Constant(constant, width), Term(GetBooleanTableAst(truthTable), coeff));
         }
 
-        private AstIdx SimplifyTwoTerm(ApInt constant, Dictionary<ApInt, TruthTable> coeffToTable)
+        private AstIdx SimplifyTwoTerm(ApInt constant, Dictionary<ApInt, BooleanTruthTable> coeffToTable)
         {
             Debug.Assert(coeffToTable.Count == 2);
             // Get the first and second coefficient from the dictionary. 
@@ -659,9 +662,9 @@ namespace Mba.Simplifier.Pipeline
             return LinearSimplifier.Run(width, ctx, sum, false, false, false, mutVars, depth: depth + 1);
         }
 
-        private void EliminateUniqueValues(Dictionary<ApInt, TruthTable> coeffToTable)
+        private void EliminateUniqueValues(Dictionary<ApInt, BooleanTruthTable> coeffToTable)
         {
-            (ApInt coeff, TruthTable table)[] uniqueValues = coeffToTable.Select(x => (x.Key, x.Value)).ToArray();
+            (ApInt coeff, BooleanTruthTable table)[] uniqueValues = coeffToTable.Select(x => (x.Key, x.Value)).ToArray();
             var l = uniqueValues.Length;
             if (l == 0)
                 return;
@@ -712,7 +715,7 @@ namespace Mba.Simplifier.Pipeline
 
         // If we have two terms and less than four variables, semi-exhaustively explore the search space of possible boolean expressions.
         // Otherwise yield a linear combination
-        private AstIdx TryRefineBitwiseCombination(ApInt constantOffset, Dictionary<ApInt, TruthTable> coeffToTable)
+        private AstIdx TryRefineBitwiseCombination(ApInt constantOffset, Dictionary<ApInt, BooleanTruthTable> coeffToTable)
         {
             // TODO: Exhaustively search bitwise expressions.
             var terms = new List<AstIdx>();
@@ -727,7 +730,7 @@ namespace Mba.Simplifier.Pipeline
             return ctx.Add(terms);
         }
 
-        private bool TryEliminateTriple((ApInt coeff, TruthTable table)[] uniqueValues, int idx0, int idx1, int idx2)
+        private bool TryEliminateTriple((ApInt coeff, BooleanTruthTable table)[] uniqueValues, int idx0, int idx1, int idx2)
         {
             var op0 = uniqueValues[idx0];
             var op1 = uniqueValues[idx1];
@@ -1446,7 +1449,7 @@ namespace Mba.Simplifier.Pipeline
             // Walk result vector, get the ones with xor mask.. merge them, then merge the ones without the XOR mask..
             var combinedAnds = new ApInt[(int)numCombinations];
             // We want to group XOR terms by their base bitwise expressions
-            var xorMap = new Dictionary<TruthTable, ApInt>();
+            var xorMap = new Dictionary<BooleanTruthTable, ApInt>();
             ApInt freeMask = moduloMask;
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
@@ -1456,7 +1459,7 @@ namespace Mba.Simplifier.Pipeline
                 ApInt globMask = 0;
 
                 ushort truthIdx = 0;
-                var xoredIndices = new TruthTable(variables.Count);
+                var xoredIndices = new BooleanTruthTable(variables.Count);
 
                 int withXorCount = 0;
                 for (int i = 0; i < (int)numCombinations; i++)
@@ -1499,7 +1502,7 @@ namespace Mba.Simplifier.Pipeline
             // Group by AND / XOR masks.
             var process = (ApInt[] arr) =>
             {
-                Dictionary<ApInt, TruthTable> maskToBitwise = new();
+                Dictionary<ApInt, BooleanTruthTable> maskToBitwise = new();
                 for (int i = 0; i < arr.Length; i++)
                 {
                     var mask = arr[i];
@@ -1513,7 +1516,7 @@ namespace Mba.Simplifier.Pipeline
 
                     else
                     {
-                        var tt = new TruthTable(variables.Count);
+                        var tt = new BooleanTruthTable(variables.Count);
                         tt.SetBit(i, true);
                         maskToBitwise[mask] = tt;
                     }
@@ -1534,6 +1537,8 @@ namespace Mba.Simplifier.Pipeline
 
             var combinedBitwise = ctx.Or(union);
             var solution = TryPartition(combinedBitwise, targetCoeff, constant, freeMask);
+
+            // BooleanMinimizer.MinimizeMultibit(ctx, solution);
             return solution;
         }
 
@@ -1682,7 +1687,7 @@ namespace Mba.Simplifier.Pipeline
             return ctx.Xor(ctx.Constant(xorMask, width), bitwise);
         }
 
-        private unsafe AstIdx GetBooleanTableAst(TruthTable table)
+        private unsafe AstIdx GetBooleanTableAst(BooleanTruthTable table)
         {
             var res = BooleanMinimizer.GetBitwise(ctx, variables, table.Clone());
             return res;
@@ -1952,8 +1957,8 @@ namespace Mba.Simplifier.Pipeline
             if (vec == null)
                 vec = resultVector;
 
-            var tt1 = new TruthTable(variables.Count);
-            var tt2 = new TruthTable(variables.Count);
+            var tt1 = new BooleanTruthTable(variables.Count);
+            var tt2 = new BooleanTruthTable(variables.Count);
             var d = GetDecisionVectorFast(coeff1, coeff2, vec);
 
             int numSolutions = 0;
@@ -1966,7 +1971,7 @@ namespace Mba.Simplifier.Pipeline
 
         // Given a two term linear MBA, exhaustively enumerate all possible term combinations fitting the result vector,
         // picking the optimal one based on some cost function.
-        private void EnumerateTwoTermSolutions(ref int numSolutions, ref uint bestCost, ref AstIdx? bestSolution, DecisionTable cases, int i, ApInt coeff1, ApInt coeff2, TruthTable tt1, TruthTable tt2, bool secNegated = false)
+        private void EnumerateTwoTermSolutions(ref int numSolutions, ref uint bestCost, ref AstIdx? bestSolution, DecisionTable cases, int i, ApInt coeff1, ApInt coeff2, BooleanTruthTable tt1, BooleanTruthTable tt2, bool secNegated = false)
         {
             // Do not explore more than 32 solutions! 
             if (numSolutions >= 32)
@@ -1978,8 +1983,8 @@ namespace Mba.Simplifier.Pipeline
                 numSolutions += 1;
 
                 // Don't allocate an AST for this solution if it would be worse than the best result we found so far.
-                var firstCost = TableDatabase.Instance.GetTableEntryCost(ctx, variables.Count, (int)tt1.arr[0]);
-                var secondCost = TableDatabase.Instance.GetTableEntryCost(ctx, variables.Count, (int)tt2.arr[0]);
+                var firstCost = TableDatabase.Instance.GetTableEntryCost(ctx, variables.Count, (int)tt1.Arr[0]);
+                var secondCost = TableDatabase.Instance.GetTableEntryCost(ctx, variables.Count, (int)tt2.Arr[0]);
                 var newCost = firstCost + secondCost;
                 if (newCost >= bestCost)
                     return;
@@ -2139,7 +2144,7 @@ namespace Mba.Simplifier.Pipeline
         // rAlt to the given expression.
         private AstIdx TermRefinement(ApInt r1, ApInt? rAlt = null)
         {
-            var t = new TruthTable(variables.Count);
+            var t = new BooleanTruthTable(variables.Count);
             for(int i = 0; i < resultVector.Length; i++)
             {
                 var r2 = resultVector[i];

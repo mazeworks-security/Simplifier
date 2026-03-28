@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use ahash::AHashMap;
+use egg::{BackoffScheduler, CostFunction, EGraph, Extractor, Id, Language, RecExpr, Runner};
 use rand::Rng;
 
 // use egraph::simplify_via_eqsat;
@@ -10,17 +12,21 @@ use std::{
     fs::{self, File},
     io::{BufRead, BufReader},
     path::Path,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use crate::{
-    mba::Context as MbaContext,
-    simple_ast::{recursive_simplify, Arena, AstPrinter, Context as Ctx},
+    isle_rules::Context as MbaContext,
+    egraph_rules::get_generated_rules,
+    simple_ast::{
+        add_to_egraph, from_rec_expr, recursive_simplify, Arena, AstPrinter, Context as Ctx,
+        EEGraph, MbaAnalysis, Predicate,
+    },
     truth_table_database::TruthTableDatabase,
 };
 
 // use egg::*;
-use simple_ast::{marshal_string, AstData, AstIdx, Empty, SimpleAst};
+use simple_ast::{marshal_string, AstData, AstIdx, Context, Empty, SimpleAst};
 
 use mimalloc::MiMalloc;
 
@@ -29,33 +35,15 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 mod assembler;
 mod known_bits;
+
+#[path = "dsl/isle_rules.rs"]
+mod isle_rules;
+#[path = "dsl/egraph_rules.rs"]
+mod egraph_rules;
 mod linalg;
-mod mba;
 mod simple_ast;
 mod truth_table_database;
-
-#[no_mangle]
-pub extern "C" fn SimplifyViaEqsat(s: *const c_char, ms: u64) -> *mut c_char {
-    /*
-    let str = marshal_string(s).to_owned();
-
-    let res = simplify_via_eqsat(&str, Some(ms));
-    unsafe {
-        return CString::new(res).unwrap().into_raw();
-    }
-    */
-
-    panic!("Disabled for now");
-}
-
-fn read_expr_from_args() -> String {
-    let mut args = std::env::args().skip(1);
-
-    if let Some(next) = args.next() {
-        next
-    } else {
-        std::fs::read_to_string("test-input.txt").unwrap()
-    }
-}
+#[path = "dsl/isle_macros.rs"]
+mod isle_macros;
 
 fn main() {}

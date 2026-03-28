@@ -51,6 +51,7 @@ namespace Mba.Simplifier.Utility
                 AstOp.And => binop(),
                 AstOp.Or => binop(),
                 AstOp.Xor => binop(),
+                AstOp.ICmp => ctx.ICmp(ctx.GetPredicate(node), ChangeBitwidth(ctx, ctx.GetOp0(node), newWidth, moduloMask, cache), ChangeBitwidth(ctx, ctx.GetOp1(node), newWidth, moduloMask, cache)),
                 AstOp.Neg => ctx.Neg(op0()),
                 // For lshrs we can't truncate any before, because the high bits may now effect the low bits!
                 AstOp.Lshr => ctx.Trunc(node, (byte)newWidth),
