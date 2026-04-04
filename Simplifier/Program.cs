@@ -538,6 +538,13 @@ if (useNew)
     //synthesizer.Run();
 }
 
+bool hiera = true;
+if(hiera)
+{
+    Mba.Simplifier.Hiera.HieraSynth.Test();
+    Debugger.Break();
+}
+
 //new DagRuleSynthesis(ctx).Run(id);
 //Debugger.Break();
 
