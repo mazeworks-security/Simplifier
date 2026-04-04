@@ -101,7 +101,7 @@ namespace Mba.Simplifier.Synth
         public SynthOperand[] Operands { get; set; }
     }
 
-    public class BvSynthesis
+    public class LineSynth
     {
         private readonly SynthConfig config;
 
@@ -136,7 +136,7 @@ namespace Mba.Simplifier.Synth
 
         private readonly uint componentOpcodeSize;
 
-        public BvSynthesis(SynthConfig config, AstCtx mbaCtx, AstIdx mbaIdx)
+        public LineSynth(SynthConfig config, AstCtx mbaCtx, AstIdx mbaIdx)
         {
             this.config = config;
             this.mbaCtx = mbaCtx;
@@ -1126,7 +1126,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 5, 0);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1142,7 +1142,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 4, 2);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1157,7 +1157,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 14, 0);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1173,7 +1173,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 5, 1);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1188,7 +1188,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 9, 1);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1205,7 +1205,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 5, 0);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1224,7 +1224,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 9, 3);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1246,7 +1246,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 6, 1);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1261,7 +1261,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 6, 1);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1280,7 +1280,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 9, 4);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1296,7 +1296,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 5, 2);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1311,7 +1311,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 8, 1);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1327,7 +1327,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 5, 1);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1344,7 +1344,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 14, 0);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1362,7 +1362,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 14, 0);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1377,7 +1377,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 20, 0);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1393,7 +1393,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 25, 0);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1409,7 +1409,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 5, 3);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1428,7 +1428,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 11, 4);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1499,7 +1499,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 9, 3);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1522,7 +1522,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 9, 3);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1553,7 +1553,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 9, 4);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1580,7 +1580,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 7, 2);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1609,7 +1609,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 5, 2);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1631,7 +1631,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 2, 1);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
 
@@ -1674,7 +1674,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 4, 2);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1712,7 +1712,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 4, 1);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }
@@ -1798,7 +1798,7 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 6, 3);
-            var synth = new BvSynthesis(config, ctx, idx);
+            var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
         }

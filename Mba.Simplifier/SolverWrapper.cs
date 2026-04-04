@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Mba.Simplifier.Synth
+namespace Mba.Simplifier
 {
     /// <summary>
     /// Represents the result of a satisfiability check.
@@ -134,7 +134,7 @@ namespace Mba.Simplifier.Synth
             this.native = native;
         }
 
-        public BitwuzlaKind Kind => (BitwuzlaKind)BitwuzlaNative.bitwuzla_term_get_kind(native);
+        public BitwuzlaKind Kind => BitwuzlaNative.bitwuzla_term_get_kind(native);
         public Sort Sort => new Sort(BitwuzlaNative.bitwuzla_term_get_sort(native));
 
         public bool IsConst => BitwuzlaNative.bitwuzla_term_is_const(native);
@@ -279,7 +279,7 @@ namespace Mba.Simplifier.Synth
         private static readonly System.Reflection.ConstructorInfo bitwuzlaTermCtor = typeof(BitwuzlaTerm).GetConstructor(
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
             null,
-            new Type[] { typeof(IntPtr), typeof(bool) },
+            new Type[] { typeof(nint), typeof(bool) },
             null);
 
         internal readonly BitwuzlaTermManager native;
@@ -364,7 +364,7 @@ namespace Mba.Simplifier.Synth
                 throw new ArgumentException("At least one child required", nameof(children));
 
             int len = children.Length;
-            IntPtr* ptrs = stackalloc IntPtr[len];
+            nint* ptrs = stackalloc nint[len];
             for (int i = 0; i < len; i++)
             {
                 ptrs[i] = BitwuzlaTerm.getCPtr(children[i].native).Handle;
@@ -410,9 +410,9 @@ namespace Mba.Simplifier.Synth
 
             if (mapLen == 0) return;
 
-            IntPtr[] termHandles = new IntPtr[termsLen];
-            IntPtr[] keyHandles = new IntPtr[mapLen];
-            IntPtr[] valHandles = new IntPtr[mapLen];
+            nint[] termHandles = new nint[termsLen];
+            nint[] keyHandles = new nint[mapLen];
+            nint[] valHandles = new nint[mapLen];
 
             for (int i = 0; i < termsLen; i++)
             {
@@ -425,9 +425,9 @@ namespace Mba.Simplifier.Synth
                 valHandles[i] = BitwuzlaTerm.getCPtr(to[i].native).Handle;
             }
 
-            fixed (IntPtr* tPtr = termHandles)
-            fixed (IntPtr* kPtr = keyHandles)
-            fixed (IntPtr* vPtr = valHandles)
+            fixed (nint* tPtr = termHandles)
+            fixed (nint* kPtr = keyHandles)
+            fixed (nint* vPtr = valHandles)
             {
                 BitwuzlaNative.bitwuzla_substitute_terms((uint)termsLen, tPtr, (uint)mapLen, kPtr, vPtr);
             }
@@ -447,8 +447,8 @@ namespace Mba.Simplifier.Synth
             int mapSize = from.Length;
             if (mapSize == 0) return term;
 
-            IntPtr[] keys = new IntPtr[mapSize];
-            IntPtr[] values = new IntPtr[mapSize];
+            nint[] keys = new nint[mapSize];
+            nint[] values = new nint[mapSize];
 
             for (int i = 0; i < mapSize; i++)
             {
@@ -456,8 +456,8 @@ namespace Mba.Simplifier.Synth
                 values[i] = BitwuzlaTerm.getCPtr(to[i].native).Handle;
             }
 
-            fixed (IntPtr* k = keys)
-            fixed (IntPtr* v = values)
+            fixed (nint* k = keys)
+            fixed (nint* v = values)
             {
                 return Wrap(BitwuzlaNative.bitwuzla_substitute_term(term.native, (uint)mapSize, k, v));
             }
@@ -471,9 +471,9 @@ namespace Mba.Simplifier.Synth
             int termsLen = terms.Length;
             int mapLen = map.Count;
 
-            IntPtr[] termHandles = new IntPtr[termsLen];
-            IntPtr[] keyHandles = new IntPtr[mapLen];
-            IntPtr[] valHandles = new IntPtr[mapLen];
+            nint[] termHandles = new nint[termsLen];
+            nint[] keyHandles = new nint[mapLen];
+            nint[] valHandles = new nint[mapLen];
 
             for (int i = 0; i < termsLen; i++)
             {
@@ -488,9 +488,9 @@ namespace Mba.Simplifier.Synth
                 j++;
             }
 
-            fixed (IntPtr* tPtr = termHandles)
-            fixed (IntPtr* kPtr = keyHandles)
-            fixed (IntPtr* vPtr = valHandles)
+            fixed (nint* tPtr = termHandles)
+            fixed (nint* kPtr = keyHandles)
+            fixed (nint* vPtr = valHandles)
             {
                 BitwuzlaNative.bitwuzla_substitute_terms((uint)termsLen, tPtr, (uint)mapLen, kPtr, vPtr);
             }
@@ -515,7 +515,7 @@ namespace Mba.Simplifier.Synth
     /// </summary>
     public class BvSolver : IDisposable
     {
-        private readonly Bitwuzla.BitwuzlaSolver native;
+        private readonly BitwuzlaSolver native;
         private readonly TermManager tm;
 
         public BvSolver(TermManager tm, Options options = null)
@@ -524,7 +524,7 @@ namespace Mba.Simplifier.Synth
             native = BitwuzlaNative.bitwuzla_new(tm.native, options?.native);
         }
 
-        public void ConfigureTerminator(IntPtr terminatorState)
+        public void ConfigureTerminator(nint terminatorState)
         {
             // TODO
         }
@@ -547,7 +547,7 @@ namespace Mba.Simplifier.Synth
                 return (Result)BitwuzlaNative.bitwuzla_check_sat_assuming(native, 0, null);
 
             int len = assumptions.Length;
-            IntPtr* ptrs = stackalloc IntPtr[len];
+            nint* ptrs = stackalloc nint[len];
             for (int i = 0; i < len; i++)
             {
                 ptrs[i] = BitwuzlaTerm.getCPtr(assumptions[i].native).Handle;
@@ -561,17 +561,17 @@ namespace Mba.Simplifier.Synth
             var ptr = BitwuzlaNative.bitwuzla_get_unsat_core(native, &size);
 
             var result = new List<Term>();
-            if (size == 0 || ptr.swigCPtr.Handle == IntPtr.Zero)
+            if (size == 0 || ptr.swigCPtr.Handle == nint.Zero)
                 return result;
 
             // Access the internal SWIG constructor for BitwuzlaTerm from the IntPtr
             var ctor = typeof(BitwuzlaTerm).GetConstructor(
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
                 null,
-                new Type[] { typeof(IntPtr), typeof(bool) },
+                new Type[] { typeof(nint), typeof(bool) },
                 null);
 
-            var items = (IntPtr*)ptr.swigCPtr.Handle;
+            var items = (nint*)ptr.swigCPtr.Handle;
             for (ulong i = 0; i < size; i++)
             {
                 var termPtr = items[i];
@@ -612,10 +612,10 @@ namespace Mba.Simplifier.Synth
         {
             // Import the native C functions
             [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl, SetLastError = true)]
-            public static extern IntPtr fopen(string filename, string mode);
+            public static extern nint fopen(string filename, string mode);
 
             [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl, SetLastError = true)]
-            public static extern int fclose(IntPtr stream);
+            public static extern int fclose(nint stream);
 
             // If needed, import the function from the external DLL that takes the FILE*
             // [DllImport("YourNativeLibrary.dll", CallingConvention = CallingConvention.Cdecl)]

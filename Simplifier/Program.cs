@@ -532,7 +532,7 @@ if (useNew)
     Debugger.Break();
 
     if (false)
-        new BvSynthesis(new SynthConfig(null, 0, 0), ctx, id);
+        new LineSynth(new SynthConfig(null, 0, 0), ctx, id);
 
     //var synthesizer = new BvSynthesis(ctx, id);
     //synthesizer.Run();

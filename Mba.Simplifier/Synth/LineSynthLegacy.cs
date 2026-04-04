@@ -23,42 +23,12 @@ namespace Mba.Simplifier.Synth
     public record Component(SynthOpc Opcode, CompontentData Data = null);
     public record CompontentData(int Index);
 
-    public enum SynthOpc
-    {
-        // Boolean
-        And,
-        Or,
-        Xor,
-
-        Not,
-
-        // Arithmetic
-        Add,
-        Sub,
-        Mul,
-
-        // Shifts
-        Lshr,
-        Ashr,
-        Shl,
-
-        // Comparisons
-        Eq,
-        Ult,
-
-        Select,
-
-        // Special
-        TruthTable,
-
-        Constant,
-    }
-
+    
     public abstract record Line();
     public record VarLine(int Index, Expr Symbol) : Line();
     public record ExprLine(BitVecExpr Opcode, BitVecExpr Op0, BitVecExpr Op1, Expr TruthTable, BitVecExpr ConstantData) : Line();
 
-    public class BrahmaSynthesis
+    public class LineSynthLegacy
     {
         private readonly AstCtx mbaCtx;
         private readonly AstIdx mbaIdx;
@@ -126,7 +96,7 @@ namespace Mba.Simplifier.Synth
             //new(SynthOpc.Lshr),
         };
 
-        public BrahmaSynthesis(AstCtx mbaCtx, AstIdx mbaIdx)
+        public LineSynthLegacy(AstCtx mbaCtx, AstIdx mbaIdx)
         {
             components = components.OrderBy(x => x.Opcode).ToList();
 

@@ -1,7 +1,6 @@
 ﻿using Bitwuzla;
 using Mba.Common.Ast;
 using Mba.Simplifier.Bindings;
-using Mba.Simplifier.Synth;
 using Microsoft.Z3;
 using System;
 using System.Collections.Generic;

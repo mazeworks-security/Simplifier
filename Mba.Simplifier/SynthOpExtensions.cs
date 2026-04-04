@@ -5,8 +5,39 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Mba.Simplifier.Synthesis
+namespace Mba.Simplifier
 {
+    public enum SynthOpc
+    {
+        // Boolean
+        And,
+        Or,
+        Xor,
+
+        Not,
+
+        // Arithmetic
+        Add,
+        Sub,
+        Mul,
+
+        // Shifts
+        Lshr,
+        Ashr,
+        Shl,
+
+        // Comparisons
+        Eq,
+        Ult,
+
+        Select,
+
+        // Special
+        TruthTable,
+
+        Constant,
+    }
+
     public static class SynthOpExtensions
     {
         public static bool IsCommutative(this SynthOpc opc)
