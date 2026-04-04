@@ -1,5 +1,8 @@
-﻿using Mba.Simplifier.Bindings;
+﻿using Bitwuzla;
+using Mba.Simplifier.Bindings;
+using Mba.Simplifier.Synth;
 using Mba.Simplifier.Utility;
+using Microsoft.VisualBasic;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -56,7 +59,7 @@ namespace Mba.Simplifier.Hiera
     public class SynthOperand
     {
         // Boolean variable indicating whether the first operand is a constant
-        public Term IsConst { get; }
+        public Term IsConstant { get; }
 
         // The immediate value of this operand
         public Term ConstValue { get; set; }
@@ -66,14 +69,14 @@ namespace Mba.Simplifier.Hiera
 
         public SynthOperand(Term isConstant, Term constVal, Term index)
         {
-            IsConst = isConstant;
+            IsConstant = isConstant;
             ConstValue = constVal;
             OperandIndex = index;
         }
 
         public override string ToString()
         {
-            return $"(IsConstant: {IsConst}) (Index: {OperandIndex})";
+            return $"(IsConstant: {IsConstant}) (Index: {OperandIndex})";
         }
     }
 
@@ -100,12 +103,12 @@ namespace Mba.Simplifier.Hiera
         // Bitvector variable selecting the length of the synthesized program
         private readonly Term numInstsVar;
 
-        private readonly List<SynthLine> allLines;
+        private List<SynthLine> lines;
 
         // Get the index of the first instruction in lines
         private int FirstInstIdx => symbols.Length;
 
-        public IReadOnlyList<SynthLine> RealLines => allLines.Skip(FirstInstIdx).ToList();
+        public IReadOnlyList<SynthLine> RealLines => lines.Skip(FirstInstIdx).ToList();
 
         private readonly uint w;
 
@@ -145,7 +148,10 @@ namespace Mba.Simplifier.Hiera
 
         public void Run()
         {
-            GetLines();
+            lines = GetLines();
+            var outputs = GetOutputs();
+
+            Debugger.Break();
         }
 
         private List<SynthLine> GetLines()
@@ -165,7 +171,6 @@ namespace Mba.Simplifier.Hiera
                 line.IsSymbol = false;
                 line.Opcode = ctx.MkBvConst($"compCode{lineIndex}", opcodeSize);
 
-              
                 line.Operands = new SynthOperand[line.MaxArity];
                 for(int i = 0; i < line.MaxArity; i++)
                 {
@@ -182,6 +187,127 @@ namespace Mba.Simplifier.Hiera
 
             return lines;
         }
+
+        // Instantiate the semantics of each instruction
+        private List<Term> GetOutputs()
+        {
+            var exprs = new List<Term>();
+            List<Term> prev = new();
+            prev.AddRange(symbols);
+            prev.AddRange(RealLines.Select(x => x.Output));
+
+            for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+            {
+                // The first N lines are symbols
+                var line = lines[lineIndex];
+                if (line.IsSymbol)
+                {
+                    exprs.Add(symbols[lineIndex]);
+                    continue;
+                }
+
+                // Select all of the operands
+                var operands = line.Operands.Select(x => SelectOperand(x, exprs)).ToList();
+
+                var terms = new List<Term>();
+                foreach (var opcode in line.Choices)
+                {
+                    var term = ApplyOperator(opcode, operands.Select(x => x.expr).ToList());
+
+                    terms.Add(term);
+                }
+
+                var select = LinearSelect(line.Opcode, terms);
+                exprs.Add(select);
+            }
+
+            return exprs;
+        }
+
+        private (Term expr, Term justOperands, Term justConstants) SelectOperand(SynthOperand operand, List<Term> prev)
+        {
+            var operandSelect = LinearSelect(operand.OperandIndex, prev);
+            if (config.MaxConstants == 0)
+                return (operandSelect, operandSelect, null);
+
+            var expr = ctx.MkIte(operand.IsConstant, operand.ConstValue, operandSelect);
+            return (expr, operandSelect, null);
+        }
+
+        // Select one of N values using a chain of ITEs
+        private Term LinearSelect(Term index, List<Term> options)
+        {
+            var n = options.Count;
+
+            if (n == 0)
+                throw new InvalidOperationException();
+            if (n == 1)
+                return options[0];
+
+            var result = options[n - 1];
+            for (int i = n - 2; i >= 0; i--)
+            {
+                var condition = index == ctx.MkBvValue(i, index.Sort.BvSize);
+                result = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_ITE, condition, options[i], result);
+            }
+
+            return result;
+        }
+
+        private Term ApplyOperator(SynthOpc opcode, List<Term> operands)
+        {
+            var op0 = () => operands[0];
+            var op1 = () => operands[1];
+            var op2 = () => operands[2];
+
+            var term = opcode switch
+            {
+                SynthOpc.Not => ~op0(),
+                SynthOpc.And => (op0() & op1()),
+                SynthOpc.Or => (op0() | op1()),
+                SynthOpc.Xor => (op0() ^ op1()),
+                SynthOpc.Add => (op0() + op1()),
+                SynthOpc.Sub => (op0() - op1()),
+                SynthOpc.Mul => (op0() * op1()),
+                SynthOpc.Lshr => (op0() >> (op1() & (op1().Sort.BvSize - 1))), // Truncate the shift width
+                SynthOpc.Ashr => (op0() >>> (op1() & (op1().Sort.BvSize - 1))), // Truncate the shift width
+                SynthOpc.Shl => (op0() << (op1() & (op1().Sort.BvSize - 1))),
+                SynthOpc.Eq => ToBv(op0() == op1(), w),
+                SynthOpc.Ult => ToBv(op0() < op1(), w),
+                SynthOpc.Select => ctx.MkIte(ToBool(op0()), op1(), op2()),
+
+                _ => throw new InvalidOperationException()
+            };
+
+            return term;
+        }
+
+        private Term ToBv(Term term, uint width = 1)
+          => ctx.MkIte(term, ctx.MkBvValue(1, width), ctx.MkBvValue(0, width));
+
+        private Term ToBool(Term term)
+           => ctx.MkExtract(0, 0, term) == 1;
+
+        private Term Implies(Term a, Term b)
+            => ctx.MkImplies(a, b);
+
+        private Term Or(IEnumerable<Term> terms)
+            => MkBw(BitwuzlaKind.BITWUZLA_KIND_OR, terms);
+
+        private Term And(IEnumerable<Term> terms)
+            => MkBw(BitwuzlaKind.BITWUZLA_KIND_AND, terms);
+
+        // Bitwise constructor operator that allows passing less than 2 operands.
+        private Term MkBw(BitwuzlaKind kind, IEnumerable<Term> terms)
+        {
+            var c = terms.Count();
+            if (c == 0)
+                throw new InvalidOperationException();
+            if (c == 1)
+                return terms.Single();
+            return ctx.MkTerm(kind, terms);
+        }
+
 
         // Get the minimum number of bits needed to fit an integer that ranges from 0..N (inclusive)
         public static int BvWidth(int maxValue)
