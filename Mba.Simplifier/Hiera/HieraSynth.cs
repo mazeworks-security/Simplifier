@@ -104,7 +104,7 @@ namespace Mba.Simplifier.Hiera
         private Term[] symbols;
 
         // Bitvector variable selecting the length of the synthesized program
-        private readonly Term numInstsVar;
+        private readonly Term lastInstVar;
 
         private List<SynthLine> lines;
 
@@ -117,7 +117,7 @@ namespace Mba.Simplifier.Hiera
 
         public bool VariableLength => config.MinLength != config.MaxLength;
 
-        public static void Test()
+        public static void P4()
         {
             var config = new SynthConfig(new SynthOpc[] { SynthOpc.Add, SynthOpc.Sub }, 5, 5, 0);
 
@@ -128,12 +128,25 @@ namespace Mba.Simplifier.Hiera
             Debugger.Break();
         }
 
+        
+        public static void PMediumBoolean()
+        {
+            var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Not }, 14, 14, 0);
+
+            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
+            var synth = new HieraSynth(config, ctx, idx);
+
+            synth.Run();
+            Debugger.Break();
+        }
+
+
         public HieraSynth(SynthConfig config, AstCtx mbaCtx, AstIdx mbaIdx)
         {
             this.config = config;
             this.mbaCtx = mbaCtx;
             this.mbaIdx = mbaIdx;
-            this.numInstsVar = ctx.MkBvValue(config.MinLength, (uint)BvWidth(config.MinLength));
+            this.lastInstVar = ctx.MkBvValue(config.MinLength - 1, (uint)BvWidth(config.MinLength - 1));
 
             this.mbaVariables = mbaCtx.CollectVariables(mbaIdx).ToArray();
 
@@ -160,7 +173,7 @@ namespace Mba.Simplifier.Hiera
             var constraints = GetProgramConstraints(outputs);
             
             // Compute the result variable
-            var result = LinearSelect(numInstsVar, outputs);
+            var result = LinearSelect(lastInstVar, outputs);
 
 
             CegisT(constraints, result);
@@ -425,10 +438,31 @@ namespace Mba.Simplifier.Hiera
                     return;
                 }
 
-                // Ask the solver for a fitting solution
-                var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
+                
+                foreach(var line in RealLines)
+                {
+                    Console.WriteLine($"Loc: {s.GetValue(line.Loc)}");
+                    Console.WriteLine($"Opc: {s.GetValue(line.Opcode)}");
+                    foreach(var operand in line.Operands)
+                    {
+                        Console.WriteLine($"    {s.GetValue(operand.IsConstant)}");
+                        Console.WriteLine($"    {s.GetValue(operand.OperandIndex)}");
+                        Console.WriteLine($"    {s.GetValue(operand.ConstValue)}");
+                        Console.WriteLine("    ");
+                    }
+                    Console.WriteLine("\n");
+                }
 
-                Log($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{ourSolution}\n\n\n");
+                //Console.WriteLine(s.mod);
+
+                var cegisSolution = SolutionToExprNew(s, (int)ctx.GetIntegerValue(s.GetValue(lastInstVar)));
+
+                // Ask the solver for a fitting solution
+                //var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
+
+
+
+                Log($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{"todo"}\n\n\n");
 
                 if (curr.ElapsedMilliseconds > 75000)
                     Debugger.Break();
@@ -453,6 +487,8 @@ namespace Mba.Simplifier.Hiera
                 var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
                 s.Assert(GetBehavioralConstraint(skeleton, vs));
                 constraints.Add(GetBehavioralConstraint(skeleton, vs));
+
+                s.Write();
             }
         }
 
@@ -464,10 +500,44 @@ namespace Mba.Simplifier.Hiera
             return before == after;
         }
 
+        private Term SolutionToExprNew(BvSolver s, int loc)
+        {
+            if (loc < symbols.Length)
+                return symbols[loc];
+
+            foreach (var l in lines)
+            {
+                if (l.IsSymbol)
+                    continue;
+
+                var lVar = l.Loc.Kind == BitwuzlaKind.BITWUZLA_KIND_CONSTANT ? ctx.GetIntegerValue(s.GetValue(l.Loc)).ToString() : "undefined";
+                //Console.WriteLine($"Loc var: {lVar}");
+            }
+
+            //Console.WriteLine("\n\n");
+            var line = lines.Single(x => !x.IsSymbol && x.Loc.Kind == BitwuzlaKind.BITWUZLA_KIND_CONSTANT && (int)ctx.GetIntegerValue(s.GetValue(x.Loc)) == loc);
+
+            var opcode = ctx.GetIntegerValue(s.GetValue(line.Opcode));
+            if (opcode >= (ulong)line.Choices.Length)
+                opcode = (ulong)line.Choices.Length - 1;
+
+            var operands = new List<Term>();
+            foreach(var operand in line.Operands)
+            {
+                var isConstant = ctx.GetBoolValue(s.GetValue(operand.IsConstant));
+                var operandIndex = (int)ctx.GetIntegerValue(s.GetValue(operand.OperandIndex));
+
+                var cegisOperand = isConstant ? operand.ConstValue : SolutionToExprNew(s, operandIndex);
+                operands.Add(cegisOperand);
+            }
+
+            Term cegisNode = ApplyOperator(line.Choices[opcode], operands);
+            return cegisNode;
+        }
+
         // TODO: We're getting tons of identical duplicates even with CEGIS(T). I think the forall query is broken?
         private (AstIdx ourSolution, Term cegisSolution, List<Term> constants) SolutionToExpr(BvSolver s)
         {
-           
             foreach (var line in lines)
             {
                 if (line.IsSymbol)

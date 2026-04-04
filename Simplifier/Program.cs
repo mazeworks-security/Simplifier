@@ -541,7 +541,7 @@ if (useNew)
 bool hiera = true;
 if(hiera)
 {
-    Mba.Simplifier.Hiera.HieraSynth.Test();
+    Mba.Simplifier.Hiera.HieraSynth.P4();
     Debugger.Break();
 }
 

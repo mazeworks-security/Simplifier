@@ -591,7 +591,8 @@ namespace Mba.Simplifier
 
         public void Write()
         {
-            var handle = NativeMethods.fopen("\\\\wsl.localhost\\Ubuntu-22.04\\home\\colton\\bitwuzla_linux_build\\bitwuzla\\build\\src\\main\\your_problem.smt2", "w");
+            //var handle = NativeMethods.fopen("\\\\wsl.localhost\\Ubuntu-22.04\\home\\colton\\bitwuzla_linux_build\\bitwuzla\\build\\src\\main\\your_problem.smt2", "w");
+            var handle = NativeMethods.fopen("C:\\Users\\colton\\source\\repos\\synth\\your_problem.smt2", "w");
             BitwuzlaNative.bitwuzla_print_formula(native, "smt2", new SWIGTYPE_p_FILE(handle, true), 10);
 
             NativeMethods.fclose(handle);
