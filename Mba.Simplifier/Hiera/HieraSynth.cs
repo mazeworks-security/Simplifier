@@ -131,9 +131,9 @@ namespace Mba.Simplifier.Hiera
         
         public static void PMediumBoolean()
         {
-            var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Not }, 14, 14, 0);
+            var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 7, 7, 0);
 
-            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
+            var (ctx, idx) = Parse("x0^x1^x2^x3", 1);
             var synth = new HieraSynth(config, ctx, idx);
 
             synth.Run();
@@ -171,15 +171,29 @@ namespace Mba.Simplifier.Hiera
             var outputs = GetOutputs();
 
             var constraints = GetProgramConstraints(outputs);
-            
-            // Compute the result variable
-            var result = LinearSelect(lastInstVar, outputs);
 
+            // Compute the result variable
+            //var result = LinearSelect(lastInstVar, outputs);
+            //var result = SelectLineOutput(lastInstVar);
+            var result = lines.Last().Output;
 
             CegisT(constraints, result);
 
             Debugger.Break();
         }
+
+        private Term SelectLineOutput(Term loc)
+        {
+            var result = RealLines.Last().Output;
+            foreach (var line in RealLines)
+            {
+                var matchesLoc = line.Loc == loc;
+                result = ctx.MkIte(matchesLoc, line.Output, result);
+            }
+
+            return result;
+        }
+
 
         private List<SynthLine> GetLines()
         {
@@ -220,6 +234,7 @@ namespace Mba.Simplifier.Hiera
         }
 
         // Instantiate the semantics of each instruction
+        // TODO: This is broken...
         private List<Term> GetOutputs()
         {
             var exprs = new List<Term>();
@@ -238,7 +253,7 @@ namespace Mba.Simplifier.Hiera
                 }
 
                 // Select all of the operands
-                var operands = line.Operands.Select(x => SelectOperand(x, exprs)).ToList();
+                var operands = line.Operands.Select(x => SelectOperand(x, prev)).ToList();
 
                 var terms = new List<Term>();
                 foreach (var opcode in line.Choices)
@@ -346,6 +361,7 @@ namespace Mba.Simplifier.Hiera
                 }
 
                 // The location must be within range
+                constraints.Add(line.Loc >= (uint)FirstInstIdx);
                 constraints.Add(line.Loc <= (uint)lines.Count - 1);
                 // The opcode must be within range
                 constraints.Add(line.Opcode <= (uint)line.Choices.Length - 1);
@@ -382,10 +398,6 @@ namespace Mba.Simplifier.Hiera
 
             s.Write();
 
-            bool mba = false;
-            if (mba)
-                s.Assert(symbols[0] >= 50);
-
 
             var rng = new SeededRandom();
             var inputCombinations = new List<List<ulong>>();
@@ -408,12 +420,6 @@ namespace Mba.Simplifier.Hiera
                    .Select(x => ctx.MkBvValue(inputCombinations[i][x] & ModuloReducer.GetMask((uint)symbols[x].Sort.BvSize), symbols[x].Sort.BvSize))
                    .ToArray();
                 }
-
-                while (mba && ctx.GetIntegerValue(values[0]) < 50)
-                {
-                    values[0] |= (rng.GetRandUlong() & ModuloReducer.GetMask((uint)symbols[0].Sort.BvSize));
-                }
-
 
 
                 var constraint = GetBehavioralConstraint(skeleton, values);
@@ -462,7 +468,7 @@ namespace Mba.Simplifier.Hiera
 
 
 
-                Log($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{"todo"}\n\n\n");
+                Log($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{cegisSolution}\n\n\n");
 
                 if (curr.ElapsedMilliseconds > 75000)
                     Debugger.Break();
@@ -471,9 +477,6 @@ namespace Mba.Simplifier.Hiera
                 options = new Options();
                 options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
                 var temp = new BvSolver(ctx, options);
-
-                if (mba)
-                    temp.Assert(symbols[0] >= 50);
 
                 temp.Assert(~(groundTruth == cegisSolution));
                 var isEquiv = temp.CheckSat() == Result.Unsat;
@@ -497,6 +500,8 @@ namespace Mba.Simplifier.Hiera
         {
             var before = ctx.SubstituteTerm(groundTruth, symbols, points);
             var after = ctx.SubstituteTerm(skeleton, symbols, points);
+
+            
             return before == after;
         }
 
@@ -521,6 +526,8 @@ namespace Mba.Simplifier.Hiera
             if (opcode >= (ulong)line.Choices.Length)
                 opcode = (ulong)line.Choices.Length - 1;
 
+            var opc = line.Choices[opcode];
+
             var operands = new List<Term>();
             foreach(var operand in line.Operands)
             {
@@ -529,9 +536,12 @@ namespace Mba.Simplifier.Hiera
 
                 var cegisOperand = isConstant ? operand.ConstValue : SolutionToExprNew(s, operandIndex);
                 operands.Add(cegisOperand);
+
+                if (opc == SynthOpc.Not)
+                    break;
             }
 
-            Term cegisNode = ApplyOperator(line.Choices[opcode], operands);
+            Term cegisNode = ApplyOperator(opc, operands);
             return cegisNode;
         }
 
