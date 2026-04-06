@@ -528,7 +528,7 @@ bool useNew = false;
 if (useNew)
 {
     //SynthTests.P1();
-    SynthTests.PMba();
+    SynthTests.P4();
     Debugger.Break();
 
     if (false)
@@ -541,7 +541,7 @@ if (useNew)
 bool hiera = true;
 if(hiera)
 {
-    Mba.Simplifier.Hiera.HieraSynth.PMediumBoolean();
+    Mba.Simplifier.Hiera.HieraSynth.P4();
     Debugger.Break();
 }
 
