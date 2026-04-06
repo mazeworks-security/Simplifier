@@ -125,12 +125,47 @@ namespace Mba.Simplifier.Hiera
             Debugger.Break();
         }
 
-        
+        /*
         public static void PMediumBoolean()
         {
             var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 7, 7, 0);
 
             var (ctx, idx) = Parse("x0^x1^x2^x3", 1);
+            var synth = new HieraSynth(config, ctx, idx);
+
+            synth.Run();
+            Debugger.Break();
+        }
+        */
+
+        public static void PMediumBoolean()
+        {
+            var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 5, 5, 0);
+
+            var (ctx, idx) = Parse("(AAA&BBB)|CCC", 1);
+            var synth = new HieraSynth(config, ctx, idx);
+
+            synth.Run();
+            Debugger.Break();
+        }
+
+        public static void PMediumBooleanReal()
+        {
+            var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 14, 14, 0);
+
+            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
+            var synth = new HieraSynth(config, ctx, idx);
+
+            synth.Run();
+            Debugger.Break();
+        }
+
+
+        public static void PEasyBoolean()
+        {
+            var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 11, 11, 0);
+
+            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4^x2))", 1);
             var synth = new HieraSynth(config, ctx, idx);
 
             synth.Run();
@@ -245,7 +280,6 @@ namespace Mba.Simplifier.Hiera
             }
 
             li++;
-            //prev.AddRange(RealLines.Select(x => x.Output));
 
             for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
             {
@@ -258,7 +292,7 @@ namespace Mba.Simplifier.Hiera
                 }
 
                 // Select all of the operands
-                var operands = line.Operands.Select(x => SelectOperand(x, prev)).ToList();
+                var operands = line.Operands.Select(x => SelectOperandByLoc(x, prev)).ToList();
 
                 var terms = new List<Term>();
                 foreach (var opcode in line.Choices)
@@ -275,9 +309,17 @@ namespace Mba.Simplifier.Hiera
             return (prev, exprs);
         }
 
-        private (Term expr, Term justOperands, Term justConstants) SelectOperand(SynthOperand operand, List<Term> prev)
+        private (Term expr, Term justOperands, Term justConstants) SelectOperandByLoc(SynthOperand operand, List<Term> prevVariables)
         {
-            var operandSelect = LinearSelect(operand.OperandIndex, prev);
+            var targetLoc = operand.OperandIndex;
+            Term operandSelect = prevVariables[0]; // Fallback
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var producerLoc = lines[i].IsSymbol ? ctx.MkBvValue((uint)i, targetLoc.Sort.BvSize) : lines[i].Loc;
+                var producerOutput = prevVariables[i];
+                operandSelect = ctx.MkIte(targetLoc == producerLoc, producerOutput, operandSelect);
+            }
+
             if (config.MaxConstants == 0)
                 return (operandSelect, operandSelect, null);
 
@@ -377,6 +419,7 @@ namespace Mba.Simplifier.Hiera
         }
 
         // Implements CEGIS(T)
+        // TODO: Triage why SLOT makes some of these constraints easier to solve..
         // https://www.kroening.com/papers/cav2018-synthesis.pdf
         private void CegisT(List<Term> constraints)
         {
@@ -427,14 +470,14 @@ namespace Mba.Simplifier.Hiera
 
                 var (declarations, assignments) = GetOutputs();
                 List<Term> conjs = new();
-                foreach(var (l, r) in Enumerable.Zip(declarations, assignments))
+                foreach (var (l, r) in Enumerable.Zip(declarations, assignments).Skip(symbols.Length))
                 {
                     conjs.Add(ctx.SubstituteTerm(l == r, symbols, values));
                 }
 
 
                 var constrainDataflow = And(conjs);
-                var constrainEquivalence = GetBehavioralConstraint(declarations.Last(), values);
+                var constrainEquivalence = GetBehavioralConstraint(GetProgramOutput(declarations), values);
                 s.Assert(constrainDataflow);
                 s.Assert(constrainEquivalence);
             }
@@ -505,17 +548,18 @@ namespace Mba.Simplifier.Hiera
 
                 var (declarations, assignments) = GetOutputs();
                 List<Term> conjs = new();
-                foreach (var (l, r) in Enumerable.Zip(declarations, assignments))
+                foreach (var (l, r) in Enumerable.Zip(declarations, assignments).Skip(symbols.Length))
                 {
                     conjs.Add(ctx.SubstituteTerm(l == r, symbols, vs));
                 }
 
 
                 var constrainDataflow = And(conjs);
-                var constrainEquivalence = GetBehavioralConstraint(declarations.Last(), vs);
+                var constrainEquivalence = GetBehavioralConstraint(GetProgramOutput(declarations), vs);
                 s.Assert(constrainDataflow);
                 s.Assert(constrainEquivalence);
 
+                s.Simplify();
                 s.Write();
             }
         }
@@ -526,6 +570,17 @@ namespace Mba.Simplifier.Hiera
             var before = ctx.SubstituteTerm(groundTruth, symbols, points);
             var after = ctx.SubstituteTerm(skeleton, symbols, points);
             return before == after;
+        }
+
+        private Term GetProgramOutput(List<Term> declarations)
+        {
+            Term result = declarations[0];
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var producerLoc = lines[i].IsSymbol ? ctx.MkBvValue((uint)i, lastInstVar.Sort.BvSize) : lines[i].Loc;
+                result = ctx.MkIte(lastInstVar == producerLoc, declarations[i], result);
+            }
+            return result;
         }
 
         private Term SolutionToExprNew(BvSolver s, int loc)
