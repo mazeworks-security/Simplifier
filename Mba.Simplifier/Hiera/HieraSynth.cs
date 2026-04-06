@@ -50,9 +50,6 @@ namespace Mba.Simplifier.Hiera
         // The operands of the component
         public SynthOperand[] Operands { get; set; }
 
-        // Result of the component
-        public Term Output { get; set; }
-
         public SynthLine(params SynthOpc[] opcodes)
         {
             Choices = opcodes;
@@ -168,20 +165,21 @@ namespace Mba.Simplifier.Hiera
         public void Run()
         {
             lines = GetLines();
-            var outputs = GetOutputs();
+            //var outputs = GetOutputs();
 
-            var constraints = GetProgramConstraints(outputs);
+            var constraints = GetProgramConstraints();
 
             // Compute the result variable
             //var result = LinearSelect(lastInstVar, outputs);
             //var result = SelectLineOutput(lastInstVar);
-            var result = lines.Last().Output;
+            //var result = lines.Last().Output;
 
-            CegisT(constraints, result);
+            CegisT(constraints);
 
             Debugger.Break();
         }
 
+        /*
         private Term SelectLineOutput(Term loc)
         {
             var result = RealLines.Last().Output;
@@ -193,6 +191,7 @@ namespace Mba.Simplifier.Hiera
 
             return result;
         }
+        */
 
 
         private List<SynthLine> GetLines()
@@ -224,23 +223,29 @@ namespace Mba.Simplifier.Hiera
                     line.Operands[i] = operand;
                 }
 
-                var output = ctx.MkBvConst($"line{lineIndex}_out", w);
-                line.Output = output;
-
                 lines.Add(line);
             }
 
             return lines;
         }
 
+        int li = 0;
         // Instantiate the semantics of each instruction
         // TODO: This is broken...
-        private List<Term> GetOutputs()
+        // You can't just recursively clone everything 
+        private (List<Term> definitions, List<Term> values) GetOutputs()
         {
             var exprs = new List<Term>();
             List<Term> prev = new();
             prev.AddRange(symbols);
-            prev.AddRange(RealLines.Select(x => x.Output));
+            for (int lineIndex = FirstInstIdx; lineIndex < lines.Count; lineIndex++)
+            {
+                var output = ctx.MkBvConst($"line{lineIndex}_out{li}", w);
+                prev.Add(output);
+            }
+
+            li++;
+            //prev.AddRange(RealLines.Select(x => x.Output));
 
             for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
             {
@@ -267,7 +272,7 @@ namespace Mba.Simplifier.Hiera
                 exprs.Add(select);
             }
 
-            return exprs;
+            return (prev, exprs);
         }
 
         private (Term expr, Term justOperands, Term justConstants) SelectOperand(SynthOperand operand, List<Term> prev)
@@ -330,11 +335,11 @@ namespace Mba.Simplifier.Hiera
             return term;
         }
 
-        private List<Term> GetProgramConstraints(List<Term> instantiations)
+        private List<Term> GetProgramConstraints()
         {
             var constraints = new List<Term>();
             AddNumInstructionsConstraint(constraints);
-            AddWfpConstraints(constraints, instantiations);
+            AddWfpConstraints(constraints);
             return constraints;
         }
 
@@ -348,7 +353,7 @@ namespace Mba.Simplifier.Hiera
             Debugger.Break();
         }
 
-        private void AddWfpConstraints(List<Term> constraints, List<Term> instantiations)
+        private void AddWfpConstraints(List<Term> constraints)
         {
             for (int i = FirstInstIdx; i < lines.Count; i++)
             {
@@ -365,9 +370,6 @@ namespace Mba.Simplifier.Hiera
                 constraints.Add(line.Loc <= (uint)lines.Count - 1);
                 // The opcode must be within range
                 constraints.Add(line.Opcode <= (uint)line.Choices.Length - 1);
-
-                // The semantics must be instantiated
-                constraints.Add(line.Output == instantiations[i]);
             }
 
             // The locations should be distinct
@@ -376,8 +378,9 @@ namespace Mba.Simplifier.Hiera
 
         // Implements CEGIS(T)
         // https://www.kroening.com/papers/cav2018-synthesis.pdf
-        private void CegisT(List<Term> constraints, Term skeleton)
+        private void CegisT(List<Term> constraints)
         {
+
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
 
@@ -422,8 +425,18 @@ namespace Mba.Simplifier.Hiera
                 }
 
 
-                var constraint = GetBehavioralConstraint(skeleton, values);
-                s.Assert(constraint);
+                var (declarations, assignments) = GetOutputs();
+                List<Term> conjs = new();
+                foreach(var (l, r) in Enumerable.Zip(declarations, assignments))
+                {
+                    conjs.Add(ctx.SubstituteTerm(l == r, symbols, values));
+                }
+
+
+                var constrainDataflow = And(conjs);
+                var constrainEquivalence = GetBehavioralConstraint(declarations.Last(), values);
+                s.Assert(constrainDataflow);
+                s.Assert(constrainEquivalence);
             }
 
 
@@ -488,8 +501,20 @@ namespace Mba.Simplifier.Hiera
 
                 // Probably need better heuristic for IO points?
                 var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
-                s.Assert(GetBehavioralConstraint(skeleton, vs));
-                constraints.Add(GetBehavioralConstraint(skeleton, vs));
+
+
+                var (declarations, assignments) = GetOutputs();
+                List<Term> conjs = new();
+                foreach (var (l, r) in Enumerable.Zip(declarations, assignments))
+                {
+                    conjs.Add(ctx.SubstituteTerm(l == r, symbols, vs));
+                }
+
+
+                var constrainDataflow = And(conjs);
+                var constrainEquivalence = GetBehavioralConstraint(declarations.Last(), vs);
+                s.Assert(constrainDataflow);
+                s.Assert(constrainEquivalence);
 
                 s.Write();
             }
@@ -500,8 +525,6 @@ namespace Mba.Simplifier.Hiera
         {
             var before = ctx.SubstituteTerm(groundTruth, symbols, points);
             var after = ctx.SubstituteTerm(skeleton, symbols, points);
-
-            
             return before == after;
         }
 
