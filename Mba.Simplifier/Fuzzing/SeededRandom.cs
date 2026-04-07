@@ -19,6 +19,7 @@ namespace Mba.Simplifier.Fuzzing
             var value = (ulong)random.NextInt64(0, long.MaxValue);
             ulong signBit = GetRandBool() ? 0x8000000000000000 : 0;
             value |= signBit;
+
             return value;
         }
 

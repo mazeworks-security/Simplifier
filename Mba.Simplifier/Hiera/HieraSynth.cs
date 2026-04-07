@@ -794,6 +794,17 @@ namespace Mba.Simplifier.Hiera
                 synth.Run();
             }
 
+            public static void P3Adapted()
+            {
+                var (ctx, idx) = Parse("(((a^b)) - ((c&d))) + (b&e)", 64);
+
+
+                var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Sub }, 11, 11, 0);
+                var synth = new HieraSynth(config, ctx, idx);
+
+                synth.Run();
+            }
+
             private static (AstCtx Ctx, AstIdx Idx) Parse(string text, uint width)
             {
                 var ctx = new AstCtx();

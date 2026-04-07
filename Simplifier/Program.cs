@@ -529,7 +529,7 @@ if (useNew)
 {
     //SynthTests.P1();
     // OLD
-    SynthTests.Phardboolean(); // OLD CODE
+    SynthTests.P3Adapted(); // OLD CODE
     Debugger.Break();
 
     if (false)
@@ -542,7 +542,7 @@ if (useNew)
 bool hiera = true;
 if(hiera)
 {
-    Mba.Simplifier.Hiera.HieraSynth.Tests.Phardboolean();
+    Mba.Simplifier.Hiera.HieraSynth.Tests.P3Adapted();
     Debugger.Break();
 }
 

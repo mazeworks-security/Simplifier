@@ -767,6 +767,7 @@ namespace Mba.Simplifier.Synth
             while (true)
             {
                 var curr = Stopwatch.StartNew();
+                s.Simplify();
                 s.Write();
                 var check = s.CheckSat();
                 curr.Stop();
@@ -1344,6 +1345,23 @@ namespace Mba.Simplifier.Synth
             };
 
             var config = new SynthConfig(components, 14, 0);
+            var synth = new LineSynth(config, ctx, idx);
+
+            synth.Run();
+        }
+
+
+        // Why does this hang??
+        public static void P3Adapted()
+        {
+            var (ctx, idx) = Parse("(((a^b)) - ((c&d))) + (b&c)", 64);
+
+            var components = new List<SynthComponent>()
+            {
+                new(SynthOpc.And, SynthOpc.Or, SynthOpc.Xor, SynthOpc.Add, SynthOpc.Sub),
+            };
+
+            var config = new SynthConfig(components, 10, 0);
             var synth = new LineSynth(config, ctx, idx);
 
             synth.Run();
