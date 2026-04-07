@@ -28,6 +28,11 @@ namespace Mba.Simplifier.Hiera
         int MaxConstants
         );
 
+    public class SynthComponent
+    {
+
+    }
+
     // A component has multiple choices for an instruction
     // If we want to allow synthesizing variable length sequences, we 
     public class SynthLine
@@ -136,7 +141,7 @@ namespace Mba.Simplifier.Hiera
             synth.Run();
             Debugger.Break();
         }
-        */
+        */ 
 
         public static void PMediumBoolean()
         {
