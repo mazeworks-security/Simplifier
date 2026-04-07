@@ -1385,6 +1385,24 @@ namespace Mba.Simplifier.Synth
             synth.Run();
         }
 
+        public static void Throw()
+        {
+            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4^x2))", 1);
+
+            var components = new List<SynthComponent>()
+            {
+                new(new ComponentData(6), SynthOpc.And),
+                new(new ComponentData(6), SynthOpc.Or),
+                new(new ComponentData(6), SynthOpc.Xor),
+                // new(new ComponentData(6), SynthOpc.Not),
+            };
+
+            var config = new SynthConfig(components, 11, 0);
+            var synth = new LineSynth(config, ctx, idx);
+
+            synth.Run();
+        }
+
         public static void PReallyHardBoolean()
         {
             var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))|x7|x8|x9", 1);

@@ -6,6 +6,7 @@ using Mba.Simplifier.Synth;
 using Mba.Simplifier.Utility;
 using Mba.Utility;
 using Microsoft.VisualBasic;
+using Microsoft.Z3;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -18,7 +19,6 @@ using System.Threading.Tasks;
 namespace Mba.Simplifier.Hiera
 {
     public record SynthConfig(
-        // The opcodes that may be chosen during synthesis
         SynthOpc[] Opcodes,
         // Minimum number of instructions a solution must use
         int MinLength, 
@@ -30,7 +30,15 @@ namespace Mba.Simplifier.Hiera
 
     public class SynthComponent
     {
+        // The possible instructions the component can choose from
+        public SynthOpc[] Choices { get; set; }
 
+        // Selector variable choosing which semantic(add, sub, etc) to assign to the component
+        public Term Opcode { get; set; }
+
+        public int NumOperands => Choices.MaxBy(x => x.GetOperandCount()).GetOperandCount();
+
+        // Inputs and outputs should not be stored here... they need to be instantiated
     }
 
     // A component has multiple choices for an instruction
@@ -40,48 +48,30 @@ namespace Mba.Simplifier.Hiera
         // Gets or sets whether the line is a symbol or instruction
         public bool IsSymbol { get; set; }
 
-        // The possible instructions the component can choose from
-        public SynthOpc[] Choices { get; set; }
-
-        public int MaxArity => Choices.Max(x => x.GetOperandCount());
-
-        // The DAG index of the component
-        // Inputs get assigned the first N indices, so this is an offset starting from N
-        public Term Loc { get; set; }
-
-        // Selector variable choosing which semantic(add, sub, etc) to assign to the component
-        public Term Opcode { get; set; }
+        // The index of the component
+        public Term ComponentIdx { get; set; }
 
         // The operands of the component
-        public SynthOperand[] Operands { get; set; }
-
-        public SynthLine(params SynthOpc[] opcodes)
-        {
-            Choices = opcodes;
-        }
+        public LineOperand[] Operands { get; set; }
     }
 
-    public class SynthOperand
+    public class LineOperand
     {
         // Boolean variable indicating whether the first operand is a constant
         public Term IsConstant { get; }
 
-        // The immediate value of this operand
-        public Term ConstValue { get; set; }
-
         // The index of the operand. 
-        public Term OperandIndex { get; }
+        public Term Index { get; }
 
-        public SynthOperand(Term isConstant, Term constVal, Term index)
+        public LineOperand(Term isConstant, Term index)
         {
             IsConstant = isConstant;
-            ConstValue = constVal;
-            OperandIndex = index;
+            Index = index;
         }
 
         public override string ToString()
         {
-            return $"(IsConstant: {IsConstant}) (Index: {OperandIndex})";
+            return $"(IsConstant: {IsConstant}) (Index: {Index})";
         }
     }
 
@@ -105,77 +95,23 @@ namespace Mba.Simplifier.Hiera
         // Input variables
         private Term[] symbols;
 
-        // Bitvector variable selecting the length of the synthesized program
-        private readonly Term lastInstVar;
-
-        private List<SynthLine> lines;
-
         // Get the index of the first instruction in lines
         private int FirstInstIdx => symbols.Length;
 
+        // Get the max number of operands that one instruction may contain.
+        private int MaxArity => components.Max(x => x.Choices.Max(x => x.GetOperandCount()));
+
+        public List<SynthOpc> Opcodes => config.Opcodes.ToList();
+
+        private readonly IReadOnlyList<SynthComponent> components;
+
+        private List<SynthLine> lines;
+
         public IReadOnlyList<SynthLine> RealLines => lines.Skip(FirstInstIdx).ToList();
 
+        private List<Term> constants;
+
         private readonly uint w;
-
-        public bool VariableLength => config.MinLength != config.MaxLength;
-
-        public static void P4()
-        {
-            var config = new SynthConfig(new SynthOpc[] { SynthOpc.Add, SynthOpc.Sub }, 5, 5, 0);
-
-            var (ctx, idx) = Parse("(a+b)-c", 8);
-            var synth = new HieraSynth(config, ctx, idx);
-
-            synth.Run();
-            Debugger.Break();
-        }
-
-        /*
-        public static void PMediumBoolean()
-        {
-            var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 7, 7, 0);
-
-            var (ctx, idx) = Parse("x0^x1^x2^x3", 1);
-            var synth = new HieraSynth(config, ctx, idx);
-
-            synth.Run();
-            Debugger.Break();
-        }
-        */ 
-
-        public static void PMediumBoolean()
-        {
-            var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 5, 5, 0);
-
-            var (ctx, idx) = Parse("(AAA&BBB)|CCC", 1);
-            var synth = new HieraSynth(config, ctx, idx);
-
-            synth.Run();
-            Debugger.Break();
-        }
-
-        public static void PMediumBooleanReal()
-        {
-            var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 14, 14, 0);
-
-            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
-            var synth = new HieraSynth(config, ctx, idx);
-
-            synth.Run();
-            Debugger.Break();
-        }
-
-
-        public static void PEasyBoolean()
-        {
-            var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 11, 11, 0);
-
-            var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4^x2))", 1);
-            var synth = new HieraSynth(config, ctx, idx);
-
-            synth.Run();
-            Debugger.Break();
-        }
 
 
         public HieraSynth(SynthConfig config, AstCtx mbaCtx, AstIdx mbaIdx)
@@ -183,9 +119,12 @@ namespace Mba.Simplifier.Hiera
             this.config = config;
             this.mbaCtx = mbaCtx;
             this.mbaIdx = mbaIdx;
-            this.lastInstVar = ctx.MkBvValue(config.MinLength - 1, (uint)BvWidth(config.MinLength - 1));
-
             this.mbaVariables = mbaCtx.CollectVariables(mbaIdx).ToArray();
+            
+            var numInstructions = config.MaxLength - mbaVariables.Length;
+            var opcodeSelectorSize = (uint)BvWidth(config.Opcodes.Length - 1);
+
+            this.components = Enumerable.Range(0, numInstructions).Select(x => new SynthComponent() { Choices = config.Opcodes, Opcode = ctx.MkBvConst($"comp{x}_code", opcodeSelectorSize) }).ToList();
 
             // Set the global width that all expressions use
             w = mbaVariables.Select(x => mbaCtx.GetWidth(x)).Append(mbaCtx.GetWidth(mbaIdx)).Max();
@@ -195,7 +134,7 @@ namespace Mba.Simplifier.Hiera
             if (w > outputWidth)
                 mbaIdx = mbaCtx.Zext(mbaIdx, (byte)w);
 
-            // Translate inputs to SMT
+            // Translate inputs to LLVM IR
             var translator = new BitwuzlaTranslator(mbaCtx, ctx);
 
             groundTruth = translator.Translate(mbaIdx);
@@ -204,35 +143,21 @@ namespace Mba.Simplifier.Hiera
 
         public void Run()
         {
+            // Get a list of lines
             lines = GetLines();
-            //var outputs = GetOutputs();
+            constants = Enumerable.Range(0, config.MaxConstants).Select(x => ctx.MkBvConst($"const{x}", w)).ToList();
+
+
 
             var constraints = GetProgramConstraints();
-
-            // Compute the result variable
-            //var result = LinearSelect(lastInstVar, outputs);
-            //var result = SelectLineOutput(lastInstVar);
-            //var result = lines.Last().Output;
 
             CegisT(constraints);
 
             Debugger.Break();
         }
 
-        /*
-        private Term SelectLineOutput(Term loc)
-        {
-            var result = RealLines.Last().Output;
-            foreach (var line in RealLines)
-            {
-                var matchesLoc = line.Loc == loc;
-                result = ctx.MkIte(matchesLoc, line.Output, result);
-            }
-
-            return result;
-        }
-        */
-
+        private void Log(string x)
+            => Console.WriteLine(x);
 
         private List<SynthLine> GetLines()
         {
@@ -242,26 +167,30 @@ namespace Mba.Simplifier.Hiera
             for (int i = 0; i < symbols.Length; i++)
                 lines.Add(new() { IsSymbol = true });
 
-            var maxOperandSize = BvWidth(config.MaxLength);
-            var opcodeSize = BvWidth(config.Opcodes.Length - 1);
-            for (int lineIndex = symbols.Length; lineIndex < config.MaxLength; lineIndex++)
+            var maxOperandSize = BvWidth(Math.Max(config.MaxLength - 2, config.MaxConstants - 1));
+
+            // Get the minimum size bitvector needed to store the component index and component opcode
+            var componentIndexSize = (uint)BvWidth(components.Count - 1);
+            for (int lineIndex = lines.Count; lineIndex < config.MaxLength; lineIndex++)
             {
                 var line = new SynthLine();
-                line.Loc = ctx.MkBvConst($"loc{lineIndex}", maxOperandSize);
-                line.Choices = config.Opcodes.ToArray();
                 line.IsSymbol = false;
-                line.Opcode = ctx.MkBvConst($"compCode{lineIndex}", opcodeSize);
-
-                line.Operands = new SynthOperand[line.MaxArity];
-                for(int i = 0; i < line.MaxArity; i++)
+                line.ComponentIdx = ctx.MkBvConst($"line{lineIndex}_compIdx", componentIndexSize);
+                line.Operands = new LineOperand[MaxArity];
+                var operandBitsize = BvWidth(Math.Max(lineIndex - 1, config.MaxConstants - 1));
+                for (int i = 0; i < MaxArity; i++)
                 {
-                    var isConstant = config.MaxConstants == 0 ? ctx.MkFalse() : ctx.MkBoolConst($"line{lineIndex}_op{i}is_const");
-                    var constant = ctx.MkBvConst($"line{lineIndex}_op{i}const", w);
-                    var operandIndex = ctx.MkBvConst($"line{lineIndex}_op{i}", maxOperandSize);
+                    var isConstant = config.MaxConstants == 0 ? ctx.MkFalse() : ctx.MkBoolConst($"line{lineIndex}_op{i}Const");
+                    var operandIndex = ctx.MkBvConst($"line{lineIndex}_op{i}", operandBitsize);
+                    // Sometimes this will emit useless zero extensions. Zext(a, 0)
+                    // For some reason there are performance regressions with Bitwuzla if you remove this redundant zext. Specifically on the `PBenchSlot` benchmark
+                    operandIndex = ctx.MkZext((uint)maxOperandSize - (uint)operandBitsize, operandIndex);
 
-                    var operand = new SynthOperand(isConstant, constant, operandIndex);
+                    var operand = new LineOperand(isConstant, operandIndex);
                     line.Operands[i] = operand;
                 }
+
+                //line.Output = ctx.MkBvConst($"line{lineIndex}_output", w);
 
                 lines.Add(line);
             }
@@ -269,23 +198,72 @@ namespace Mba.Simplifier.Hiera
             return lines;
         }
 
-        int li = 0;
-        // Instantiate the semantics of each instruction
-        // TODO: This is broken...
-        // You can't just recursively clone everything 
-        private (List<Term> definitions, List<Term> values) GetOutputs()
+        public record ComponentInstance(Term[] inputs, Term output);
+        public record LineInstance(Term output);
+
+        int numInstances = 0;
+        private (List<Term> constraints, List<Term> lineOutputs) GetDataflowConstraints()
         {
-            var exprs = new List<Term>();
-            List<Term> prev = new();
-            prev.AddRange(symbols);
-            for (int lineIndex = FirstInstIdx; lineIndex < lines.Count; lineIndex++)
+            // For each component instantiate an instance.
+            var componentInstances = new List<ComponentInstance>();
+            for(int i = 0; i < components.Count; i++)
             {
-                var output = ctx.MkBvConst($"line{lineIndex}_out{li}", w);
-                prev.Add(output);
+                var component = components[i];
+                var operands = Enumerable.Range(0, component.NumOperands).Select(x => ctx.MkBvConst($"comp{i}_op{x}_instance{numInstances}", w)).ToList();
+                var terms = new List<Term>();
+                foreach (var opcode in component.Choices)
+                {
+                    var term = ApplyOperator(opcode, operands);
+                    terms.Add(term);
+                }
+
+                var select = LinearSelect(component.Opcode, terms);
+                componentInstances.Add(new ComponentInstance(operands.ToArray(), select));
             }
 
-            li++;
+            var constraints = new List<Term>();
+            var lineInstances = new List<LineInstance>();
+            for(int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
+            {
+                // The first N lines are symbols
+                var line = lines[lineIndex];
+                if (line.IsSymbol)
+                {
+                    lineInstances.Add(new(symbols[lineIndex]));
+                    continue;
+                }
 
+                // Select all of the operands
+                var operands = line.Operands.Select(x => SelectOperand(x, lineInstances.Select(x => x.output).ToList())).ToList();
+
+                // Problem: We need a canonical ordering for the instructions..
+                var output = ctx.MkBvConst($"line{lineIndex}_output{numInstances}", w);
+                for (int componentIndex = 0; componentIndex < components.Count; componentIndex++)
+                {
+                    var component = components[componentIndex];
+                    var isComponent = line.ComponentIdx == (ulong)componentIndex;
+                    var compInstance = componentInstances[componentIndex];
+                    // If we picked this component, use it's output.
+                    constraints.Add(Implies(isComponent, output == compInstance.output));
+                    for(int operandIdx = 0; operandIdx < operands.Count; operandIdx++)
+                    {
+                        // If we picked this component, set its input to the line inputs.
+                        constraints.Add(Implies(isComponent, operands[operandIdx].expr == compInstance.inputs[operandIdx]));
+                    }
+                }
+
+                lineInstances.Add(new(output));
+            }
+
+            numInstances++;
+            return (constraints, lineInstances.Select(x => x.output).ToList());
+
+        }
+
+        private Term GetSkeleton()
+        {
+
+            var exprs = new List<Term>();
             for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
             {
                 // The first N lines are symbols
@@ -297,62 +275,22 @@ namespace Mba.Simplifier.Hiera
                 }
 
                 // Select all of the operands
-                var operands = line.Operands.Select(x => SelectOperandByLoc(x, prev)).ToList();
+                var operands = line.Operands.Select(x => SelectOperand(x, exprs)).ToList();
 
                 var terms = new List<Term>();
-                foreach (var opcode in line.Choices)
+                foreach (var opcode in Opcodes)
                 {
                     var term = ApplyOperator(opcode, operands.Select(x => x.expr).ToList());
 
                     terms.Add(term);
                 }
 
-                var select = LinearSelect(line.Opcode, terms);
-                exprs.Add(select);
+                //var select = LinearSelect(line.ComponentOpcode, terms);
+                //exprs.Add(select);
             }
 
-            return (prev, exprs);
+            return exprs.Last();
         }
-
-        private (Term expr, Term justOperands, Term justConstants) SelectOperandByLoc(SynthOperand operand, List<Term> prevVariables)
-        {
-            var targetLoc = operand.OperandIndex;
-            Term operandSelect = prevVariables[0]; // Fallback
-            for (int i = 0; i < lines.Count; i++)
-            {
-                var producerLoc = lines[i].IsSymbol ? ctx.MkBvValue((uint)i, targetLoc.Sort.BvSize) : lines[i].Loc;
-                var producerOutput = prevVariables[i];
-                operandSelect = ctx.MkIte(targetLoc == producerLoc, producerOutput, operandSelect);
-            }
-
-            if (config.MaxConstants == 0)
-                return (operandSelect, operandSelect, null);
-
-            var expr = ctx.MkIte(operand.IsConstant, operand.ConstValue, operandSelect);
-            return (expr, operandSelect, null);
-        }
-
-        // Select the ith value of an array using a chain of ITEs
-        private Term LinearSelect(Term index, List<Term> options)
-        {
-            var n = options.Count;
-
-            if (n == 0)
-                throw new InvalidOperationException();
-            if (n == 1)
-                return options[0];
-
-            var result = options[n - 1];
-            for (int i = n - 2; i >= 0; i--)
-            {
-                var condition = index == ctx.MkBvValue(i, index.Sort.BvSize);
-                result = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_ITE, condition, options[i], result);
-            }
-
-            return result;
-        }
-        
-        // We have a list of components each with a unique index, and are looking for 
 
         private Term ApplyOperator(SynthOpc opcode, List<Term> operands)
         {
@@ -382,53 +320,105 @@ namespace Mba.Simplifier.Hiera
             return term;
         }
 
+        private (Term expr, Term justOperands, Term justConstants) SelectOperand(LineOperand operand, List<Term> prev)
+        {
+            var operandSelect = LinearSelect(operand.Index, prev);
+            if (config.MaxConstants == 0)
+                return (operandSelect, operandSelect, null);
+
+            var constSelect = LinearSelect(operand.Index, constants);
+            var expr = ctx.MkIte(operand.IsConstant, constSelect, operandSelect);
+            return (expr, operandSelect, constSelect);
+        }
+
+        // Select one of N values using a chain of ITEs
+        private Term LinearSelect(Term index, List<Term> options)
+        {
+            var n = options.Count;
+
+            if (n == 0)
+                throw new InvalidOperationException();
+            if (n == 1)
+                return options[0];
+
+            var result = options[n - 1];
+            for (int i = n - 2; i >= 0; i--)
+            {
+                var condition = index == ctx.MkBvValue(i, index.Sort.BvSize);
+                result = ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_ITE, condition, options[i], result);
+            }
+
+            return result;
+        }
+
+        // Select one of N values using a binary search
+        private Term BinarySelect(Term index, List<Term> options, int offset, int count)
+        {
+            if (count == 1) return options[offset];
+
+            int requiredBits = (int)Math.Ceiling(Math.Log2(count));
+            int msbIndex = requiredBits - 1;
+            int splitSize = 1 << msbIndex;
+            int rightCount = count - splitSize;
+
+            var condBit = ctx.MkExtract((uint)msbIndex, (uint)msbIndex, index);
+            var condition = condBit == ctx.MkBvValue(1, 1);
+
+            var lowResult = BinarySelect(index, options, offset, splitSize);
+            var highResult = BinarySelect(index, options, offset + splitSize, rightCount);
+
+            return ctx.MkIte(condition, highResult, lowResult);
+        }
+
         private List<Term> GetProgramConstraints()
         {
             var constraints = new List<Term>();
-            AddNumInstructionsConstraint(constraints);
             AddWfpConstraints(constraints);
             return constraints;
         }
 
-        // If we are synthesizing an instruction with a variable number of instructions, constrain the length of the solution accordingly
-        private void AddNumInstructionsConstraint(List<Term> constraints)
-        {
-            // Skip if there is only one allowed length
-            if (!VariableLength)
-                return;
-
-            Debugger.Break();
-        }
-
+        // Constrain the synthesis template to be a valid program
         private void AddWfpConstraints(List<Term> constraints)
         {
             for (int i = FirstInstIdx; i < lines.Count; i++)
             {
                 var line = lines[i];
+
                 // Each line can only refer to lines below it
-                foreach(var operand in line.Operands)
+                foreach (var operand in line.Operands)
                 {
-                    var ult = operand.OperandIndex < line.Loc;
-                    constraints.Add(ult);
+                    var ult = operand.Index <= (uint)(i - 1);
+                    var opConstraint = Implies(~operand.IsConstant, ult);
+                    // TODO: If the operand is a constant, maybe the bounds should be Min(i-1, config.MaxConstants)
+                    var constConstraint = Implies(operand.IsConstant, operand.Index <= (uint)Math.Max((config.MaxConstants - 1), 0));
+
+                    constraints.Add(opConstraint);
+                    constraints.Add(constConstraint);
                 }
 
-                // The location must be within range
-                constraints.Add(line.Loc >= (uint)FirstInstIdx);
-                constraints.Add(line.Loc <= (uint)lines.Count - 1);
-                // The opcode must be within range
-                constraints.Add(line.Opcode <= (uint)line.Choices.Length - 1);
+                // Each instruction must choose a valid component
+                constraints.Add(line.ComponentIdx <= (uint)(components.Count - 1));
             }
 
-            // The locations should be distinct
-            constraints.Add(ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_DISTINCT, RealLines.Select(x => x.Loc)));
+            // Each line must be assigned a unique component
+            constraints.Add(ctx.MkTerm(BitwuzlaKind.BITWUZLA_KIND_DISTINCT, lines.Skip(FirstInstIdx).Select(x => x.ComponentIdx)));
+
+            foreach(var component in components)
+            {
+                constraints.Add(component.Opcode <= (uint)(component.Choices.Length - 1));
+            }
+
+        }
+
+        private bool HasComponent(SynthOpc opcode)
+        {
+            return Opcodes.Contains(opcode);
         }
 
         // Implements CEGIS(T)
-        // TODO: Triage why SLOT makes some of these constraints easier to solve..
         // https://www.kroening.com/papers/cav2018-synthesis.pdf
         private void CegisT(List<Term> constraints)
         {
-
             var options = new Options();
             options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
 
@@ -448,6 +438,11 @@ namespace Mba.Simplifier.Hiera
                 s.Assert(c);
 
             s.Write();
+
+            bool mba = false;
+            if (mba)
+                s.Assert(symbols[0] >= 50);
+
 
 
             var rng = new SeededRandom();
@@ -472,19 +467,21 @@ namespace Mba.Simplifier.Hiera
                    .ToArray();
                 }
 
-
-                var (declarations, assignments) = GetOutputs();
-                List<Term> conjs = new();
-                foreach (var (l, r) in Enumerable.Zip(declarations, assignments).Skip(symbols.Length))
+                while (mba && ctx.GetIntegerValue(values[0]) < 50)
                 {
-                    conjs.Add(ctx.SubstituteTerm(l == r, symbols, values));
+                    values[0] |= (rng.GetRandUlong() & ModuloReducer.GetMask((uint)symbols[0].Sort.BvSize));
                 }
 
 
-                var constrainDataflow = And(conjs);
-                var constrainEquivalence = GetBehavioralConstraint(GetProgramOutput(declarations), values);
-                s.Assert(constrainDataflow);
-                s.Assert(constrainEquivalence);
+
+                var (flowConstraints, flowResults) = GetDataflowConstraints();
+                flowConstraints.Add(flowResults.Last() == groundTruth);
+
+                var adj = flowConstraints.Select(x => ctx.SubstituteTerm(x, symbols, values));
+                foreach (var c in adj)
+                    s.Assert(c);
+                //var constraint = GetBehavioralConstraint(skeleton, values);
+                //s.Assert(constraint);
             }
 
 
@@ -505,31 +502,10 @@ namespace Mba.Simplifier.Hiera
                     return;
                 }
 
-                
-                foreach(var line in RealLines)
-                {
-                    Console.WriteLine($"Loc: {s.GetValue(line.Loc)}");
-                    Console.WriteLine($"Opc: {s.GetValue(line.Opcode)}");
-                    foreach(var operand in line.Operands)
-                    {
-                        Console.WriteLine($"    {s.GetValue(operand.IsConstant)}");
-                        Console.WriteLine($"    {s.GetValue(operand.OperandIndex)}");
-                        Console.WriteLine($"    {s.GetValue(operand.ConstValue)}");
-                        Console.WriteLine("    ");
-                    }
-                    Console.WriteLine("\n");
-                }
-
-                //Console.WriteLine(s.mod);
-
-                var cegisSolution = SolutionToExprNew(s, (int)ctx.GetIntegerValue(s.GetValue(lastInstVar)));
-
                 // Ask the solver for a fitting solution
-                //var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
+                var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
 
-
-
-                Log($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{cegisSolution}\n\n\n");
+                Log($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{ourSolution}\n\n\n");
 
                 if (curr.ElapsedMilliseconds > 75000)
                     Debugger.Break();
@@ -539,6 +515,9 @@ namespace Mba.Simplifier.Hiera
                 options.Set(BitwuzlaOption.BITWUZLA_OPT_PRODUCE_MODELS, true);
                 var temp = new BvSolver(ctx, options);
 
+                if (mba)
+                    temp.Assert(symbols[0] >= 50);
+
                 temp.Assert(~(groundTruth == cegisSolution));
                 var isEquiv = temp.CheckSat() == Result.Unsat;
                 if (isEquiv)
@@ -547,25 +526,40 @@ namespace Mba.Simplifier.Hiera
                     Debugger.Break();
                 }
 
-                // Probably need better heuristic for IO points?
-                var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
-
-
-                var (declarations, assignments) = GetOutputs();
-                List<Term> conjs = new();
-                foreach (var (l, r) in Enumerable.Zip(declarations, assignments).Skip(symbols.Length))
+                bool generalize = false;
+                if (generalize)
                 {
-                    conjs.Add(ctx.SubstituteTerm(l == r, symbols, vs));
+                    Log("Beginning generalization...");
+                    var sww = Stopwatch.StartNew();
+                    var (generalizedSolution, generalizedBan) = Generalize(s, cegisSolution, cegisConstants, totalTime, mba);
+
+                    sww.Stop();
+                    Log($"Generalizing took {sww.ElapsedMilliseconds}ms");
+
+                    if (generalizedBan is not null)
+                    {
+
+                        Log("Finished generalization...");
+                        Debug.Assert(generalizedSolution is null);
+                        s.Assert(generalizedBan);
+                        constraints.Add(generalizedBan);
+                    }
                 }
 
 
-                var constrainDataflow = And(conjs);
-                var constrainEquivalence = GetBehavioralConstraint(GetProgramOutput(declarations), vs);
-                s.Assert(constrainDataflow);
-                s.Assert(constrainEquivalence);
+                // Probably need better heuristic for IO points?
+                /*
+                var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
+                s.Assert(GetBehavioralConstraint(null, vs));
+                constraints.Add(GetBehavioralConstraint(null, vs));
+                */
+                var vs = symbols.Select(x => temp.GetValue(x)).ToArray();
+                var (flowConstraints, flowResults) = GetDataflowConstraints();
+                flowConstraints.Add(flowResults.Last() == groundTruth);
 
-                s.Simplify();
-                s.Write();
+                var adj = flowConstraints.Select(x => ctx.SubstituteTerm(x, symbols, vs));
+                foreach (var c in adj)
+                    s.Assert(c);
             }
         }
 
@@ -577,60 +571,25 @@ namespace Mba.Simplifier.Hiera
             return before == after;
         }
 
-        private Term GetProgramOutput(List<Term> declarations)
-        {
-            Term result = declarations[0];
-            for (int i = FirstInstIdx; i < lines.Count; i++)
-            {
-                var producerLoc = lines[i].IsSymbol ? ctx.MkBvValue((uint)i, lastInstVar.Sort.BvSize) : lines[i].Loc;
-                result = ctx.MkIte(lastInstVar == producerLoc, declarations[i], result);
-            }
-            return result;
-        }
-
-        private Term SolutionToExprNew(BvSolver s, int loc)
-        {
-            if (loc < symbols.Length)
-                return symbols[loc];
-
-            foreach (var l in lines)
-            {
-                if (l.IsSymbol)
-                    continue;
-
-                var lVar = l.Loc.Kind == BitwuzlaKind.BITWUZLA_KIND_CONSTANT ? ctx.GetIntegerValue(s.GetValue(l.Loc)).ToString() : "undefined";
-                //Console.WriteLine($"Loc var: {lVar}");
-            }
-
-            //Console.WriteLine("\n\n");
-            var line = lines.Single(x => !x.IsSymbol && x.Loc.Kind == BitwuzlaKind.BITWUZLA_KIND_CONSTANT && (int)ctx.GetIntegerValue(s.GetValue(x.Loc)) == loc);
-
-            var opcode = ctx.GetIntegerValue(s.GetValue(line.Opcode));
-            if (opcode >= (ulong)line.Choices.Length)
-                opcode = (ulong)line.Choices.Length - 1;
-
-            var opc = line.Choices[opcode];
-
-            var operands = new List<Term>();
-            foreach(var operand in line.Operands)
-            {
-                var isConstant = ctx.GetBoolValue(s.GetValue(operand.IsConstant));
-                var operandIndex = (int)ctx.GetIntegerValue(s.GetValue(operand.OperandIndex));
-
-                var cegisOperand = isConstant ? operand.ConstValue : SolutionToExprNew(s, operandIndex);
-                operands.Add(cegisOperand);
-
-                if (opc == SynthOpc.Not)
-                    break;
-            }
-
-            Term cegisNode = ApplyOperator(opc, operands);
-            return cegisNode;
-        }
-
         // TODO: We're getting tons of identical duplicates even with CEGIS(T). I think the forall query is broken?
         private (AstIdx ourSolution, Term cegisSolution, List<Term> constants) SolutionToExpr(BvSolver s)
         {
+ 
+            // Compute the list of constant terms
+            List<Term> cegisConstants = new();
+            List<AstIdx> ourConstants = new();
+            for (int i = 0; i < config.MaxConstants; i++)
+            {
+                var eval = s.GetValue(constants[i]);
+
+                var w = constants[i].Sort.BvSize;
+                var myConstant = ctx.GetIntegerValue(eval);
+                ourConstants.Add(mbaCtx.Constant(myConstant, (byte)w));
+                cegisConstants.Add(eval);
+
+                Log($"const{i} = {myConstant}");
+            }
+
             foreach (var line in lines)
             {
                 if (line.IsSymbol)
@@ -638,7 +597,7 @@ namespace Mba.Simplifier.Hiera
                     continue;
                 }
 
-                var a = s.GetValue(line.Opcode);
+                var a = s.GetValue(line.ComponentIdx);
                 Log($"{a}");
             }
 
@@ -656,21 +615,24 @@ namespace Mba.Simplifier.Hiera
                     continue;
                 }
 
-                var opcode = ctx.GetIntegerValue(s.GetValue(line.Opcode));
-                if (opcode >= (ulong)line.Choices.Length)
-                    opcode = (ulong)line.Choices.Length - 1;
+                var compIdx = ctx.GetIntegerValue(s.GetValue(line.ComponentIdx));
+                var component = components[(int)compIdx];
+
+                var opcode = ctx.GetIntegerValue(s.GetValue(component.Opcode));
+                //if (opcode >= (ulong)Opcodes.Count)
+                //    opcode = (ulong)Opcodes.Count - 1;
 
                 var cegisOperands = new List<Term>();
                 var ourOperands = new List<AstIdx>();
                 foreach (var operand in line.Operands)
                 {
                     var isConstant = ctx.GetBoolValue(s.GetValue(operand.IsConstant));
-                    var operandIndex = (int)ctx.GetIntegerValue(s.GetValue(operand.OperandIndex));
+                    var operandIndex = (int)ctx.GetIntegerValue(s.GetValue(operand.Index));
 
-                    var cegisOperand = isConstant ? operand.ConstValue : cegisNodes[operandIndex];
+                    var cegisOperand = isConstant ? cegisConstants[operandIndex] : cegisNodes[operandIndex];
                     cegisOperands.Add(cegisOperand);
 
-                    var ourOperand = isConstant ? mbaCtx.Constant(ctx.GetIntegerValue(s.GetValue(operand.ConstValue)), (byte)w) : ourNodes[operandIndex];
+                    var ourOperand = isConstant ? ourConstants[operandIndex] : ourNodes[operandIndex];
                     ourOperands.Add(ourOperand);
                 }
 
@@ -680,7 +642,7 @@ namespace Mba.Simplifier.Hiera
 
 
 
-                var opc = line.Choices[(int)opcode];
+                var opc = component.Choices[(int)opcode];
 
                 if (opc == SynthOpc.Select)
                 {
@@ -712,11 +674,11 @@ namespace Mba.Simplifier.Hiera
 
 
                 List<string> operandStrs = new();
-                for (int i = 0; i < line.MaxArity; i++)
+                for (int i = 0; i < MaxArity; i++)
                 {
                     var operand = line.Operands[i];
                     var isConstant = ctx.GetBoolValue(s.GetValue(operand.IsConstant));
-                    var operandIndex = (int)ctx.GetIntegerValue(s.GetValue(operand.OperandIndex));
+                    var operandIndex = (int)ctx.GetIntegerValue(s.GetValue(operand.Index));
                     operandStrs.Add($"{isConstant} {operandIndex}");
                 }
 
@@ -726,12 +688,17 @@ namespace Mba.Simplifier.Hiera
                 cegisNodes.Add(cegisNode);
             }
 
-            return (ourNodes.Last(), cegisNodes.Last(), null);
-       
+            return (ourNodes.Last(), cegisNodes.Last(), cegisConstants);
+            
+        }
+
+        private (Term generalizedSolution, Term generalizedConstraints) Generalize(BvSolver oldModel, Term candidate, List<Term> cegisConstants, Stopwatch totalTime, bool mba)
+        {
+            return (null, null);
         }
 
         private Term ToBv(Term term, uint width = 1)
-          => ctx.MkIte(term, ctx.MkBvValue(1, width), ctx.MkBvValue(0, width));
+            => ctx.MkIte(term, ctx.MkBvValue(1, width), ctx.MkBvValue(0, width));
 
         private Term ToBool(Term term)
            => ctx.MkExtract(0, 0, term) == 1;
@@ -756,7 +723,6 @@ namespace Mba.Simplifier.Hiera
             return ctx.MkTerm(kind, terms);
         }
 
-
         // Get the minimum number of bits needed to fit an integer that ranges from 0..N (inclusive)
         public static int BvWidth(int maxValue)
         {
@@ -766,17 +732,78 @@ namespace Mba.Simplifier.Hiera
             return BitOperations.Log2((uint)maxValue) + 1;
         }
 
-        private void Log(string x)
-            => Console.WriteLine(x);
 
-        private static (AstCtx Ctx, AstIdx Idx) Parse(string text, uint width)
+        public class Tests
         {
-            var ctx = new AstCtx();
-            AstIdx.ctx = ctx;
-            var parsed = RustAstParser.Parse(ctx, text, width);
-            return (ctx, parsed);
+            public static void P0()
+            {
+                var (ctx, idx) = Parse("(a&b) + c", 8);
+
+
+                var config = new SynthConfig(new SynthOpc[] { SynthOpc.Add, SynthOpc.And }, 5, 5, 0);
+                var synth = new HieraSynth(config, ctx, idx);
+
+                synth.Run();
+            }
+
+
+            public static void PEasyBoolean()
+            {
+                var (ctx, idx) = Parse("x0^x1^x2^x3", 1);
+
+
+                var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 7, 7, 0);
+                var synth = new HieraSynth(config, ctx, idx);
+
+                synth.Run();
+            }
+
+            public static void PEasyBoolean2()
+            {
+                var (ctx, idx) = Parse("AAA|BBB^CCC&DDD|EEE", 1);
+
+
+                var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 9, 9, 0);
+                var synth = new HieraSynth(config, ctx, idx);
+
+                synth.Run();
+            }
+
+
+
+            // (x0^x1^x2^x3)&(x3|(x4|x5&x6))
+            public static void Throw()
+            {
+                var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4^x2))", 1);
+
+
+                var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 11, 11, 0);
+                var synth = new HieraSynth(config, ctx, idx);
+
+                synth.Run();
+            }
+
+            public static void Phardboolean()
+            {
+                var (ctx, idx) = Parse("(x0^x1^x2^x3)&(x3|(x4|x5&x6))", 1);
+
+
+                var config = new SynthConfig(new SynthOpc[] { SynthOpc.And, SynthOpc.Or, SynthOpc.Xor }, 14, 14, 0);
+                var synth = new HieraSynth(config, ctx, idx);
+
+                synth.Run();
+            }
+
+            private static (AstCtx Ctx, AstIdx Idx) Parse(string text, uint width)
+            {
+                var ctx = new AstCtx();
+                AstIdx.ctx = ctx;
+                var parsed = RustAstParser.Parse(ctx, text, width);
+                return (ctx, parsed);
+            }
         }
     }
 
-   
+
+
 }
