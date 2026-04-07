@@ -575,7 +575,7 @@ namespace Mba.Simplifier.Hiera
         private Term GetProgramOutput(List<Term> declarations)
         {
             Term result = declarations[0];
-            for (int i = 0; i < lines.Count; i++)
+            for (int i = FirstInstIdx; i < lines.Count; i++)
             {
                 var producerLoc = lines[i].IsSymbol ? ctx.MkBvValue((uint)i, lastInstVar.Sort.BvSize) : lines[i].Loc;
                 result = ctx.MkIte(lastInstVar == producerLoc, declarations[i], result);
