@@ -24,6 +24,7 @@ using static Antlr4.Runtime.Atn.SemanticContext;
 using Mba.Simplifier.Interpreter;
 using Mba.Simplifier.Utility;
 using Microsoft.VisualBasic;
+using Mba.Simplifier.Fuzzing;
 
 namespace Mba.Simplifier.Pipeline
 {
@@ -122,7 +123,9 @@ namespace Mba.Simplifier.Pipeline
                 if (asConstant != null)
                     resultVector = new ApInt[] { asConstant.Value };
                 else
+                {
                     resultVector = JitResultVector(ctx, bitSize, moduloMask, variables, ast.Value, multiBit, numCombinations);
+                }
             }
 
             // After constructing the result vector, cast all of the variables to the size of the output expression.
@@ -143,7 +146,7 @@ namespace Mba.Simplifier.Pipeline
                 return variables;
 
             var result = new List<AstIdx>();
-            foreach(var v in variables)
+            foreach (var v in variables)
             {
                 // Skip if the variable is of the correct size
                 var w = ctx.GetWidth(v);
@@ -172,9 +175,9 @@ namespace Mba.Simplifier.Pipeline
             return groupSizes;
         }
 
-        public unsafe static ApInt[] JitResultVector(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, bool multiBit, ApInt numCombinations)
+        public unsafe static ApInt[] JitResultVector(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, bool multiBit, ApInt numCombinations, bool shift = true)
         {
-            return JitResultVectorNew(ctx, bitWidth, mask, variables, ast, multiBit, numCombinations);
+            return JitResultVectorNew(ctx, bitWidth, mask, variables, ast, multiBit, numCombinations, shift);
         }
 
         public unsafe static ApInt[] JitResultVectorOld(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, bool multiBit, ApInt numCombinations)
@@ -189,10 +192,10 @@ namespace Mba.Simplifier.Pipeline
             return resultVec;
         }
 
-        public unsafe static ApInt[] JitResultVectorNew(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, bool multiBit, ApInt numCombinations)
+        public unsafe static ApInt[] JitResultVectorNew(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, AstIdx ast, bool multiBit, ApInt numCombinations, bool shift = true)
         {
             ctx.Compile(ast, ModuloReducer.GetMask(bitWidth), variables.ToArray(), MultibitSiMBA.JitPage.Value);
-            var vec = LinearSimplifier.Execute(ctx, bitWidth, mask, variables, multiBit, numCombinations, MultibitSiMBA.JitPage.Value, false);
+            var vec = LinearSimplifier.Execute(ctx, bitWidth, mask, variables, multiBit, numCombinations, MultibitSiMBA.JitPage.Value, false, shift);
             return vec;
         }
 
@@ -201,13 +204,13 @@ namespace Mba.Simplifier.Pipeline
             return ctx.CompileLegacy(ast, mask, variables.ToArray(), codePtr);
         }
 
-        public unsafe static ApInt[] Execute(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, bool multiBit, ApInt numCombinations, nint codePtr, bool isOneBitVars)
+        public unsafe static ApInt[] Execute(AstCtx ctx, uint bitWidth, ApInt mask, IReadOnlyList<AstIdx> variables, bool multiBit, ApInt numCombinations, nint codePtr, bool isOneBitVars, bool shift)
         {
             uint capacity = (uint)(numCombinations * (multiBit ? bitWidth : 1u));
             var resultVec = new ApInt[capacity];
             fixed (ulong* vecPtr = &resultVec[0])
             {
-                ctx.Execute(multiBit, bitWidth, variables.ToArray(), numCombinations, codePtr, (nint)vecPtr, isOneBitVars);
+                ctx.Execute(multiBit, bitWidth, variables.ToArray(), numCombinations, codePtr, (nint)vecPtr, isOneBitVars, shift);
             }
 
             return resultVec;
@@ -228,13 +231,12 @@ namespace Mba.Simplifier.Pipeline
 
         private AstIdx Simplify(bool useZ3 = false, bool alreadySplit = false)
         {
-
             // Remove the constant offset
             var constant = SubtractConstantOffset(moduloMask, resultVector, (int)numCombinations);
 
             // If we were given a semi-linear expression, and the ground truth of that expression is linear,
             // truncate the size of the result vector down to 2^t, then treat it as a linear MBA.
-           if (multiBit && IsLinearResultVector())
+            if (multiBit && IsLinearResultVector())
             {
                 multiBit = false;
                 Array.Resize(ref resultVector, (int)numCombinations);
@@ -251,7 +253,7 @@ namespace Mba.Simplifier.Pipeline
         // If we have a multi-bit result vector, try to rewrite as a linear result vector. If possible, update state accordingly.
         private unsafe bool IsLinearResultVector()
         {
-            foreach(var v in variables)
+            foreach (var v in variables)
             {
                 // If the variable is zero extended or truncated, we treat this as a semi-linear signature vector.
                 // Truncation cannot be treated as linear, though in the future we may be able to get away with treating zero extension as linear?
@@ -377,7 +379,7 @@ namespace Mba.Simplifier.Pipeline
             }
 
             // If the linear MBA has dead variables, eliminate them and recursively simplify this fewer variable count version.
-            if(BitOperations.PopCount(demandedVariables) < variables.Count)
+            if (BitOperations.PopCount(demandedVariables) < variables.Count)
             {
                 return EliminateDeadVarsAndSimplify(constant, demandedVariables, variableCombinations, linearCombinations);
             }
@@ -394,7 +396,7 @@ namespace Mba.Simplifier.Pipeline
             // Note that we're iterating backwards to heuristically see terms with the most variables first.
             int anfCost = constant == 0 ? 0 : 1;
             List<ApInt> disjointSets = new();
-            for(int i = linearCombinations.Count - 1; i >= 0; i--)
+            for (int i = linearCombinations.Count - 1; i >= 0; i--)
             {
                 // Skip if this variable combination is not demanded.
                 var curr = linearCombinations[i];
@@ -409,27 +411,27 @@ namespace Mba.Simplifier.Pipeline
                 anfCost += BitOperations.PopCount(combMask) - 1; // Account for the number of AND nodes.
 
                 bool found = false;
-                for(int setIdx = 0; setIdx < disjointSets.Count; setIdx++)
+                for (int setIdx = 0; setIdx < disjointSets.Count; setIdx++)
                 {
                     var set = disjointSets[setIdx];
-                    if((set&combMask) != 0)
+                    if ((set & combMask) != 0)
                     {
                         disjointSets[setIdx] |= combMask;
                         found = true;
                         break;
                     }
                 }
-                
-                if(!found)
+
+                if (!found)
                 {
                     disjointSets.Add(combMask);
                 }
             }
 
             // Merge intersecting variable sets
-            for(int i = 0; i < disjointSets.Count; i++)
+            for (int i = 0; i < disjointSets.Count; i++)
             {
-                for(int j = i + 1; j < disjointSets.Count; j++)
+                for (int j = i + 1; j < disjointSets.Count; j++)
                 {
                     var jMask = disjointSets[j];
                     if (jMask == 0)
@@ -450,7 +452,7 @@ namespace Mba.Simplifier.Pipeline
             // If we have a single disjoint set, we can immediately yield a solution.
             // TODO: Our cost function is not as good as the one in msimba.
             // We use AST size because it's cheap to compute, but the original msimba accounts for both the AST size and the number of terms.
-            if(disjointSets.Count == 1)
+            if (disjointSets.Count == 1)
             {
                 // First try to reduce the number of terms.
                 EliminateUniqueValues(coeffToTable);
@@ -464,7 +466,7 @@ namespace Mba.Simplifier.Pipeline
                 if (constant != 0)
                     terms.Add(ctx.Constant(constant, width));
                 // Then append conjunctions of variables in increasing order.
-                for(int i = 0; i < linearCombinations.Count; i++)
+                for (int i = 0; i < linearCombinations.Count; i++)
                 {
                     // Skip if this variable combination is not demanded.
                     var curr = linearCombinations[i];
@@ -491,14 +493,14 @@ namespace Mba.Simplifier.Pipeline
             var disjointTerms = new List<AstIdx?>();
             for (int i = 0; i < disjointSets.Count; i++)
                 disjointTerms.Add(null);
-            for(int i = 0; i < linearCombinations.Count; i++)
+            for (int i = 0; i < linearCombinations.Count; i++)
             {
                 // Skip if this variable combination is not demanded.
                 var curr = linearCombinations[i];
                 if (curr.Count == 0)
                     continue;
 
-                var mask = variableCombinations[i]; 
+                var mask = variableCombinations[i];
                 var coeff = curr[0].coeff;
                 // Find the index
                 var insertIdx = disjointSets.FindIndex(x => (x & mask) != 0);
@@ -511,7 +513,7 @@ namespace Mba.Simplifier.Pipeline
 
             // Then recursively simplify the disjoint sets.
             List<AstIdx> mutVars = new(variables.Count);
-            for(int i = 0; i < disjointTerms.Count; i++)
+            for (int i = 0; i < disjointTerms.Count; i++)
             {
                 // Fetch the demanded variables. If only one variable is demanded in this term, it is already optimal.
                 var demandedMask = disjointSets[i];
@@ -520,7 +522,7 @@ namespace Mba.Simplifier.Pipeline
 
                 // Collect all of the variables.
                 mutVars.Clear();
-                while(demandedMask != 0)
+                while (demandedMask != 0)
                 {
                     var xorIdx = BitOperations.TrailingZeroCount(demandedMask);
                     mutVars.Add(variables[xorIdx]);
@@ -530,7 +532,7 @@ namespace Mba.Simplifier.Pipeline
                 // Recursively simplify.
                 var oldId = disjointTerms[i].Value;
                 var newId = Run(width, ctx, oldId, false, false, false, mutVars);
-                disjointTerms[i] = newId;   
+                disjointTerms[i] = newId;
             }
 
             var sum = ctx.Add(disjointTerms.Select(x => x.Value));
@@ -542,10 +544,10 @@ namespace Mba.Simplifier.Pipeline
         private AstIdx SimplifyOneTerm(ApInt constant, ApInt coeff, BooleanTruthTable truthTable)
         {
             // If there is no constant offset, we can just yield the boolean expression.
-            if(constant == 0)
+            if (constant == 0)
                 return Term(GetBooleanTableAst(truthTable), coeff);
             // If we have c1 + c1*x, we can rewrite as a single term solution of -c1*~x.
-            if(constant == coeff)
+            if (constant == coeff)
             {
                 truthTable.Negate();
                 return Term(GetBooleanTableAst(truthTable), moduloMask & (moduloMask * coeff));
@@ -554,11 +556,11 @@ namespace Mba.Simplifier.Pipeline
             // If the constant offset is equal to -1, we want to embed it as a negation.
             // We could leave it outside, but embedding it as a negation gives the rest of the simplification pipeline
             // a stronger chance of identifying trivial negations of substituted parts.
-            else if(constant == moduloMask)
+            else if (constant == moduloMask)
             {
                 return ctx.Neg(Term(GetBooleanTableAst(truthTable), moduloMask & (moduloMask * coeff)));
             }
-            
+
             // If all else fails we have a two term solution.
             return ctx.Add(ctx.Constant(constant, width), Term(GetBooleanTableAst(truthTable), coeff));
         }
@@ -569,7 +571,7 @@ namespace Mba.Simplifier.Pipeline
             // Get the first and second coefficient from the dictionary. 
             ApInt a = 0;
             ApInt b = 0;
-            foreach(var coeff in coeffToTable.Keys)
+            foreach (var coeff in coeffToTable.Keys)
             {
                 if (a == 0)
                     a = coeff;
@@ -612,7 +614,7 @@ namespace Mba.Simplifier.Pipeline
                 var cand2 = DetermineCombOfTwoFast((_a - constant) & moduloMask, constant, null, true).Value;
                 return new AstIdx[] { cand1, cand2 }.MinBy(x => ctx.GetCost(x));
             }
-            
+
             var negCoeff = constant;
             if (((b - a - negCoeff) & moduloMask) != 0)
             {
@@ -745,7 +747,7 @@ namespace Mba.Simplifier.Pipeline
                 return false;
             if (!op0.table.IsDisjoint(op2.table))
                 return false;
-            if(!op1.table.IsDisjoint(op2.table))
+            if (!op1.table.IsDisjoint(op2.table))
                 return false;
 
             uniqueValues[idx0] = (0, op0.table);
@@ -939,7 +941,7 @@ namespace Mba.Simplifier.Pipeline
                     return (0, null, null);
                 }
             }
-            
+
 
             // Linear combination, where the index can be seen as an index into `variableCombinations`,
             // and the element at that index is a list of terms operating over that boolean combination.
@@ -995,12 +997,12 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
-            if(anfDemandedBits != null)
+            if (anfDemandedBits != null)
             {
-                for(int i = 0; i < linearCombinations.Count; i++)
+                for (int i = 0; i < linearCombinations.Count; i++)
                 {
                     anfDemandedBits.TryAdd((ApInt)i, 0);
-                    foreach(var (coeff, mask) in linearCombinations[i])
+                    foreach (var (coeff, mask) in linearCombinations[i])
                     {
                         anfDemandedBits[(ApInt)i] |= mask;
                     }
@@ -1446,99 +1448,69 @@ namespace Mba.Simplifier.Pipeline
                 }
             }
 
+            var total = new BooleanTruthTable(variables.Count);
+            var xoredIndices = new BooleanTruthTable(variables.Count);
+            int tableLength = total.Arr.Length;
+            var vec = new ulong[width * total.Arr.Length];
+            int vecIndex = 0;
+
             // Walk result vector, get the ones with xor mask.. merge them, then merge the ones without the XOR mask..
-            var combinedAnds = new ApInt[(int)numCombinations];
             // We want to group XOR terms by their base bitwise expressions
-            var xorMap = new Dictionary<BooleanTruthTable, ApInt>();
             ApInt freeMask = moduloMask;
             for (ushort bitIndex = 0; bitIndex < GetNumBitIterations(multiBit, width); bitIndex++)
             {
+                total.Clear();
+                xoredIndices.Clear();
+                
                 var offset = (int)(bitIndex * numCombinations);
                 var mask = 1ul << bitIndex;
 
                 ApInt globMask = 0;
-
-                ushort truthIdx = 0;
-                var xoredIndices = new BooleanTruthTable(variables.Count);
 
                 int withXorCount = 0;
                 for (int i = 0; i < (int)numCombinations; i++)
                 {
                     var coeff = withoutConstant[offset + i];
                     if (coeff == 0)
-                    {
-                        truthIdx += 1;
                         continue;
-                    }
 
                     var xorMask = xorMasks[offset + i];
                     freeMask &= ~mask;
 
                     if (xorMask == 0)
                     {
-                        combinedAnds[i] |= mask;
+                        total.SetBit(i, true);
                     }
                     else
                     {
                         withXorCount += 1;
                         globMask = xorMask;
-                        xoredIndices.SetBit(truthIdx, true);
+                        xoredIndices.SetBit(i, true);
                     }
-
-                    truthIdx += 1;
                 }
 
                 if (withXorCount > 0)
                 {
+                    var negXor = xoredIndices.Clone();
+                    negXor.Negate();
+                    total.Or(negXor);
+
                     var newOffset = moduloMask & (((ApInt)withXorCount - 1) * globMask);
                     newOffset = moduloMask & (targetCoeff * newOffset);
-
                     constant += newOffset;
-                    xorMap.TryAdd(xoredIndices, globMask);
-                    xorMap[xoredIndices] |= globMask;
                 }
+
+                Array.Copy(total.Arr, 0, vec, vecIndex, tableLength);
+                vecIndex += tableLength;
             }
 
-            // Group by AND / XOR masks.
-            var process = (ApInt[] arr) =>
-            {
-                Dictionary<ApInt, BooleanTruthTable> maskToBitwise = new();
-                for (int i = 0; i < arr.Length; i++)
-                {
-                    var mask = arr[i];
-                    if (mask == 0)
-                        continue;
+            // Minimize the bitwise expression
+            var boolPoly = BoolPoly.Create((byte)variables.Count, (byte)width, vec);
+            var ourCombined = AnfMinimizerV2.SimplifyBoolean(ctx, variables, boolPoly);
 
-                    if (maskToBitwise.TryGetValue(mask, out var existing))
-                    {
-                        existing.SetBit((ushort)i, true);
-                    }
-
-                    else
-                    {
-                        var tt = new BooleanTruthTable(variables.Count);
-                        tt.SetBit(i, true);
-                        maskToBitwise[mask] = tt;
-                    }
-                }
-
-                return maskToBitwise;
-            };
-
-            // Merging needs to be done carefully, because the constant offset adjustment is assuming we have already performed some merging
-            // Merge bitwise terms.
-           
-            var andToBitwise = process(combinedAnds);
-            var union = new List<AstIdx>();
-            foreach (var x in andToBitwise)
-                union.Add(MaskAndMinimize(GetBooleanTableAst(x.Value), AstOp.And, x.Key));
-            foreach (var x in xorMap)
-                union.Add(MaskAndMinimize(GetBooleanTableAst(x.Key), AstOp.Xor, x.Value));
-
-            var combinedBitwise = ctx.Or(union);
-            var solution = TryPartition(combinedBitwise, targetCoeff, constant, freeMask);
-
-            // BooleanMinimizer.MinimizeMultibit(ctx, solution);
+            // Compose and simplify
+            var partition = TryPartition(ourCombined, targetCoeff, constant, freeMask);
+            var solution = ctx.RecursiveSimplify(partition);
             return solution;
         }
 
@@ -1615,7 +1587,9 @@ namespace Mba.Simplifier.Pipeline
                 if ((bitMask & freeMask) == 0)
                     continue;
 
-                var lc = solver.LinearCongruence(bitMask, constant, moduloMask);
+                var lc = solver.LinearCongruence(bitMask, constant, modulus);
+                if (lc == null)
+                    continue;
                 var limit = lc.d;
                 if (limit > 255)
                     limit = 255;
@@ -1629,7 +1603,6 @@ namespace Mba.Simplifier.Pipeline
                     return ctx.Mul(ctx.Constant(solution, width), bitwise);
                 }
             }
-
 
             // If the sign bit pops out, try to move it back in.
             var signBit = 1ul << ((ushort)width - 1);
@@ -1651,7 +1624,9 @@ namespace Mba.Simplifier.Pipeline
                 var mask = ctx.Constant(fittingMask.Value, width);
                 return ctx.Mul(coeffIdx, ctx.Or(mask, bitwise));
             }
-
+            
+            // TODO: Fix this pattern
+            /*
             // If the constant offset does not fit, try to remove the sign bit from the constant offset,
             // then look for a fitting mask.
             ApInt adjusted = moduloMask & (constant - signBit);
@@ -1666,6 +1641,7 @@ namespace Mba.Simplifier.Pipeline
                     return ctx.Mul(coeffIdx, ctx.Or(mask, withoutSb.Value));
                 }
             }
+            */
 
             return null;
         }
@@ -2048,7 +2024,7 @@ namespace Mba.Simplifier.Pipeline
 
             var e = new DecisionTable(variables.Count);
 
-            for(int i = 0; i < vec.Length; i++)
+            for (int i = 0; i < vec.Length; i++)
             {
                 var r = vec[i];
 
@@ -2145,7 +2121,7 @@ namespace Mba.Simplifier.Pipeline
         private AstIdx TermRefinement(ApInt r1, ApInt? rAlt = null)
         {
             var t = new BooleanTruthTable(variables.Count);
-            for(int i = 0; i < resultVector.Length; i++)
+            for (int i = 0; i < resultVector.Length; i++)
             {
                 var r2 = resultVector[i];
                 var cond = r2 == r1 || rAlt != null && r2 == rAlt.Value ? true : false;
@@ -2169,7 +2145,7 @@ namespace Mba.Simplifier.Pipeline
                 e = AddConstant(e, constant.Value);
             }
 
-            if(bestSolution == null)
+            if (bestSolution == null)
             {
                 bestSolution = e;
                 return;
@@ -2178,7 +2154,7 @@ namespace Mba.Simplifier.Pipeline
             // Take the new solution if the cost is lower.
             var cost1 = ctx.GetCost(bestSolution.Value);
             var cost2 = ctx.GetCost(e);
-            if(cost2 < cost1)
+            if (cost2 < cost1)
                 bestSolution = e;
         }
 

@@ -31,12 +31,12 @@ namespace Mba.Simplifier.Fuzzing
             {
                 // Simplify the expression using MSiMBA
                 var fCase = fuzzer.GetFuzzCase();
+
                 var result = LinearSimplifier.Run(ctx.GetWidth(fCase), fuzzer.ctx, fCase, false, true);
                 Console.WriteLine($"{fuzzer.ctx.GetAstString(fCase)}\n=>\n{fuzzer.ctx.GetAstString(result)}\n    \n");
 
                 // Skip if the expression simplifies to a constant
                 var variables = ctx.CollectVariables(fCase);
-
                 if (variables.Count == 0)
                     continue;
 
@@ -57,9 +57,6 @@ namespace Mba.Simplifier.Fuzzing
         // TODO: Truncation.. for now, assert that the variable sizes must be less than or equal to the size of the output expression
         private AstIdx GetFuzzCase()
         {
-            // Clear the ast context
-            ctx.Clear();
-
             // Pick the width of the output expression...
             int outputWidth = rand.Next(0, 4) switch
             {
@@ -78,8 +75,7 @@ namespace Mba.Simplifier.Fuzzing
             }
 
             // Chose between 2 and 5 terms
-            //var termCount = rand.Next(2, 6);
-            var termCount = 1;
+            var termCount = rand.Next(1, 6);
             List<AstIdx> terms = new();
             for(int i = 0; i < termCount; i++)
             {
@@ -98,9 +94,50 @@ namespace Mba.Simplifier.Fuzzing
             return choices[rand.Next(0, choices.Length)];
         }
 
+        private AstIdx GetTerm(int outputWidth, List<AstIdx> variables)
+        {
+            var minWidth = GetConjMinWidth(ModuloReducer.GetMask((uint)variables.Count), variables);
+            var extendedVars = variables.Select(x => ChangeWidth(x, ctx.GetWidth(x), minWidth)).ToList();
+            var limit = rand.GetRandUshort(1, 16);
+            var bitwise = GetBitwiseRec(minWidth, extendedVars, limit);
+            bitwise = ChangeWidth(bitwise, ctx.GetWidth(bitwise), (uint)outputWidth);
+            return ctx.Mul(ctx.Constant(rand.GetRandUlong(), (byte)outputWidth), bitwise);
+        }
+
+        private AstIdx GetBitwiseRec(int outputWidth, List<AstIdx> variables, int leaves)
+        {
+            AstIdx node;
+            if (leaves <= 1)
+            {
+                if (rand.Next(0, 4) == 0)
+                    node = ctx.Constant(rand.GetRandUlong(), (byte)outputWidth);
+                else
+                    node = variables[rand.Next(0, variables.Count)];
+            }
+
+            else
+            {
+                int leftLeaves = rand.Next(1, leaves);
+                int rightLeaves = leaves - leftLeaves;
+                var left = GetBitwiseRec(outputWidth, variables, leftLeaves);
+                var right = GetBitwiseRec(outputWidth, variables, rightLeaves);
+                var op = rand.Next(0, 3);
+                node = op switch
+                {
+                    0 => ctx.And(left, right),
+                    1 => ctx.Or(left, right),
+                    _ => ctx.Xor(left, right),
+                };
+            }
+
+            if (rand.Next(0, 5) == 0)
+                node = ctx.Neg(node);
+            return node;
+        }
+
         // Compute a random semi-linear bitwise term
         // We output booleans in algebraic form because it's more convenient to generate 
-        private AstIdx GetTerm(int outputWidth, List<AstIdx> variables)
+        private AstIdx GetAnfTerm(int outputWidth, List<AstIdx> variables)
         {
             // Compute a list of variable conjunctions, e.g. [(a&b&c), (b&c), (a)]
             var conjCount = rand.GetRandUshort(1, 4);

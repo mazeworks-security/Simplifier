@@ -321,9 +321,9 @@ namespace Mba.Simplifier.Bindings
             }
         }
 
-        public unsafe void Execute(bool isMultibit, uint bitWidth, AstIdx[] variables, ulong numCombinations, nint rwxPagePtr, nint outputArrayPtr, bool isOneBitVars)
+        public unsafe void Execute(bool isMultibit, uint bitWidth, AstIdx[] variables, ulong numCombinations, nint rwxPagePtr, nint outputArrayPtr, bool isOneBitVars, bool shift)
         {
-            Api.ContextExecute(isMultibit ? 1u : 0, bitWidth, (ulong)variables.Length, numCombinations, (ulong*)rwxPagePtr, (ulong*)outputArrayPtr, isOneBitVars ? 1u : 0);
+            Api.ContextExecute(isMultibit ? 1u : 0, bitWidth, (ulong)variables.Length, numCombinations, (ulong*)rwxPagePtr, (ulong*)outputArrayPtr, isOneBitVars ? 1u : 0, shift ? 1u : 0);
         }
 
         public static int GetOpcount(AstOp opc)
@@ -503,7 +503,7 @@ namespace Mba.Simplifier.Bindings
             public unsafe static extern void ContextCompile(OpaqueAstCtx* ctx, AstIdx id, ulong mask, AstIdx* variableArray, ulong varCount, ulong* rwxJitPage);
 
             [DllImport("eq_sat")]
-            public unsafe static extern ulong* ContextExecute(uint isMultiBit, uint bitWidth, ulong varCount, ulong numCombinations, ulong* rwxJitPage, ulong* outputArray, uint isOneBitVars);
+            public unsafe static extern ulong* ContextExecute(uint isMultiBit, uint bitWidth, ulong varCount, ulong numCombinations, ulong* rwxJitPage, ulong* outputArray, uint isOneBitVars, uint shift);
 
             [DllImport("eq_sat")]
             public unsafe static extern AstIdx ContextSingleSimplify(OpaqueAstCtx* ctx, AstIdx id);

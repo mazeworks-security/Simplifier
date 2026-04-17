@@ -220,6 +220,7 @@ namespace Mba.Simplifier.DSL
                 case AstKind.Lshr:
                 case AstKind.ConditionalAnd:
                 case AstKind.ConditionalOr:
+                case AstKind.ICmp:
                     Debug.Assert(precondition.Children.Count == 2);
                     var binop = AstFormatter.GetOperatorName(precondition);
                     sb.Append("(");
@@ -334,11 +335,12 @@ namespace Mba.Simplifier.DSL
                 return;
 
             var isleContent = File.ReadAllText(rulesIslePath);
-            var beginIndex = isleContent.IndexOf(";;BEGIN", StringComparison.Ordinal);
+            var s = ";;BEGIN";
+            var beginIndex = isleContent.IndexOf(s, StringComparison.Ordinal);
             if (beginIndex == -1)
                 return;
 
-            var lineEnd = isleContent.IndexOf(Environment.NewLine, beginIndex, StringComparison.Ordinal);
+            var lineEnd = beginIndex + s.Length;
             if (lineEnd == -1)
                 return;
 

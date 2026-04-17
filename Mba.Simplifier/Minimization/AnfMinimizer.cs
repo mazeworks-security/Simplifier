@@ -24,9 +24,7 @@ namespace Mba.Simplifier.Minimization
 
         private readonly Dictionary<AstIdx, uint> demandedVarsMap = new();
 
-        // Simplify the boolean expression as a 1-bit polynomial.
-        // When the ground truth contains many XORs, this yields exponentially more compact results than DNF.
-        // TODO: The result can be refined through factoring and other means.
+        // Convert the truth table to algebraic normal form, factor, replace < 5 variable subtrees with optimal results using a lookup table.
         public static unsafe AstIdx SimplifyBoolean(AstCtx ctx, IReadOnlyList<AstIdx> variables, BooleanTruthTable truthTable)
             => new AnfMinimizer(ctx, variables, truthTable).SimplifyBoolean();
 

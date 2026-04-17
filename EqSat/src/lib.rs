@@ -1,3 +1,7 @@
+#![feature(generic_const_exprs)]
+#![feature(const_convert)]
+#![feature(const_index)]
+#![allow(incomplete_features)]
 #![allow(unused)]
 
 use ahash::AHashMap;
@@ -34,16 +38,22 @@ use mimalloc::MiMalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 mod assembler;
+mod fbgb;
+
+
 mod known_bits;
+
+mod linalg;
+mod simple_ast;
+mod truth_table_database;
 
 #[path = "dsl/isle_rules.rs"]
 mod isle_rules;
 #[path = "dsl/egraph_rules.rs"]
 mod egraph_rules;
-mod linalg;
-mod simple_ast;
-mod truth_table_database;
 #[path = "dsl/isle_macros.rs"]
 mod isle_macros;
+
+
 
 fn main() {}

@@ -4,6 +4,8 @@ FUNCTIONS REQUIRED
 	builtin fn is_const(node: Node) -> i1;
 	// Gets the value of the constant
 	builtin fn get_const(node: Node) -> i64;
+	// Gets whether the node is a neg
+	builtin fn is_neg(node: Node) -> i1;
 	// Gets whether the constant contained by `node` is equivalent to `c1` modulo 2**w, where w is the width of the input node.
 	builtin fn const_eq(node: Node, c1: i64) -> i1;
 	// Gets the width of the nodes
@@ -42,48 +44,28 @@ FUNCTIONS REQUIRED
 // Half of the rewrite rules originate from the GAMBA paper
 RULES PROFITABLE 
 [
-	mul_constant_to_left_1: (a*c1) => (c1*a) 
+	fold_neg_xor: c1^(~x) =>(~c1)^x
 		:: is_const(c1)
-	mul_constant_to_left_2: ((c1*a)*b) => (c1*(a*b)) 
+	fold_nested_neg_xor: c1^((~a)^b) => (~c1)^(a^b)
 		:: is_const(c1)
-	mul_constant_to_left_3: (c1*(c2*a)) => ((c1*c2)*a) 
-		:: is_const(c1) && is_const(c2)
-	mul_constant_to_left_4: (c1*c2) => (c1*c2) 
-		:: is_const(c1) && is_const(c2)
-	add_constant_to_left_1: (a+c1) => (c1+a) 
+	fold_neg_xor_xor: ~(c1^a) => (~c1)^a
 		:: is_const(c1)
-	add_constant_to_left_2: ((c1+a)+b) => (c1+(a+b)) 
-		:: is_const(c1)
-	add_constant_to_left_3: (c1+(c2+a)) => ((c1+c2)+a) 
-		:: is_const(c1) && is_const(c2)
-	add_constant_to_left_4: (c1+c2) => (c1+c2) 
-		:: is_const(c1) && is_const(c2)
-	and_constant_to_left_1: (a&c1) => (c1&a) 
-		:: is_const(c1)
-	and_constant_to_left_2: ((c1&a)&b) => (c1&(a&b)) 
-		:: is_const(c1)
-	and_constant_to_left_3: (c1&(c2&a)) => ((c1&c2)&a) 
-		:: is_const(c1) && is_const(c2)
-	and_constant_to_left_4: (c1&c2) => (c1&c2) 
-		:: is_const(c1) && is_const(c2)
-	or_constant_to_left_1: (a|c1) => (c1|a) 
-		:: is_const(c1)
-	or_constant_to_left_2: ((c1|a)|b) => (c1|(a|b)) 
-		:: is_const(c1)
-	or_constant_to_left_3: (c1|(c2|a)) => ((c1|c2)|a) 
-		:: is_const(c1) && is_const(c2)
-	or_constant_to_left_4: (c1|c2) => (c1|c2) 
-		:: is_const(c1) && is_const(c2)
-	xor_constant_to_left_1: (a^c1) => (c1^a) 
-		:: is_const(c1)
-	xor_constant_to_left_2: ((c1^a)^b) => (c1^(a^b)) 
-		:: is_const(c1)
-	xor_constant_to_left_3: (c1^(c2^a)) => ((c1^c2)^a) 
-		:: is_const(c1) && is_const(c2)
-	xor_constant_to_left_4: (c1^c2) => (c1^c2) 
-		:: is_const(c1) && is_const(c2)
-	neg_constant_to_left_1: (~c1) => (~c1) 
-		:: is_const(c1)
+	fold_or: a^(~a&b) => a|b
+	fold_duplicate_xor: a^(a&b) => a&~b
+	fold_const_or: c1^(c2&b) => c1|b
+		:: is_const(c1) && is_const(c2) && const_eq(c1, ~get_const(c2))
+
+	factor_negation: ~a&~b => ~(a|b)
+	factor_or: ~(a|~b) => ~a&b
+	factor_xor_or: (a|c)^(b|c) => ~c&(a^b)
+	factor_and: ~(~a&b) => a|~b
+	inv_and_or_distributivity: ((a&b)|(a&c)) => (a&(b|c))
+	inv_or_and_distributivity: ((a|b)&(a|c)) => (a|(b&c))
+	xor_neg: ~a^~b => a^b
+	xor_to_or: ((~x) & (~y^z)) => ~(x|(y^z))
+	xor_to_or_2: ((x&(y|~z))^y) => ((y|(x & z)) ^ x)
+	xor_to_and: ((x|y)^(z|(x^y))) => ((x^z)&(y^z))
+	synth3: ((~(x|(y|z)))^(y^z)) => ~(((y|x)&~z)^y)
 
 	arith_to_negation: (-1+(-1*a)) => (~a)
 	add_negate_to_invert_sign: (1+(~a)) => (-1*a)
@@ -122,7 +104,6 @@ RULES PROFITABLE
 	__merge_inverse_bitwise_terms_22: ((x|y)+(-1*((~x)&y))) => x
 	__merge_inverse_bitwise_terms_23: ((x^y)+(-1*(2*((~x)&y)))) => (x+(-1*y))
 	__merge_inverse_bitwise_terms_24: ((x^y)+(2*((~x)|y))) => ((-2+(-1*x))+y)
-	and_move_bitwise_negation_in: (~((~a)&b)) => (a|(~b))
 	or_move_bitwise_negation_in: (~((~a)|b)) => (a&(~b))
 	xor_move_bitwise_negation_in: (~((~a)^b)) => (a^b)
 	merge_power_same_base: ((a**b)*(a**c)) => (a**(b+c))

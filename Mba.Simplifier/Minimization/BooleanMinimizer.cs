@@ -102,14 +102,12 @@ namespace Mba.Simplifier.Minimization
             var gv = Optimal5.Instance.Lookup(neg);
 
             // Emplace variables onto node vector
-            var reversed = variables.Reverse().ToArray();
-            var nodeVec = new AstIdx[5 + gv.NumGates];
-
+            var nodeVec = stackalloc AstIdx[24];
             var diff = 5 - variables.Count;
             for (int i = 0; i < diff; i++)
-                nodeVec[i] = reversed[0];
+                nodeVec[i] = variables[variables.Count - 1];
             for (int i = diff; i < 5; i++)
-                nodeVec[i] = reversed[i - diff];
+                nodeVec[i] = variables[(variables.Count - 1) - (i - diff)];
 
             // Compute the circuit
             for (int idx = 0; idx < gv.NumGates; idx++)
@@ -166,7 +164,7 @@ namespace Mba.Simplifier.Minimization
             // Minimize normally if zext/trunc nodes aren't present
             bool containsExt = variables.Any(x => ctx.GetOpcode(x) == AstOp.Zext || ctx.GetOpcode(x) == AstOp.Trunc);
             if (!containsExt)
-                return ctx.MinimizeAnf(TableDatabase.Instance.db, truthTable, (List<AstIdx>)variables, MultibitSiMBA.JitPage.Value);
+                return AnfMinimizerV2.SimplifyBoolean(ctx, variables, BoolPoly.Create((byte)truthTable.NumVars, 1, truthTable.Arr));
 
             // Otherwise we need to apply substitution.
             var invSubstMapping = new Dictionary<AstIdx, AstIdx>();
@@ -187,7 +185,7 @@ namespace Mba.Simplifier.Minimization
                 tempVars.Add(subst);
             }
 
-            var r = ctx.MinimizeAnf(TableDatabase.Instance.db, truthTable, tempVars, MultibitSiMBA.JitPage.Value);
+            var r = AnfMinimizerV2.SimplifyBoolean(ctx, tempVars, BoolPoly.Create((byte)truthTable.NumVars, 1, truthTable.Arr));
             var backSubst = GeneralSimplifier.BackSubstitute(ctx, r, invSubstMapping);
             return backSubst;
         }

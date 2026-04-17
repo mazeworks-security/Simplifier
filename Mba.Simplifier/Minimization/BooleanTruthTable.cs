@@ -53,7 +53,7 @@ namespace Mba.Simplifier.Minimization
 
         public int NumCombinations => 1 << (ushort)NumVars;
 
-        public ulong[] Arr { get; }
+        public ulong[] Arr { get; set; }
 
         public int Width => 1;
 
@@ -87,10 +87,22 @@ namespace Mba.Simplifier.Minimization
                 SetBit(i, GetBit(i) ? false : true);
         }
 
+        public void And(ITruthTable<bool> other)
+        {
+            for (int i = 0; i < Arr.Length; i++)
+                Arr[i] &= other.Arr[i];
+        }
+
         public void Or(ITruthTable<bool> other)
         {
             for (int i = 0; i < Arr.Length; i++)
                 Arr[i] |= other.Arr[i];
+        }
+
+        public void Xor(ITruthTable<bool> other)
+        {
+            for (int i = 0; i < Arr.Length; i++)
+                Arr[i] ^= other.Arr[i];
         }
 
         public void Clear()
@@ -173,57 +185,43 @@ namespace Mba.Simplifier.Minimization
         {
             return value ? 1ul : 0;
         }
-    }
 
-
-    // Semi-linear boolean truth table
-    public struct SlBooleanTruthTable : ITruthTable<ulong>
-    {
-        public int NumVars { get; }
-
-        public int NumCombinations => 1 << (ushort)NumVars;
-
-        public ulong[] Arr { get; }
-
-        public int Width { get; }
-
-        public SlBooleanTruthTable(int numVars, uint width)
+        public static bool operator ==(BooleanTruthTable table1, BooleanTruthTable table2)
         {
-            NumVars = numVars;
-            Width = Width;
-            int numArrayEntries = NumCombinations;
-            Arr = new ulong[numArrayEntries];
+            return table1.Equals(table2);
         }
 
-        public ulong GetBit(int index)
+        public static bool operator !=(BooleanTruthTable table1, BooleanTruthTable table2)
         {
-            return Arr[index];
+            return !table1.Equals(table2);
         }
 
-        public void SetBit(int index, ulong value)
+        public static BooleanTruthTable operator ~(BooleanTruthTable a)
         {
-            Arr[index] = value;
+            var result = a.Clone();
+            result.Negate();
+            return result;
         }
 
-        public void Or(ITruthTable<ulong> other)
+        public static BooleanTruthTable operator &(BooleanTruthTable a, BooleanTruthTable b)
         {
-            throw new NotImplementedException();
+            var result = a.Clone();
+            result.And(b);
+            return result;
         }
 
-        public void Clear()
+        public static BooleanTruthTable operator |(BooleanTruthTable a, BooleanTruthTable b)
         {
-            throw new NotImplementedException();
+            var result = a.Clone();
+            result.Or(b);
+            return result;
         }
 
-        public bool IsDisjoint(ITruthTable<ulong> other)
+        public static BooleanTruthTable operator ^(BooleanTruthTable a, BooleanTruthTable b)
         {
-            throw new NotImplementedException();
-        }
-
-        public ulong AsUlong(ulong value)
-        {
-            return value;
+            var result = a.Clone();
+            result.Xor(b);
+            return result;
         }
     }
-
 }
