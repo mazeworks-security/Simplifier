@@ -10,6 +10,8 @@ use std::{
     u16, u64, vec,
 };
 
+
+
 use ahash::AHashMap;
 use egg::{
     Analysis, Applier, BackoffScheduler, CostFunction, DidMerge, EClass, EGraph, Extractor, Id, Language, PatternAst, RecExpr, Runner, Subst, Symbol, Var, define_language, rewrite
@@ -464,6 +466,61 @@ impl INodeUtil for Arena {
     }
 }
 
+macro_rules! fold_and_sort {
+    ($self_var:ident, $a:ident, $b:ident, $fn_name:ident, $ast_variant:ident, operator: $operator:tt) => {
+        if let SimpleAst::Constant { c: c1, width } = *$self_var.get_node($a) {
+            if let SimpleAst::Constant { c: c2, width } = *$self_var.get_node($b) {
+                let result = $self_var.constant(c1 $operator c2, $self_var.get_width($a));
+                return result;
+            }
+        }
+
+        if let SimpleAst::$ast_variant([op0, op1]) = *$self_var.get_node($a) {
+            let new_b = $self_var.$fn_name(op1, $b);
+            return $self_var.$fn_name(op0, new_b);
+        }
+
+        if let SimpleAst::$ast_variant([op0, op1]) = *$self_var.get_node($b) {
+            if $self_var.cmp_node($a, op0) == std::cmp::Ordering::Greater {
+                let new_b = $self_var.$fn_name($a, op1);
+                return $self_var.$fn_name(op0, new_b);
+            }
+        } 
+        
+        else {
+            if $self_var.cmp_node($a, $b) == std::cmp::Ordering::Greater {
+                ($a, $b) = ($b, $a);
+            }
+        }
+    };
+
+    // Canonicalize ~c ^ a to ~a ^ c
+    (xor $self_var:ident, $a:ident, $b:ident) => {
+        let a_neg = matches!(*$self_var.get_node($a), SimpleAst::Neg(_));
+        let b_neg = matches!(*$self_var.get_node($b), SimpleAst::Neg(_));
+        if a_neg ^ b_neg {
+            let (neg_inner, other) = if a_neg {
+                let SimpleAst::Neg([inner]) = *$self_var.get_node($a) else { unreachable!() };
+                (inner, $b)
+            } else {
+                let SimpleAst::Neg([inner]) = *$self_var.get_node($b) else { unreachable!() };
+                (inner, $a)
+            };
+
+            if $self_var.cmp_node(other, neg_inner) == std::cmp::Ordering::Less {
+                $a = $self_var.neg(other);
+                $b = neg_inner;
+            } else {
+                $a = $self_var.neg(neg_inner);
+                $b = other;
+            }
+        }
+
+        fold_and_sort!($self_var, $a, $b, xor, Xor, operator: ^);
+    };
+}
+
+
 impl Arena {
     pub fn new() -> Self {
         let elements = Vec::with_capacity(65536);
@@ -483,12 +540,68 @@ impl Arena {
         }
     }
 
-    pub fn add(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+    pub fn cmp_node(&self, a: AstIdx, b: AstIdx) -> std::cmp::Ordering {
+        if a == b {
+            return std::cmp::Ordering::Equal;
+        }
+
+        // Sort by opcodes first
+        let a_rank = self.get_opcode_rank(a);
+        let b_rank = self.get_opcode_rank(b);
+        let rank_cmp = a_rank.cmp(&b_rank);
+        if rank_cmp != std::cmp::Ordering::Equal {
+            return rank_cmp;
+        }
+
+        // If constants, move the smallest one to the right
+        if let SimpleAst::Constant { c: c1, width: w1 } = self.get_node(a) {
+            if let SimpleAst::Constant { c: c2, width: w2 } = self.get_node(b) {
+                return c1.cmp(c2);
+            }
+        }
+
+        // If both symbols, pick the lexicographically smallest one
+        if let SimpleAst::Symbol { id: id1, width: w1 } = self.get_node(a) {
+            if let SimpleAst::Symbol { id: id2, width: w2 } = self.get_node(b) {
+                return self.get_symbol_name(*id1).cmp(&self.get_symbol_name(*id2));
+            }
+        }
+        
+        std::cmp::Ordering::Equal
+    }
+
+    pub fn get_opcode_rank(&self, idx: AstIdx) -> u8 {
+        let ast = self.get_node(idx);
+        match ast {
+            SimpleAst::Add(_) => 6,
+            SimpleAst::Mul(_) => 7,
+            SimpleAst::Pow(_) => 8,
+            SimpleAst::And(_) => 3,
+            SimpleAst::Or(_) => 4,
+            SimpleAst::Xor(_) => 5,
+            SimpleAst::Neg(_) => 1,
+            SimpleAst::Lshr(_) => 9,
+            SimpleAst::Zext(_) => 10,
+            SimpleAst::Trunc(_) => 11,
+            SimpleAst::Constant { .. } => 0,
+            SimpleAst::Symbol { .. } => 2,
+            SimpleAst::ICmp { .. } => 12,
+            SimpleAst::Select { .. } => 13,
+            SimpleAst::Extract { .. } => 14,
+            SimpleAst::Concat { .. } => 15,
+            SimpleAst::Carry { .. } => 16,
+        }
+    }
+
+    pub fn add(&mut self, mut a: AstIdx, mut b: AstIdx) -> AstIdx {
+        fold_and_sort!(self, a, b, add, Add, operator: +);
+
         let data = self.add_transfer(a, b);
         return self.insert_ast_node(SimpleAst::Add([a, b]), data);
     }
 
-    pub fn mul(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+    pub fn mul(&mut self, mut a: AstIdx, mut b: AstIdx) -> AstIdx {
+        fold_and_sort!(self, a, b, mul, Mul, operator: *);
         let a_value = self.get_node(a);
         let b_value = self.get_node(b);
 
@@ -525,17 +638,20 @@ impl Arena {
         return self.insert_ast_node(SimpleAst::Pow([a, b]), data);
     }
 
-    pub fn and(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+    pub fn and(&mut self, mut a: AstIdx, mut b: AstIdx) -> AstIdx {
+        fold_and_sort!(self, a, b, and, And, operator: &);
         let data = self.and_transfer(a, b);
         return self.insert_ast_node(SimpleAst::And([a, b]), data);
     }
 
-    pub fn or(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+    pub fn or(&mut self, mut a: AstIdx, mut b: AstIdx) -> AstIdx {
+        fold_and_sort!(self, a, b, or, Or, operator: |);
         let data = self.or_transfer(a, b);
         return self.insert_ast_node(SimpleAst::Or([a, b]), data);
     }
 
-    pub fn xor(&mut self, a: AstIdx, b: AstIdx) -> AstIdx {
+    pub fn xor(&mut self, mut a: AstIdx, mut b: AstIdx) -> AstIdx {
+        fold_and_sort!(xor self, a, b);
         let data = self.xor_transfer(a, b);
         return self.insert_ast_node(SimpleAst::Xor([a, b]), data);
     }
@@ -550,6 +666,12 @@ impl Arena {
     }
 
     pub fn neg(&mut self, a: AstIdx) -> AstIdx {
+        let op1 = self.get_node(a);
+        if let SimpleAst::Constant { c: c1, width } = op1 {
+            let result = self.constant((!*c1), self.get_width(a));
+            return result;
+        }
+
         let data = self.neg_transfer(a);
         return self.insert_ast_node(SimpleAst::Neg([a]), data);
     }
@@ -740,6 +862,7 @@ impl Arena {
     pub fn clear(&mut self) {
         self.elements.clear();
         self.ast_to_idx.clear();
+        self.isle_cache.clear();
         self.symbol_ids.clear();
         self.name_to_symbol.clear();
     }
@@ -1427,13 +1550,6 @@ impl isle_rules::Context for Context {
     }
 
     fn neg(&mut self, arg0: AstIdx) -> SimpleAst {
-        let op1 = self.arena.get_node(arg0);
-        if let SimpleAst::Constant { c: c1, width } = op1 {
-            let result = self.arena.constant((!*c1), self.arena.get_width(arg0));
-
-            return self.arena.get_node(result).clone();
-        }
-
         let neg = self.arena.neg(arg0);
         return self.arena.get_node(neg).clone();
     }
@@ -1698,6 +1814,10 @@ impl AstPrinter {
 
 pub fn get_modulo_mask(width: u8) -> u64 {
     return u64::MAX >> (64 - width);
+}
+
+pub fn rmod(constant: u64, width: u8) -> u64 {
+    return constant & get_modulo_mask(width);
 }
 
 fn cmp(pred: Predicate, a: u64, b: u64) -> bool {
@@ -2762,6 +2882,7 @@ pub unsafe extern "C" fn ContextExecute(
     page: *mut u8,
     output: *mut u64,
     one_bit_vars: u32,
+    shift: u32,
 ) {
     let multi_bit = multi_bit_u != 0;
     let num_bit_iterations: u32 = if multi_bit { bit_width } else { 1 };
@@ -2791,8 +2912,10 @@ pub unsafe extern "C" fn ContextExecute(
             for v_idx in 0..var_count {
                 vptr[v_idx as usize] = ((i >> v_idx) & 1) << bit_index;
             }
+            
+            let lshr = if shift != 0 { bit_index } else { 0 };
 
-            let result = (fptr(vptr.as_mut_ptr()) & get_modulo_mask(bit_width as u8)) >> bit_index;
+            let result = (fptr(vptr.as_mut_ptr()) & get_modulo_mask(bit_width as u8)) >> lshr;
             *output.add(arr_idx) = result;
             arr_idx += 1;
         }
@@ -4416,30 +4539,38 @@ pub fn isle_is_const(egraph: &mut Context, node: AstIdx) -> bool {
     return is_constant;
 }
 
-pub fn isle_get_const(egraph: &mut Context, node: AstIdx) -> u64 {
+pub fn isle_is_neg(egraph: &mut Context, node: AstIdx) -> bool {
+    let is_neg = egraph.arena.get_node(node);
+    if let SimpleAst::Neg(_) = is_neg {
+        return true;
+    }
+    return false;
+}
+
+pub fn isle_get_const(egraph: &Context, node: AstIdx) -> u64 {
     // We differ from the egraph version of `get_const` because ISLE deals with concrete terms
     let constant = egraph.arena.get_constant(node);
     return constant;
 }
 
-pub fn isle_const_eq(egraph: &mut Context, node: AstIdx, c1: u64) -> bool {
+pub fn isle_const_eq(egraph: &Context, node: AstIdx, c1: u64) -> bool {
     let constant = egraph.arena.get_constant(node);
-    return constant == c1;
+    return constant == rmod(c1, egraph.arena.get_data(node).width);
 }
 
-pub fn isle_get_width(egraph: &mut Context, node: AstIdx) -> u64 {
+pub fn isle_get_width(egraph: &Context, node: AstIdx) -> u64 {
     return egraph.arena.get_data(node).width as u64;
 }
 
-pub fn isle_get_known_zeroes(egraph: &mut Context, node: AstIdx) -> u64 {
+pub fn isle_get_known_zeroes(egraph: &Context, node: AstIdx) -> u64 {
     return egraph.arena.get_data(node).known_bits.zeroes;
 }
 
-pub fn isle_get_known_ones(egraph: &mut Context, node: AstIdx) -> u64 {
+pub fn isle_get_known_ones(egraph: &Context, node: AstIdx) -> u64 {
     return egraph.arena.get_data(node).known_bits.ones;
 }
 
-pub fn isle_popcount(egraph: &mut Context, node: AstIdx) -> u64 {
+pub fn isle_popcount(egraph: &Context, node: AstIdx) -> u64 {
     return egraph.arena.get_data(node).known_bits.as_constant().unwrap().count_ones() as u64;
 }
 
@@ -4453,7 +4584,7 @@ pub fn get_const(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {
 }
 
 pub fn const_eq(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>, c1: u64) -> bool {
-    return node.data.known_bits.as_constant().unwrap() == c1;
+    return node.data.known_bits.as_constant().unwrap() == rmod(c1, node.data.width);
 }
 
 pub fn get_width(egraph: &EEGraph, node: &EClass<SimpleAst, AstData>) -> u64 {

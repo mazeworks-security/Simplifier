@@ -12,6 +12,7 @@ using Mba.Utility;
 using Microsoft.Z3;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 bool printUsage = false;
 bool onlyLinear = false;
@@ -69,6 +70,9 @@ if (inputText == null || printUsage)
 const int maxWidth = 64;
 if (bitWidth > maxWidth)
     throw new InvalidOperationException($"Received bit width {bitWidth}, which is greater than the max width {maxWidth}");
+
+// Load the optimal5 database. 
+RuntimeHelpers.RunClassConstructor(typeof(Optimal5).TypeHandle);
 
 var ctx = new AstCtx();
 AstIdx.ctx = ctx;

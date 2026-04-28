@@ -57,27 +57,10 @@ pub trait Context {
     fn pred_sge(&mut self, ) -> Predicate;
     fn pred_slt(&mut self, ) -> Predicate;
     fn pred_sle(&mut self, ) -> Predicate;
-    fn rule_mul_constant_to_left_1_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
-    fn rule_mul_constant_to_left_2_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
-    fn rule_mul_constant_to_left_3_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
-    fn rule_mul_constant_to_left_4_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
-    fn rule_add_constant_to_left_1_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
-    fn rule_add_constant_to_left_2_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
-    fn rule_add_constant_to_left_3_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
-    fn rule_add_constant_to_left_4_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
-    fn rule_and_constant_to_left_1_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
-    fn rule_and_constant_to_left_2_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
-    fn rule_and_constant_to_left_3_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
-    fn rule_and_constant_to_left_4_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
-    fn rule_or_constant_to_left_1_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
-    fn rule_or_constant_to_left_2_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
-    fn rule_or_constant_to_left_3_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
-    fn rule_or_constant_to_left_4_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
-    fn rule_xor_constant_to_left_1_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
-    fn rule_xor_constant_to_left_2_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
-    fn rule_xor_constant_to_left_3_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
-    fn rule_xor_constant_to_left_4_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
-    fn rule_neg_constant_to_left_1_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
+    fn rule_fold_neg_xor_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
+    fn rule_fold_nested_neg_xor_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
+    fn rule_fold_neg_xor_xor_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
+    fn rule_fold_const_or_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
     fn rule_arith_to_negation_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
     fn rule_add_negate_to_invert_sign_precondition(&mut self, arg0: AstIdx) -> Option<Empty>;
     fn rule_qsynth_1_precondition(&mut self, arg0: AstIdx, arg1: AstIdx) -> Option<Empty>;
@@ -248,44 +231,44 @@ pub fn constructor_lower<C: Context>(
     arg0: &SimpleAst,
 ) -> Option<SimpleAst> {
     match arg0 {
-        &SimpleAst::Add([v45, v46]) => {
-            let v54 = &C::lookup_value(ctx, v45);
-            if let Some(v55) = v54 {
-                match v55 {
-                    &SimpleAst::Add([v56, v57]) => {
-                        let v69 = &C::lookup_value(ctx, v46);
-                        if let Some(v70) = v69 {
-                            if let &SimpleAst::Mul([v227, v228]) = v70 {
-                                let v261 = &C::lookup_value(ctx, v228);
-                                if let Some(v262) = v261 {
-                                    match v262 {
-                                        &SimpleAst::And([v263, v264]) => {
-                                            let v265 = &C::lookup_value(ctx, v263);
-                                            if let Some(v266) = v265 {
-                                                if let &SimpleAst::Neg([v267]) = v266 {
-                                                    if v56 == v267 {
-                                                        let v919 = &C::lookup_value(ctx, v57);
-                                                        if let Some(v920) = v919 {
-                                                            if let &SimpleAst::Mul([v921, v922]) = v920 {
-                                                                let v1052 = &C::lookup_value(ctx, v264);
-                                                                if let Some(v1053) = v1052 {
-                                                                    if let &SimpleAst::Mul([v1060, v1061]) = v1053 {
-                                                                        if v227 == v1060 {
-                                                                            if v922 == v1061 {
-                                                                                let v1062 = C::rule_mba_9_precondition(ctx, v921, v227);
-                                                                                if let Some(v1063) = v1062 {
-                                                                                    let v60 = &C::any(ctx, v56);
-                                                                                    let v61 = C::lookup_id(ctx, v60);
-                                                                                    let v1064 = C::get_width(ctx, v56);
-                                                                                    let v1065 = &C::constant(ctx, 0x2, v1064);
-                                                                                    let v1066 = C::lookup_id(ctx, v1065);
-                                                                                    let v1067 = &C::any(ctx, v922);
-                                                                                    let v1068 = C::lookup_id(ctx, v1067);
-                                                                                    let v1069 = &C::mul(ctx, v1066, v1068);
-                                                                                    let v1070 = C::lookup_id(ctx, v1069);
-                                                                                    let v1071 = &C::xor(ctx, v61, v1070);
-                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1158.
-                                                                                    return Some(v1071.clone());
+        &SimpleAst::Add([v228, v229]) => {
+            let v249 = &C::lookup_value(ctx, v228);
+            if let Some(v250) = v249 {
+                match v250 {
+                    &SimpleAst::Add([v912, v913]) => {
+                        let v230 = &C::lookup_value(ctx, v229);
+                        if let Some(v231) = v230 {
+                            if let &SimpleAst::Mul([v232, v233]) = v231 {
+                                let v268 = &C::lookup_value(ctx, v233);
+                                if let Some(v269) = v268 {
+                                    match v269 {
+                                        &SimpleAst::And([v270, v271]) => {
+                                            let v272 = &C::lookup_value(ctx, v270);
+                                            if let Some(v273) = v272 {
+                                                if let &SimpleAst::Neg([v274]) = v273 {
+                                                    if v274 == v912 {
+                                                        let v918 = &C::lookup_value(ctx, v913);
+                                                        if let Some(v919) = v918 {
+                                                            if let &SimpleAst::Mul([v920, v921]) = v919 {
+                                                                let v1057 = &C::lookup_value(ctx, v271);
+                                                                if let Some(v1058) = v1057 {
+                                                                    if let &SimpleAst::Mul([v1065, v1066]) = v1058 {
+                                                                        if v232 == v1065 {
+                                                                            if v921 == v1066 {
+                                                                                let v1067 = C::rule_mba_9_precondition(ctx, v920, v232);
+                                                                                if let Some(v1068) = v1067 {
+                                                                                    let v972 = &C::any(ctx, v912);
+                                                                                    let v973 = C::lookup_id(ctx, v972);
+                                                                                    let v1069 = C::get_width(ctx, v912);
+                                                                                    let v1070 = &C::constant(ctx, 0x2, v1069);
+                                                                                    let v1071 = C::lookup_id(ctx, v1070);
+                                                                                    let v1072 = &C::any(ctx, v921);
+                                                                                    let v1073 = C::lookup_id(ctx, v1072);
+                                                                                    let v1074 = &C::mul(ctx, v1071, v1073);
+                                                                                    let v1075 = C::lookup_id(ctx, v1074);
+                                                                                    let v1076 = &C::xor(ctx, v973, v1075);
+                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1078.
+                                                                                    return Some(v1076.clone());
                                                                                 }
                                                                             }
                                                                         }
@@ -297,45 +280,45 @@ pub fn constructor_lower<C: Context>(
                                                 }
                                             }
                                         }
-                                        &SimpleAst::Or([v470, v471]) => {
-                                            let v915 = &C::lookup_value(ctx, v56);
-                                            if let Some(v916) = v915 {
-                                                if let &SimpleAst::And([v1196, v1197]) = v916 {
-                                                    let v919 = &C::lookup_value(ctx, v57);
-                                                    if let Some(v920) = v919 {
-                                                        if let &SimpleAst::Xor([v1198, v1199]) = v920 {
-                                                            if v470 == v1198 {
-                                                                let v1200 = &C::lookup_value(ctx, v1199);
-                                                                if let Some(v1201) = v1200 {
-                                                                    if let &SimpleAst::Or([v1202, v1203]) = v1201 {
-                                                                        if v1196 == v1202 {
-                                                                            if v1197 == v1203 {
-                                                                                let v1204 = &C::lookup_value(ctx, v471);
-                                                                                if let Some(v1205) = v1204 {
-                                                                                    if let &SimpleAst::Neg([v1206]) = v1205 {
-                                                                                        let v1207 = &C::lookup_value(ctx, v1206);
-                                                                                        if let Some(v1208) = v1207 {
-                                                                                            if let &SimpleAst::And([v1209, v1210]) = v1208 {
-                                                                                                if v1196 == v1209 {
-                                                                                                    if v1197 == v1210 {
-                                                                                                        let v1211 = C::rule_combine_and_add_xor_or_precondition(ctx, v227);
-                                                                                                        if let Some(v1212) = v1211 {
-                                                                                                            let v1213 = C::get_width(ctx, v1196);
-                                                                                                            let v1214 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFE, v1213);
-                                                                                                            let v1215 = C::lookup_id(ctx, v1214);
-                                                                                                            let v1216 = &C::any(ctx, v1198);
-                                                                                                            let v1217 = C::lookup_id(ctx, v1216);
-                                                                                                            let v1218 = &C::any(ctx, v1196);
-                                                                                                            let v1219 = C::lookup_id(ctx, v1218);
-                                                                                                            let v1220 = &C::xor(ctx, v1217, v1219);
-                                                                                                            let v1221 = C::lookup_id(ctx, v1220);
-                                                                                                            let v1222 = &C::any(ctx, v1197);
-                                                                                                            let v1223 = C::lookup_id(ctx, v1222);
-                                                                                                            let v1224 = &C::xor(ctx, v1221, v1223);
-                                                                                                            let v1225 = C::lookup_id(ctx, v1224);
-                                                                                                            let v1226 = &C::add(ctx, v1215, v1225);
-                                                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1249.
-                                                                                                            return Some(v1226.clone());
+                                        &SimpleAst::Or([v488, v489]) => {
+                                            let v914 = &C::lookup_value(ctx, v912);
+                                            if let Some(v915) = v914 {
+                                                if let &SimpleAst::And([v1191, v1192]) = v915 {
+                                                    let v918 = &C::lookup_value(ctx, v913);
+                                                    if let Some(v919) = v918 {
+                                                        if let &SimpleAst::Xor([v1193, v1194]) = v919 {
+                                                            if v488 == v1193 {
+                                                                let v1195 = &C::lookup_value(ctx, v1194);
+                                                                if let Some(v1196) = v1195 {
+                                                                    if let &SimpleAst::Or([v1197, v1198]) = v1196 {
+                                                                        if v1191 == v1197 {
+                                                                            if v1192 == v1198 {
+                                                                                let v1199 = &C::lookup_value(ctx, v489);
+                                                                                if let Some(v1200) = v1199 {
+                                                                                    if let &SimpleAst::Neg([v1201]) = v1200 {
+                                                                                        let v1202 = &C::lookup_value(ctx, v1201);
+                                                                                        if let Some(v1203) = v1202 {
+                                                                                            if let &SimpleAst::And([v1204, v1205]) = v1203 {
+                                                                                                if v1191 == v1204 {
+                                                                                                    if v1192 == v1205 {
+                                                                                                        let v1206 = C::rule_combine_and_add_xor_or_precondition(ctx, v232);
+                                                                                                        if let Some(v1207) = v1206 {
+                                                                                                            let v1208 = C::get_width(ctx, v1191);
+                                                                                                            let v1209 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFE, v1208);
+                                                                                                            let v1210 = C::lookup_id(ctx, v1209);
+                                                                                                            let v1211 = &C::any(ctx, v1193);
+                                                                                                            let v1212 = C::lookup_id(ctx, v1211);
+                                                                                                            let v1213 = &C::any(ctx, v1191);
+                                                                                                            let v1214 = C::lookup_id(ctx, v1213);
+                                                                                                            let v1215 = &C::xor(ctx, v1212, v1214);
+                                                                                                            let v1216 = C::lookup_id(ctx, v1215);
+                                                                                                            let v1217 = &C::any(ctx, v1192);
+                                                                                                            let v1218 = C::lookup_id(ctx, v1217);
+                                                                                                            let v1219 = &C::xor(ctx, v1216, v1218);
+                                                                                                            let v1220 = C::lookup_id(ctx, v1219);
+                                                                                                            let v1221 = &C::add(ctx, v1210, v1220);
+                                                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1169.
+                                                                                                            return Some(v1221.clone());
                                                                                                         }
                                                                                                     }
                                                                                                 }
@@ -359,60 +342,60 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Mul([v244, v245]) => {
-                        let v250 = &C::lookup_value(ctx, v245);
-                        if let Some(v251) = v250 {
-                            match v251 {
-                                &SimpleAst::Add([v1227, v1228]) => {
-                                    let v69 = &C::lookup_value(ctx, v46);
-                                    if let Some(v70) = v69 {
-                                        if let &SimpleAst::Mul([v227, v228]) = v70 {
-                                            let v261 = &C::lookup_value(ctx, v228);
-                                            if let Some(v262) = v261 {
-                                                if let &SimpleAst::Or([v470, v471]) = v262 {
-                                                    let v1204 = &C::lookup_value(ctx, v471);
-                                                    if let Some(v1205) = v1204 {
-                                                        if let &SimpleAst::Neg([v1206]) = v1205 {
-                                                            let v1207 = &C::lookup_value(ctx, v1206);
-                                                            if let Some(v1208) = v1207 {
-                                                                if let &SimpleAst::And([v1209, v1210]) = v1208 {
-                                                                    let v1229 = &C::lookup_value(ctx, v1227);
-                                                                    if let Some(v1230) = v1229 {
-                                                                        if let &SimpleAst::And([v1231, v1232]) = v1230 {
-                                                                            if v1209 == v1231 {
-                                                                                if v1210 == v1232 {
-                                                                                    let v1233 = &C::lookup_value(ctx, v1228);
-                                                                                    if let Some(v1234) = v1233 {
-                                                                                        if let &SimpleAst::Xor([v1235, v1236]) = v1234 {
-                                                                                            if v470 == v1235 {
-                                                                                                let v1237 = &C::lookup_value(ctx, v1236);
-                                                                                                if let Some(v1238) = v1237 {
-                                                                                                    if let &SimpleAst::Or([v1239, v1240]) = v1238 {
-                                                                                                        if v1209 == v1239 {
-                                                                                                            if v1210 == v1240 {
-                                                                                                                let v1241 = C::rule_combine_and_add_xor_or_2_precondition(ctx, v244, v227);
-                                                                                                                if let Some(v1242) = v1241 {
-                                                                                                                    let v540 = C::get_width(ctx, v244);
-                                                                                                                    let v1243 = &C::constant(ctx, 0x2, v540);
+                    &SimpleAst::Mul([v251, v252]) => {
+                        let v257 = &C::lookup_value(ctx, v252);
+                        if let Some(v258) = v257 {
+                            match v258 {
+                                &SimpleAst::Add([v1222, v1223]) => {
+                                    let v230 = &C::lookup_value(ctx, v229);
+                                    if let Some(v231) = v230 {
+                                        if let &SimpleAst::Mul([v232, v233]) = v231 {
+                                            let v268 = &C::lookup_value(ctx, v233);
+                                            if let Some(v269) = v268 {
+                                                if let &SimpleAst::Or([v488, v489]) = v269 {
+                                                    let v1199 = &C::lookup_value(ctx, v489);
+                                                    if let Some(v1200) = v1199 {
+                                                        if let &SimpleAst::Neg([v1201]) = v1200 {
+                                                            let v1202 = &C::lookup_value(ctx, v1201);
+                                                            if let Some(v1203) = v1202 {
+                                                                if let &SimpleAst::And([v1204, v1205]) = v1203 {
+                                                                    let v1224 = &C::lookup_value(ctx, v1222);
+                                                                    if let Some(v1225) = v1224 {
+                                                                        if let &SimpleAst::And([v1226, v1227]) = v1225 {
+                                                                            if v1204 == v1226 {
+                                                                                if v1205 == v1227 {
+                                                                                    let v1228 = &C::lookup_value(ctx, v1223);
+                                                                                    if let Some(v1229) = v1228 {
+                                                                                        if let &SimpleAst::Xor([v1230, v1231]) = v1229 {
+                                                                                            if v488 == v1230 {
+                                                                                                let v1232 = &C::lookup_value(ctx, v1231);
+                                                                                                if let Some(v1233) = v1232 {
+                                                                                                    if let &SimpleAst::Or([v1234, v1235]) = v1233 {
+                                                                                                        if v1204 == v1234 {
+                                                                                                            if v1205 == v1235 {
+                                                                                                                let v1236 = C::rule_combine_and_add_xor_or_2_precondition(ctx, v251, v232);
+                                                                                                                if let Some(v1237) = v1236 {
+                                                                                                                    let v544 = C::get_width(ctx, v251);
+                                                                                                                    let v1238 = &C::constant(ctx, 0x2, v544);
+                                                                                                                    let v1239 = C::lookup_id(ctx, v1238);
+                                                                                                                    let v1240 = C::get_width(ctx, v251);
+                                                                                                                    let v1241 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1240);
+                                                                                                                    let v1242 = C::lookup_id(ctx, v1241);
+                                                                                                                    let v1243 = &C::any(ctx, v1230);
                                                                                                                     let v1244 = C::lookup_id(ctx, v1243);
-                                                                                                                    let v1245 = C::get_width(ctx, v244);
-                                                                                                                    let v1246 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1245);
-                                                                                                                    let v1247 = C::lookup_id(ctx, v1246);
-                                                                                                                    let v1248 = &C::any(ctx, v1235);
-                                                                                                                    let v1249 = C::lookup_id(ctx, v1248);
-                                                                                                                    let v1250 = &C::any(ctx, v1231);
-                                                                                                                    let v1251 = C::lookup_id(ctx, v1250);
-                                                                                                                    let v1252 = &C::xor(ctx, v1249, v1251);
-                                                                                                                    let v1253 = C::lookup_id(ctx, v1252);
-                                                                                                                    let v1254 = &C::any(ctx, v1232);
-                                                                                                                    let v1255 = C::lookup_id(ctx, v1254);
-                                                                                                                    let v1256 = &C::xor(ctx, v1253, v1255);
-                                                                                                                    let v1257 = C::lookup_id(ctx, v1256);
-                                                                                                                    let v1258 = &C::mul(ctx, v1247, v1257);
-                                                                                                                    let v1259 = C::lookup_id(ctx, v1258);
-                                                                                                                    let v1260 = &C::add(ctx, v1244, v1259);
-                                                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1256.
-                                                                                                                    return Some(v1260.clone());
+                                                                                                                    let v1245 = &C::any(ctx, v1226);
+                                                                                                                    let v1246 = C::lookup_id(ctx, v1245);
+                                                                                                                    let v1247 = &C::xor(ctx, v1244, v1246);
+                                                                                                                    let v1248 = C::lookup_id(ctx, v1247);
+                                                                                                                    let v1249 = &C::any(ctx, v1227);
+                                                                                                                    let v1250 = C::lookup_id(ctx, v1249);
+                                                                                                                    let v1251 = &C::xor(ctx, v1248, v1250);
+                                                                                                                    let v1252 = C::lookup_id(ctx, v1251);
+                                                                                                                    let v1253 = &C::mul(ctx, v1242, v1252);
+                                                                                                                    let v1254 = C::lookup_id(ctx, v1253);
+                                                                                                                    let v1255 = &C::add(ctx, v1239, v1254);
+                                                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1176.
+                                                                                                                    return Some(v1255.clone());
                                                                                                                 }
                                                                                                             }
                                                                                                         }
@@ -434,20 +417,20 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::And([v282, v283]) => {
-                                    let v69 = &C::lookup_value(ctx, v46);
-                                    if let Some(v70) = v69 {
-                                        if let &SimpleAst::Or([v433, v434]) = v70 {
-                                            if v282 == v434 {
-                                                let v284 = &C::lookup_value(ctx, v283);
-                                                if let Some(v285) = v284 {
-                                                    if let &SimpleAst::Neg([v286]) = v285 {
-                                                        if v286 == v433 {
-                                                            let v1057 = C::rule_mba_5_precondition(ctx, v244);
-                                                            if let Some(v1058) = v1057 {
-                                                                let v1059 = &C::any(ctx, v286);
-                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1151.
-                                                                return Some(v1059.clone());
+                                &SimpleAst::And([v289, v290]) => {
+                                    let v230 = &C::lookup_value(ctx, v229);
+                                    if let Some(v231) = v230 {
+                                        if let &SimpleAst::Or([v451, v452]) = v231 {
+                                            if v289 == v452 {
+                                                let v291 = &C::lookup_value(ctx, v290);
+                                                if let Some(v292) = v291 {
+                                                    if let &SimpleAst::Neg([v293]) = v292 {
+                                                        if v293 == v451 {
+                                                            let v1062 = C::rule_mba_5_precondition(ctx, v251);
+                                                            if let Some(v1063) = v1062 {
+                                                                let v1064 = &C::any(ctx, v293);
+                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1071.
+                                                                return Some(v1064.clone());
                                                             }
                                                         }
                                                     }
@@ -455,73 +438,73 @@ pub fn constructor_lower<C: Context>(
                                             }
                                         }
                                     }
-                                    if v46 == v282 {
-                                        let v1043 = C::rule_mba_2_precondition(ctx, v244);
-                                        if let Some(v1044) = v1043 {
-                                            let v1045 = &C::any(ctx, v283);
-                                            let v1046 = C::lookup_id(ctx, v1045);
-                                            let v1047 = &C::neg(ctx, v1046);
-                                            let v1048 = C::lookup_id(ctx, v1047);
-                                            let v1049 = &C::any(ctx, v282);
-                                            let v1050 = C::lookup_id(ctx, v1049);
-                                            let v1051 = &C::and(ctx, v1048, v1050);
-                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1137.
-                                            return Some(v1051.clone());
+                                    if v229 == v289 {
+                                        let v1048 = C::rule_mba_2_precondition(ctx, v251);
+                                        if let Some(v1049) = v1048 {
+                                            let v1050 = &C::any(ctx, v290);
+                                            let v1051 = C::lookup_id(ctx, v1050);
+                                            let v1052 = &C::neg(ctx, v1051);
+                                            let v1053 = C::lookup_id(ctx, v1052);
+                                            let v1054 = &C::any(ctx, v289);
+                                            let v1055 = C::lookup_id(ctx, v1054);
+                                            let v1056 = &C::and(ctx, v1053, v1055);
+                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1057.
+                                            return Some(v1056.clone());
                                         }
                                     }
                                 }
-                                &SimpleAst::Xor([v1401, v1402]) => {
-                                    let v69 = &C::lookup_value(ctx, v46);
-                                    if let Some(v70) = v69 {
-                                        if let &SimpleAst::Mul([v227, v228]) = v70 {
-                                            let v254 = &C::lookup_value(ctx, v227);
-                                            if let Some(v255) = v254 {
-                                                if let &SimpleAst::Mul([v1414, v1415]) = v255 {
-                                                    if v244 == v1415 {
-                                                        let v261 = &C::lookup_value(ctx, v228);
-                                                        if let Some(v262) = v261 {
-                                                            if let &SimpleAst::Add([v1416, v1417]) = v262 {
-                                                                let v1403 = &C::lookup_value(ctx, v1402);
-                                                                if let Some(v1404) = v1403 {
-                                                                    if let &SimpleAst::Neg([v1405]) = v1404 {
-                                                                        let v1406 = &C::lookup_value(ctx, v1405);
-                                                                        if let Some(v1407) = v1406 {
-                                                                            if let &SimpleAst::Or([v1408, v1409]) = v1407 {
-                                                                                let v1410 = &C::lookup_value(ctx, v1409);
-                                                                                if let Some(v1411) = v1410 {
-                                                                                    if let &SimpleAst::And([v1412, v1413]) = v1411 {
-                                                                                        if v1401 == v1412 {
-                                                                                            let v1418 = &C::lookup_value(ctx, v1416);
-                                                                                            if let Some(v1419) = v1418 {
-                                                                                                if let &SimpleAst::And([v1420, v1421]) = v1419 {
-                                                                                                    if v1401 == v1420 {
-                                                                                                        if v1408 == v1421 {
-                                                                                                            let v1422 = &C::lookup_value(ctx, v1417);
-                                                                                                            if let Some(v1423) = v1422 {
-                                                                                                                if let &SimpleAst::Or([v1424, v1425]) = v1423 {
-                                                                                                                    if v1413 == v1424 {
-                                                                                                                        let v1426 = &C::lookup_value(ctx, v1425);
-                                                                                                                        if let Some(v1427) = v1426 {
-                                                                                                                            if let &SimpleAst::Or([v1428, v1429]) = v1427 {
-                                                                                                                                if v1408 == v1428 {
-                                                                                                                                    let v1430 = &C::lookup_value(ctx, v1429);
-                                                                                                                                    if let Some(v1431) = v1430 {
-                                                                                                                                        if let &SimpleAst::Neg([v1432]) = v1431 {
-                                                                                                                                            if v1401 == v1432 {
-                                                                                                                                                let v1433 = C::rule_linear_mba_2_precondition(ctx, v1414);
-                                                                                                                                                if let Some(v1434) = v1433 {
-                                                                                                                                                    let v540 = C::get_width(ctx, v244);
-                                                                                                                                                    let v541 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v540);
-                                                                                                                                                    let v542 = C::lookup_id(ctx, v541);
-                                                                                                                                                    let v543 = &C::any(ctx, v244);
-                                                                                                                                                    let v544 = C::lookup_id(ctx, v543);
-                                                                                                                                                    let v545 = &C::mul(ctx, v542, v544);
-                                                                                                                                                    let v1435 = C::lookup_id(ctx, v545);
-                                                                                                                                                    let v1436 = &C::any(ctx, v1408);
-                                                                                                                                                    let v1437 = C::lookup_id(ctx, v1436);
-                                                                                                                                                    let v1438 = &C::mul(ctx, v1435, v1437);
-                                                                                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1317.
-                                                                                                                                                    return Some(v1438.clone());
+                                &SimpleAst::Xor([v1394, v1395]) => {
+                                    let v230 = &C::lookup_value(ctx, v229);
+                                    if let Some(v231) = v230 {
+                                        if let &SimpleAst::Mul([v232, v233]) = v231 {
+                                            let v261 = &C::lookup_value(ctx, v232);
+                                            if let Some(v262) = v261 {
+                                                if let &SimpleAst::Mul([v1407, v1408]) = v262 {
+                                                    if v251 == v1408 {
+                                                        let v268 = &C::lookup_value(ctx, v233);
+                                                        if let Some(v269) = v268 {
+                                                            if let &SimpleAst::Add([v1409, v1410]) = v269 {
+                                                                let v1396 = &C::lookup_value(ctx, v1395);
+                                                                if let Some(v1397) = v1396 {
+                                                                    if let &SimpleAst::Neg([v1398]) = v1397 {
+                                                                        let v1399 = &C::lookup_value(ctx, v1398);
+                                                                        if let Some(v1400) = v1399 {
+                                                                            if let &SimpleAst::Or([v1401, v1402]) = v1400 {
+                                                                                let v1403 = &C::lookup_value(ctx, v1402);
+                                                                                if let Some(v1404) = v1403 {
+                                                                                    if let &SimpleAst::And([v1405, v1406]) = v1404 {
+                                                                                        if v1394 == v1405 {
+                                                                                            let v1411 = &C::lookup_value(ctx, v1409);
+                                                                                            if let Some(v1412) = v1411 {
+                                                                                                if let &SimpleAst::And([v1413, v1414]) = v1412 {
+                                                                                                    if v1394 == v1413 {
+                                                                                                        if v1401 == v1414 {
+                                                                                                            let v1415 = &C::lookup_value(ctx, v1410);
+                                                                                                            if let Some(v1416) = v1415 {
+                                                                                                                if let &SimpleAst::Or([v1417, v1418]) = v1416 {
+                                                                                                                    if v1406 == v1417 {
+                                                                                                                        let v1419 = &C::lookup_value(ctx, v1418);
+                                                                                                                        if let Some(v1420) = v1419 {
+                                                                                                                            if let &SimpleAst::Or([v1421, v1422]) = v1420 {
+                                                                                                                                if v1401 == v1421 {
+                                                                                                                                    let v1423 = &C::lookup_value(ctx, v1422);
+                                                                                                                                    if let Some(v1424) = v1423 {
+                                                                                                                                        if let &SimpleAst::Neg([v1425]) = v1424 {
+                                                                                                                                            if v1394 == v1425 {
+                                                                                                                                                let v1426 = C::rule_linear_mba_2_precondition(ctx, v1407);
+                                                                                                                                                if let Some(v1427) = v1426 {
+                                                                                                                                                    let v544 = C::get_width(ctx, v251);
+                                                                                                                                                    let v545 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v544);
+                                                                                                                                                    let v546 = C::lookup_id(ctx, v545);
+                                                                                                                                                    let v547 = &C::any(ctx, v251);
+                                                                                                                                                    let v548 = C::lookup_id(ctx, v547);
+                                                                                                                                                    let v549 = &C::mul(ctx, v546, v548);
+                                                                                                                                                    let v1428 = C::lookup_id(ctx, v549);
+                                                                                                                                                    let v1429 = &C::any(ctx, v1401);
+                                                                                                                                                    let v1430 = C::lookup_id(ctx, v1429);
+                                                                                                                                                    let v1431 = &C::mul(ctx, v1428, v1430);
+                                                                                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1237.
+                                                                                                                                                    return Some(v1431.clone());
                                                                                                                                                 }
                                                                                                                                             }
                                                                                                                                         }
@@ -555,86 +538,86 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::And([v427, v428]) => {
-                        let v69 = &C::lookup_value(ctx, v46);
-                        if let Some(v70) = v69 {
-                            match v70 {
-                                &SimpleAst::Mul([v227, v228]) => {
-                                    let v1096 = &C::lookup_value(ctx, v427);
-                                    if let Some(v1097) = v1096 {
-                                        if let &SimpleAst::Neg([v1098]) = v1097 {
-                                            if v227 == v428 {
-                                                let v261 = &C::lookup_value(ctx, v228);
-                                                if let Some(v262) = v261 {
-                                                    if let &SimpleAst::Mul([v451, v452]) = v262 {
-                                                        let v1111 = C::rule_new_24_precondition(ctx, v451, v452);
-                                                        if let Some(v1112) = v1111 {
-                                                            let v1101 = C::get_width(ctx, v1098);
-                                                            let v1102 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1101);
-                                                            let v1103 = C::lookup_id(ctx, v1102);
-                                                            let v1104 = &C::any(ctx, v1098);
-                                                            let v1105 = C::lookup_id(ctx, v1104);
-                                                            let v1106 = &C::any(ctx, v428);
-                                                            let v1107 = C::lookup_id(ctx, v1106);
-                                                            let v1108 = &C::and(ctx, v1105, v1107);
-                                                            let v1109 = C::lookup_id(ctx, v1108);
-                                                            let v1110 = &C::mul(ctx, v1103, v1109);
-                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1192.
-                                                            return Some(v1110.clone());
+                    &SimpleAst::And([v445, v446]) => {
+                        let v230 = &C::lookup_value(ctx, v229);
+                        if let Some(v231) = v230 {
+                            match v231 {
+                                &SimpleAst::Mul([v232, v233]) => {
+                                    let v1101 = &C::lookup_value(ctx, v445);
+                                    if let Some(v1102) = v1101 {
+                                        if let &SimpleAst::Neg([v1103]) = v1102 {
+                                            if v232 == v446 {
+                                                let v268 = &C::lookup_value(ctx, v233);
+                                                if let Some(v269) = v268 {
+                                                    if let &SimpleAst::Mul([v469, v470]) = v269 {
+                                                        let v1116 = C::rule_new_24_precondition(ctx, v469, v470);
+                                                        if let Some(v1117) = v1116 {
+                                                            let v1106 = C::get_width(ctx, v1103);
+                                                            let v1107 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1106);
+                                                            let v1108 = C::lookup_id(ctx, v1107);
+                                                            let v1109 = &C::any(ctx, v1103);
+                                                            let v1110 = C::lookup_id(ctx, v1109);
+                                                            let v1111 = &C::any(ctx, v446);
+                                                            let v1112 = C::lookup_id(ctx, v1111);
+                                                            let v1113 = &C::and(ctx, v1110, v1112);
+                                                            let v1114 = C::lookup_id(ctx, v1113);
+                                                            let v1115 = &C::mul(ctx, v1108, v1114);
+                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1112.
+                                                            return Some(v1115.clone());
                                                         }
                                                     }
                                                 }
                                             }
-                                            if v228 == v428 {
-                                                let v1099 = C::rule_new_23_precondition(ctx, v227);
-                                                if let Some(v1100) = v1099 {
-                                                    let v1101 = C::get_width(ctx, v1098);
-                                                    let v1102 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1101);
-                                                    let v1103 = C::lookup_id(ctx, v1102);
-                                                    let v1104 = &C::any(ctx, v1098);
-                                                    let v1105 = C::lookup_id(ctx, v1104);
-                                                    let v1106 = &C::any(ctx, v428);
-                                                    let v1107 = C::lookup_id(ctx, v1106);
-                                                    let v1108 = &C::and(ctx, v1105, v1107);
-                                                    let v1109 = C::lookup_id(ctx, v1108);
-                                                    let v1110 = &C::mul(ctx, v1103, v1109);
-                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1185.
-                                                    return Some(v1110.clone());
+                                            if v233 == v446 {
+                                                let v1104 = C::rule_new_23_precondition(ctx, v232);
+                                                if let Some(v1105) = v1104 {
+                                                    let v1106 = C::get_width(ctx, v1103);
+                                                    let v1107 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1106);
+                                                    let v1108 = C::lookup_id(ctx, v1107);
+                                                    let v1109 = &C::any(ctx, v1103);
+                                                    let v1110 = C::lookup_id(ctx, v1109);
+                                                    let v1111 = &C::any(ctx, v446);
+                                                    let v1112 = C::lookup_id(ctx, v1111);
+                                                    let v1113 = &C::and(ctx, v1110, v1112);
+                                                    let v1114 = C::lookup_id(ctx, v1113);
+                                                    let v1115 = &C::mul(ctx, v1108, v1114);
+                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1105.
+                                                    return Some(v1115.clone());
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                &SimpleAst::And([v275, v276]) => {
-                                    let v1096 = &C::lookup_value(ctx, v427);
-                                    if let Some(v1097) = v1096 {
-                                        match v1097 {
-                                            &SimpleAst::And([v1291, v1292]) => {
-                                                let v429 = &C::lookup_value(ctx, v275);
-                                                if let Some(v430) = v429 {
-                                                    if let &SimpleAst::And([v1296, v1297]) = v430 {
-                                                        if v1291 == v1296 {
-                                                            let v1141 = &C::lookup_value(ctx, v428);
-                                                            if let Some(v1142) = v1141 {
-                                                                if let &SimpleAst::Neg([v1143]) = v1142 {
-                                                                    if v276 == v1143 {
-                                                                        let v1293 = &C::lookup_value(ctx, v1292);
-                                                                        if let Some(v1294) = v1293 {
-                                                                            if let &SimpleAst::Neg([v1295]) = v1294 {
-                                                                                if v1295 == v1297 {
-                                                                                    let v1298 = &C::any(ctx, v1291);
-                                                                                    let v1299 = C::lookup_id(ctx, v1298);
-                                                                                    let v1300 = &C::any(ctx, v1295);
-                                                                                    let v1301 = C::lookup_id(ctx, v1300);
-                                                                                    let v1302 = &C::any(ctx, v1143);
-                                                                                    let v1303 = C::lookup_id(ctx, v1302);
-                                                                                    let v1304 = &C::xor(ctx, v1301, v1303);
-                                                                                    let v1305 = C::lookup_id(ctx, v1304);
-                                                                                    let v1306 = &C::neg(ctx, v1305);
-                                                                                    let v1307 = C::lookup_id(ctx, v1306);
-                                                                                    let v1308 = &C::and(ctx, v1299, v1307);
-                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1281.
-                                                                                    return Some(v1308.clone());
+                                &SimpleAst::And([v282, v283]) => {
+                                    let v1101 = &C::lookup_value(ctx, v445);
+                                    if let Some(v1102) = v1101 {
+                                        match v1102 {
+                                            &SimpleAst::And([v1286, v1287]) => {
+                                                let v447 = &C::lookup_value(ctx, v282);
+                                                if let Some(v448) = v447 {
+                                                    if let &SimpleAst::And([v1291, v1292]) = v448 {
+                                                        if v1286 == v1291 {
+                                                            let v1142 = &C::lookup_value(ctx, v446);
+                                                            if let Some(v1143) = v1142 {
+                                                                if let &SimpleAst::Neg([v1144]) = v1143 {
+                                                                    if v283 == v1144 {
+                                                                        let v1288 = &C::lookup_value(ctx, v1287);
+                                                                        if let Some(v1289) = v1288 {
+                                                                            if let &SimpleAst::Neg([v1290]) = v1289 {
+                                                                                if v1290 == v1292 {
+                                                                                    let v1293 = &C::any(ctx, v1286);
+                                                                                    let v1294 = C::lookup_id(ctx, v1293);
+                                                                                    let v1295 = &C::any(ctx, v1290);
+                                                                                    let v1296 = C::lookup_id(ctx, v1295);
+                                                                                    let v1297 = &C::any(ctx, v1144);
+                                                                                    let v1298 = C::lookup_id(ctx, v1297);
+                                                                                    let v1299 = &C::xor(ctx, v1296, v1298);
+                                                                                    let v1300 = C::lookup_id(ctx, v1299);
+                                                                                    let v1301 = &C::neg(ctx, v1300);
+                                                                                    let v1302 = C::lookup_id(ctx, v1301);
+                                                                                    let v1303 = &C::and(ctx, v1294, v1302);
+                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1201.
+                                                                                    return Some(v1303.clone());
                                                                                 }
                                                                             }
                                                                         }
@@ -645,41 +628,41 @@ pub fn constructor_lower<C: Context>(
                                                     }
                                                 }
                                             }
-                                            &SimpleAst::Neg([v1098]) => {
-                                                if v275 == v428 {
-                                                    if v276 == v1098 {
-                                                        let v432 = &C::any(ctx, v428);
-                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1275.
-                                                        return Some(v432.clone());
+                                            &SimpleAst::Neg([v1103]) => {
+                                                if v282 == v446 {
+                                                    if v283 == v1103 {
+                                                        let v450 = &C::any(ctx, v446);
+                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1195.
+                                                        return Some(v450.clone());
                                                     }
                                                 }
                                             }
                                             _ => {}
                                         }
                                     }
-                                    if v276 == v427 {
-                                        let v1141 = &C::lookup_value(ctx, v428);
-                                        if let Some(v1142) = v1141 {
-                                            if let &SimpleAst::Neg([v1143]) = v1142 {
-                                                if v275 == v1143 {
-                                                    let v934 = &C::any(ctx, v427);
-                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1225.
-                                                    return Some(v934.clone());
+                                    if v283 == v445 {
+                                        let v1142 = &C::lookup_value(ctx, v446);
+                                        if let Some(v1143) = v1142 {
+                                            if let &SimpleAst::Neg([v1144]) = v1143 {
+                                                if v282 == v1144 {
+                                                    let v933 = &C::any(ctx, v445);
+                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1145.
+                                                    return Some(v933.clone());
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                &SimpleAst::Neg([v234]) => {
-                                    let v988 = &C::lookup_value(ctx, v234);
-                                    if let Some(v989) = v988 {
-                                        if let &SimpleAst::And([v1121, v1122]) = v989 {
-                                            if v427 == v1121 {
-                                                if v428 == v1122 {
-                                                    let v1123 = C::get_width(ctx, v427);
-                                                    let v1124 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1123);
-                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1206.
-                                                    return Some(v1124.clone());
+                                &SimpleAst::Neg([v239]) => {
+                                    let v993 = &C::lookup_value(ctx, v239);
+                                    if let Some(v994) = v993 {
+                                        if let &SimpleAst::And([v1126, v1127]) = v994 {
+                                            if v445 == v1126 {
+                                                if v446 == v1127 {
+                                                    let v1128 = C::get_width(ctx, v445);
+                                                    let v1129 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v1128);
+                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1126.
+                                                    return Some(v1129.clone());
                                                 }
                                             }
                                         }
@@ -689,37 +672,37 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Or([v273, v274]) => {
-                        let v69 = &C::lookup_value(ctx, v46);
-                        if let Some(v70) = v69 {
-                            if let &SimpleAst::Mul([v227, v228]) = v70 {
-                                if v228 == v273 {
-                                    let v1080 = C::rule_new_3_precondition(ctx, v227);
-                                    if let Some(v1081) = v1080 {
-                                        let v277 = &C::any(ctx, v273);
-                                        let v278 = C::lookup_id(ctx, v277);
-                                        let v1082 = &C::neg(ctx, v278);
-                                        let v1083 = C::lookup_id(ctx, v1082);
-                                        let v1084 = &C::any(ctx, v274);
-                                        let v1085 = C::lookup_id(ctx, v1084);
-                                        let v1086 = &C::and(ctx, v1083, v1085);
-                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1172.
-                                        return Some(v1086.clone());
+                    &SimpleAst::Or([v280, v281]) => {
+                        let v230 = &C::lookup_value(ctx, v229);
+                        if let Some(v231) = v230 {
+                            if let &SimpleAst::Mul([v232, v233]) = v231 {
+                                if v233 == v280 {
+                                    let v1085 = C::rule_new_3_precondition(ctx, v232);
+                                    if let Some(v1086) = v1085 {
+                                        let v284 = &C::any(ctx, v280);
+                                        let v285 = C::lookup_id(ctx, v284);
+                                        let v1087 = &C::neg(ctx, v285);
+                                        let v1088 = C::lookup_id(ctx, v1087);
+                                        let v1089 = &C::any(ctx, v281);
+                                        let v1090 = C::lookup_id(ctx, v1089);
+                                        let v1091 = &C::and(ctx, v1088, v1090);
+                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1092.
+                                        return Some(v1091.clone());
                                     }
                                 }
-                                let v261 = &C::lookup_value(ctx, v228);
-                                if let Some(v262) = v261 {
-                                    if let &SimpleAst::And([v263, v264]) = v262 {
-                                        if v263 == v274 {
-                                            let v1052 = &C::lookup_value(ctx, v264);
-                                            if let Some(v1053) = v1052 {
-                                                if let &SimpleAst::Neg([v1054]) = v1053 {
-                                                    if v273 == v1054 {
-                                                        let v1055 = C::rule_mba_4_precondition(ctx, v227);
-                                                        if let Some(v1056) = v1055 {
-                                                            let v277 = &C::any(ctx, v273);
-                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1144.
-                                                            return Some(v277.clone());
+                                let v268 = &C::lookup_value(ctx, v233);
+                                if let Some(v269) = v268 {
+                                    if let &SimpleAst::And([v270, v271]) = v269 {
+                                        if v270 == v281 {
+                                            let v1057 = &C::lookup_value(ctx, v271);
+                                            if let Some(v1058) = v1057 {
+                                                if let &SimpleAst::Neg([v1059]) = v1058 {
+                                                    if v280 == v1059 {
+                                                        let v1060 = C::rule_mba_4_precondition(ctx, v232);
+                                                        if let Some(v1061) = v1060 {
+                                                            let v284 = &C::any(ctx, v280);
+                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1064.
+                                                            return Some(v284.clone());
                                                         }
                                                     }
                                                 }
@@ -730,76 +713,76 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Xor([v308, v309]) => {
-                        let v69 = &C::lookup_value(ctx, v46);
-                        if let Some(v70) = v69 {
-                            match v70 {
-                                &SimpleAst::Mul([v227, v228]) => {
-                                    let v261 = &C::lookup_value(ctx, v228);
-                                    if let Some(v262) = v261 {
-                                        if let &SimpleAst::Or([v470, v471]) = v262 {
-                                            if v308 == v470 {
-                                                if v309 == v471 {
-                                                    let v1072 = C::rule_new_2_precondition(ctx, v227);
-                                                    if let Some(v1073) = v1072 {
-                                                        let v447 = C::get_width(ctx, v308);
-                                                        let v448 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v447);
-                                                        let v1074 = C::lookup_id(ctx, v448);
-                                                        let v1075 = &C::any(ctx, v308);
-                                                        let v1076 = C::lookup_id(ctx, v1075);
-                                                        let v465 = &C::any(ctx, v309);
-                                                        let v466 = C::lookup_id(ctx, v465);
-                                                        let v1077 = &C::and(ctx, v1076, v466);
-                                                        let v1078 = C::lookup_id(ctx, v1077);
-                                                        let v1079 = &C::mul(ctx, v1074, v1078);
-                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1165.
-                                                        return Some(v1079.clone());
+                    &SimpleAst::Xor([v315, v316]) => {
+                        let v230 = &C::lookup_value(ctx, v229);
+                        if let Some(v231) = v230 {
+                            match v231 {
+                                &SimpleAst::Mul([v232, v233]) => {
+                                    let v268 = &C::lookup_value(ctx, v233);
+                                    if let Some(v269) = v268 {
+                                        if let &SimpleAst::Or([v488, v489]) = v269 {
+                                            if v315 == v488 {
+                                                if v316 == v489 {
+                                                    let v1077 = C::rule_new_2_precondition(ctx, v232);
+                                                    if let Some(v1078) = v1077 {
+                                                        let v465 = C::get_width(ctx, v315);
+                                                        let v466 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v465);
+                                                        let v1079 = C::lookup_id(ctx, v466);
+                                                        let v1080 = &C::any(ctx, v315);
+                                                        let v1081 = C::lookup_id(ctx, v1080);
+                                                        let v483 = &C::any(ctx, v316);
+                                                        let v484 = C::lookup_id(ctx, v483);
+                                                        let v1082 = &C::and(ctx, v1081, v484);
+                                                        let v1083 = C::lookup_id(ctx, v1082);
+                                                        let v1084 = &C::mul(ctx, v1079, v1083);
+                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1085.
+                                                        return Some(v1084.clone());
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                &SimpleAst::Or([v433, v434]) => {
-                                    let v435 = &C::lookup_value(ctx, v433);
-                                    if let Some(v436) = v435 {
-                                        if let &SimpleAst::Xor([v1378, v1379]) = v436 {
-                                            let v1261 = &C::lookup_value(ctx, v309);
-                                            if let Some(v1262) = v1261 {
-                                                if let &SimpleAst::Or([v1369, v1370]) = v1262 {
-                                                    let v1371 = &C::lookup_value(ctx, v1370);
-                                                    if let Some(v1372) = v1371 {
-                                                        if let &SimpleAst::And([v1373, v1374]) = v1372 {
-                                                            if v308 == v1373 {
-                                                                let v1375 = &C::lookup_value(ctx, v1374);
-                                                                if let Some(v1376) = v1375 {
-                                                                    if let &SimpleAst::Neg([v1377]) = v1376 {
-                                                                        if v1377 == v1378 {
-                                                                            let v1380 = &C::lookup_value(ctx, v1379);
-                                                                            if let Some(v1381) = v1380 {
-                                                                                if let &SimpleAst::Xor([v1382, v1383]) = v1381 {
-                                                                                    if v308 == v1383 {
-                                                                                        if v1369 == v1382 {
-                                                                                            let v1384 = &C::lookup_value(ctx, v434);
-                                                                                            if let Some(v1385) = v1384 {
-                                                                                                if let &SimpleAst::And([v1386, v1387]) = v1385 {
-                                                                                                    if v308 == v1387 {
-                                                                                                        if v1369 == v1386 {
-                                                                                                            let v1388 = &C::any(ctx, v1369);
-                                                                                                            let v1389 = C::lookup_id(ctx, v1388);
-                                                                                                            let v1390 = &C::any(ctx, v1369);
-                                                                                                            let v1391 = C::lookup_id(ctx, v1390);
-                                                                                                            let v1392 = &C::any(ctx, v308);
-                                                                                                            let v1393 = C::lookup_id(ctx, v1392);
-                                                                                                            let v1394 = &C::any(ctx, v1377);
-                                                                                                            let v1395 = C::lookup_id(ctx, v1394);
-                                                                                                            let v1396 = &C::or(ctx, v1393, v1395);
-                                                                                                            let v1397 = C::lookup_id(ctx, v1396);
-                                                                                                            let v1398 = &C::xor(ctx, v1391, v1397);
-                                                                                                            let v1399 = C::lookup_id(ctx, v1398);
-                                                                                                            let v1400 = &C::add(ctx, v1389, v1399);
-                                                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1311.
-                                                                                                            return Some(v1400.clone());
+                                &SimpleAst::Or([v451, v452]) => {
+                                    let v453 = &C::lookup_value(ctx, v451);
+                                    if let Some(v454) = v453 {
+                                        if let &SimpleAst::Xor([v1371, v1372]) = v454 {
+                                            let v1256 = &C::lookup_value(ctx, v316);
+                                            if let Some(v1257) = v1256 {
+                                                if let &SimpleAst::Or([v1362, v1363]) = v1257 {
+                                                    let v1364 = &C::lookup_value(ctx, v1363);
+                                                    if let Some(v1365) = v1364 {
+                                                        if let &SimpleAst::And([v1366, v1367]) = v1365 {
+                                                            if v315 == v1366 {
+                                                                let v1368 = &C::lookup_value(ctx, v1367);
+                                                                if let Some(v1369) = v1368 {
+                                                                    if let &SimpleAst::Neg([v1370]) = v1369 {
+                                                                        if v1370 == v1371 {
+                                                                            let v1373 = &C::lookup_value(ctx, v1372);
+                                                                            if let Some(v1374) = v1373 {
+                                                                                if let &SimpleAst::Xor([v1375, v1376]) = v1374 {
+                                                                                    if v315 == v1376 {
+                                                                                        if v1362 == v1375 {
+                                                                                            let v1377 = &C::lookup_value(ctx, v452);
+                                                                                            if let Some(v1378) = v1377 {
+                                                                                                if let &SimpleAst::And([v1379, v1380]) = v1378 {
+                                                                                                    if v315 == v1380 {
+                                                                                                        if v1362 == v1379 {
+                                                                                                            let v1381 = &C::any(ctx, v1362);
+                                                                                                            let v1382 = C::lookup_id(ctx, v1381);
+                                                                                                            let v1383 = &C::any(ctx, v1362);
+                                                                                                            let v1384 = C::lookup_id(ctx, v1383);
+                                                                                                            let v1385 = &C::any(ctx, v315);
+                                                                                                            let v1386 = C::lookup_id(ctx, v1385);
+                                                                                                            let v1387 = &C::any(ctx, v1370);
+                                                                                                            let v1388 = C::lookup_id(ctx, v1387);
+                                                                                                            let v1389 = &C::or(ctx, v1386, v1388);
+                                                                                                            let v1390 = C::lookup_id(ctx, v1389);
+                                                                                                            let v1391 = &C::xor(ctx, v1384, v1390);
+                                                                                                            let v1392 = C::lookup_id(ctx, v1391);
+                                                                                                            let v1393 = &C::add(ctx, v1382, v1392);
+                                                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1231.
+                                                                                                            return Some(v1393.clone());
                                                                                                         }
                                                                                                     }
                                                                                                 }
@@ -819,31 +802,31 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::Xor([v301, v302]) => {
-                                    let v1261 = &C::lookup_value(ctx, v309);
-                                    if let Some(v1262) = v1261 {
-                                        if let &SimpleAst::Xor([v1263, v1264]) = v1262 {
-                                            if v301 == v1264 {
-                                                let v1265 = &C::lookup_value(ctx, v302);
-                                                if let Some(v1266) = v1265 {
-                                                    if let &SimpleAst::And([v1267, v1268]) = v1266 {
-                                                        if v308 == v1267 {
-                                                            if v1263 == v1268 {
-                                                                let v1269 = &C::any(ctx, v1264);
-                                                                let v1270 = C::lookup_id(ctx, v1269);
-                                                                let v1271 = &C::any(ctx, v1264);
-                                                                let v1272 = C::lookup_id(ctx, v1271);
-                                                                let v1273 = &C::any(ctx, v1263);
-                                                                let v1274 = C::lookup_id(ctx, v1273);
-                                                                let v483 = &C::any(ctx, v308);
-                                                                let v484 = C::lookup_id(ctx, v483);
-                                                                let v1275 = &C::or(ctx, v1274, v484);
-                                                                let v1276 = C::lookup_id(ctx, v1275);
-                                                                let v1277 = &C::xor(ctx, v1272, v1276);
-                                                                let v1278 = C::lookup_id(ctx, v1277);
-                                                                let v1279 = &C::add(ctx, v1270, v1278);
-                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1263.
-                                                                return Some(v1279.clone());
+                                &SimpleAst::Xor([v308, v309]) => {
+                                    let v1256 = &C::lookup_value(ctx, v316);
+                                    if let Some(v1257) = v1256 {
+                                        if let &SimpleAst::Xor([v1258, v1259]) = v1257 {
+                                            if v308 == v1259 {
+                                                let v1260 = &C::lookup_value(ctx, v309);
+                                                if let Some(v1261) = v1260 {
+                                                    if let &SimpleAst::And([v1262, v1263]) = v1261 {
+                                                        if v315 == v1262 {
+                                                            if v1258 == v1263 {
+                                                                let v1264 = &C::any(ctx, v1259);
+                                                                let v1265 = C::lookup_id(ctx, v1264);
+                                                                let v1266 = &C::any(ctx, v1259);
+                                                                let v1267 = C::lookup_id(ctx, v1266);
+                                                                let v1268 = &C::any(ctx, v1258);
+                                                                let v1269 = C::lookup_id(ctx, v1268);
+                                                                let v501 = &C::any(ctx, v315);
+                                                                let v502 = C::lookup_id(ctx, v501);
+                                                                let v1270 = &C::or(ctx, v1269, v502);
+                                                                let v1271 = C::lookup_id(ctx, v1270);
+                                                                let v1272 = &C::xor(ctx, v1267, v1271);
+                                                                let v1273 = C::lookup_id(ctx, v1272);
+                                                                let v1274 = &C::add(ctx, v1265, v1273);
+                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1183.
+                                                                return Some(v1274.clone());
                                                             }
                                                         }
                                                     }
@@ -859,65 +842,65 @@ pub fn constructor_lower<C: Context>(
                     _ => {}
                 }
             }
-            let v69 = &C::lookup_value(ctx, v46);
-            if let Some(v70) = v69 {
-                match v70 {
-                    &SimpleAst::Mul([v227, v228]) => {
-                        let v261 = &C::lookup_value(ctx, v228);
-                        if let Some(v262) = v261 {
-                            match v262 {
-                                &SimpleAst::Mul([v451, v452]) => {
-                                    if let Some(v55) = v54 {
-                                        match v55 {
-                                            &SimpleAst::Add([v56, v57]) => {
-                                                let v453 = &C::lookup_value(ctx, v452);
-                                                if let Some(v454) = v453 {
-                                                    match v454 {
-                                                        &SimpleAst::And([v455, v456]) => {
-                                                            let v915 = &C::lookup_value(ctx, v56);
-                                                            if let Some(v916) = v915 {
-                                                                if let &SimpleAst::Mul([v917, v918]) = v916 {
-                                                                    if v455 == v918 {
-                                                                        let v919 = &C::lookup_value(ctx, v57);
-                                                                        if let Some(v920) = v919 {
-                                                                            if let &SimpleAst::Mul([v921, v922]) = v920 {
-                                                                                if v456 == v922 {
-                                                                                    if v917 == v921 {
-                                                                                        let v960 = &C::lookup_value(ctx, v451);
-                                                                                        if let Some(v961) = v960 {
-                                                                                            if let &SimpleAst::Mul([v962, v963]) = v961 {
-                                                                                                if v917 == v963 {
-                                                                                                    let v964 = C::rule_xor_mul_shrink_precondition(ctx, v227, v962);
-                                                                                                    if let Some(v965) = v964 {
-                                                                                                        let v925 = &C::any(ctx, v917);
-                                                                                                        let v926 = C::lookup_id(ctx, v925);
-                                                                                                        let v927 = &C::any(ctx, v918);
-                                                                                                        let v928 = C::lookup_id(ctx, v927);
-                                                                                                        let v929 = &C::any(ctx, v922);
-                                                                                                        let v930 = C::lookup_id(ctx, v929);
-                                                                                                        let v966 = &C::xor(ctx, v928, v930);
-                                                                                                        let v967 = C::lookup_id(ctx, v966);
-                                                                                                        let v968 = &C::mul(ctx, v926, v967);
-                                                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1063.
-                                                                                                        return Some(v968.clone());
+            let v230 = &C::lookup_value(ctx, v229);
+            if let Some(v231) = v230 {
+                match v231 {
+                    &SimpleAst::Mul([v232, v233]) => {
+                        let v268 = &C::lookup_value(ctx, v233);
+                        if let Some(v269) = v268 {
+                            match v269 {
+                                &SimpleAst::Mul([v469, v470]) => {
+                                    if let Some(v250) = v249 {
+                                        match v250 {
+                                            &SimpleAst::Add([v912, v913]) => {
+                                                let v471 = &C::lookup_value(ctx, v470);
+                                                if let Some(v472) = v471 {
+                                                    match v472 {
+                                                        &SimpleAst::And([v473, v474]) => {
+                                                            let v914 = &C::lookup_value(ctx, v912);
+                                                            if let Some(v915) = v914 {
+                                                                if let &SimpleAst::Mul([v916, v917]) = v915 {
+                                                                    if v473 == v917 {
+                                                                        let v918 = &C::lookup_value(ctx, v913);
+                                                                        if let Some(v919) = v918 {
+                                                                            if let &SimpleAst::Mul([v920, v921]) = v919 {
+                                                                                if v474 == v921 {
+                                                                                    if v916 == v920 {
+                                                                                        let v961 = &C::lookup_value(ctx, v469);
+                                                                                        if let Some(v962) = v961 {
+                                                                                            if let &SimpleAst::Mul([v963, v964]) = v962 {
+                                                                                                if v916 == v964 {
+                                                                                                    let v965 = C::rule_xor_mul_shrink_precondition(ctx, v232, v963);
+                                                                                                    if let Some(v966) = v965 {
+                                                                                                        let v924 = &C::any(ctx, v916);
+                                                                                                        let v925 = C::lookup_id(ctx, v924);
+                                                                                                        let v926 = &C::any(ctx, v917);
+                                                                                                        let v927 = C::lookup_id(ctx, v926);
+                                                                                                        let v928 = &C::any(ctx, v921);
+                                                                                                        let v929 = C::lookup_id(ctx, v928);
+                                                                                                        let v967 = &C::xor(ctx, v927, v929);
+                                                                                                        let v968 = C::lookup_id(ctx, v967);
+                                                                                                        let v969 = &C::mul(ctx, v925, v968);
+                                                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 983.
+                                                                                                        return Some(v969.clone());
                                                                                                     }
                                                                                                 }
                                                                                             }
                                                                                         }
-                                                                                        if v451 == v917 {
-                                                                                            let v923 = C::rule_or_mul_shrink_precondition(ctx, v227);
-                                                                                            if let Some(v924) = v923 {
-                                                                                                let v925 = &C::any(ctx, v917);
-                                                                                                let v926 = C::lookup_id(ctx, v925);
-                                                                                                let v927 = &C::any(ctx, v918);
-                                                                                                let v928 = C::lookup_id(ctx, v927);
-                                                                                                let v929 = &C::any(ctx, v922);
-                                                                                                let v930 = C::lookup_id(ctx, v929);
-                                                                                                let v931 = &C::or(ctx, v928, v930);
-                                                                                                let v932 = C::lookup_id(ctx, v931);
-                                                                                                let v933 = &C::mul(ctx, v926, v932);
-                                                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1032.
-                                                                                                return Some(v933.clone());
+                                                                                        if v469 == v916 {
+                                                                                            let v922 = C::rule_or_mul_shrink_precondition(ctx, v232);
+                                                                                            if let Some(v923) = v922 {
+                                                                                                let v924 = &C::any(ctx, v916);
+                                                                                                let v925 = C::lookup_id(ctx, v924);
+                                                                                                let v926 = &C::any(ctx, v917);
+                                                                                                let v927 = C::lookup_id(ctx, v926);
+                                                                                                let v928 = &C::any(ctx, v921);
+                                                                                                let v929 = C::lookup_id(ctx, v928);
+                                                                                                let v930 = &C::or(ctx, v927, v929);
+                                                                                                let v931 = C::lookup_id(ctx, v930);
+                                                                                                let v932 = &C::mul(ctx, v925, v931);
+                                                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 952.
+                                                                                                return Some(v932.clone());
                                                                                             }
                                                                                         }
                                                                                     }
@@ -928,30 +911,30 @@ pub fn constructor_lower<C: Context>(
                                                                 }
                                                             }
                                                         }
-                                                        &SimpleAst::Or([v995, v996]) => {
-                                                            let v915 = &C::lookup_value(ctx, v56);
-                                                            if let Some(v916) = v915 {
-                                                                if let &SimpleAst::Mul([v917, v918]) = v916 {
-                                                                    if v451 == v917 {
-                                                                        if v918 == v995 {
-                                                                            let v919 = &C::lookup_value(ctx, v57);
-                                                                            if let Some(v920) = v919 {
-                                                                                if let &SimpleAst::Mul([v921, v922]) = v920 {
-                                                                                    if v451 == v921 {
-                                                                                        if v922 == v996 {
-                                                                                            let v997 = C::rule_and_mul_shrink_precondition(ctx, v227);
-                                                                                            if let Some(v998) = v997 {
-                                                                                                let v925 = &C::any(ctx, v917);
-                                                                                                let v926 = C::lookup_id(ctx, v925);
-                                                                                                let v927 = &C::any(ctx, v918);
-                                                                                                let v928 = C::lookup_id(ctx, v927);
-                                                                                                let v929 = &C::any(ctx, v922);
-                                                                                                let v930 = C::lookup_id(ctx, v929);
-                                                                                                let v999 = &C::and(ctx, v928, v930);
-                                                                                                let v1000 = C::lookup_id(ctx, v999);
-                                                                                                let v1001 = &C::mul(ctx, v926, v1000);
-                                                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1096.
-                                                                                                return Some(v1001.clone());
+                                                        &SimpleAst::Or([v1000, v1001]) => {
+                                                            let v914 = &C::lookup_value(ctx, v912);
+                                                            if let Some(v915) = v914 {
+                                                                if let &SimpleAst::Mul([v916, v917]) = v915 {
+                                                                    if v469 == v916 {
+                                                                        if v917 == v1000 {
+                                                                            let v918 = &C::lookup_value(ctx, v913);
+                                                                            if let Some(v919) = v918 {
+                                                                                if let &SimpleAst::Mul([v920, v921]) = v919 {
+                                                                                    if v469 == v920 {
+                                                                                        if v921 == v1001 {
+                                                                                            let v1002 = C::rule_and_mul_shrink_precondition(ctx, v232);
+                                                                                            if let Some(v1003) = v1002 {
+                                                                                                let v924 = &C::any(ctx, v916);
+                                                                                                let v925 = C::lookup_id(ctx, v924);
+                                                                                                let v926 = &C::any(ctx, v917);
+                                                                                                let v927 = C::lookup_id(ctx, v926);
+                                                                                                let v928 = &C::any(ctx, v921);
+                                                                                                let v929 = C::lookup_id(ctx, v928);
+                                                                                                let v1004 = &C::and(ctx, v927, v929);
+                                                                                                let v1005 = C::lookup_id(ctx, v1004);
+                                                                                                let v1006 = &C::mul(ctx, v925, v1005);
+                                                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1016.
+                                                                                                return Some(v1006.clone());
                                                                                             }
                                                                                         }
                                                                                     }
@@ -966,59 +949,59 @@ pub fn constructor_lower<C: Context>(
                                                     }
                                                 }
                                             }
-                                            &SimpleAst::Mul([v244, v245]) => {
-                                                let v453 = &C::lookup_value(ctx, v452);
-                                                if let Some(v454) = v453 {
-                                                    if let &SimpleAst::And([v455, v456]) = v454 {
-                                                        let v250 = &C::lookup_value(ctx, v245);
-                                                        if let Some(v251) = v250 {
-                                                            if let &SimpleAst::And([v282, v283]) = v251 {
-                                                                if v282 == v455 {
-                                                                    if v283 == v456 {
-                                                                        let v1019 = C::rule_merge_and_multipliers_precondition(ctx, v227);
-                                                                        if let Some(v1020) = v1019 {
-                                                                            let v1008 = &C::any(ctx, v244);
-                                                                            let v1009 = C::lookup_id(ctx, v1008);
-                                                                            let v293 = C::get_width(ctx, v244);
-                                                                            let v294 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v293);
-                                                                            let v295 = C::lookup_id(ctx, v294);
-                                                                            let v1021 = &C::any(ctx, v451);
-                                                                            let v1022 = C::lookup_id(ctx, v1021);
-                                                                            let v1023 = &C::mul(ctx, v295, v1022);
-                                                                            let v1024 = C::lookup_id(ctx, v1023);
-                                                                            let v1025 = &C::add(ctx, v1009, v1024);
-                                                                            let v1026 = C::lookup_id(ctx, v1025);
-                                                                            let v1027 = &C::any(ctx, v282);
-                                                                            let v1028 = C::lookup_id(ctx, v1027);
-                                                                            let v1029 = &C::any(ctx, v283);
-                                                                            let v1030 = C::lookup_id(ctx, v1029);
-                                                                            let v1031 = &C::and(ctx, v1028, v1030);
-                                                                            let v1032 = C::lookup_id(ctx, v1031);
-                                                                            let v1033 = &C::mul(ctx, v1026, v1032);
-                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1123.
-                                                                            return Some(v1033.clone());
+                                            &SimpleAst::Mul([v251, v252]) => {
+                                                let v471 = &C::lookup_value(ctx, v470);
+                                                if let Some(v472) = v471 {
+                                                    if let &SimpleAst::And([v473, v474]) = v472 {
+                                                        let v257 = &C::lookup_value(ctx, v252);
+                                                        if let Some(v258) = v257 {
+                                                            if let &SimpleAst::And([v289, v290]) = v258 {
+                                                                if v289 == v473 {
+                                                                    if v290 == v474 {
+                                                                        let v1024 = C::rule_merge_and_multipliers_precondition(ctx, v232);
+                                                                        if let Some(v1025) = v1024 {
+                                                                            let v1013 = &C::any(ctx, v251);
+                                                                            let v1014 = C::lookup_id(ctx, v1013);
+                                                                            let v300 = C::get_width(ctx, v251);
+                                                                            let v301 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v300);
+                                                                            let v302 = C::lookup_id(ctx, v301);
+                                                                            let v1026 = &C::any(ctx, v469);
+                                                                            let v1027 = C::lookup_id(ctx, v1026);
+                                                                            let v1028 = &C::mul(ctx, v302, v1027);
+                                                                            let v1029 = C::lookup_id(ctx, v1028);
+                                                                            let v1030 = &C::add(ctx, v1014, v1029);
+                                                                            let v1031 = C::lookup_id(ctx, v1030);
+                                                                            let v1032 = &C::any(ctx, v289);
+                                                                            let v1033 = C::lookup_id(ctx, v1032);
+                                                                            let v1034 = &C::any(ctx, v290);
+                                                                            let v1035 = C::lookup_id(ctx, v1034);
+                                                                            let v1036 = &C::and(ctx, v1033, v1035);
+                                                                            let v1037 = C::lookup_id(ctx, v1036);
+                                                                            let v1038 = &C::mul(ctx, v1031, v1037);
+                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1043.
+                                                                            return Some(v1038.clone());
                                                                         }
                                                                     }
                                                                 }
                                                             }
                                                         }
-                                                        if v244 == v451 {
-                                                            if v245 == v455 {
-                                                                let v1006 = C::rule_cancel_and_reduce_bitwise_subtraction_precondition(ctx, v227);
-                                                                if let Some(v1007) = v1006 {
-                                                                    let v1008 = &C::any(ctx, v244);
-                                                                    let v1009 = C::lookup_id(ctx, v1008);
-                                                                    let v1010 = &C::any(ctx, v245);
-                                                                    let v1011 = C::lookup_id(ctx, v1010);
-                                                                    let v1012 = &C::any(ctx, v456);
-                                                                    let v1013 = C::lookup_id(ctx, v1012);
-                                                                    let v1014 = &C::neg(ctx, v1013);
-                                                                    let v1015 = C::lookup_id(ctx, v1014);
-                                                                    let v1016 = &C::and(ctx, v1011, v1015);
-                                                                    let v1017 = C::lookup_id(ctx, v1016);
-                                                                    let v1018 = &C::mul(ctx, v1009, v1017);
-                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1116.
-                                                                    return Some(v1018.clone());
+                                                        if v251 == v469 {
+                                                            if v252 == v473 {
+                                                                let v1011 = C::rule_cancel_and_reduce_bitwise_subtraction_precondition(ctx, v232);
+                                                                if let Some(v1012) = v1011 {
+                                                                    let v1013 = &C::any(ctx, v251);
+                                                                    let v1014 = C::lookup_id(ctx, v1013);
+                                                                    let v1015 = &C::any(ctx, v252);
+                                                                    let v1016 = C::lookup_id(ctx, v1015);
+                                                                    let v1017 = &C::any(ctx, v474);
+                                                                    let v1018 = C::lookup_id(ctx, v1017);
+                                                                    let v1019 = &C::neg(ctx, v1018);
+                                                                    let v1020 = C::lookup_id(ctx, v1019);
+                                                                    let v1021 = &C::and(ctx, v1016, v1020);
+                                                                    let v1022 = C::lookup_id(ctx, v1021);
+                                                                    let v1023 = &C::mul(ctx, v1014, v1022);
+                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1036.
+                                                                    return Some(v1023.clone());
                                                                 }
                                                             }
                                                         }
@@ -1029,51 +1012,51 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::And([v263, v264]) => {
-                                    if v45 == v263 {
-                                        let v1034 = C::rule_mba_1_precondition(ctx, v227);
-                                        if let Some(v1035) = v1034 {
-                                            let v1036 = &C::any(ctx, v264);
-                                            let v1037 = C::lookup_id(ctx, v1036);
-                                            let v1038 = &C::neg(ctx, v1037);
-                                            let v1039 = C::lookup_id(ctx, v1038);
-                                            let v1040 = &C::any(ctx, v45);
-                                            let v1041 = C::lookup_id(ctx, v1040);
-                                            let v1042 = &C::and(ctx, v1039, v1041);
-                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1130.
-                                            return Some(v1042.clone());
+                                &SimpleAst::And([v270, v271]) => {
+                                    if v228 == v270 {
+                                        let v1039 = C::rule_mba_1_precondition(ctx, v232);
+                                        if let Some(v1040) = v1039 {
+                                            let v1041 = &C::any(ctx, v271);
+                                            let v1042 = C::lookup_id(ctx, v1041);
+                                            let v1043 = &C::neg(ctx, v1042);
+                                            let v1044 = C::lookup_id(ctx, v1043);
+                                            let v1045 = &C::any(ctx, v228);
+                                            let v1046 = C::lookup_id(ctx, v1045);
+                                            let v1047 = &C::and(ctx, v1044, v1046);
+                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1050.
+                                            return Some(v1047.clone());
                                         }
                                     }
-                                    if let Some(v55) = v54 {
-                                        match v55 {
-                                            &SimpleAst::Add([v56, v57]) => {
-                                                if v56 == v263 {
-                                                    if v57 == v264 {
-                                                        let v969 = C::rule_xor_shrink_precondition(ctx, v227);
-                                                        if let Some(v970) = v969 {
-                                                            let v60 = &C::any(ctx, v56);
-                                                            let v61 = C::lookup_id(ctx, v60);
-                                                            let v62 = &C::any(ctx, v57);
-                                                            let v63 = C::lookup_id(ctx, v62);
-                                                            let v971 = &C::xor(ctx, v61, v63);
-                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1070.
-                                                            return Some(v971.clone());
+                                    if let Some(v250) = v249 {
+                                        match v250 {
+                                            &SimpleAst::Add([v912, v913]) => {
+                                                if v270 == v912 {
+                                                    if v271 == v913 {
+                                                        let v970 = C::rule_xor_shrink_precondition(ctx, v232);
+                                                        if let Some(v971) = v970 {
+                                                            let v972 = &C::any(ctx, v912);
+                                                            let v973 = C::lookup_id(ctx, v972);
+                                                            let v974 = &C::any(ctx, v913);
+                                                            let v975 = C::lookup_id(ctx, v974);
+                                                            let v976 = &C::xor(ctx, v973, v975);
+                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 990.
+                                                            return Some(v976.clone());
                                                         }
                                                     }
                                                 }
                                             }
-                                            &SimpleAst::Or([v273, v274]) => {
-                                                if v263 == v273 {
-                                                    if v264 == v274 {
-                                                        let v972 = C::rule_xor_shrink2_precondition(ctx, v227);
-                                                        if let Some(v973) = v972 {
-                                                            let v277 = &C::any(ctx, v273);
-                                                            let v278 = C::lookup_id(ctx, v277);
-                                                            let v279 = &C::any(ctx, v274);
-                                                            let v280 = C::lookup_id(ctx, v279);
-                                                            let v974 = &C::xor(ctx, v278, v280);
-                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1077.
-                                                            return Some(v974.clone());
+                                            &SimpleAst::Or([v280, v281]) => {
+                                                if v270 == v280 {
+                                                    if v271 == v281 {
+                                                        let v977 = C::rule_xor_shrink2_precondition(ctx, v232);
+                                                        if let Some(v978) = v977 {
+                                                            let v284 = &C::any(ctx, v280);
+                                                            let v285 = C::lookup_id(ctx, v284);
+                                                            let v286 = &C::any(ctx, v281);
+                                                            let v287 = C::lookup_id(ctx, v286);
+                                                            let v979 = &C::xor(ctx, v285, v287);
+                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 997.
+                                                            return Some(v979.clone());
                                                         }
                                                     }
                                                 }
@@ -1082,40 +1065,40 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::Xor([v287, v288]) => {
-                                    if let Some(v55) = v54 {
-                                        if let &SimpleAst::Or([v273, v274]) = v55 {
-                                            if v273 == v287 {
-                                                if v274 == v288 {
-                                                    let v1002 = C::rule_and_shrink_precondition(ctx, v227);
-                                                    if let Some(v1003) = v1002 {
-                                                        let v277 = &C::any(ctx, v273);
-                                                        let v278 = C::lookup_id(ctx, v277);
-                                                        let v279 = &C::any(ctx, v274);
-                                                        let v280 = C::lookup_id(ctx, v279);
-                                                        let v1004 = &C::and(ctx, v278, v280);
-                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1103.
-                                                        return Some(v1004.clone());
+                                &SimpleAst::Xor([v294, v295]) => {
+                                    if let Some(v250) = v249 {
+                                        if let &SimpleAst::Or([v280, v281]) = v250 {
+                                            if v280 == v294 {
+                                                if v281 == v295 {
+                                                    let v1007 = C::rule_and_shrink_precondition(ctx, v232);
+                                                    if let Some(v1008) = v1007 {
+                                                        let v284 = &C::any(ctx, v280);
+                                                        let v285 = C::lookup_id(ctx, v284);
+                                                        let v286 = &C::any(ctx, v281);
+                                                        let v287 = C::lookup_id(ctx, v286);
+                                                        let v1009 = &C::and(ctx, v285, v287);
+                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1023.
+                                                        return Some(v1009.clone());
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                &SimpleAst::Neg([v914]) => {
-                                    if let Some(v55) = v54 {
-                                        if let &SimpleAst::Mul([v244, v245]) = v55 {
-                                            if v227 == v244 {
-                                                if v227 == v245 {
-                                                    if v227 == v914 {
-                                                        let v540 = C::get_width(ctx, v244);
-                                                        let v541 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v540);
-                                                        let v542 = C::lookup_id(ctx, v541);
-                                                        let v543 = &C::any(ctx, v244);
-                                                        let v544 = C::lookup_id(ctx, v543);
-                                                        let v545 = &C::mul(ctx, v542, v544);
-                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1026.
-                                                        return Some(v545.clone());
+                                &SimpleAst::Neg([v911]) => {
+                                    if let Some(v250) = v249 {
+                                        if let &SimpleAst::Mul([v251, v252]) = v250 {
+                                            if v232 == v251 {
+                                                if v232 == v252 {
+                                                    if v232 == v911 {
+                                                        let v544 = C::get_width(ctx, v251);
+                                                        let v545 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v544);
+                                                        let v546 = C::lookup_id(ctx, v545);
+                                                        let v547 = &C::any(ctx, v251);
+                                                        let v548 = C::lookup_id(ctx, v547);
+                                                        let v549 = &C::mul(ctx, v546, v548);
+                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 946.
+                                                        return Some(v549.clone());
                                                     }
                                                 }
                                             }
@@ -1125,41 +1108,41 @@ pub fn constructor_lower<C: Context>(
                                 _ => {}
                             }
                         }
-                        if let Some(v55) = v54 {
-                            match v55 {
-                                &SimpleAst::Mul([v244, v245]) => {
-                                    let v250 = &C::lookup_value(ctx, v245);
-                                    if let Some(v251) = v250 {
-                                        match v251 {
-                                            &SimpleAst::Or([v252, v253]) => {
-                                                if v228 == v252 {
-                                                    let v864 = C::rule___check_bitwise_in_sums_cancel_terms_4_precondition(ctx, v244, v227);
-                                                    if let Some(v865) = v864 {
-                                                        let v866 = &C::any(ctx, v253);
-                                                        let v867 = C::lookup_id(ctx, v866);
-                                                        let v868 = &C::any(ctx, v252);
-                                                        let v869 = C::lookup_id(ctx, v868);
-                                                        let v870 = &C::any(ctx, v253);
-                                                        let v871 = C::lookup_id(ctx, v870);
-                                                        let v872 = &C::xor(ctx, v869, v871);
-                                                        let v873 = C::lookup_id(ctx, v872);
-                                                        let v874 = &C::add(ctx, v867, v873);
-                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1001.
-                                                        return Some(v874.clone());
+                        if let Some(v250) = v249 {
+                            match v250 {
+                                &SimpleAst::Mul([v251, v252]) => {
+                                    let v257 = &C::lookup_value(ctx, v252);
+                                    if let Some(v258) = v257 {
+                                        match v258 {
+                                            &SimpleAst::Or([v259, v260]) => {
+                                                if v233 == v259 {
+                                                    let v867 = C::rule___check_bitwise_in_sums_cancel_terms_4_precondition(ctx, v251, v232);
+                                                    if let Some(v868) = v867 {
+                                                        let v869 = &C::any(ctx, v260);
+                                                        let v870 = C::lookup_id(ctx, v869);
+                                                        let v871 = &C::any(ctx, v259);
+                                                        let v872 = C::lookup_id(ctx, v871);
+                                                        let v873 = &C::any(ctx, v260);
+                                                        let v874 = C::lookup_id(ctx, v873);
+                                                        let v875 = &C::xor(ctx, v872, v874);
+                                                        let v876 = C::lookup_id(ctx, v875);
+                                                        let v877 = &C::add(ctx, v870, v876);
+                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 921.
+                                                        return Some(v877.clone());
                                                     }
                                                 }
                                             }
-                                            &SimpleAst::Neg([v539]) => {
-                                                if v227 == v244 {
-                                                    if v228 == v539 {
-                                                        let v540 = C::get_width(ctx, v244);
-                                                        let v541 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v540);
-                                                        let v542 = C::lookup_id(ctx, v541);
-                                                        let v543 = &C::any(ctx, v244);
-                                                        let v544 = C::lookup_id(ctx, v543);
-                                                        let v545 = &C::mul(ctx, v542, v544);
-                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 773.
-                                                        return Some(v545.clone());
+                                            &SimpleAst::Neg([v543]) => {
+                                                if v232 == v251 {
+                                                    if v233 == v543 {
+                                                        let v544 = C::get_width(ctx, v251);
+                                                        let v545 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v544);
+                                                        let v546 = C::lookup_id(ctx, v545);
+                                                        let v547 = &C::any(ctx, v251);
+                                                        let v548 = C::lookup_id(ctx, v547);
+                                                        let v549 = &C::mul(ctx, v546, v548);
+                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 693.
+                                                        return Some(v549.clone());
                                                     }
                                                 }
                                             }
@@ -1167,19 +1150,19 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::Or([v273, v274]) => {
-                                    if let Some(v262) = v261 {
-                                        if let &SimpleAst::And([v263, v264]) = v262 {
-                                            if v264 == v274 {
-                                                let v265 = &C::lookup_value(ctx, v263);
-                                                if let Some(v266) = v265 {
-                                                    if let &SimpleAst::Neg([v267]) = v266 {
-                                                        if v267 == v273 {
-                                                            let v449 = C::rule___merge_inverse_bitwise_terms_22_precondition(ctx, v227);
-                                                            if let Some(v450) = v449 {
-                                                                let v277 = &C::any(ctx, v273);
-                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 722.
-                                                                return Some(v277.clone());
+                                &SimpleAst::Or([v280, v281]) => {
+                                    if let Some(v269) = v268 {
+                                        if let &SimpleAst::And([v270, v271]) = v269 {
+                                            if v271 == v281 {
+                                                let v272 = &C::lookup_value(ctx, v270);
+                                                if let Some(v273) = v272 {
+                                                    if let &SimpleAst::Neg([v274]) = v273 {
+                                                        if v274 == v280 {
+                                                            let v467 = C::rule___merge_inverse_bitwise_terms_22_precondition(ctx, v232);
+                                                            if let Some(v468) = v467 {
+                                                                let v284 = &C::any(ctx, v280);
+                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 648.
+                                                                return Some(v284.clone());
                                                             }
                                                         }
                                                     }
@@ -1188,32 +1171,32 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::Xor([v308, v309]) => {
-                                    if let Some(v262) = v261 {
-                                        match v262 {
-                                            &SimpleAst::Mul([v451, v452]) => {
-                                                let v453 = &C::lookup_value(ctx, v452);
-                                                if let Some(v454) = v453 {
-                                                    if let &SimpleAst::And([v455, v456]) = v454 {
-                                                        if v309 == v456 {
-                                                            let v457 = &C::lookup_value(ctx, v455);
-                                                            if let Some(v458) = v457 {
-                                                                if let &SimpleAst::Neg([v459]) = v458 {
-                                                                    if v308 == v459 {
-                                                                        let v460 = C::rule___merge_inverse_bitwise_terms_23_precondition(ctx, v227, v451);
-                                                                        if let Some(v461) = v460 {
-                                                                            let v312 = &C::any(ctx, v308);
-                                                                            let v313 = C::lookup_id(ctx, v312);
-                                                                            let v462 = C::get_width(ctx, v308);
-                                                                            let v463 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v462);
-                                                                            let v464 = C::lookup_id(ctx, v463);
-                                                                            let v465 = &C::any(ctx, v309);
-                                                                            let v466 = C::lookup_id(ctx, v465);
-                                                                            let v467 = &C::mul(ctx, v464, v466);
-                                                                            let v468 = C::lookup_id(ctx, v467);
-                                                                            let v469 = &C::add(ctx, v313, v468);
-                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 729.
-                                                                            return Some(v469.clone());
+                                &SimpleAst::Xor([v315, v316]) => {
+                                    if let Some(v269) = v268 {
+                                        match v269 {
+                                            &SimpleAst::Mul([v469, v470]) => {
+                                                let v471 = &C::lookup_value(ctx, v470);
+                                                if let Some(v472) = v471 {
+                                                    if let &SimpleAst::And([v473, v474]) = v472 {
+                                                        if v316 == v474 {
+                                                            let v475 = &C::lookup_value(ctx, v473);
+                                                            if let Some(v476) = v475 {
+                                                                if let &SimpleAst::Neg([v477]) = v476 {
+                                                                    if v315 == v477 {
+                                                                        let v478 = C::rule___merge_inverse_bitwise_terms_23_precondition(ctx, v232, v469);
+                                                                        if let Some(v479) = v478 {
+                                                                            let v319 = &C::any(ctx, v315);
+                                                                            let v320 = C::lookup_id(ctx, v319);
+                                                                            let v480 = C::get_width(ctx, v315);
+                                                                            let v481 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v480);
+                                                                            let v482 = C::lookup_id(ctx, v481);
+                                                                            let v483 = &C::any(ctx, v316);
+                                                                            let v484 = C::lookup_id(ctx, v483);
+                                                                            let v485 = &C::mul(ctx, v482, v484);
+                                                                            let v486 = C::lookup_id(ctx, v485);
+                                                                            let v487 = &C::add(ctx, v320, v486);
+                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 655.
+                                                                            return Some(v487.clone());
                                                                         }
                                                                     }
                                                                 }
@@ -1222,31 +1205,31 @@ pub fn constructor_lower<C: Context>(
                                                     }
                                                 }
                                             }
-                                            &SimpleAst::Or([v470, v471]) => {
-                                                if v309 == v471 {
-                                                    let v472 = &C::lookup_value(ctx, v470);
-                                                    if let Some(v473) = v472 {
-                                                        if let &SimpleAst::Neg([v474]) = v473 {
-                                                            if v308 == v474 {
-                                                                let v475 = C::rule___merge_inverse_bitwise_terms_24_precondition(ctx, v227);
-                                                                if let Some(v476) = v475 {
-                                                                    let v447 = C::get_width(ctx, v308);
-                                                                    let v478 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFE, v447);
-                                                                    let v479 = C::lookup_id(ctx, v478);
-                                                                    let v480 = C::get_width(ctx, v308);
-                                                                    let v481 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v480);
-                                                                    let v482 = C::lookup_id(ctx, v481);
-                                                                    let v483 = &C::any(ctx, v308);
-                                                                    let v484 = C::lookup_id(ctx, v483);
-                                                                    let v485 = &C::mul(ctx, v482, v484);
-                                                                    let v486 = C::lookup_id(ctx, v485);
-                                                                    let v487 = &C::add(ctx, v479, v486);
-                                                                    let v488 = C::lookup_id(ctx, v487);
-                                                                    let v489 = &C::any(ctx, v309);
-                                                                    let v490 = C::lookup_id(ctx, v489);
-                                                                    let v491 = &C::add(ctx, v488, v490);
-                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 736.
-                                                                    return Some(v491.clone());
+                                            &SimpleAst::Or([v488, v489]) => {
+                                                if v316 == v489 {
+                                                    let v490 = &C::lookup_value(ctx, v488);
+                                                    if let Some(v491) = v490 {
+                                                        if let &SimpleAst::Neg([v492]) = v491 {
+                                                            if v315 == v492 {
+                                                                let v493 = C::rule___merge_inverse_bitwise_terms_24_precondition(ctx, v232);
+                                                                if let Some(v494) = v493 {
+                                                                    let v465 = C::get_width(ctx, v315);
+                                                                    let v496 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFE, v465);
+                                                                    let v497 = C::lookup_id(ctx, v496);
+                                                                    let v498 = C::get_width(ctx, v315);
+                                                                    let v499 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v498);
+                                                                    let v500 = C::lookup_id(ctx, v499);
+                                                                    let v501 = &C::any(ctx, v315);
+                                                                    let v502 = C::lookup_id(ctx, v501);
+                                                                    let v503 = &C::mul(ctx, v500, v502);
+                                                                    let v504 = C::lookup_id(ctx, v503);
+                                                                    let v505 = &C::add(ctx, v497, v504);
+                                                                    let v506 = C::lookup_id(ctx, v505);
+                                                                    let v507 = &C::any(ctx, v316);
+                                                                    let v508 = C::lookup_id(ctx, v507);
+                                                                    let v509 = &C::add(ctx, v506, v508);
+                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 662.
+                                                                    return Some(v509.clone());
                                                                 }
                                                             }
                                                         }
@@ -1260,41 +1243,41 @@ pub fn constructor_lower<C: Context>(
                                 _ => {}
                             }
                         }
-                        if v45 == v228 {
-                            let v362 = C::rule_add_cancellation_precondition(ctx, v227);
-                            if let Some(v363) = v362 {
-                                let v238 = C::get_width(ctx, v45);
-                                let v364 = &C::constant(ctx, 0x0, v238);
-                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 635.
-                                return Some(v364.clone());
+                        if v228 == v233 {
+                            let v369 = C::rule_add_cancellation_precondition(ctx, v232);
+                            if let Some(v370) = v369 {
+                                let v243 = C::get_width(ctx, v228);
+                                let v371 = &C::constant(ctx, 0x0, v243);
+                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 561.
+                                return Some(v371.clone());
                             }
                         }
                     }
-                    &SimpleAst::And([v275, v276]) => {
-                        let v947 = &C::lookup_value(ctx, v276);
-                        if let Some(v948) = v947 {
-                            if let &SimpleAst::Neg([v949]) = v948 {
-                                if v45 == v949 {
-                                    let v75 = &C::any(ctx, v45);
-                                    let v76 = C::lookup_id(ctx, v75);
-                                    let v950 = &C::any(ctx, v275);
-                                    let v951 = C::lookup_id(ctx, v950);
-                                    let v952 = &C::or(ctx, v76, v951);
-                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1051.
-                                    return Some(v952.clone());
+                    &SimpleAst::And([v282, v283]) => {
+                        let v946 = &C::lookup_value(ctx, v283);
+                        if let Some(v947) = v946 {
+                            if let &SimpleAst::Neg([v948]) = v947 {
+                                if v228 == v948 {
+                                    let v949 = &C::any(ctx, v228);
+                                    let v950 = C::lookup_id(ctx, v949);
+                                    let v951 = &C::any(ctx, v282);
+                                    let v952 = C::lookup_id(ctx, v951);
+                                    let v953 = &C::or(ctx, v950, v952);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 971.
+                                    return Some(v953.clone());
                                 }
                             }
                         }
-                        if let Some(v55) = v54 {
-                            if let &SimpleAst::And([v427, v428]) = v55 {
-                                if v276 == v428 {
-                                    let v429 = &C::lookup_value(ctx, v275);
-                                    if let Some(v430) = v429 {
-                                        if let &SimpleAst::Neg([v431]) = v430 {
-                                            if v427 == v431 {
-                                                let v432 = &C::any(ctx, v428);
-                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 704.
-                                                return Some(v432.clone());
+                        if let Some(v250) = v249 {
+                            if let &SimpleAst::And([v445, v446]) = v250 {
+                                if v283 == v446 {
+                                    let v447 = &C::lookup_value(ctx, v282);
+                                    if let Some(v448) = v447 {
+                                        if let &SimpleAst::Neg([v449]) = v448 {
+                                            if v445 == v449 {
+                                                let v450 = &C::any(ctx, v446);
+                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 630.
+                                                return Some(v450.clone());
                                             }
                                         }
                                     }
@@ -1302,36 +1285,36 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Or([v433, v434]) => {
-                        if let Some(v55) = v54 {
-                            match v55 {
-                                &SimpleAst::And([v427, v428]) => {
-                                    if v427 == v433 {
-                                        if v428 == v434 {
-                                            let v934 = &C::any(ctx, v427);
-                                            let v935 = C::lookup_id(ctx, v934);
-                                            let v936 = &C::any(ctx, v428);
-                                            let v937 = C::lookup_id(ctx, v936);
-                                            let v1005 = &C::add(ctx, v935, v937);
-                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1110.
-                                            return Some(v1005.clone());
+                    &SimpleAst::Or([v451, v452]) => {
+                        if let Some(v250) = v249 {
+                            match v250 {
+                                &SimpleAst::And([v445, v446]) => {
+                                    if v445 == v451 {
+                                        if v446 == v452 {
+                                            let v933 = &C::any(ctx, v445);
+                                            let v934 = C::lookup_id(ctx, v933);
+                                            let v935 = &C::any(ctx, v446);
+                                            let v936 = C::lookup_id(ctx, v935);
+                                            let v1010 = &C::add(ctx, v934, v936);
+                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1030.
+                                            return Some(v1010.clone());
                                         }
                                     }
                                 }
-                                &SimpleAst::Or([v273, v274]) => {
-                                    if v274 == v434 {
-                                        let v435 = &C::lookup_value(ctx, v433);
-                                        if let Some(v436) = v435 {
-                                            if let &SimpleAst::Neg([v437]) = v436 {
-                                                if v273 == v437 {
-                                                    let v438 = C::get_width(ctx, v273);
-                                                    let v439 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v438);
-                                                    let v440 = C::lookup_id(ctx, v439);
-                                                    let v441 = &C::any(ctx, v274);
-                                                    let v442 = C::lookup_id(ctx, v441);
-                                                    let v443 = &C::add(ctx, v440, v442);
-                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 710.
-                                                    return Some(v443.clone());
+                                &SimpleAst::Or([v280, v281]) => {
+                                    if v281 == v452 {
+                                        let v453 = &C::lookup_value(ctx, v451);
+                                        if let Some(v454) = v453 {
+                                            if let &SimpleAst::Neg([v455]) = v454 {
+                                                if v280 == v455 {
+                                                    let v456 = C::get_width(ctx, v280);
+                                                    let v457 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v456);
+                                                    let v458 = C::lookup_id(ctx, v457);
+                                                    let v459 = &C::any(ctx, v281);
+                                                    let v460 = C::lookup_id(ctx, v459);
+                                                    let v461 = &C::add(ctx, v458, v460);
+                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 636.
+                                                    return Some(v461.clone());
                                                 }
                                             }
                                         }
@@ -1341,32 +1324,32 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Xor([v301, v302]) => {
-                        if let Some(v55) = v54 {
-                            match v55 {
-                                &SimpleAst::And([v427, v428]) => {
-                                    if v301 == v427 {
-                                        if v302 == v428 {
-                                            let v934 = &C::any(ctx, v427);
-                                            let v935 = C::lookup_id(ctx, v934);
-                                            let v936 = &C::any(ctx, v428);
-                                            let v937 = C::lookup_id(ctx, v936);
-                                            let v938 = &C::or(ctx, v935, v937);
-                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1039.
-                                            return Some(v938.clone());
+                    &SimpleAst::Xor([v308, v309]) => {
+                        if let Some(v250) = v249 {
+                            match v250 {
+                                &SimpleAst::And([v445, v446]) => {
+                                    if v308 == v445 {
+                                        if v309 == v446 {
+                                            let v933 = &C::any(ctx, v445);
+                                            let v934 = C::lookup_id(ctx, v933);
+                                            let v935 = &C::any(ctx, v446);
+                                            let v936 = C::lookup_id(ctx, v935);
+                                            let v937 = &C::or(ctx, v934, v936);
+                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 959.
+                                            return Some(v937.clone());
                                         }
                                     }
                                 }
-                                &SimpleAst::Xor([v308, v309]) => {
-                                    if v302 == v309 {
-                                        let v444 = &C::lookup_value(ctx, v301);
-                                        if let Some(v445) = v444 {
-                                            if let &SimpleAst::Neg([v446]) = v445 {
-                                                if v308 == v446 {
-                                                    let v447 = C::get_width(ctx, v308);
-                                                    let v448 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v447);
-                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 716.
-                                                    return Some(v448.clone());
+                                &SimpleAst::Xor([v315, v316]) => {
+                                    if v309 == v316 {
+                                        let v462 = &C::lookup_value(ctx, v308);
+                                        if let Some(v463) = v462 {
+                                            if let &SimpleAst::Neg([v464]) = v463 {
+                                                if v315 == v464 {
+                                                    let v465 = C::get_width(ctx, v315);
+                                                    let v466 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v465);
+                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 642.
+                                                    return Some(v466.clone());
                                                 }
                                             }
                                         }
@@ -1376,87 +1359,87 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Neg([v234]) => {
-                        if let Some(v55) = v54 {
-                            if let &SimpleAst::And([v427, v428]) = v55 {
-                                let v988 = &C::lookup_value(ctx, v234);
-                                if let Some(v989) = v988 {
-                                    if let &SimpleAst::Or([v990, v991]) = v989 {
-                                        if v427 == v990 {
-                                            if v428 == v991 {
-                                                let v934 = &C::any(ctx, v427);
-                                                let v935 = C::lookup_id(ctx, v934);
-                                                let v936 = &C::any(ctx, v428);
-                                                let v937 = C::lookup_id(ctx, v936);
-                                                let v992 = &C::xor(ctx, v935, v937);
-                                                let v993 = C::lookup_id(ctx, v992);
-                                                let v994 = &C::neg(ctx, v993);
-                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1090.
-                                                return Some(v994.clone());
+                    &SimpleAst::Neg([v239]) => {
+                        if let Some(v250) = v249 {
+                            if let &SimpleAst::And([v445, v446]) = v250 {
+                                let v993 = &C::lookup_value(ctx, v239);
+                                if let Some(v994) = v993 {
+                                    if let &SimpleAst::Or([v995, v996]) = v994 {
+                                        if v445 == v995 {
+                                            if v446 == v996 {
+                                                let v933 = &C::any(ctx, v445);
+                                                let v934 = C::lookup_id(ctx, v933);
+                                                let v935 = &C::any(ctx, v446);
+                                                let v936 = C::lookup_id(ctx, v935);
+                                                let v997 = &C::xor(ctx, v934, v936);
+                                                let v998 = C::lookup_id(ctx, v997);
+                                                let v999 = &C::neg(ctx, v998);
+                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1010.
+                                                return Some(v999.clone());
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                        if v45 == v234 {
-                            let v238 = C::get_width(ctx, v45);
-                            let v239 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v238);
-                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 767.
-                            return Some(v239.clone());
+                        if v228 == v239 {
+                            let v243 = C::get_width(ctx, v228);
+                            let v244 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v243);
+                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 687.
+                            return Some(v244.clone());
                         }
                     }
                     _ => {}
                 }
             }
-            let v360 = C::rule_add_zero_precondition(ctx, v45);
-            if let Some(v361) = v360 {
-                let v49 = &C::any(ctx, v46);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 628.
-                return Some(v49.clone());
+            let v366 = C::rule_add_zero_precondition(ctx, v228);
+            if let Some(v367) = v366 {
+                let v368 = &C::any(ctx, v229);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 554.
+                return Some(v368.clone());
             }
-            if v45 == v46 {
-                let v238 = C::get_width(ctx, v45);
-                let v355 = &C::constant(ctx, 0x2, v238);
-                let v356 = C::lookup_id(ctx, v355);
-                let v357 = &C::any(ctx, v45);
-                let v358 = C::lookup_id(ctx, v357);
-                let v359 = &C::mul(ctx, v356, v358);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 622.
-                return Some(v359.clone());
+            if v228 == v229 {
+                let v243 = C::get_width(ctx, v228);
+                let v361 = &C::constant(ctx, 0x2, v243);
+                let v362 = C::lookup_id(ctx, v361);
+                let v363 = &C::any(ctx, v228);
+                let v364 = C::lookup_id(ctx, v363);
+                let v365 = &C::mul(ctx, v362, v364);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 548.
+                return Some(v365.clone());
             }
-            if let Some(v70) = v69 {
-                match v70 {
-                    &SimpleAst::Mul([v227, v228]) => {
-                        if let Some(v55) = v54 {
-                            match v55 {
-                                &SimpleAst::Mul([v244, v245]) => {
-                                    let v250 = &C::lookup_value(ctx, v245);
-                                    if let Some(v251) = v250 {
-                                        match v251 {
-                                            &SimpleAst::And([v282, v283]) => {
-                                                let v261 = &C::lookup_value(ctx, v228);
-                                                if let Some(v262) = v261 {
-                                                    if let &SimpleAst::Xor([v287, v288]) = v262 {
-                                                        if v282 == v287 {
-                                                            let v284 = &C::lookup_value(ctx, v283);
-                                                            if let Some(v285) = v284 {
-                                                                if let &SimpleAst::Neg([v286]) = v285 {
-                                                                    if v286 == v288 {
-                                                                        let v289 = C::rule_qsynth_1_precondition(ctx, v244, v227);
-                                                                        if let Some(v290) = v289 {
-                                                                            let v291 = &C::any(ctx, v282);
-                                                                            let v292 = C::lookup_id(ctx, v291);
-                                                                            let v293 = C::get_width(ctx, v244);
-                                                                            let v294 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v293);
-                                                                            let v295 = C::lookup_id(ctx, v294);
-                                                                            let v296 = &C::any(ctx, v286);
-                                                                            let v297 = C::lookup_id(ctx, v296);
-                                                                            let v298 = &C::mul(ctx, v295, v297);
+            if let Some(v231) = v230 {
+                match v231 {
+                    &SimpleAst::Mul([v232, v233]) => {
+                        if let Some(v250) = v249 {
+                            match v250 {
+                                &SimpleAst::Mul([v251, v252]) => {
+                                    let v257 = &C::lookup_value(ctx, v252);
+                                    if let Some(v258) = v257 {
+                                        match v258 {
+                                            &SimpleAst::And([v289, v290]) => {
+                                                let v268 = &C::lookup_value(ctx, v233);
+                                                if let Some(v269) = v268 {
+                                                    if let &SimpleAst::Xor([v294, v295]) = v269 {
+                                                        if v289 == v294 {
+                                                            let v291 = &C::lookup_value(ctx, v290);
+                                                            if let Some(v292) = v291 {
+                                                                if let &SimpleAst::Neg([v293]) = v292 {
+                                                                    if v293 == v295 {
+                                                                        let v296 = C::rule_qsynth_1_precondition(ctx, v251, v232);
+                                                                        if let Some(v297) = v296 {
+                                                                            let v298 = &C::any(ctx, v289);
                                                                             let v299 = C::lookup_id(ctx, v298);
-                                                                            let v300 = &C::add(ctx, v292, v299);
-                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 523.
-                                                                            return Some(v300.clone());
+                                                                            let v300 = C::get_width(ctx, v251);
+                                                                            let v301 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v300);
+                                                                            let v302 = C::lookup_id(ctx, v301);
+                                                                            let v303 = &C::any(ctx, v293);
+                                                                            let v304 = C::lookup_id(ctx, v303);
+                                                                            let v305 = &C::mul(ctx, v302, v304);
+                                                                            let v306 = C::lookup_id(ctx, v305);
+                                                                            let v307 = &C::add(ctx, v299, v306);
+                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 449.
+                                                                            return Some(v307.clone());
                                                                         }
                                                                     }
                                                                 }
@@ -1465,35 +1448,35 @@ pub fn constructor_lower<C: Context>(
                                                     }
                                                 }
                                             }
-                                            &SimpleAst::Or([v252, v253]) => {
-                                                let v246 = &C::lookup_value(ctx, v244);
-                                                if let Some(v247) = v246 {
-                                                    if let &SimpleAst::And([v248, v249]) = v247 {
-                                                        if v248 == v252 {
-                                                            if v249 == v253 {
-                                                                let v254 = &C::lookup_value(ctx, v227);
-                                                                if let Some(v255) = v254 {
-                                                                    if let &SimpleAst::And([v256, v257]) = v255 {
-                                                                        if v248 == v256 {
-                                                                            let v258 = &C::lookup_value(ctx, v257);
-                                                                            if let Some(v259) = v258 {
-                                                                                if let &SimpleAst::Neg([v260]) = v259 {
-                                                                                    if v249 == v260 {
-                                                                                        let v261 = &C::lookup_value(ctx, v228);
-                                                                                        if let Some(v262) = v261 {
-                                                                                            if let &SimpleAst::And([v263, v264]) = v262 {
-                                                                                                if v249 == v264 {
-                                                                                                    let v265 = &C::lookup_value(ctx, v263);
-                                                                                                    if let Some(v266) = v265 {
-                                                                                                        if let &SimpleAst::Neg([v267]) = v266 {
-                                                                                                            if v248 == v267 {
-                                                                                                                let v268 = &C::any(ctx, v248);
-                                                                                                                let v269 = C::lookup_id(ctx, v268);
-                                                                                                                let v270 = &C::any(ctx, v249);
-                                                                                                                let v271 = C::lookup_id(ctx, v270);
-                                                                                                                let v272 = &C::mul(ctx, v269, v271);
-                                                                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 511.
-                                                                                                                return Some(v272.clone());
+                                            &SimpleAst::Or([v259, v260]) => {
+                                                let v253 = &C::lookup_value(ctx, v251);
+                                                if let Some(v254) = v253 {
+                                                    if let &SimpleAst::And([v255, v256]) = v254 {
+                                                        if v255 == v259 {
+                                                            if v256 == v260 {
+                                                                let v261 = &C::lookup_value(ctx, v232);
+                                                                if let Some(v262) = v261 {
+                                                                    if let &SimpleAst::And([v263, v264]) = v262 {
+                                                                        if v255 == v263 {
+                                                                            let v265 = &C::lookup_value(ctx, v264);
+                                                                            if let Some(v266) = v265 {
+                                                                                if let &SimpleAst::Neg([v267]) = v266 {
+                                                                                    if v256 == v267 {
+                                                                                        let v268 = &C::lookup_value(ctx, v233);
+                                                                                        if let Some(v269) = v268 {
+                                                                                            if let &SimpleAst::And([v270, v271]) = v269 {
+                                                                                                if v256 == v271 {
+                                                                                                    let v272 = &C::lookup_value(ctx, v270);
+                                                                                                    if let Some(v273) = v272 {
+                                                                                                        if let &SimpleAst::Neg([v274]) = v273 {
+                                                                                                            if v255 == v274 {
+                                                                                                                let v275 = &C::any(ctx, v255);
+                                                                                                                let v276 = C::lookup_id(ctx, v275);
+                                                                                                                let v277 = &C::any(ctx, v256);
+                                                                                                                let v278 = C::lookup_id(ctx, v277);
+                                                                                                                let v279 = &C::mul(ctx, v276, v278);
+                                                                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 437.
+                                                                                                                return Some(v279.clone());
                                                                                                             }
                                                                                                         }
                                                                                                     }
@@ -1515,21 +1498,21 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::Xor([v308, v309]) => {
-                                    let v261 = &C::lookup_value(ctx, v228);
-                                    if let Some(v262) = v261 {
-                                        if let &SimpleAst::And([v263, v264]) = v262 {
-                                            if v263 == v308 {
-                                                if v264 == v309 {
-                                                    let v310 = C::rule_qsynth_2_commutative_precondition(ctx, v227);
-                                                    if let Some(v311) = v310 {
-                                                        let v312 = &C::any(ctx, v308);
-                                                        let v313 = C::lookup_id(ctx, v312);
-                                                        let v314 = &C::any(ctx, v309);
-                                                        let v315 = C::lookup_id(ctx, v314);
-                                                        let v316 = &C::add(ctx, v313, v315);
-                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 537.
-                                                        return Some(v316.clone());
+                                &SimpleAst::Xor([v315, v316]) => {
+                                    let v268 = &C::lookup_value(ctx, v233);
+                                    if let Some(v269) = v268 {
+                                        if let &SimpleAst::And([v270, v271]) = v269 {
+                                            if v270 == v315 {
+                                                if v271 == v316 {
+                                                    let v317 = C::rule_qsynth_2_commutative_precondition(ctx, v232);
+                                                    if let Some(v318) = v317 {
+                                                        let v319 = &C::any(ctx, v315);
+                                                        let v320 = C::lookup_id(ctx, v319);
+                                                        let v321 = &C::any(ctx, v316);
+                                                        let v322 = C::lookup_id(ctx, v321);
+                                                        let v323 = &C::add(ctx, v320, v322);
+                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 463.
+                                                        return Some(v323.clone());
                                                     }
                                                 }
                                             }
@@ -1539,51 +1522,51 @@ pub fn constructor_lower<C: Context>(
                                 _ => {}
                             }
                         }
-                        if v45 == v227 {
-                            let v229 = C::rule_arith_to_negation_precondition(ctx, v45);
-                            if let Some(v230) = v229 {
-                                let v231 = &C::any(ctx, v228);
-                                let v232 = C::lookup_id(ctx, v231);
-                                let v233 = &C::neg(ctx, v232);
-                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 497.
-                                return Some(v233.clone());
+                        if v228 == v232 {
+                            let v234 = C::rule_arith_to_negation_precondition(ctx, v228);
+                            if let Some(v235) = v234 {
+                                let v236 = &C::any(ctx, v233);
+                                let v237 = C::lookup_id(ctx, v236);
+                                let v238 = &C::neg(ctx, v237);
+                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 423.
+                                return Some(v238.clone());
                             }
                         }
                     }
-                    &SimpleAst::And([v275, v276]) => {
-                        if let Some(v55) = v54 {
-                            if let &SimpleAst::Or([v273, v274]) = v55 {
-                                if v273 == v275 {
-                                    if v274 == v276 {
-                                        let v277 = &C::any(ctx, v273);
-                                        let v278 = C::lookup_id(ctx, v277);
-                                        let v279 = &C::any(ctx, v274);
-                                        let v280 = C::lookup_id(ctx, v279);
-                                        let v281 = &C::add(ctx, v278, v280);
-                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 517.
-                                        return Some(v281.clone());
+                    &SimpleAst::And([v282, v283]) => {
+                        if let Some(v250) = v249 {
+                            if let &SimpleAst::Or([v280, v281]) = v250 {
+                                if v280 == v282 {
+                                    if v281 == v283 {
+                                        let v284 = &C::any(ctx, v280);
+                                        let v285 = C::lookup_id(ctx, v284);
+                                        let v286 = &C::any(ctx, v281);
+                                        let v287 = C::lookup_id(ctx, v286);
+                                        let v288 = &C::add(ctx, v285, v287);
+                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 443.
+                                        return Some(v288.clone());
                                     }
                                 }
                             }
                         }
                     }
-                    &SimpleAst::Xor([v301, v302]) => {
-                        if let Some(v55) = v54 {
-                            if let &SimpleAst::Mul([v244, v245]) = v55 {
-                                let v250 = &C::lookup_value(ctx, v245);
-                                if let Some(v251) = v250 {
-                                    if let &SimpleAst::And([v282, v283]) = v251 {
-                                        if v282 == v301 {
-                                            if v283 == v302 {
-                                                let v303 = C::rule_qsynth_2_precondition(ctx, v244);
-                                                if let Some(v304) = v303 {
-                                                    let v291 = &C::any(ctx, v282);
-                                                    let v292 = C::lookup_id(ctx, v291);
-                                                    let v305 = &C::any(ctx, v283);
-                                                    let v306 = C::lookup_id(ctx, v305);
-                                                    let v307 = &C::add(ctx, v292, v306);
-                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 530.
-                                                    return Some(v307.clone());
+                    &SimpleAst::Xor([v308, v309]) => {
+                        if let Some(v250) = v249 {
+                            if let &SimpleAst::Mul([v251, v252]) = v250 {
+                                let v257 = &C::lookup_value(ctx, v252);
+                                if let Some(v258) = v257 {
+                                    if let &SimpleAst::And([v289, v290]) = v258 {
+                                        if v289 == v308 {
+                                            if v290 == v309 {
+                                                let v310 = C::rule_qsynth_2_precondition(ctx, v251);
+                                                if let Some(v311) = v310 {
+                                                    let v298 = &C::any(ctx, v289);
+                                                    let v299 = C::lookup_id(ctx, v298);
+                                                    let v312 = &C::any(ctx, v290);
+                                                    let v313 = C::lookup_id(ctx, v312);
+                                                    let v314 = &C::add(ctx, v299, v313);
+                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 456.
+                                                    return Some(v314.clone());
                                                 }
                                             }
                                         }
@@ -1592,156 +1575,100 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Neg([v234]) => {
-                        let v235 = C::rule_add_negate_to_invert_sign_precondition(ctx, v45);
-                        if let Some(v236) = v235 {
-                            let v238 = C::get_width(ctx, v45);
-                            let v239 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v238);
-                            let v240 = C::lookup_id(ctx, v239);
-                            let v241 = &C::any(ctx, v234);
-                            let v242 = C::lookup_id(ctx, v241);
-                            let v243 = &C::mul(ctx, v240, v242);
-                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 504.
-                            return Some(v243.clone());
+                    &SimpleAst::Neg([v239]) => {
+                        let v240 = C::rule_add_negate_to_invert_sign_precondition(ctx, v228);
+                        if let Some(v241) = v240 {
+                            let v243 = C::get_width(ctx, v228);
+                            let v244 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v243);
+                            let v245 = C::lookup_id(ctx, v244);
+                            let v246 = &C::any(ctx, v239);
+                            let v247 = C::lookup_id(ctx, v246);
+                            let v248 = &C::mul(ctx, v245, v247);
+                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 430.
+                            return Some(v248.clone());
                         }
                     }
                     _ => {}
                 }
             }
-            let v84 = C::rule_add_constant_to_left_4_precondition(ctx, v45, v46);
-            if let Some(v85) = v84 {
-                let v75 = &C::any(ctx, v45);
-                let v76 = C::lookup_id(ctx, v75);
-                let v86 = &C::any(ctx, v46);
-                let v87 = C::lookup_id(ctx, v86);
-                let v88 = &C::add(ctx, v76, v87);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 399.
-                return Some(v88.clone());
-            }
-            if let Some(v70) = v69 {
-                if let &SimpleAst::Add([v71, v72]) = v70 {
-                    let v73 = C::rule_add_constant_to_left_3_precondition(ctx, v45, v71);
-                    if let Some(v74) = v73 {
-                        let v75 = &C::any(ctx, v45);
-                        let v76 = C::lookup_id(ctx, v75);
-                        let v77 = &C::any(ctx, v71);
-                        let v78 = C::lookup_id(ctx, v77);
-                        let v79 = &C::add(ctx, v76, v78);
-                        let v80 = C::lookup_id(ctx, v79);
-                        let v81 = &C::any(ctx, v72);
-                        let v82 = C::lookup_id(ctx, v81);
-                        let v83 = &C::add(ctx, v80, v82);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 392.
-                        return Some(v83.clone());
-                    }
-                }
-            }
-            if let Some(v55) = v54 {
-                if let &SimpleAst::Add([v56, v57]) = v55 {
-                    let v58 = C::rule_add_constant_to_left_2_precondition(ctx, v56);
-                    if let Some(v59) = v58 {
-                        let v60 = &C::any(ctx, v56);
-                        let v61 = C::lookup_id(ctx, v60);
-                        let v62 = &C::any(ctx, v57);
-                        let v63 = C::lookup_id(ctx, v62);
-                        let v64 = &C::any(ctx, v46);
-                        let v65 = C::lookup_id(ctx, v64);
-                        let v66 = &C::add(ctx, v63, v65);
-                        let v67 = C::lookup_id(ctx, v66);
-                        let v68 = &C::add(ctx, v61, v67);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 385.
-                        return Some(v68.clone());
-                    }
-                }
-            }
-            let v47 = C::rule_add_constant_to_left_1_precondition(ctx, v46);
-            if let Some(v48) = v47 {
-                let v49 = &C::any(ctx, v46);
-                let v50 = C::lookup_id(ctx, v49);
-                let v51 = &C::any(ctx, v45);
-                let v52 = C::lookup_id(ctx, v51);
-                let v53 = &C::add(ctx, v50, v52);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 378.
-                return Some(v53.clone());
-            }
         }
-        &SimpleAst::Mul([v1, v2]) => {
-            let v25 = &C::lookup_value(ctx, v2);
-            if let Some(v26) = v25 {
-                match v26 {
-                    &SimpleAst::Mul([v27, v28]) => {
-                        if v1 == v27 {
-                            let v381 = C::rule_minus_twice_precondition(ctx, v1);
-                            if let Some(v382) = v381 {
-                                let v383 = &C::any(ctx, v28);
-                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 670.
-                                return Some(v383.clone());
+        &SimpleAst::Mul([v372, v373]) => {
+            let v391 = &C::lookup_value(ctx, v373);
+            if let Some(v392) = v391 {
+                match v392 {
+                    &SimpleAst::Mul([v393, v394]) => {
+                        if v372 == v393 {
+                            let v395 = C::rule_minus_twice_precondition(ctx, v372);
+                            if let Some(v396) = v395 {
+                                let v397 = &C::any(ctx, v394);
+                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 596.
+                                return Some(v397.clone());
                             }
                         }
                     }
-                    &SimpleAst::Pow([v528, v529]) => {
-                        let v10 = &C::lookup_value(ctx, v1);
-                        if let Some(v11) = v10 {
-                            if let &SimpleAst::Pow([v526, v527]) = v11 {
-                                if v526 == v528 {
-                                    let v530 = &C::any(ctx, v526);
-                                    let v531 = C::lookup_id(ctx, v530);
-                                    let v532 = &C::any(ctx, v527);
-                                    let v533 = C::lookup_id(ctx, v532);
-                                    let v534 = &C::any(ctx, v529);
+                    &SimpleAst::Pow([v532, v533]) => {
+                        let v528 = &C::lookup_value(ctx, v372);
+                        if let Some(v529) = v528 {
+                            if let &SimpleAst::Pow([v530, v531]) = v529 {
+                                if v530 == v532 {
+                                    let v534 = &C::any(ctx, v530);
                                     let v535 = C::lookup_id(ctx, v534);
-                                    let v536 = &C::add(ctx, v533, v535);
+                                    let v536 = &C::any(ctx, v531);
                                     let v537 = C::lookup_id(ctx, v536);
-                                    let v538 = &C::pow(ctx, v531, v537);
-                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 761.
-                                    return Some(v538.clone());
+                                    let v538 = &C::any(ctx, v533);
+                                    let v539 = C::lookup_id(ctx, v538);
+                                    let v540 = &C::add(ctx, v537, v539);
+                                    let v541 = C::lookup_id(ctx, v540);
+                                    let v542 = &C::pow(ctx, v535, v541);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 681.
+                                    return Some(v542.clone());
                                 }
                             }
                         }
                     }
-                    &SimpleAst::And([v568, v569]) => {
-                        let v570 = &C::lookup_value(ctx, v569);
-                        if let Some(v571) = v570 {
-                            if let &SimpleAst::Mul([v572, v573]) = v571 {
-                                if v568 == v573 {
-                                    let v574 = C::rule_xor_same_mult_by_minus_one_2_precondition(ctx, v1, v572);
-                                    if let Some(v575) = v574 {
-                                        let v576 = &C::any(ctx, v568);
-                                        let v577 = C::lookup_id(ctx, v576);
-                                        let v560 = C::get_width(ctx, v1);
-                                        let v561 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v560);
-                                        let v562 = C::lookup_id(ctx, v561);
-                                        let v578 = &C::any(ctx, v568);
-                                        let v579 = C::lookup_id(ctx, v578);
-                                        let v580 = &C::mul(ctx, v562, v579);
+                    &SimpleAst::And([v572, v573]) => {
+                        let v574 = &C::lookup_value(ctx, v573);
+                        if let Some(v575) = v574 {
+                            if let &SimpleAst::Mul([v576, v577]) = v575 {
+                                if v572 == v577 {
+                                    let v578 = C::rule_xor_same_mult_by_minus_one_2_precondition(ctx, v372, v576);
+                                    if let Some(v579) = v578 {
+                                        let v580 = &C::any(ctx, v572);
                                         let v581 = C::lookup_id(ctx, v580);
-                                        let v582 = &C::xor(ctx, v577, v581);
-                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 792.
-                                        return Some(v582.clone());
+                                        let v564 = C::get_width(ctx, v372);
+                                        let v565 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v564);
+                                        let v566 = C::lookup_id(ctx, v565);
+                                        let v582 = &C::any(ctx, v572);
+                                        let v583 = C::lookup_id(ctx, v582);
+                                        let v584 = &C::mul(ctx, v566, v583);
+                                        let v585 = C::lookup_id(ctx, v584);
+                                        let v586 = &C::xor(ctx, v581, v585);
+                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 712.
+                                        return Some(v586.clone());
                                     }
                                 }
                             }
                         }
                     }
-                    &SimpleAst::Or([v550, v551]) => {
-                        let v552 = &C::lookup_value(ctx, v551);
-                        if let Some(v553) = v552 {
-                            if let &SimpleAst::Mul([v554, v555]) = v553 {
-                                if v550 == v555 {
-                                    let v556 = C::rule_xor_same_mult_by_minus_one_1_precondition(ctx, v1, v554);
-                                    if let Some(v557) = v556 {
-                                        let v558 = &C::any(ctx, v550);
-                                        let v559 = C::lookup_id(ctx, v558);
-                                        let v560 = C::get_width(ctx, v1);
-                                        let v561 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v560);
-                                        let v562 = C::lookup_id(ctx, v561);
-                                        let v563 = &C::any(ctx, v550);
-                                        let v564 = C::lookup_id(ctx, v563);
-                                        let v565 = &C::mul(ctx, v562, v564);
+                    &SimpleAst::Or([v554, v555]) => {
+                        let v556 = &C::lookup_value(ctx, v555);
+                        if let Some(v557) = v556 {
+                            if let &SimpleAst::Mul([v558, v559]) = v557 {
+                                if v554 == v559 {
+                                    let v560 = C::rule_xor_same_mult_by_minus_one_1_precondition(ctx, v372, v558);
+                                    if let Some(v561) = v560 {
+                                        let v562 = &C::any(ctx, v554);
+                                        let v563 = C::lookup_id(ctx, v562);
+                                        let v564 = C::get_width(ctx, v372);
+                                        let v565 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v564);
                                         let v566 = C::lookup_id(ctx, v565);
-                                        let v567 = &C::xor(ctx, v559, v566);
-                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 785.
-                                        return Some(v567.clone());
+                                        let v567 = &C::any(ctx, v554);
+                                        let v568 = C::lookup_id(ctx, v567);
+                                        let v569 = &C::mul(ctx, v566, v568);
+                                        let v570 = C::lookup_id(ctx, v569);
+                                        let v571 = &C::xor(ctx, v563, v570);
+                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 705.
+                                        return Some(v571.clone());
                                     }
                                 }
                             }
@@ -1750,159 +1677,102 @@ pub fn constructor_lower<C: Context>(
                     _ => {}
                 }
             }
-            let v369 = C::rule_mul_one_precondition(ctx, v1);
-            if let Some(v370) = v369 {
-                let v5 = &C::any(ctx, v2);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 649.
-                return Some(v5.clone());
-            }
-            let v365 = C::rule_mul_zero_precondition(ctx, v1);
-            if let Some(v366) = v365 {
-                let v367 = C::get_width(ctx, v1);
-                let v368 = &C::constant(ctx, 0x0, v367);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 642.
-                return Some(v368.clone());
-            }
-            let v40 = C::rule_mul_constant_to_left_4_precondition(ctx, v1, v2);
-            if let Some(v41) = v40 {
-                let v31 = &C::any(ctx, v1);
-                let v32 = C::lookup_id(ctx, v31);
-                let v42 = &C::any(ctx, v2);
-                let v43 = C::lookup_id(ctx, v42);
-                let v44 = &C::mul(ctx, v32, v43);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 371.
-                return Some(v44.clone());
-            }
-            if let Some(v26) = v25 {
-                if let &SimpleAst::Mul([v27, v28]) = v26 {
-                    let v29 = C::rule_mul_constant_to_left_3_precondition(ctx, v1, v27);
-                    if let Some(v30) = v29 {
-                        let v31 = &C::any(ctx, v1);
-                        let v32 = C::lookup_id(ctx, v31);
-                        let v33 = &C::any(ctx, v27);
-                        let v34 = C::lookup_id(ctx, v33);
-                        let v35 = &C::mul(ctx, v32, v34);
-                        let v36 = C::lookup_id(ctx, v35);
-                        let v37 = &C::any(ctx, v28);
-                        let v38 = C::lookup_id(ctx, v37);
-                        let v39 = &C::mul(ctx, v36, v38);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 364.
-                        return Some(v39.clone());
-                    }
-                }
-            }
-            let v10 = &C::lookup_value(ctx, v1);
-            if let Some(v11) = v10 {
-                if let &SimpleAst::Mul([v12, v13]) = v11 {
-                    let v14 = C::rule_mul_constant_to_left_2_precondition(ctx, v12);
-                    if let Some(v15) = v14 {
-                        let v16 = &C::any(ctx, v12);
-                        let v17 = C::lookup_id(ctx, v16);
-                        let v18 = &C::any(ctx, v13);
-                        let v19 = C::lookup_id(ctx, v18);
-                        let v20 = &C::any(ctx, v2);
-                        let v21 = C::lookup_id(ctx, v20);
-                        let v22 = &C::mul(ctx, v19, v21);
-                        let v23 = C::lookup_id(ctx, v22);
-                        let v24 = &C::mul(ctx, v17, v23);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 357.
-                        return Some(v24.clone());
-                    }
-                }
-            }
-            let v3 = C::rule_mul_constant_to_left_1_precondition(ctx, v2);
-            if let Some(v4) = v3 {
-                let v5 = &C::any(ctx, v2);
-                let v6 = C::lookup_id(ctx, v5);
-                let v7 = &C::any(ctx, v1);
-                let v8 = C::lookup_id(ctx, v7);
-                let v9 = &C::mul(ctx, v6, v8);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 350.
-                return Some(v9.clone());
-            }
-        }
-        &SimpleAst::Pow([v371, v372]) => {
-            let v378 = C::rule_power_one_precondition(ctx, v372);
+            let v378 = C::rule_mul_one_precondition(ctx, v372);
             if let Some(v379) = v378 {
-                let v380 = &C::any(ctx, v371);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 663.
+                let v380 = &C::any(ctx, v373);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 575.
                 return Some(v380.clone());
             }
-            let v373 = C::rule_power_zero_precondition(ctx, v372);
-            if let Some(v374) = v373 {
-                let v376 = C::get_width(ctx, v371);
-                let v377 = &C::constant(ctx, 0x1, v376);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 656.
+            let v374 = C::rule_mul_zero_precondition(ctx, v372);
+            if let Some(v375) = v374 {
+                let v376 = C::get_width(ctx, v372);
+                let v377 = &C::constant(ctx, 0x0, v376);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 568.
                 return Some(v377.clone());
             }
         }
-        &SimpleAst::And([v89, v90]) => {
-            let v113 = &C::lookup_value(ctx, v90);
-            if let Some(v114) = v113 {
-                match v114 {
-                    &SimpleAst::Or([v685, v686]) => {
-                        let v690 = &C::lookup_value(ctx, v686);
-                        if let Some(v691) = v690 {
-                            if let &SimpleAst::Xor([v1280, v1281]) = v691 {
-                                if v89 == v1280 {
-                                    let v119 = &C::any(ctx, v89);
-                                    let v120 = C::lookup_id(ctx, v119);
-                                    let v1282 = &C::any(ctx, v1281);
-                                    let v1283 = C::lookup_id(ctx, v1282);
-                                    let v1284 = &C::neg(ctx, v1283);
-                                    let v1285 = C::lookup_id(ctx, v1284);
-                                    let v1286 = &C::any(ctx, v685);
-                                    let v1287 = C::lookup_id(ctx, v1286);
-                                    let v1288 = &C::or(ctx, v1285, v1287);
-                                    let v1289 = C::lookup_id(ctx, v1288);
-                                    let v1290 = &C::and(ctx, v120, v1289);
-                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1269.
-                                    return Some(v1290.clone());
+        &SimpleAst::Pow([v381, v382]) => {
+            let v388 = C::rule_power_one_precondition(ctx, v382);
+            if let Some(v389) = v388 {
+                let v390 = &C::any(ctx, v381);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 589.
+                return Some(v390.clone());
+            }
+            let v383 = C::rule_power_zero_precondition(ctx, v382);
+            if let Some(v384) = v383 {
+                let v386 = C::get_width(ctx, v381);
+                let v387 = &C::constant(ctx, 0x1, v386);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 582.
+                return Some(v387.clone());
+            }
+        }
+        &SimpleAst::And([v56, v57]) => {
+            let v61 = &C::lookup_value(ctx, v57);
+            if let Some(v62) = v61 {
+                match v62 {
+                    &SimpleAst::Or([v133, v134]) => {
+                        let v691 = &C::lookup_value(ctx, v134);
+                        if let Some(v692) = v691 {
+                            if let &SimpleAst::Xor([v1275, v1276]) = v692 {
+                                if v56 == v1275 {
+                                    let v359 = &C::any(ctx, v56);
+                                    let v844 = C::lookup_id(ctx, v359);
+                                    let v1277 = &C::any(ctx, v1276);
+                                    let v1278 = C::lookup_id(ctx, v1277);
+                                    let v1279 = &C::neg(ctx, v1278);
+                                    let v1280 = C::lookup_id(ctx, v1279);
+                                    let v1281 = &C::any(ctx, v133);
+                                    let v1282 = C::lookup_id(ctx, v1281);
+                                    let v1283 = &C::or(ctx, v1280, v1282);
+                                    let v1284 = C::lookup_id(ctx, v1283);
+                                    let v1285 = &C::and(ctx, v844, v1284);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1189.
+                                    return Some(v1285.clone());
                                 }
                             }
                         }
                     }
-                    &SimpleAst::Xor([v642, v643]) => {
-                        let v98 = &C::lookup_value(ctx, v89);
-                        if let Some(v99) = v98 {
-                            match v99 {
-                                &SimpleAst::And([v100, v101]) => {
-                                    if v101 == v642 {
-                                        let v1339 = &C::any(ctx, v101);
-                                        let v1340 = C::lookup_id(ctx, v1339);
-                                        let v1341 = &C::any(ctx, v100);
-                                        let v1342 = C::lookup_id(ctx, v1341);
-                                        let v1343 = &C::and(ctx, v1340, v1342);
-                                        let v1344 = C::lookup_id(ctx, v1343);
-                                        let v1345 = &C::any(ctx, v643);
-                                        let v1346 = C::lookup_id(ctx, v1345);
-                                        let v1347 = &C::neg(ctx, v1346);
-                                        let v1348 = C::lookup_id(ctx, v1347);
-                                        let v1349 = &C::and(ctx, v1344, v1348);
-                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1299.
-                                        return Some(v1349.clone());
+                    &SimpleAst::Xor([v150, v151]) => {
+                        let v58 = &C::lookup_value(ctx, v56);
+                        if let Some(v59) = v58 {
+                            match v59 {
+                                &SimpleAst::And([v1330, v1331]) => {
+                                    if v150 == v1331 {
+                                        let v1332 = &C::any(ctx, v1331);
+                                        let v1333 = C::lookup_id(ctx, v1332);
+                                        let v1334 = &C::any(ctx, v1330);
+                                        let v1335 = C::lookup_id(ctx, v1334);
+                                        let v1336 = &C::and(ctx, v1333, v1335);
+                                        let v1337 = C::lookup_id(ctx, v1336);
+                                        let v1338 = &C::any(ctx, v151);
+                                        let v1339 = C::lookup_id(ctx, v1338);
+                                        let v1340 = &C::neg(ctx, v1339);
+                                        let v1341 = C::lookup_id(ctx, v1340);
+                                        let v1342 = &C::and(ctx, v1337, v1341);
+                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1219.
+                                        return Some(v1342.clone());
                                     }
                                 }
-                                &SimpleAst::Xor([v1087, v1088]) => {
-                                    let v644 = &C::lookup_value(ctx, v643);
-                                    if let Some(v645) = v644 {
-                                        if let &SimpleAst::Xor([v1144, v1145]) = v645 {
-                                            if v1087 == v1144 {
-                                                let v1146 = &C::lookup_value(ctx, v1145);
-                                                if let Some(v1147) = v1146 {
-                                                    if let &SimpleAst::Neg([v1148]) = v1147 {
-                                                        if v1088 == v1148 {
-                                                            let v1149 = &C::any(ctx, v642);
-                                                            let v1150 = C::lookup_id(ctx, v1149);
-                                                            let v1151 = &C::any(ctx, v1087);
-                                                            let v1152 = C::lookup_id(ctx, v1151);
-                                                            let v1153 = &C::any(ctx, v1088);
-                                                            let v1154 = C::lookup_id(ctx, v1153);
-                                                            let v1155 = &C::xor(ctx, v1152, v1154);
-                                                            let v1156 = C::lookup_id(ctx, v1155);
-                                                            let v1157 = &C::and(ctx, v1150, v1156);
-                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1231.
-                                                            return Some(v1157.clone());
+                                &SimpleAst::Xor([v1092, v1093]) => {
+                                    let v647 = &C::lookup_value(ctx, v151);
+                                    if let Some(v648) = v647 {
+                                        if let &SimpleAst::Xor([v1145, v1146]) = v648 {
+                                            if v1092 == v1145 {
+                                                let v1147 = &C::lookup_value(ctx, v1146);
+                                                if let Some(v1148) = v1147 {
+                                                    if let &SimpleAst::Neg([v1149]) = v1148 {
+                                                        if v1093 == v1149 {
+                                                            let v1150 = &C::any(ctx, v150);
+                                                            let v1151 = C::lookup_id(ctx, v1150);
+                                                            let v1152 = &C::any(ctx, v1092);
+                                                            let v1153 = C::lookup_id(ctx, v1152);
+                                                            let v1154 = &C::any(ctx, v1093);
+                                                            let v1155 = C::lookup_id(ctx, v1154);
+                                                            let v1156 = &C::xor(ctx, v1153, v1155);
+                                                            let v1157 = C::lookup_id(ctx, v1156);
+                                                            let v1158 = &C::and(ctx, v1151, v1157);
+                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1151.
+                                                            return Some(v1158.clone());
                                                         }
                                                     }
                                                 }
@@ -1910,39 +1780,39 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::Neg([v593]) => {
-                                    let v594 = &C::lookup_value(ctx, v593);
-                                    if let Some(v595) = v594 {
-                                        if let &SimpleAst::And([v975, v976]) = v595 {
-                                            if v642 == v976 {
-                                                let v644 = &C::lookup_value(ctx, v643);
-                                                if let Some(v645) = v644 {
-                                                    if let &SimpleAst::Xor([v1144, v1145]) = v645 {
-                                                        let v1146 = &C::lookup_value(ctx, v1145);
-                                                        if let Some(v1147) = v1146 {
-                                                            if let &SimpleAst::Neg([v1148]) = v1147 {
-                                                                if v975 == v1148 {
-                                                                    let v1350 = &C::any(ctx, v976);
-                                                                    let v1351 = C::lookup_id(ctx, v1350);
-                                                                    let v1352 = &C::any(ctx, v975);
-                                                                    let v1353 = C::lookup_id(ctx, v1352);
-                                                                    let v1354 = &C::and(ctx, v1351, v1353);
-                                                                    let v1355 = C::lookup_id(ctx, v1354);
-                                                                    let v1356 = &C::any(ctx, v976);
-                                                                    let v1357 = C::lookup_id(ctx, v1356);
-                                                                    let v1358 = &C::any(ctx, v975);
-                                                                    let v1359 = C::lookup_id(ctx, v1358);
-                                                                    let v1360 = &C::xor(ctx, v1357, v1359);
-                                                                    let v1361 = C::lookup_id(ctx, v1360);
-                                                                    let v1362 = &C::any(ctx, v1144);
-                                                                    let v1363 = C::lookup_id(ctx, v1362);
-                                                                    let v1364 = &C::xor(ctx, v1361, v1363);
-                                                                    let v1365 = C::lookup_id(ctx, v1364);
-                                                                    let v1366 = &C::or(ctx, v1355, v1365);
-                                                                    let v1367 = C::lookup_id(ctx, v1366);
-                                                                    let v1368 = &C::neg(ctx, v1367);
-                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1305.
-                                                                    return Some(v1368.clone());
+                                &SimpleAst::Neg([v60]) => {
+                                    let v599 = &C::lookup_value(ctx, v60);
+                                    if let Some(v600) = v599 {
+                                        if let &SimpleAst::And([v980, v981]) = v600 {
+                                            if v150 == v981 {
+                                                let v647 = &C::lookup_value(ctx, v151);
+                                                if let Some(v648) = v647 {
+                                                    if let &SimpleAst::Xor([v1145, v1146]) = v648 {
+                                                        let v1147 = &C::lookup_value(ctx, v1146);
+                                                        if let Some(v1148) = v1147 {
+                                                            if let &SimpleAst::Neg([v1149]) = v1148 {
+                                                                if v980 == v1149 {
+                                                                    let v1343 = &C::any(ctx, v981);
+                                                                    let v1344 = C::lookup_id(ctx, v1343);
+                                                                    let v1345 = &C::any(ctx, v980);
+                                                                    let v1346 = C::lookup_id(ctx, v1345);
+                                                                    let v1347 = &C::and(ctx, v1344, v1346);
+                                                                    let v1348 = C::lookup_id(ctx, v1347);
+                                                                    let v1349 = &C::any(ctx, v981);
+                                                                    let v1350 = C::lookup_id(ctx, v1349);
+                                                                    let v1351 = &C::any(ctx, v980);
+                                                                    let v1352 = C::lookup_id(ctx, v1351);
+                                                                    let v1353 = &C::xor(ctx, v1350, v1352);
+                                                                    let v1354 = C::lookup_id(ctx, v1353);
+                                                                    let v1355 = &C::any(ctx, v1145);
+                                                                    let v1356 = C::lookup_id(ctx, v1355);
+                                                                    let v1357 = &C::xor(ctx, v1354, v1356);
+                                                                    let v1358 = C::lookup_id(ctx, v1357);
+                                                                    let v1359 = &C::or(ctx, v1348, v1358);
+                                                                    let v1360 = C::lookup_id(ctx, v1359);
+                                                                    let v1361 = &C::neg(ctx, v1360);
+                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1225.
+                                                                    return Some(v1361.clone());
                                                                 }
                                                             }
                                                         }
@@ -1955,19 +1825,19 @@ pub fn constructor_lower<C: Context>(
                                 _ => {}
                             }
                         }
-                        let v644 = &C::lookup_value(ctx, v643);
-                        if let Some(v645) = v644 {
-                            if let &SimpleAst::Add([v1113, v1114]) = v645 {
-                                if v642 == v1114 {
-                                    let v1115 = &C::lookup_value(ctx, v1113);
-                                    if let Some(v1116) = v1115 {
-                                        if let &SimpleAst::Mul([v1117, v1118]) = v1116 {
-                                            let v1119 = C::rule_opaque_constant_1_precondition(ctx, v89, v1117, v1118);
-                                            if let Some(v1120) = v1119 {
-                                                let v349 = C::get_width(ctx, v89);
-                                                let v350 = &C::constant(ctx, 0x0, v349);
-                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1199.
-                                                return Some(v350.clone());
+                        let v647 = &C::lookup_value(ctx, v151);
+                        if let Some(v648) = v647 {
+                            if let &SimpleAst::Add([v1118, v1119]) = v648 {
+                                if v150 == v1119 {
+                                    let v1120 = &C::lookup_value(ctx, v1118);
+                                    if let Some(v1121) = v1120 {
+                                        if let &SimpleAst::Mul([v1122, v1123]) = v1121 {
+                                            let v1124 = C::rule_opaque_constant_1_precondition(ctx, v56, v1122, v1123);
+                                            if let Some(v1125) = v1124 {
+                                                let v354 = C::get_width(ctx, v56);
+                                                let v355 = &C::constant(ctx, 0x0, v354);
+                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1119.
+                                                return Some(v355.clone());
                                             }
                                         }
                                     }
@@ -1978,46 +1848,46 @@ pub fn constructor_lower<C: Context>(
                     _ => {}
                 }
             }
-            let v98 = &C::lookup_value(ctx, v89);
-            if let Some(v99) = v98 {
-                match v99 {
-                    &SimpleAst::Xor([v1087, v1088]) => {
-                        if v90 == v1087 {
-                            let v1089 = &C::any(ctx, v1087);
-                            let v1090 = C::lookup_id(ctx, v1089);
-                            let v1091 = &C::any(ctx, v1088);
-                            let v1092 = C::lookup_id(ctx, v1091);
-                            let v1093 = &C::neg(ctx, v1092);
-                            let v1094 = C::lookup_id(ctx, v1093);
-                            let v1095 = &C::and(ctx, v1090, v1094);
-                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1179.
-                            return Some(v1095.clone());
+            let v58 = &C::lookup_value(ctx, v56);
+            if let Some(v59) = v58 {
+                match v59 {
+                    &SimpleAst::Xor([v1092, v1093]) => {
+                        if v57 == v1092 {
+                            let v1094 = &C::any(ctx, v1092);
+                            let v1095 = C::lookup_id(ctx, v1094);
+                            let v1096 = &C::any(ctx, v1093);
+                            let v1097 = C::lookup_id(ctx, v1096);
+                            let v1098 = &C::neg(ctx, v1097);
+                            let v1099 = C::lookup_id(ctx, v1098);
+                            let v1100 = &C::and(ctx, v1095, v1099);
+                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1099.
+                            return Some(v1100.clone());
                         }
                     }
-                    &SimpleAst::Neg([v593]) => {
-                        if let Some(v114) = v113 {
-                            if let &SimpleAst::Neg([v353]) = v114 {
-                                let v546 = &C::lookup_value(ctx, v353);
-                                if let Some(v547) = v546 {
-                                    if let &SimpleAst::And([v672, v673]) = v547 {
-                                        let v594 = &C::lookup_value(ctx, v593);
-                                        if let Some(v595) = v594 {
-                                            if let &SimpleAst::And([v975, v976]) = v595 {
-                                                let v977 = &C::lookup_value(ctx, v975);
-                                                if let Some(v978) = v977 {
-                                                    if let &SimpleAst::Neg([v979]) = v978 {
-                                                        if v672 == v979 {
-                                                            let v980 = &C::lookup_value(ctx, v976);
-                                                            if let Some(v981) = v980 {
-                                                                if let &SimpleAst::Neg([v982]) = v981 {
-                                                                    if v673 == v982 {
-                                                                        let v983 = &C::any(ctx, v982);
-                                                                        let v984 = C::lookup_id(ctx, v983);
-                                                                        let v985 = &C::any(ctx, v979);
-                                                                        let v986 = C::lookup_id(ctx, v985);
-                                                                        let v987 = &C::xor(ctx, v984, v986);
-                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1084.
-                                                                        return Some(v987.clone());
+                    &SimpleAst::Neg([v60]) => {
+                        if let Some(v62) = v61 {
+                            if let &SimpleAst::Neg([v63]) = v62 {
+                                let v550 = &C::lookup_value(ctx, v63);
+                                if let Some(v551) = v550 {
+                                    if let &SimpleAst::And([v675, v676]) = v551 {
+                                        let v599 = &C::lookup_value(ctx, v60);
+                                        if let Some(v600) = v599 {
+                                            if let &SimpleAst::And([v980, v981]) = v600 {
+                                                let v982 = &C::lookup_value(ctx, v980);
+                                                if let Some(v983) = v982 {
+                                                    if let &SimpleAst::Neg([v984]) = v983 {
+                                                        if v675 == v984 {
+                                                            let v985 = &C::lookup_value(ctx, v981);
+                                                            if let Some(v986) = v985 {
+                                                                if let &SimpleAst::Neg([v987]) = v986 {
+                                                                    if v676 == v987 {
+                                                                        let v988 = &C::any(ctx, v987);
+                                                                        let v989 = C::lookup_id(ctx, v988);
+                                                                        let v990 = &C::any(ctx, v984);
+                                                                        let v991 = C::lookup_id(ctx, v990);
+                                                                        let v992 = &C::xor(ctx, v989, v991);
+                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1004.
+                                                                        return Some(v992.clone());
                                                                     }
                                                                 }
                                                             }
@@ -2034,20 +1904,20 @@ pub fn constructor_lower<C: Context>(
                     _ => {}
                 }
             }
-            if let Some(v114) = v113 {
-                match v114 {
-                    &SimpleAst::Add([v818, v819]) => {
-                        if v89 == v818 {
-                            let v820 = &C::lookup_value(ctx, v819);
-                            if let Some(v821) = v820 {
-                                if let &SimpleAst::And([v822, v823]) = v821 {
-                                    let v824 = &C::lookup_value(ctx, v822);
-                                    if let Some(v825) = v824 {
-                                        if let &SimpleAst::Neg([v826]) = v825 {
-                                            if v89 == v826 {
-                                                let v119 = &C::any(ctx, v89);
-                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 974.
-                                                return Some(v119.clone());
+            if let Some(v62) = v61 {
+                match v62 {
+                    &SimpleAst::Add([v819, v820]) => {
+                        if v56 == v819 {
+                            let v821 = &C::lookup_value(ctx, v820);
+                            if let Some(v822) = v821 {
+                                if let &SimpleAst::And([v823, v824]) = v822 {
+                                    let v825 = &C::lookup_value(ctx, v823);
+                                    if let Some(v826) = v825 {
+                                        if let &SimpleAst::Neg([v827]) = v826 {
+                                            if v56 == v827 {
+                                                let v359 = &C::any(ctx, v56);
+                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 894.
+                                                return Some(v359.clone());
                                             }
                                         }
                                     }
@@ -2055,44 +1925,44 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Mul([v598, v599]) => {
-                        let v600 = &C::lookup_value(ctx, v599);
-                        if let Some(v601) = v600 {
-                            match v601 {
-                                &SimpleAst::And([v709, v710]) => {
-                                    let v711 = &C::lookup_value(ctx, v710);
-                                    if let Some(v712) = v711 {
-                                        match v712 {
-                                            &SimpleAst::Mul([v713, v714]) => {
-                                                if v89 == v709 {
-                                                    if v89 == v714 {
-                                                        if v598 == v713 {
-                                                            let v715 = C::rule_conj_conj_identity_rule_precondition(ctx, v598);
-                                                            if let Some(v716) = v715 {
-                                                                let v119 = &C::any(ctx, v89);
-                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 876.
-                                                                return Some(v119.clone());
+                    &SimpleAst::Mul([v603, v604]) => {
+                        let v605 = &C::lookup_value(ctx, v604);
+                        if let Some(v606) = v605 {
+                            match v606 {
+                                &SimpleAst::And([v710, v711]) => {
+                                    let v712 = &C::lookup_value(ctx, v711);
+                                    if let Some(v713) = v712 {
+                                        match v713 {
+                                            &SimpleAst::Mul([v714, v715]) => {
+                                                if v56 == v710 {
+                                                    if v56 == v715 {
+                                                        if v603 == v714 {
+                                                            let v716 = C::rule_conj_conj_identity_rule_precondition(ctx, v603);
+                                                            if let Some(v717) = v716 {
+                                                                let v359 = &C::any(ctx, v56);
+                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 796.
+                                                                return Some(v359.clone());
                                                             }
                                                         }
                                                     }
                                                 }
                                             }
-                                            &SimpleAst::Or([v838, v839]) => {
-                                                if v89 == v838 {
-                                                    let v834 = &C::lookup_value(ctx, v709);
-                                                    if let Some(v835) = v834 {
-                                                        if let &SimpleAst::Mul([v836, v837]) = v835 {
-                                                            if v598 == v836 {
-                                                                if v837 == v839 {
-                                                                    let v840 = C::rule_conj_conj_disj_rule_precondition(ctx, v598);
-                                                                    if let Some(v841) = v840 {
-                                                                        let v119 = &C::any(ctx, v89);
-                                                                        let v120 = C::lookup_id(ctx, v119);
-                                                                        let v842 = &C::any(ctx, v837);
-                                                                        let v843 = C::lookup_id(ctx, v842);
-                                                                        let v844 = &C::and(ctx, v120, v843);
-                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 987.
-                                                                        return Some(v844.clone());
+                                            &SimpleAst::Or([v840, v841]) => {
+                                                if v56 == v840 {
+                                                    let v836 = &C::lookup_value(ctx, v710);
+                                                    if let Some(v837) = v836 {
+                                                        if let &SimpleAst::Mul([v838, v839]) = v837 {
+                                                            if v603 == v838 {
+                                                                if v839 == v841 {
+                                                                    let v842 = C::rule_conj_conj_disj_rule_precondition(ctx, v603);
+                                                                    if let Some(v843) = v842 {
+                                                                        let v359 = &C::any(ctx, v56);
+                                                                        let v844 = C::lookup_id(ctx, v359);
+                                                                        let v845 = &C::any(ctx, v839);
+                                                                        let v846 = C::lookup_id(ctx, v845);
+                                                                        let v847 = &C::and(ctx, v844, v846);
+                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 907.
+                                                                        return Some(v847.clone());
                                                                     }
                                                                 }
                                                             }
@@ -2104,24 +1974,24 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::Xor([v602, v603]) => {
-                                    if let Some(v99) = v98 {
-                                        if let &SimpleAst::Neg([v593]) = v99 {
-                                            let v594 = &C::lookup_value(ctx, v593);
-                                            if let Some(v595) = v594 {
-                                                if let &SimpleAst::Mul([v596, v597]) = v595 {
-                                                    if v597 == v602 {
-                                                        let v604 = &C::lookup_value(ctx, v603);
-                                                        if let Some(v605) = v604 {
-                                                            if let &SimpleAst::Mul([v606, v607]) = v605 {
-                                                                if v597 == v607 {
-                                                                    if v598 == v606 {
-                                                                        let v608 = C::rule_conj_neg_xor_zero_rule_precondition(ctx, v596, v598);
-                                                                        if let Some(v609) = v608 {
-                                                                            let v610 = C::get_width(ctx, v596);
-                                                                            let v611 = &C::constant(ctx, 0x0, v610);
-                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 806.
-                                                                            return Some(v611.clone());
+                                &SimpleAst::Xor([v607, v608]) => {
+                                    if let Some(v59) = v58 {
+                                        if let &SimpleAst::Neg([v60]) = v59 {
+                                            let v599 = &C::lookup_value(ctx, v60);
+                                            if let Some(v600) = v599 {
+                                                if let &SimpleAst::Mul([v601, v602]) = v600 {
+                                                    if v602 == v607 {
+                                                        let v609 = &C::lookup_value(ctx, v608);
+                                                        if let Some(v610) = v609 {
+                                                            if let &SimpleAst::Mul([v611, v612]) = v610 {
+                                                                if v602 == v612 {
+                                                                    if v603 == v611 {
+                                                                        let v613 = C::rule_conj_neg_xor_zero_rule_precondition(ctx, v601, v603);
+                                                                        if let Some(v614) = v613 {
+                                                                            let v615 = C::get_width(ctx, v601);
+                                                                            let v616 = &C::constant(ctx, 0x0, v615);
+                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 726.
+                                                                            return Some(v616.clone());
                                                                         }
                                                                     }
                                                                 }
@@ -2137,21 +2007,21 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::And([v115, v116]) => {
-                        let v583 = &C::lookup_value(ctx, v115);
-                        if let Some(v584) = v583 {
-                            if let &SimpleAst::Mul([v585, v586]) = v584 {
-                                if v89 == v586 {
-                                    let v587 = &C::lookup_value(ctx, v116);
-                                    if let Some(v588) = v587 {
-                                        if let &SimpleAst::Mul([v589, v590]) = v588 {
-                                            if v89 == v590 {
-                                                let v591 = C::rule_conj_zero_rule_precondition(ctx, v585, v589);
-                                                if let Some(v592) = v591 {
-                                                    let v349 = C::get_width(ctx, v89);
-                                                    let v350 = &C::constant(ctx, 0x0, v349);
-                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 799.
-                                                    return Some(v350.clone());
+                    &SimpleAst::And([v587, v588]) => {
+                        let v589 = &C::lookup_value(ctx, v587);
+                        if let Some(v590) = v589 {
+                            if let &SimpleAst::Mul([v591, v592]) = v590 {
+                                if v56 == v592 {
+                                    let v593 = &C::lookup_value(ctx, v588);
+                                    if let Some(v594) = v593 {
+                                        if let &SimpleAst::Mul([v595, v596]) = v594 {
+                                            if v56 == v596 {
+                                                let v597 = C::rule_conj_zero_rule_precondition(ctx, v591, v595);
+                                                if let Some(v598) = v597 {
+                                                    let v354 = C::get_width(ctx, v56);
+                                                    let v355 = &C::constant(ctx, 0x0, v354);
+                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 719.
+                                                    return Some(v355.clone());
                                                 }
                                             }
                                         }
@@ -2160,31 +2030,31 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Or([v685, v686]) => {
-                        let v687 = &C::lookup_value(ctx, v685);
-                        if let Some(v688) = v687 {
-                            match v688 {
-                                &SimpleAst::Mul([v757, v758]) => {
-                                    let v690 = &C::lookup_value(ctx, v686);
-                                    if let Some(v691) = v690 {
-                                        if let &SimpleAst::Mul([v766, v767]) = v691 {
-                                            if v757 == v766 {
-                                                let v759 = &C::lookup_value(ctx, v758);
-                                                if let Some(v760) = v759 {
-                                                    if let &SimpleAst::Neg([v761]) = v760 {
-                                                        let v762 = &C::lookup_value(ctx, v761);
-                                                        if let Some(v763) = v762 {
-                                                            if let &SimpleAst::Mul([v764, v765]) = v763 {
-                                                                if v89 == v765 {
-                                                                    let v768 = &C::lookup_value(ctx, v767);
-                                                                    if let Some(v769) = v768 {
-                                                                        if let &SimpleAst::Neg([v770]) = v769 {
-                                                                            if v89 == v770 {
-                                                                                let v771 = C::rule_conj_disj_identity_rule_1_precondition(ctx, v757, v764);
-                                                                                if let Some(v772) = v771 {
-                                                                                    let v119 = &C::any(ctx, v89);
-                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 925.
-                                                                                    return Some(v119.clone());
+                    &SimpleAst::Or([v133, v134]) => {
+                        let v688 = &C::lookup_value(ctx, v133);
+                        if let Some(v689) = v688 {
+                            match v689 {
+                                &SimpleAst::Mul([v758, v759]) => {
+                                    let v691 = &C::lookup_value(ctx, v134);
+                                    if let Some(v692) = v691 {
+                                        if let &SimpleAst::Mul([v767, v768]) = v692 {
+                                            if v758 == v767 {
+                                                let v760 = &C::lookup_value(ctx, v759);
+                                                if let Some(v761) = v760 {
+                                                    if let &SimpleAst::Neg([v762]) = v761 {
+                                                        let v763 = &C::lookup_value(ctx, v762);
+                                                        if let Some(v764) = v763 {
+                                                            if let &SimpleAst::Mul([v765, v766]) = v764 {
+                                                                if v56 == v766 {
+                                                                    let v769 = &C::lookup_value(ctx, v768);
+                                                                    if let Some(v770) = v769 {
+                                                                        if let &SimpleAst::Neg([v771]) = v770 {
+                                                                            if v56 == v771 {
+                                                                                let v772 = C::rule_conj_disj_identity_rule_1_precondition(ctx, v758, v765);
+                                                                                if let Some(v773) = v772 {
+                                                                                    let v359 = &C::any(ctx, v56);
+                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 845.
+                                                                                    return Some(v359.clone());
                                                                                 }
                                                                             }
                                                                         }
@@ -2198,40 +2068,40 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::Neg([v689]) => {
-                                    let v690 = &C::lookup_value(ctx, v686);
-                                    if let Some(v691) = v690 {
-                                        match v691 {
-                                            &SimpleAst::Mul([v766, v767]) => {
-                                                let v768 = &C::lookup_value(ctx, v767);
-                                                if let Some(v769) = v768 {
-                                                    if let &SimpleAst::Neg([v770]) = v769 {
-                                                        if v89 == v770 {
-                                                            let v773 = &C::lookup_value(ctx, v689);
-                                                            if let Some(v774) = v773 {
-                                                                if let &SimpleAst::Mul([v775, v776]) = v774 {
-                                                                    let v777 = &C::lookup_value(ctx, v776);
-                                                                    if let Some(v778) = v777 {
-                                                                        if let &SimpleAst::Neg([v779]) = v778 {
-                                                                            if v89 == v779 {
-                                                                                let v782 = &C::lookup_value(ctx, v775);
-                                                                                if let Some(v783) = v782 {
-                                                                                    if let &SimpleAst::Mul([v784, v785]) = v783 {
-                                                                                        if v766 == v784 {
-                                                                                            let v786 = C::rule_conj_disj_identity_rule_3_precondition(ctx, v784);
-                                                                                            if let Some(v787) = v786 {
-                                                                                                let v119 = &C::any(ctx, v89);
-                                                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 939.
-                                                                                                return Some(v119.clone());
+                                &SimpleAst::Neg([v690]) => {
+                                    let v691 = &C::lookup_value(ctx, v134);
+                                    if let Some(v692) = v691 {
+                                        match v692 {
+                                            &SimpleAst::Mul([v767, v768]) => {
+                                                let v769 = &C::lookup_value(ctx, v768);
+                                                if let Some(v770) = v769 {
+                                                    if let &SimpleAst::Neg([v771]) = v770 {
+                                                        if v56 == v771 {
+                                                            let v774 = &C::lookup_value(ctx, v690);
+                                                            if let Some(v775) = v774 {
+                                                                if let &SimpleAst::Mul([v776, v777]) = v775 {
+                                                                    let v778 = &C::lookup_value(ctx, v777);
+                                                                    if let Some(v779) = v778 {
+                                                                        if let &SimpleAst::Neg([v780]) = v779 {
+                                                                            if v56 == v780 {
+                                                                                let v783 = &C::lookup_value(ctx, v776);
+                                                                                if let Some(v784) = v783 {
+                                                                                    if let &SimpleAst::Mul([v785, v786]) = v784 {
+                                                                                        if v767 == v785 {
+                                                                                            let v787 = C::rule_conj_disj_identity_rule_3_precondition(ctx, v785);
+                                                                                            if let Some(v788) = v787 {
+                                                                                                let v359 = &C::any(ctx, v56);
+                                                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 859.
+                                                                                                return Some(v359.clone());
                                                                                             }
                                                                                         }
                                                                                     }
                                                                                 }
-                                                                                let v780 = C::rule_conj_disj_identity_rule_2_precondition(ctx, v775, v766);
-                                                                                if let Some(v781) = v780 {
-                                                                                    let v119 = &C::any(ctx, v89);
-                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 932.
-                                                                                    return Some(v119.clone());
+                                                                                let v781 = C::rule_conj_disj_identity_rule_2_precondition(ctx, v776, v767);
+                                                                                if let Some(v782) = v781 {
+                                                                                    let v359 = &C::any(ctx, v56);
+                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 852.
+                                                                                    return Some(v359.clone());
                                                                                 }
                                                                             }
                                                                         }
@@ -2242,35 +2112,35 @@ pub fn constructor_lower<C: Context>(
                                                     }
                                                 }
                                             }
-                                            &SimpleAst::Neg([v692]) => {
-                                                if let Some(v99) = v98 {
-                                                    if let &SimpleAst::Mul([v630, v631]) = v99 {
-                                                        if v631 == v689 {
-                                                            let v693 = &C::lookup_value(ctx, v692);
-                                                            if let Some(v694) = v693 {
-                                                                if let &SimpleAst::Mul([v695, v696]) = v694 {
-                                                                    if v631 == v696 {
-                                                                        let v699 = C::rule_conj_neg_conj_identity_rule_4_precondition(ctx, v630, v695);
-                                                                        if let Some(v700) = v699 {
-                                                                            let v640 = C::get_width(ctx, v630);
-                                                                            let v680 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v640);
-                                                                            let v681 = C::lookup_id(ctx, v680);
-                                                                            let v652 = &C::any(ctx, v631);
-                                                                            let v653 = C::lookup_id(ctx, v652);
-                                                                            let v682 = &C::mul(ctx, v681, v653);
-                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 862.
-                                                                            return Some(v682.clone());
+                                            &SimpleAst::Neg([v693]) => {
+                                                if let Some(v59) = v58 {
+                                                    if let &SimpleAst::Mul([v635, v636]) = v59 {
+                                                        if v636 == v690 {
+                                                            let v694 = &C::lookup_value(ctx, v693);
+                                                            if let Some(v695) = v694 {
+                                                                if let &SimpleAst::Mul([v696, v697]) = v695 {
+                                                                    if v636 == v697 {
+                                                                        let v700 = C::rule_conj_neg_conj_identity_rule_4_precondition(ctx, v635, v696);
+                                                                        if let Some(v701) = v700 {
+                                                                            let v645 = C::get_width(ctx, v635);
+                                                                            let v683 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v645);
+                                                                            let v684 = C::lookup_id(ctx, v683);
+                                                                            let v655 = &C::any(ctx, v636);
+                                                                            let v656 = C::lookup_id(ctx, v655);
+                                                                            let v685 = &C::mul(ctx, v684, v656);
+                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 782.
+                                                                            return Some(v685.clone());
                                                                         }
-                                                                        let v697 = C::rule_conj_neg_conj_identity_rule_3_precondition(ctx, v630, v695);
-                                                                        if let Some(v698) = v697 {
-                                                                            let v640 = C::get_width(ctx, v630);
-                                                                            let v680 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v640);
-                                                                            let v681 = C::lookup_id(ctx, v680);
-                                                                            let v652 = &C::any(ctx, v631);
-                                                                            let v653 = C::lookup_id(ctx, v652);
-                                                                            let v682 = &C::mul(ctx, v681, v653);
-                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 855.
-                                                                            return Some(v682.clone());
+                                                                        let v698 = C::rule_conj_neg_conj_identity_rule_3_precondition(ctx, v635, v696);
+                                                                        if let Some(v699) = v698 {
+                                                                            let v645 = C::get_width(ctx, v635);
+                                                                            let v683 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v645);
+                                                                            let v684 = C::lookup_id(ctx, v683);
+                                                                            let v655 = &C::any(ctx, v636);
+                                                                            let v656 = C::lookup_id(ctx, v655);
+                                                                            let v685 = &C::mul(ctx, v684, v656);
+                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 775.
+                                                                            return Some(v685.clone());
                                                                         }
                                                                     }
                                                                 }
@@ -2287,24 +2157,24 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Xor([v642, v643]) => {
-                        if let Some(v99) = v98 {
-                            if let &SimpleAst::Mul([v630, v631]) = v99 {
-                                if v631 == v642 {
-                                    let v644 = &C::lookup_value(ctx, v643);
-                                    if let Some(v645) = v644 {
-                                        if let &SimpleAst::Mul([v646, v647]) = v645 {
-                                            if v631 == v647 {
-                                                let v648 = C::rule_conj_xor_identity_rule_precondition(ctx, v630, v646);
-                                                if let Some(v649) = v648 {
-                                                    let v640 = C::get_width(ctx, v630);
-                                                    let v650 = &C::constant(ctx, 0x2, v640);
-                                                    let v651 = C::lookup_id(ctx, v650);
-                                                    let v652 = &C::any(ctx, v631);
-                                                    let v653 = C::lookup_id(ctx, v652);
-                                                    let v654 = &C::mul(ctx, v651, v653);
-                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 827.
-                                                    return Some(v654.clone());
+                    &SimpleAst::Xor([v150, v151]) => {
+                        if let Some(v59) = v58 {
+                            if let &SimpleAst::Mul([v635, v636]) = v59 {
+                                if v150 == v636 {
+                                    let v647 = &C::lookup_value(ctx, v151);
+                                    if let Some(v648) = v647 {
+                                        if let &SimpleAst::Mul([v649, v650]) = v648 {
+                                            if v150 == v650 {
+                                                let v651 = C::rule_conj_xor_identity_rule_precondition(ctx, v635, v649);
+                                                if let Some(v652) = v651 {
+                                                    let v645 = C::get_width(ctx, v635);
+                                                    let v653 = &C::constant(ctx, 0x2, v645);
+                                                    let v654 = C::lookup_id(ctx, v653);
+                                                    let v655 = &C::any(ctx, v636);
+                                                    let v656 = C::lookup_id(ctx, v655);
+                                                    let v657 = &C::mul(ctx, v654, v656);
+                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 747.
+                                                    return Some(v657.clone());
                                                 }
                                             }
                                         }
@@ -2313,39 +2183,39 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Neg([v353]) => {
-                        let v546 = &C::lookup_value(ctx, v353);
-                        if let Some(v547) = v546 {
-                            match v547 {
-                                &SimpleAst::And([v672, v673]) => {
-                                    if let Some(v99) = v98 {
-                                        if let &SimpleAst::Mul([v630, v631]) = v99 {
-                                            if v631 == v672 {
-                                                let v674 = &C::lookup_value(ctx, v673);
-                                                if let Some(v675) = v674 {
-                                                    if let &SimpleAst::Mul([v676, v677]) = v675 {
-                                                        if v631 == v677 {
-                                                            let v683 = C::rule_conj_neg_conj_identity_rule_2_precondition(ctx, v630, v676);
-                                                            if let Some(v684) = v683 {
-                                                                let v640 = C::get_width(ctx, v630);
-                                                                let v680 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v640);
-                                                                let v681 = C::lookup_id(ctx, v680);
-                                                                let v652 = &C::any(ctx, v631);
-                                                                let v653 = C::lookup_id(ctx, v652);
-                                                                let v682 = &C::mul(ctx, v681, v653);
-                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 848.
-                                                                return Some(v682.clone());
+                    &SimpleAst::Neg([v63]) => {
+                        let v550 = &C::lookup_value(ctx, v63);
+                        if let Some(v551) = v550 {
+                            match v551 {
+                                &SimpleAst::And([v675, v676]) => {
+                                    if let Some(v59) = v58 {
+                                        if let &SimpleAst::Mul([v635, v636]) = v59 {
+                                            if v636 == v675 {
+                                                let v677 = &C::lookup_value(ctx, v676);
+                                                if let Some(v678) = v677 {
+                                                    if let &SimpleAst::Mul([v679, v680]) = v678 {
+                                                        if v636 == v680 {
+                                                            let v686 = C::rule_conj_neg_conj_identity_rule_2_precondition(ctx, v635, v679);
+                                                            if let Some(v687) = v686 {
+                                                                let v645 = C::get_width(ctx, v635);
+                                                                let v683 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v645);
+                                                                let v684 = C::lookup_id(ctx, v683);
+                                                                let v655 = &C::any(ctx, v636);
+                                                                let v656 = C::lookup_id(ctx, v655);
+                                                                let v685 = &C::mul(ctx, v684, v656);
+                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 768.
+                                                                return Some(v685.clone());
                                                             }
-                                                            let v678 = C::rule_conj_neg_conj_identity_rule_1_precondition(ctx, v630, v676);
-                                                            if let Some(v679) = v678 {
-                                                                let v640 = C::get_width(ctx, v630);
-                                                                let v680 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v640);
-                                                                let v681 = C::lookup_id(ctx, v680);
-                                                                let v652 = &C::any(ctx, v631);
-                                                                let v653 = C::lookup_id(ctx, v652);
-                                                                let v682 = &C::mul(ctx, v681, v653);
-                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 841.
-                                                                return Some(v682.clone());
+                                                            let v681 = C::rule_conj_neg_conj_identity_rule_1_precondition(ctx, v635, v679);
+                                                            if let Some(v682) = v681 {
+                                                                let v645 = C::get_width(ctx, v635);
+                                                                let v683 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v645);
+                                                                let v684 = C::lookup_id(ctx, v683);
+                                                                let v655 = &C::any(ctx, v636);
+                                                                let v656 = C::lookup_id(ctx, v655);
+                                                                let v685 = &C::mul(ctx, v684, v656);
+                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 761.
+                                                                return Some(v685.clone());
                                                             }
                                                         }
                                                     }
@@ -2354,28 +2224,28 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::Or([v548, v549]) => {
-                                    if v89 == v548 {
-                                        let v349 = C::get_width(ctx, v89);
-                                        let v350 = &C::constant(ctx, 0x0, v349);
-                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 779.
-                                        return Some(v350.clone());
+                                &SimpleAst::Or([v552, v553]) => {
+                                    if v56 == v552 {
+                                        let v354 = C::get_width(ctx, v56);
+                                        let v355 = &C::constant(ctx, 0x0, v354);
+                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 699.
+                                        return Some(v355.clone());
                                     }
                                 }
-                                &SimpleAst::Xor([v632, v633]) => {
-                                    if let Some(v99) = v98 {
-                                        if let &SimpleAst::Mul([v630, v631]) = v99 {
-                                            if v631 == v632 {
-                                                let v634 = &C::lookup_value(ctx, v633);
-                                                if let Some(v635) = v634 {
-                                                    if let &SimpleAst::Mul([v636, v637]) = v635 {
-                                                        if v631 == v637 {
-                                                            let v638 = C::rule_conj_negated_xor_zero_rule_precondition(ctx, v630, v636);
-                                                            if let Some(v639) = v638 {
-                                                                let v640 = C::get_width(ctx, v630);
-                                                                let v641 = &C::constant(ctx, 0x0, v640);
-                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 820.
-                                                                return Some(v641.clone());
+                                &SimpleAst::Xor([v637, v638]) => {
+                                    if let Some(v59) = v58 {
+                                        if let &SimpleAst::Mul([v635, v636]) = v59 {
+                                            if v636 == v637 {
+                                                let v639 = &C::lookup_value(ctx, v638);
+                                                if let Some(v640) = v639 {
+                                                    if let &SimpleAst::Mul([v641, v642]) = v640 {
+                                                        if v636 == v642 {
+                                                            let v643 = C::rule_conj_negated_xor_zero_rule_precondition(ctx, v635, v641);
+                                                            if let Some(v644) = v643 {
+                                                                let v645 = C::get_width(ctx, v635);
+                                                                let v646 = &C::constant(ctx, 0x0, v645);
+                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 740.
+                                                                return Some(v646.clone());
                                                             }
                                                         }
                                                     }
@@ -2391,143 +2261,149 @@ pub fn constructor_lower<C: Context>(
                     _ => {}
                 }
             }
-            if let Some(v99) = v98 {
-                if let &SimpleAst::Add([v388, v389]) = v99 {
-                    let v390 = &C::lookup_value(ctx, v389);
-                    if let Some(v391) = v390 {
-                        if let &SimpleAst::Mul([v392, v393]) = v391 {
-                            if v388 == v392 {
-                                let v394 = C::rule_and_bitwise_negation_precondition(ctx, v388);
-                                if let Some(v395) = v394 {
-                                    let v396 = &C::any(ctx, v393);
-                                    let v397 = C::lookup_id(ctx, v396);
-                                    let v398 = &C::neg(ctx, v397);
-                                    let v399 = C::lookup_id(ctx, v398);
-                                    let v108 = &C::any(ctx, v90);
-                                    let v109 = C::lookup_id(ctx, v108);
-                                    let v400 = &C::and(ctx, v399, v109);
-                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 683.
-                                    return Some(v400.clone());
+            if let Some(v59) = v58 {
+                if let &SimpleAst::Add([v400, v401]) = v59 {
+                    let v402 = &C::lookup_value(ctx, v401);
+                    if let Some(v403) = v402 {
+                        if let &SimpleAst::Mul([v404, v405]) = v403 {
+                            if v400 == v404 {
+                                let v406 = C::rule_and_bitwise_negation_precondition(ctx, v400);
+                                if let Some(v407) = v406 {
+                                    let v408 = &C::any(ctx, v405);
+                                    let v409 = C::lookup_id(ctx, v408);
+                                    let v410 = &C::neg(ctx, v409);
+                                    let v411 = C::lookup_id(ctx, v410);
+                                    let v412 = &C::any(ctx, v57);
+                                    let v413 = C::lookup_id(ctx, v412);
+                                    let v414 = &C::and(ctx, v411, v413);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 609.
+                                    return Some(v414.clone());
                                 }
                             }
                         }
                     }
                 }
             }
-            if let Some(v114) = v113 {
-                if let &SimpleAst::Neg([v353]) = v114 {
-                    if v89 == v353 {
-                        let v349 = C::get_width(ctx, v89);
-                        let v350 = &C::constant(ctx, 0x0, v349);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 616.
-                        return Some(v350.clone());
+            if let Some(v62) = v61 {
+                if let &SimpleAst::Neg([v63]) = v62 {
+                    if v56 == v63 {
+                        let v354 = C::get_width(ctx, v56);
+                        let v355 = &C::constant(ctx, 0x0, v354);
+                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 542.
+                        return Some(v355.clone());
                     }
                 }
             }
-            if v89 == v90 {
-                let v119 = &C::any(ctx, v89);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 610.
-                return Some(v119.clone());
+            if v56 == v57 {
+                let v359 = &C::any(ctx, v56);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 536.
+                return Some(v359.clone());
             }
-            let v351 = C::rule_and_maxint_precondition(ctx, v89);
-            if let Some(v352) = v351 {
-                let v93 = &C::any(ctx, v90);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 603.
-                return Some(v93.clone());
+            let v356 = C::rule_and_maxint_precondition(ctx, v56);
+            if let Some(v357) = v356 {
+                let v358 = &C::any(ctx, v57);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 529.
+                return Some(v358.clone());
             }
-            let v347 = C::rule_and_zero_precondition(ctx, v89);
-            if let Some(v348) = v347 {
-                let v349 = C::get_width(ctx, v89);
-                let v350 = &C::constant(ctx, 0x0, v349);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 596.
-                return Some(v350.clone());
+            let v352 = C::rule_and_zero_precondition(ctx, v56);
+            if let Some(v353) = v352 {
+                let v354 = C::get_width(ctx, v56);
+                let v355 = &C::constant(ctx, 0x0, v354);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 522.
+                return Some(v355.clone());
             }
-            let v128 = C::rule_and_constant_to_left_4_precondition(ctx, v89, v90);
-            if let Some(v129) = v128 {
-                let v119 = &C::any(ctx, v89);
-                let v120 = C::lookup_id(ctx, v119);
-                let v130 = &C::any(ctx, v90);
-                let v131 = C::lookup_id(ctx, v130);
-                let v132 = &C::and(ctx, v120, v131);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 427.
-                return Some(v132.clone());
-            }
-            if let Some(v114) = v113 {
-                if let &SimpleAst::And([v115, v116]) = v114 {
-                    let v117 = C::rule_and_constant_to_left_3_precondition(ctx, v89, v115);
-                    if let Some(v118) = v117 {
-                        let v119 = &C::any(ctx, v89);
-                        let v120 = C::lookup_id(ctx, v119);
-                        let v121 = &C::any(ctx, v115);
-                        let v122 = C::lookup_id(ctx, v121);
-                        let v123 = &C::and(ctx, v120, v122);
-                        let v124 = C::lookup_id(ctx, v123);
-                        let v125 = &C::any(ctx, v116);
-                        let v126 = C::lookup_id(ctx, v125);
-                        let v127 = &C::and(ctx, v124, v126);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 420.
-                        return Some(v127.clone());
+            if let Some(v59) = v58 {
+                match v59 {
+                    &SimpleAst::Or([v131, v132]) => {
+                        if let Some(v62) = v61 {
+                            if let &SimpleAst::Or([v133, v134]) = v62 {
+                                if v131 == v133 {
+                                    let v135 = &C::any(ctx, v131);
+                                    let v136 = C::lookup_id(ctx, v135);
+                                    let v137 = &C::any(ctx, v132);
+                                    let v138 = C::lookup_id(ctx, v137);
+                                    let v139 = &C::any(ctx, v134);
+                                    let v140 = C::lookup_id(ctx, v139);
+                                    let v141 = &C::and(ctx, v138, v140);
+                                    let v142 = C::lookup_id(ctx, v141);
+                                    let v143 = &C::or(ctx, v136, v142);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 387.
+                                    return Some(v143.clone());
+                                }
+                            }
+                        }
                     }
-                }
-            }
-            if let Some(v99) = v98 {
-                if let &SimpleAst::And([v100, v101]) = v99 {
-                    let v102 = C::rule_and_constant_to_left_2_precondition(ctx, v100);
-                    if let Some(v103) = v102 {
-                        let v104 = &C::any(ctx, v100);
-                        let v105 = C::lookup_id(ctx, v104);
-                        let v106 = &C::any(ctx, v101);
-                        let v107 = C::lookup_id(ctx, v106);
-                        let v108 = &C::any(ctx, v90);
-                        let v109 = C::lookup_id(ctx, v108);
-                        let v110 = &C::and(ctx, v107, v109);
-                        let v111 = C::lookup_id(ctx, v110);
-                        let v112 = &C::and(ctx, v105, v111);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 413.
-                        return Some(v112.clone());
+                    &SimpleAst::Neg([v60]) => {
+                        if let Some(v62) = v61 {
+                            match v62 {
+                                &SimpleAst::Xor([v150, v151]) => {
+                                    let v152 = &C::lookup_value(ctx, v150);
+                                    if let Some(v153) = v152 {
+                                        if let &SimpleAst::Neg([v154]) = v153 {
+                                            let v64 = &C::any(ctx, v60);
+                                            let v65 = C::lookup_id(ctx, v64);
+                                            let v155 = &C::any(ctx, v154);
+                                            let v156 = C::lookup_id(ctx, v155);
+                                            let v157 = &C::any(ctx, v151);
+                                            let v158 = C::lookup_id(ctx, v157);
+                                            let v159 = &C::xor(ctx, v156, v158);
+                                            let v160 = C::lookup_id(ctx, v159);
+                                            let v161 = &C::or(ctx, v65, v160);
+                                            let v162 = C::lookup_id(ctx, v161);
+                                            let v163 = &C::neg(ctx, v162);
+                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 399.
+                                            return Some(v163.clone());
+                                        }
+                                    }
+                                }
+                                &SimpleAst::Neg([v63]) => {
+                                    let v64 = &C::any(ctx, v60);
+                                    let v65 = C::lookup_id(ctx, v64);
+                                    let v66 = &C::any(ctx, v63);
+                                    let v67 = C::lookup_id(ctx, v66);
+                                    let v68 = &C::or(ctx, v65, v67);
+                                    let v69 = C::lookup_id(ctx, v68);
+                                    let v70 = &C::neg(ctx, v69);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 357.
+                                    return Some(v70.clone());
+                                }
+                                _ => {}
+                            }
+                        }
                     }
+                    _ => {}
                 }
-            }
-            let v91 = C::rule_and_constant_to_left_1_precondition(ctx, v90);
-            if let Some(v92) = v91 {
-                let v93 = &C::any(ctx, v90);
-                let v94 = C::lookup_id(ctx, v93);
-                let v95 = &C::any(ctx, v89);
-                let v96 = C::lookup_id(ctx, v95);
-                let v97 = &C::and(ctx, v94, v96);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 406.
-                return Some(v97.clone());
             }
         }
-        &SimpleAst::Or([v133, v134]) => {
-            let v142 = &C::lookup_value(ctx, v133);
-            if let Some(v143) = v142 {
-                match v143 {
-                    &SimpleAst::Mul([v612, v613]) => {
-                        let v157 = &C::lookup_value(ctx, v134);
-                        if let Some(v158) = v157 {
-                            if let &SimpleAst::And([v337, v338]) = v158 {
-                                let v845 = &C::lookup_value(ctx, v613);
-                                if let Some(v846) = v845 {
-                                    if let &SimpleAst::Or([v847, v848]) = v846 {
-                                        let v849 = &C::lookup_value(ctx, v847);
-                                        if let Some(v850) = v849 {
-                                            if let &SimpleAst::Mul([v851, v852]) = v850 {
-                                                if v337 == v852 {
-                                                    if v612 == v851 {
-                                                        let v853 = &C::lookup_value(ctx, v848);
-                                                        if let Some(v854) = v853 {
-                                                            if let &SimpleAst::And([v855, v856]) = v854 {
-                                                                let v857 = &C::lookup_value(ctx, v855);
-                                                                if let Some(v858) = v857 {
-                                                                    if let &SimpleAst::And([v859, v860]) = v858 {
-                                                                        if v337 == v859 {
-                                                                            if v338 == v860 {
-                                                                                let v861 = C::rule_disj_disj_conj_rule_2_precondition(ctx, v612);
-                                                                                if let Some(v862) = v861 {
-                                                                                    let v863 = &C::any(ctx, v852);
-                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 994.
-                                                                                    return Some(v863.clone());
+        &SimpleAst::Or([v112, v113]) => {
+            let v114 = &C::lookup_value(ctx, v112);
+            if let Some(v115) = v114 {
+                match v115 {
+                    &SimpleAst::Mul([v617, v618]) => {
+                        let v118 = &C::lookup_value(ctx, v113);
+                        if let Some(v119) = v118 {
+                            if let &SimpleAst::And([v120, v121]) = v119 {
+                                let v848 = &C::lookup_value(ctx, v618);
+                                if let Some(v849) = v848 {
+                                    if let &SimpleAst::Or([v850, v851]) = v849 {
+                                        let v852 = &C::lookup_value(ctx, v850);
+                                        if let Some(v853) = v852 {
+                                            if let &SimpleAst::Mul([v854, v855]) = v853 {
+                                                if v120 == v855 {
+                                                    if v617 == v854 {
+                                                        let v856 = &C::lookup_value(ctx, v851);
+                                                        if let Some(v857) = v856 {
+                                                            if let &SimpleAst::And([v858, v859]) = v857 {
+                                                                let v860 = &C::lookup_value(ctx, v858);
+                                                                if let Some(v861) = v860 {
+                                                                    if let &SimpleAst::And([v862, v863]) = v861 {
+                                                                        if v120 == v862 {
+                                                                            if v121 == v863 {
+                                                                                let v864 = C::rule_disj_disj_conj_rule_2_precondition(ctx, v617);
+                                                                                if let Some(v865) = v864 {
+                                                                                    let v866 = &C::any(ctx, v855);
+                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 914.
+                                                                                    return Some(v866.clone());
                                                                                 }
                                                                             }
                                                                         }
@@ -2544,92 +2420,92 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::And([v332, v333]) => {
-                        if v134 == v332 {
-                            let v877 = &C::any(ctx, v332);
-                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1219.
-                            return Some(v877.clone());
+                    &SimpleAst::And([v116, v117]) => {
+                        if v113 == v116 {
+                            let v122 = &C::any(ctx, v116);
+                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1139.
+                            return Some(v122.clone());
                         }
-                        let v157 = &C::lookup_value(ctx, v134);
-                        if let Some(v158) = v157 {
-                            if let &SimpleAst::Xor([v875, v876]) = v158 {
-                                if v333 == v876 {
-                                    let v334 = &C::lookup_value(ctx, v332);
-                                    if let Some(v335) = v334 {
-                                        if let &SimpleAst::And([v888, v889]) = v335 {
-                                            if v875 == v889 {
-                                                let v890 = &C::any(ctx, v888);
-                                                let v891 = C::lookup_id(ctx, v890);
-                                                let v892 = &C::any(ctx, v889);
-                                                let v893 = C::lookup_id(ctx, v892);
-                                                let v894 = &C::and(ctx, v891, v893);
-                                                let v895 = C::lookup_id(ctx, v894);
-                                                let v896 = &C::any(ctx, v333);
-                                                let v897 = C::lookup_id(ctx, v896);
-                                                let v898 = &C::and(ctx, v895, v897);
-                                                let v899 = C::lookup_id(ctx, v898);
-                                                let v900 = &C::any(ctx, v889);
-                                                let v901 = C::lookup_id(ctx, v900);
-                                                let v902 = &C::any(ctx, v333);
-                                                let v903 = C::lookup_id(ctx, v902);
-                                                let v904 = &C::xor(ctx, v901, v903);
-                                                let v905 = C::lookup_id(ctx, v904);
-                                                let v906 = &C::add(ctx, v899, v905);
-                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1014.
-                                                return Some(v906.clone());
+                        let v118 = &C::lookup_value(ctx, v113);
+                        if let Some(v119) = v118 {
+                            if let &SimpleAst::Xor([v878, v879]) = v119 {
+                                if v117 == v879 {
+                                    let v343 = &C::lookup_value(ctx, v116);
+                                    if let Some(v344) = v343 {
+                                        if let &SimpleAst::And([v889, v890]) = v344 {
+                                            if v878 == v890 {
+                                                let v891 = &C::any(ctx, v889);
+                                                let v892 = C::lookup_id(ctx, v891);
+                                                let v893 = &C::any(ctx, v890);
+                                                let v894 = C::lookup_id(ctx, v893);
+                                                let v895 = &C::and(ctx, v892, v894);
+                                                let v896 = C::lookup_id(ctx, v895);
+                                                let v897 = &C::any(ctx, v117);
+                                                let v898 = C::lookup_id(ctx, v897);
+                                                let v899 = &C::and(ctx, v896, v898);
+                                                let v900 = C::lookup_id(ctx, v899);
+                                                let v901 = &C::any(ctx, v890);
+                                                let v902 = C::lookup_id(ctx, v901);
+                                                let v903 = &C::any(ctx, v117);
+                                                let v904 = C::lookup_id(ctx, v903);
+                                                let v905 = &C::xor(ctx, v902, v904);
+                                                let v906 = C::lookup_id(ctx, v905);
+                                                let v907 = &C::add(ctx, v900, v906);
+                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 934.
+                                                return Some(v907.clone());
                                             }
                                         }
                                     }
-                                    if v332 == v875 {
-                                        let v877 = &C::any(ctx, v332);
-                                        let v878 = C::lookup_id(ctx, v877);
-                                        let v344 = &C::any(ctx, v333);
-                                        let v345 = C::lookup_id(ctx, v344);
-                                        let v879 = &C::and(ctx, v878, v345);
-                                        let v880 = C::lookup_id(ctx, v879);
-                                        let v881 = &C::any(ctx, v332);
-                                        let v882 = C::lookup_id(ctx, v881);
-                                        let v883 = &C::any(ctx, v333);
-                                        let v884 = C::lookup_id(ctx, v883);
-                                        let v885 = &C::xor(ctx, v882, v884);
-                                        let v886 = C::lookup_id(ctx, v885);
-                                        let v887 = &C::add(ctx, v880, v886);
-                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1008.
-                                        return Some(v887.clone());
+                                    if v116 == v878 {
+                                        let v122 = &C::any(ctx, v116);
+                                        let v123 = C::lookup_id(ctx, v122);
+                                        let v124 = &C::any(ctx, v117);
+                                        let v125 = C::lookup_id(ctx, v124);
+                                        let v880 = &C::and(ctx, v123, v125);
+                                        let v881 = C::lookup_id(ctx, v880);
+                                        let v882 = &C::any(ctx, v116);
+                                        let v883 = C::lookup_id(ctx, v882);
+                                        let v884 = &C::any(ctx, v117);
+                                        let v885 = C::lookup_id(ctx, v884);
+                                        let v886 = &C::xor(ctx, v883, v885);
+                                        let v887 = C::lookup_id(ctx, v886);
+                                        let v888 = &C::add(ctx, v881, v887);
+                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 928.
+                                        return Some(v888.clone());
                                     }
                                 }
                             }
                         }
                     }
-                    &SimpleAst::Xor([v953, v954]) => {
-                        if v134 == v953 {
-                            let v955 = &C::any(ctx, v953);
-                            let v956 = C::lookup_id(ctx, v955);
-                            let v957 = &C::any(ctx, v954);
-                            let v958 = C::lookup_id(ctx, v957);
-                            let v959 = &C::or(ctx, v956, v958);
-                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1057.
-                            return Some(v959.clone());
+                    &SimpleAst::Xor([v954, v955]) => {
+                        if v113 == v954 {
+                            let v956 = &C::any(ctx, v954);
+                            let v957 = C::lookup_id(ctx, v956);
+                            let v958 = &C::any(ctx, v955);
+                            let v959 = C::lookup_id(ctx, v958);
+                            let v960 = &C::or(ctx, v957, v959);
+                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 977.
+                            return Some(v960.clone());
                         }
                     }
-                    &SimpleAst::Neg([v1309]) => {
-                        let v157 = &C::lookup_value(ctx, v134);
-                        if let Some(v158) = v157 {
-                            if let &SimpleAst::And([v337, v338]) = v158 {
-                                let v1310 = &C::lookup_value(ctx, v1309);
-                                if let Some(v1311) = v1310 {
-                                    if let &SimpleAst::Or([v1312, v1313]) = v1311 {
-                                        if v337 == v1312 {
-                                            if v338 == v1313 {
-                                                let v1314 = &C::any(ctx, v1312);
-                                                let v1315 = C::lookup_id(ctx, v1314);
-                                                let v1316 = &C::any(ctx, v1313);
-                                                let v1317 = C::lookup_id(ctx, v1316);
-                                                let v1318 = &C::xor(ctx, v1315, v1317);
-                                                let v1319 = C::lookup_id(ctx, v1318);
-                                                let v1320 = &C::neg(ctx, v1319);
-                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1287.
-                                                return Some(v1320.clone());
+                    &SimpleAst::Neg([v1304]) => {
+                        let v118 = &C::lookup_value(ctx, v113);
+                        if let Some(v119) = v118 {
+                            if let &SimpleAst::And([v120, v121]) = v119 {
+                                let v1305 = &C::lookup_value(ctx, v1304);
+                                if let Some(v1306) = v1305 {
+                                    if let &SimpleAst::Or([v1307, v1308]) = v1306 {
+                                        if v120 == v1307 {
+                                            if v121 == v1308 {
+                                                let v1309 = &C::any(ctx, v1307);
+                                                let v1310 = C::lookup_id(ctx, v1309);
+                                                let v1311 = &C::any(ctx, v1308);
+                                                let v1312 = C::lookup_id(ctx, v1311);
+                                                let v1313 = &C::xor(ctx, v1310, v1312);
+                                                let v1314 = C::lookup_id(ctx, v1313);
+                                                let v1315 = &C::neg(ctx, v1314);
+                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1207.
+                                                return Some(v1315.clone());
                                             }
                                         }
                                     }
@@ -2640,38 +2516,38 @@ pub fn constructor_lower<C: Context>(
                     _ => {}
                 }
             }
-            let v157 = &C::lookup_value(ctx, v134);
-            if let Some(v158) = v157 {
-                match v158 {
-                    &SimpleAst::Add([v800, v801]) => {
-                        let v806 = &C::lookup_value(ctx, v801);
-                        if let Some(v807) = v806 {
-                            if let &SimpleAst::Mul([v808, v809]) = v807 {
-                                if v133 == v800 {
-                                    let v812 = &C::lookup_value(ctx, v809);
-                                    if let Some(v813) = v812 {
-                                        if let &SimpleAst::And([v814, v815]) = v813 {
-                                            if v133 == v814 {
-                                                let v816 = C::rule_disj_sub_disj_identity_rule_2_precondition(ctx, v808);
-                                                if let Some(v817) = v816 {
-                                                    let v163 = &C::any(ctx, v133);
-                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 967.
-                                                    return Some(v163.clone());
+            let v118 = &C::lookup_value(ctx, v113);
+            if let Some(v119) = v118 {
+                match v119 {
+                    &SimpleAst::Add([v801, v802]) => {
+                        let v807 = &C::lookup_value(ctx, v802);
+                        if let Some(v808) = v807 {
+                            if let &SimpleAst::Mul([v809, v810]) = v808 {
+                                if v112 == v801 {
+                                    let v813 = &C::lookup_value(ctx, v810);
+                                    if let Some(v814) = v813 {
+                                        if let &SimpleAst::And([v815, v816]) = v814 {
+                                            if v112 == v815 {
+                                                let v817 = C::rule_disj_sub_disj_identity_rule_2_precondition(ctx, v809);
+                                                if let Some(v818) = v817 {
+                                                    let v331 = &C::any(ctx, v112);
+                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 887.
+                                                    return Some(v331.clone());
                                                 }
                                             }
                                         }
                                     }
                                 }
-                                let v802 = &C::lookup_value(ctx, v800);
-                                if let Some(v803) = v802 {
-                                    if let &SimpleAst::Or([v804, v805]) = v803 {
-                                        if v133 == v804 {
-                                            if v805 == v809 {
-                                                let v810 = C::rule_disj_sub_disj_identity_rule_1_precondition(ctx, v808);
-                                                if let Some(v811) = v810 {
-                                                    let v163 = &C::any(ctx, v133);
-                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 960.
-                                                    return Some(v163.clone());
+                                let v803 = &C::lookup_value(ctx, v801);
+                                if let Some(v804) = v803 {
+                                    if let &SimpleAst::Or([v805, v806]) = v804 {
+                                        if v112 == v805 {
+                                            if v806 == v810 {
+                                                let v811 = C::rule_disj_sub_disj_identity_rule_1_precondition(ctx, v809);
+                                                if let Some(v812) = v811 {
+                                                    let v331 = &C::any(ctx, v112);
+                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 880.
+                                                    return Some(v331.clone());
                                                 }
                                             }
                                         }
@@ -2680,72 +2556,72 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Mul([v655, v656]) => {
-                        let v657 = &C::lookup_value(ctx, v656);
-                        if let Some(v658) = v657 {
-                            match v658 {
-                                &SimpleAst::Or([v701, v702]) => {
-                                    let v703 = &C::lookup_value(ctx, v702);
-                                    if let Some(v704) = v703 {
-                                        match v704 {
-                                            &SimpleAst::Mul([v705, v706]) => {
-                                                if v133 == v706 {
-                                                    let v788 = &C::lookup_value(ctx, v701);
-                                                    if let Some(v789) = v788 {
-                                                        if let &SimpleAst::Mul([v790, v791]) = v789 {
-                                                            if v133 == v791 {
-                                                                if v655 == v790 {
-                                                                    let v794 = &C::lookup_value(ctx, v705);
-                                                                    if let Some(v795) = v794 {
-                                                                        if let &SimpleAst::Mul([v796, v797]) = v795 {
-                                                                            if v655 == v796 {
-                                                                                let v798 = C::rule_disj_neg_disj_identity_rule_2_precondition(ctx, v655);
-                                                                                if let Some(v799) = v798 {
-                                                                                    let v163 = &C::any(ctx, v133);
-                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 953.
-                                                                                    return Some(v163.clone());
+                    &SimpleAst::Mul([v658, v659]) => {
+                        let v660 = &C::lookup_value(ctx, v659);
+                        if let Some(v661) = v660 {
+                            match v661 {
+                                &SimpleAst::Or([v702, v703]) => {
+                                    let v704 = &C::lookup_value(ctx, v703);
+                                    if let Some(v705) = v704 {
+                                        match v705 {
+                                            &SimpleAst::Mul([v706, v707]) => {
+                                                if v112 == v707 {
+                                                    let v789 = &C::lookup_value(ctx, v702);
+                                                    if let Some(v790) = v789 {
+                                                        if let &SimpleAst::Mul([v791, v792]) = v790 {
+                                                            if v112 == v792 {
+                                                                if v658 == v791 {
+                                                                    let v795 = &C::lookup_value(ctx, v706);
+                                                                    if let Some(v796) = v795 {
+                                                                        if let &SimpleAst::Mul([v797, v798]) = v796 {
+                                                                            if v658 == v797 {
+                                                                                let v799 = C::rule_disj_neg_disj_identity_rule_2_precondition(ctx, v658);
+                                                                                if let Some(v800) = v799 {
+                                                                                    let v331 = &C::any(ctx, v112);
+                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 873.
+                                                                                    return Some(v331.clone());
                                                                                 }
                                                                             }
                                                                         }
                                                                     }
-                                                                    let v792 = C::rule_disj_neg_disj_identity_rule_1_precondition(ctx, v655);
-                                                                    if let Some(v793) = v792 {
-                                                                        let v163 = &C::any(ctx, v133);
-                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 946.
-                                                                        return Some(v163.clone());
+                                                                    let v793 = C::rule_disj_neg_disj_identity_rule_1_precondition(ctx, v658);
+                                                                    if let Some(v794) = v793 {
+                                                                        let v331 = &C::any(ctx, v112);
+                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 866.
+                                                                        return Some(v331.clone());
                                                                     }
                                                                 }
                                                             }
                                                         }
                                                     }
-                                                    if v133 == v701 {
-                                                        if v655 == v705 {
-                                                            let v707 = C::rule_disj_disj_identity_rule_precondition(ctx, v655);
-                                                            if let Some(v708) = v707 {
-                                                                let v163 = &C::any(ctx, v133);
-                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 869.
-                                                                return Some(v163.clone());
+                                                    if v112 == v702 {
+                                                        if v658 == v706 {
+                                                            let v708 = C::rule_disj_disj_identity_rule_precondition(ctx, v658);
+                                                            if let Some(v709) = v708 {
+                                                                let v331 = &C::any(ctx, v112);
+                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 789.
+                                                                return Some(v331.clone());
                                                             }
                                                         }
                                                     }
                                                 }
                                             }
-                                            &SimpleAst::And([v827, v828]) => {
-                                                if v133 == v827 {
-                                                    let v788 = &C::lookup_value(ctx, v701);
-                                                    if let Some(v789) = v788 {
-                                                        if let &SimpleAst::Mul([v790, v791]) = v789 {
-                                                            if v655 == v790 {
-                                                                if v791 == v828 {
-                                                                    let v829 = C::rule_disj_disj_conj_rule_precondition(ctx, v655);
-                                                                    if let Some(v830) = v829 {
-                                                                        let v163 = &C::any(ctx, v133);
-                                                                        let v164 = C::lookup_id(ctx, v163);
-                                                                        let v831 = &C::any(ctx, v791);
-                                                                        let v832 = C::lookup_id(ctx, v831);
-                                                                        let v833 = &C::or(ctx, v164, v832);
-                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 980.
-                                                                        return Some(v833.clone());
+                                            &SimpleAst::And([v828, v829]) => {
+                                                if v112 == v828 {
+                                                    let v789 = &C::lookup_value(ctx, v702);
+                                                    if let Some(v790) = v789 {
+                                                        if let &SimpleAst::Mul([v791, v792]) = v790 {
+                                                            if v658 == v791 {
+                                                                if v792 == v829 {
+                                                                    let v830 = C::rule_disj_disj_conj_rule_precondition(ctx, v658);
+                                                                    if let Some(v831) = v830 {
+                                                                        let v331 = &C::any(ctx, v112);
+                                                                        let v832 = C::lookup_id(ctx, v331);
+                                                                        let v833 = &C::any(ctx, v792);
+                                                                        let v834 = C::lookup_id(ctx, v833);
+                                                                        let v835 = &C::or(ctx, v832, v834);
+                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 900.
+                                                                        return Some(v835.clone());
                                                                     }
                                                                 }
                                                             }
@@ -2757,25 +2633,25 @@ pub fn constructor_lower<C: Context>(
                                         }
                                     }
                                 }
-                                &SimpleAst::Xor([v659, v660]) => {
-                                    if let Some(v143) = v142 {
-                                        if let &SimpleAst::Mul([v612, v613]) = v143 {
-                                            if v613 == v659 {
-                                                let v661 = &C::lookup_value(ctx, v660);
-                                                if let Some(v662) = v661 {
-                                                    if let &SimpleAst::Mul([v663, v664]) = v662 {
-                                                        if v613 == v664 {
-                                                            if v655 == v663 {
-                                                                let v665 = C::rule_disj_xor_identity_rule_precondition(ctx, v612, v655);
-                                                                if let Some(v666) = v665 {
-                                                                    let v628 = C::get_width(ctx, v612);
-                                                                    let v667 = &C::constant(ctx, 0x2, v628);
-                                                                    let v668 = C::lookup_id(ctx, v667);
-                                                                    let v669 = &C::any(ctx, v613);
-                                                                    let v670 = C::lookup_id(ctx, v669);
-                                                                    let v671 = &C::mul(ctx, v668, v670);
-                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 834.
-                                                                    return Some(v671.clone());
+                                &SimpleAst::Xor([v662, v663]) => {
+                                    if let Some(v115) = v114 {
+                                        if let &SimpleAst::Mul([v617, v618]) = v115 {
+                                            if v618 == v662 {
+                                                let v664 = &C::lookup_value(ctx, v663);
+                                                if let Some(v665) = v664 {
+                                                    if let &SimpleAst::Mul([v666, v667]) = v665 {
+                                                        if v618 == v667 {
+                                                            if v658 == v666 {
+                                                                let v668 = C::rule_disj_xor_identity_rule_precondition(ctx, v617, v658);
+                                                                if let Some(v669) = v668 {
+                                                                    let v633 = C::get_width(ctx, v617);
+                                                                    let v670 = &C::constant(ctx, 0x2, v633);
+                                                                    let v671 = C::lookup_id(ctx, v670);
+                                                                    let v672 = &C::any(ctx, v618);
+                                                                    let v673 = C::lookup_id(ctx, v672);
+                                                                    let v674 = &C::mul(ctx, v671, v673);
+                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 754.
+                                                                    return Some(v674.clone());
                                                                 }
                                                             }
                                                         }
@@ -2789,40 +2665,40 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::And([v337, v338]) => {
-                        let v339 = &C::lookup_value(ctx, v338);
-                        if let Some(v340) = v339 {
-                            if let &SimpleAst::Mul([v720, v721]) = v340 {
-                                let v717 = &C::lookup_value(ctx, v337);
-                                if let Some(v718) = v717 {
-                                    match v718 {
-                                        &SimpleAst::Mul([v741, v742]) => {
-                                            let v743 = &C::lookup_value(ctx, v742);
-                                            if let Some(v744) = v743 {
-                                                if let &SimpleAst::Neg([v745]) = v744 {
-                                                    if v133 == v745 {
-                                                        let v746 = &C::lookup_value(ctx, v721);
-                                                        if let Some(v747) = v746 {
-                                                            if let &SimpleAst::Neg([v748]) = v747 {
-                                                                if v133 == v748 {
-                                                                    let v751 = &C::lookup_value(ctx, v720);
-                                                                    if let Some(v752) = v751 {
-                                                                        if let &SimpleAst::Mul([v753, v754]) = v752 {
-                                                                            if v741 == v753 {
-                                                                                let v755 = C::rule_disj_conj_identity_rule_2_2_precondition(ctx, v741, v754);
-                                                                                if let Some(v756) = v755 {
-                                                                                    let v163 = &C::any(ctx, v133);
-                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 918.
-                                                                                    return Some(v163.clone());
+                    &SimpleAst::And([v120, v121]) => {
+                        let v346 = &C::lookup_value(ctx, v121);
+                        if let Some(v347) = v346 {
+                            if let &SimpleAst::Mul([v721, v722]) = v347 {
+                                let v718 = &C::lookup_value(ctx, v120);
+                                if let Some(v719) = v718 {
+                                    match v719 {
+                                        &SimpleAst::Mul([v742, v743]) => {
+                                            let v744 = &C::lookup_value(ctx, v743);
+                                            if let Some(v745) = v744 {
+                                                if let &SimpleAst::Neg([v746]) = v745 {
+                                                    if v112 == v746 {
+                                                        let v747 = &C::lookup_value(ctx, v722);
+                                                        if let Some(v748) = v747 {
+                                                            if let &SimpleAst::Neg([v749]) = v748 {
+                                                                if v112 == v749 {
+                                                                    let v752 = &C::lookup_value(ctx, v721);
+                                                                    if let Some(v753) = v752 {
+                                                                        if let &SimpleAst::Mul([v754, v755]) = v753 {
+                                                                            if v742 == v754 {
+                                                                                let v756 = C::rule_disj_conj_identity_rule_2_2_precondition(ctx, v742, v755);
+                                                                                if let Some(v757) = v756 {
+                                                                                    let v331 = &C::any(ctx, v112);
+                                                                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 838.
+                                                                                    return Some(v331.clone());
                                                                                 }
                                                                             }
                                                                         }
                                                                     }
-                                                                    let v749 = C::rule_disj_conj_identity_rule_2_1_precondition(ctx, v741, v720);
-                                                                    if let Some(v750) = v749 {
-                                                                        let v163 = &C::any(ctx, v133);
-                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 911.
-                                                                        return Some(v163.clone());
+                                                                    let v750 = C::rule_disj_conj_identity_rule_2_1_precondition(ctx, v742, v721);
+                                                                    if let Some(v751) = v750 {
+                                                                        let v331 = &C::any(ctx, v112);
+                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 831.
+                                                                        return Some(v331.clone());
                                                                     }
                                                                 }
                                                             }
@@ -2831,32 +2707,32 @@ pub fn constructor_lower<C: Context>(
                                                 }
                                             }
                                         }
-                                        &SimpleAst::Neg([v719]) => {
-                                            if let Some(v143) = v142 {
-                                                if let &SimpleAst::Mul([v612, v613]) = v143 {
-                                                    if v613 == v719 {
-                                                        if v613 == v721 {
-                                                            let v726 = C::rule_disj_conj_identity_rule_2_precondition(ctx, v612, v720);
-                                                            if let Some(v727) = v726 {
-                                                                let v628 = C::get_width(ctx, v612);
-                                                                let v629 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v628);
-                                                                let v724 = C::lookup_id(ctx, v629);
-                                                                let v669 = &C::any(ctx, v613);
-                                                                let v670 = C::lookup_id(ctx, v669);
-                                                                let v725 = &C::mul(ctx, v724, v670);
-                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 890.
-                                                                return Some(v725.clone());
+                                        &SimpleAst::Neg([v720]) => {
+                                            if let Some(v115) = v114 {
+                                                if let &SimpleAst::Mul([v617, v618]) = v115 {
+                                                    if v618 == v720 {
+                                                        if v618 == v722 {
+                                                            let v727 = C::rule_disj_conj_identity_rule_2_precondition(ctx, v617, v721);
+                                                            if let Some(v728) = v727 {
+                                                                let v633 = C::get_width(ctx, v617);
+                                                                let v634 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v633);
+                                                                let v725 = C::lookup_id(ctx, v634);
+                                                                let v672 = &C::any(ctx, v618);
+                                                                let v673 = C::lookup_id(ctx, v672);
+                                                                let v726 = &C::mul(ctx, v725, v673);
+                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 810.
+                                                                return Some(v726.clone());
                                                             }
-                                                            let v722 = C::rule_disj_conj_identity_rule_1_precondition(ctx, v612, v720);
-                                                            if let Some(v723) = v722 {
-                                                                let v628 = C::get_width(ctx, v612);
-                                                                let v629 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v628);
-                                                                let v724 = C::lookup_id(ctx, v629);
-                                                                let v669 = &C::any(ctx, v613);
-                                                                let v670 = C::lookup_id(ctx, v669);
-                                                                let v725 = &C::mul(ctx, v724, v670);
-                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 883.
-                                                                return Some(v725.clone());
+                                                            let v723 = C::rule_disj_conj_identity_rule_1_precondition(ctx, v617, v721);
+                                                            if let Some(v724) = v723 {
+                                                                let v633 = C::get_width(ctx, v617);
+                                                                let v634 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v633);
+                                                                let v725 = C::lookup_id(ctx, v634);
+                                                                let v672 = &C::any(ctx, v618);
+                                                                let v673 = C::lookup_id(ctx, v672);
+                                                                let v726 = &C::mul(ctx, v725, v673);
+                                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 803.
+                                                                return Some(v726.clone());
                                                             }
                                                         }
                                                     }
@@ -2869,28 +2745,28 @@ pub fn constructor_lower<C: Context>(
                             }
                         }
                     }
-                    &SimpleAst::Neg([v323]) => {
-                        if let Some(v143) = v142 {
-                            if let &SimpleAst::Mul([v612, v613]) = v143 {
-                                let v614 = &C::lookup_value(ctx, v323);
-                                if let Some(v615) = v614 {
-                                    match v615 {
-                                        &SimpleAst::Mul([v616, v617]) => {
-                                            let v618 = &C::lookup_value(ctx, v617);
-                                            if let Some(v619) = v618 {
-                                                if let &SimpleAst::Xor([v620, v621]) = v619 {
-                                                    if v613 == v620 {
-                                                        let v622 = &C::lookup_value(ctx, v621);
-                                                        if let Some(v623) = v622 {
-                                                            if let &SimpleAst::Mul([v624, v625]) = v623 {
-                                                                if v613 == v625 {
-                                                                    if v616 == v624 {
-                                                                        let v626 = C::rule_conj_neg_xor_minus_one_rule_precondition(ctx, v612, v616);
-                                                                        if let Some(v627) = v626 {
-                                                                            let v628 = C::get_width(ctx, v612);
-                                                                            let v629 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v628);
-                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 813.
-                                                                            return Some(v629.clone());
+                    &SimpleAst::Neg([v332]) => {
+                        if let Some(v115) = v114 {
+                            if let &SimpleAst::Mul([v617, v618]) = v115 {
+                                let v619 = &C::lookup_value(ctx, v332);
+                                if let Some(v620) = v619 {
+                                    match v620 {
+                                        &SimpleAst::Mul([v621, v622]) => {
+                                            let v623 = &C::lookup_value(ctx, v622);
+                                            if let Some(v624) = v623 {
+                                                if let &SimpleAst::Xor([v625, v626]) = v624 {
+                                                    if v618 == v625 {
+                                                        let v627 = &C::lookup_value(ctx, v626);
+                                                        if let Some(v628) = v627 {
+                                                            if let &SimpleAst::Mul([v629, v630]) = v628 {
+                                                                if v618 == v630 {
+                                                                    if v621 == v629 {
+                                                                        let v631 = C::rule_conj_neg_xor_minus_one_rule_precondition(ctx, v617, v621);
+                                                                        if let Some(v632) = v631 {
+                                                                            let v633 = C::get_width(ctx, v617);
+                                                                            let v634 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v633);
+                                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 733.
+                                                                            return Some(v634.clone());
                                                                         }
                                                                     }
                                                                 }
@@ -2900,36 +2776,36 @@ pub fn constructor_lower<C: Context>(
                                                 }
                                             }
                                         }
-                                        &SimpleAst::Or([v728, v729]) => {
-                                            if v613 == v728 {
-                                                let v730 = &C::lookup_value(ctx, v729);
-                                                if let Some(v731) = v730 {
-                                                    if let &SimpleAst::Neg([v732]) = v731 {
-                                                        let v733 = &C::lookup_value(ctx, v732);
-                                                        if let Some(v734) = v733 {
-                                                            if let &SimpleAst::Mul([v735, v736]) = v734 {
-                                                                if v613 == v736 {
-                                                                    let v739 = C::rule_disj_conj_identity_rule_4_precondition(ctx, v612, v735);
-                                                                    if let Some(v740) = v739 {
-                                                                        let v628 = C::get_width(ctx, v612);
-                                                                        let v629 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v628);
-                                                                        let v724 = C::lookup_id(ctx, v629);
-                                                                        let v669 = &C::any(ctx, v613);
-                                                                        let v670 = C::lookup_id(ctx, v669);
-                                                                        let v725 = &C::mul(ctx, v724, v670);
-                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 904.
-                                                                        return Some(v725.clone());
+                                        &SimpleAst::Or([v729, v730]) => {
+                                            if v618 == v729 {
+                                                let v731 = &C::lookup_value(ctx, v730);
+                                                if let Some(v732) = v731 {
+                                                    if let &SimpleAst::Neg([v733]) = v732 {
+                                                        let v734 = &C::lookup_value(ctx, v733);
+                                                        if let Some(v735) = v734 {
+                                                            if let &SimpleAst::Mul([v736, v737]) = v735 {
+                                                                if v618 == v737 {
+                                                                    let v740 = C::rule_disj_conj_identity_rule_4_precondition(ctx, v617, v736);
+                                                                    if let Some(v741) = v740 {
+                                                                        let v633 = C::get_width(ctx, v617);
+                                                                        let v634 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v633);
+                                                                        let v725 = C::lookup_id(ctx, v634);
+                                                                        let v672 = &C::any(ctx, v618);
+                                                                        let v673 = C::lookup_id(ctx, v672);
+                                                                        let v726 = &C::mul(ctx, v725, v673);
+                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 824.
+                                                                        return Some(v726.clone());
                                                                     }
-                                                                    let v737 = C::rule_disj_conj_identity_rule_3_precondition(ctx, v612, v735);
-                                                                    if let Some(v738) = v737 {
-                                                                        let v628 = C::get_width(ctx, v612);
-                                                                        let v629 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v628);
-                                                                        let v724 = C::lookup_id(ctx, v629);
-                                                                        let v669 = &C::any(ctx, v613);
-                                                                        let v670 = C::lookup_id(ctx, v669);
-                                                                        let v725 = &C::mul(ctx, v724, v670);
-                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 897.
-                                                                        return Some(v725.clone());
+                                                                    let v738 = C::rule_disj_conj_identity_rule_3_precondition(ctx, v617, v736);
+                                                                    if let Some(v739) = v738 {
+                                                                        let v633 = C::get_width(ctx, v617);
+                                                                        let v634 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v633);
+                                                                        let v725 = C::lookup_id(ctx, v634);
+                                                                        let v672 = &C::any(ctx, v618);
+                                                                        let v673 = C::lookup_id(ctx, v672);
+                                                                        let v726 = &C::mul(ctx, v725, v673);
+                                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 817.
+                                                                        return Some(v726.clone());
                                                                     }
                                                                 }
                                                             }
@@ -2947,47 +2823,47 @@ pub fn constructor_lower<C: Context>(
                     _ => {}
                 }
             }
-            if let Some(v143) = v142 {
-                match v143 {
-                    &SimpleAst::Add([v401, v402]) => {
-                        let v403 = &C::lookup_value(ctx, v402);
-                        if let Some(v404) = v403 {
-                            if let &SimpleAst::Mul([v405, v406]) = v404 {
-                                if v401 == v405 {
-                                    let v407 = C::rule_or_bitwise_negation_precondition(ctx, v401);
-                                    if let Some(v408) = v407 {
-                                        let v409 = &C::any(ctx, v406);
-                                        let v410 = C::lookup_id(ctx, v409);
-                                        let v411 = &C::neg(ctx, v410);
-                                        let v412 = C::lookup_id(ctx, v411);
-                                        let v152 = &C::any(ctx, v134);
-                                        let v153 = C::lookup_id(ctx, v152);
-                                        let v413 = &C::or(ctx, v412, v153);
-                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 690.
-                                        return Some(v413.clone());
+            if let Some(v115) = v114 {
+                match v115 {
+                    &SimpleAst::Add([v415, v416]) => {
+                        let v417 = &C::lookup_value(ctx, v416);
+                        if let Some(v418) = v417 {
+                            if let &SimpleAst::Mul([v419, v420]) = v418 {
+                                if v415 == v419 {
+                                    let v421 = C::rule_or_bitwise_negation_precondition(ctx, v415);
+                                    if let Some(v422) = v421 {
+                                        let v423 = &C::any(ctx, v420);
+                                        let v424 = C::lookup_id(ctx, v423);
+                                        let v425 = &C::neg(ctx, v424);
+                                        let v426 = C::lookup_id(ctx, v425);
+                                        let v427 = &C::any(ctx, v113);
+                                        let v428 = C::lookup_id(ctx, v427);
+                                        let v429 = &C::or(ctx, v426, v428);
+                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 616.
+                                        return Some(v429.clone());
                                     }
                                 }
                             }
                         }
                     }
-                    &SimpleAst::And([v332, v333]) => {
-                        if let Some(v158) = v157 {
-                            if let &SimpleAst::And([v337, v338]) = v158 {
-                                let v334 = &C::lookup_value(ctx, v332);
-                                if let Some(v335) = v334 {
-                                    if let &SimpleAst::Neg([v336]) = v335 {
-                                        if v336 == v337 {
-                                            let v339 = &C::lookup_value(ctx, v338);
-                                            if let Some(v340) = v339 {
-                                                if let &SimpleAst::Neg([v341]) = v340 {
-                                                    if v333 == v341 {
-                                                        let v342 = &C::any(ctx, v336);
-                                                        let v343 = C::lookup_id(ctx, v342);
-                                                        let v344 = &C::any(ctx, v333);
-                                                        let v345 = C::lookup_id(ctx, v344);
-                                                        let v346 = &C::xor(ctx, v343, v345);
-                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 590.
-                                                        return Some(v346.clone());
+                    &SimpleAst::And([v116, v117]) => {
+                        if let Some(v119) = v118 {
+                            if let &SimpleAst::And([v120, v121]) = v119 {
+                                let v343 = &C::lookup_value(ctx, v116);
+                                if let Some(v344) = v343 {
+                                    if let &SimpleAst::Neg([v345]) = v344 {
+                                        if v120 == v345 {
+                                            let v346 = &C::lookup_value(ctx, v121);
+                                            if let Some(v347) = v346 {
+                                                if let &SimpleAst::Neg([v348]) = v347 {
+                                                    if v117 == v348 {
+                                                        let v349 = &C::any(ctx, v345);
+                                                        let v350 = C::lookup_id(ctx, v349);
+                                                        let v124 = &C::any(ctx, v117);
+                                                        let v125 = C::lookup_id(ctx, v124);
+                                                        let v351 = &C::xor(ctx, v350, v125);
+                                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 516.
+                                                        return Some(v351.clone());
                                                     }
                                                 }
                                             }
@@ -3000,398 +2876,534 @@ pub fn constructor_lower<C: Context>(
                     _ => {}
                 }
             }
-            if let Some(v158) = v157 {
-                if let &SimpleAst::Neg([v323]) = v158 {
-                    if v133 == v323 {
-                        let v321 = C::get_width(ctx, v133);
-                        let v322 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v321);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 564.
-                        return Some(v322.clone());
+            if let Some(v119) = v118 {
+                if let &SimpleAst::Neg([v332]) = v119 {
+                    if v112 == v332 {
+                        let v329 = C::get_width(ctx, v112);
+                        let v330 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v329);
+                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 490.
+                        return Some(v330.clone());
                     }
                 }
             }
-            if v133 == v134 {
-                let v163 = &C::any(ctx, v133);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 558.
-                return Some(v163.clone());
-            }
-            let v319 = C::rule_or_maxint_precondition(ctx, v133);
-            if let Some(v320) = v319 {
-                let v321 = C::get_width(ctx, v133);
-                let v322 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v321);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 551.
-                return Some(v322.clone());
-            }
-            let v317 = C::rule_or_zero_precondition(ctx, v133);
-            if let Some(v318) = v317 {
-                let v137 = &C::any(ctx, v134);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 544.
-                return Some(v137.clone());
-            }
-            let v172 = C::rule_or_constant_to_left_4_precondition(ctx, v133, v134);
-            if let Some(v173) = v172 {
-                let v163 = &C::any(ctx, v133);
-                let v164 = C::lookup_id(ctx, v163);
-                let v174 = &C::any(ctx, v134);
-                let v175 = C::lookup_id(ctx, v174);
-                let v176 = &C::or(ctx, v164, v175);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 455.
-                return Some(v176.clone());
-            }
-            if let Some(v158) = v157 {
-                if let &SimpleAst::Or([v159, v160]) = v158 {
-                    let v161 = C::rule_or_constant_to_left_3_precondition(ctx, v133, v159);
-                    if let Some(v162) = v161 {
-                        let v163 = &C::any(ctx, v133);
-                        let v164 = C::lookup_id(ctx, v163);
-                        let v165 = &C::any(ctx, v159);
-                        let v166 = C::lookup_id(ctx, v165);
-                        let v167 = &C::or(ctx, v164, v166);
-                        let v168 = C::lookup_id(ctx, v167);
-                        let v169 = &C::any(ctx, v160);
-                        let v170 = C::lookup_id(ctx, v169);
-                        let v171 = &C::or(ctx, v168, v170);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 448.
-                        return Some(v171.clone());
-                    }
-                }
-            }
-            if let Some(v143) = v142 {
-                if let &SimpleAst::Or([v144, v145]) = v143 {
-                    let v146 = C::rule_or_constant_to_left_2_precondition(ctx, v144);
-                    if let Some(v147) = v146 {
-                        let v148 = &C::any(ctx, v144);
-                        let v149 = C::lookup_id(ctx, v148);
-                        let v150 = &C::any(ctx, v145);
-                        let v151 = C::lookup_id(ctx, v150);
-                        let v152 = &C::any(ctx, v134);
-                        let v153 = C::lookup_id(ctx, v152);
-                        let v154 = &C::or(ctx, v151, v153);
-                        let v155 = C::lookup_id(ctx, v154);
-                        let v156 = &C::or(ctx, v149, v155);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 441.
-                        return Some(v156.clone());
-                    }
-                }
-            }
-            let v135 = C::rule_or_constant_to_left_1_precondition(ctx, v134);
-            if let Some(v136) = v135 {
-                let v137 = &C::any(ctx, v134);
-                let v138 = C::lookup_id(ctx, v137);
-                let v139 = &C::any(ctx, v133);
-                let v140 = C::lookup_id(ctx, v139);
-                let v141 = &C::or(ctx, v138, v140);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 434.
-                return Some(v141.clone());
-            }
-        }
-        &SimpleAst::Xor([v177, v178]) => {
-            let v201 = &C::lookup_value(ctx, v178);
-            if let Some(v202) = v201 {
-                if let &SimpleAst::Or([v907, v908]) = v202 {
-                    let v1321 = &C::lookup_value(ctx, v908);
-                    if let Some(v1322) = v1321 {
-                        if let &SimpleAst::Neg([v1323]) = v1322 {
-                            let v1324 = &C::lookup_value(ctx, v1323);
-                            if let Some(v1325) = v1324 {
-                                if let &SimpleAst::And([v1326, v1327]) = v1325 {
-                                    if v177 == v1327 {
-                                        let v207 = &C::any(ctx, v177);
-                                        let v208 = C::lookup_id(ctx, v207);
-                                        let v1328 = &C::any(ctx, v907);
-                                        let v1329 = C::lookup_id(ctx, v1328);
-                                        let v1330 = &C::any(ctx, v1326);
-                                        let v1331 = C::lookup_id(ctx, v1330);
-                                        let v1332 = &C::neg(ctx, v1331);
-                                        let v1333 = C::lookup_id(ctx, v1332);
-                                        let v1334 = &C::or(ctx, v1329, v1333);
-                                        let v1335 = C::lookup_id(ctx, v1334);
-                                        let v1336 = &C::and(ctx, v208, v1335);
-                                        let v1337 = C::lookup_id(ctx, v1336);
-                                        let v1338 = &C::neg(ctx, v1337);
-                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1293.
-                                        return Some(v1338.clone());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            let v186 = &C::lookup_value(ctx, v177);
-            if let Some(v187) = v186 {
-                match v187 {
-                    &SimpleAst::And([v1125, v1126]) => {
-                        if let Some(v202) = v201 {
-                            if let &SimpleAst::And([v1127, v1128]) = v202 {
-                                if v1125 == v1127 {
-                                    let v1158 = &C::lookup_value(ctx, v1126);
-                                    if let Some(v1159) = v1158 {
-                                        if let &SimpleAst::Xor([v1160, v1161]) = v1159 {
-                                            let v1162 = &C::any(ctx, v1125);
-                                            let v1163 = C::lookup_id(ctx, v1162);
-                                            let v1164 = &C::any(ctx, v1128);
-                                            let v1165 = C::lookup_id(ctx, v1164);
-                                            let v1166 = &C::any(ctx, v1160);
-                                            let v1167 = C::lookup_id(ctx, v1166);
-                                            let v1168 = &C::any(ctx, v1161);
-                                            let v1169 = C::lookup_id(ctx, v1168);
-                                            let v1170 = &C::xor(ctx, v1167, v1169);
-                                            let v1171 = C::lookup_id(ctx, v1170);
-                                            let v1172 = &C::xor(ctx, v1165, v1171);
-                                            let v1173 = C::lookup_id(ctx, v1172);
-                                            let v1174 = &C::and(ctx, v1163, v1173);
-                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1237.
-                                            return Some(v1174.clone());
-                                        }
-                                    }
-                                    let v1129 = &C::lookup_value(ctx, v1128);
-                                    if let Some(v1130) = v1129 {
-                                        if let &SimpleAst::Add([v1131, v1132]) = v1130 {
-                                            if v1126 == v1131 {
-                                                let v1133 = &C::lookup_value(ctx, v1132);
-                                                if let Some(v1134) = v1133 {
-                                                    if let &SimpleAst::Mul([v1135, v1136]) = v1134 {
-                                                        let v1137 = C::rule_opaque_constant_two_precondition(ctx, v1125, v1135, v1136);
-                                                        if let Some(v1138) = v1137 {
-                                                            let v1139 = C::get_width(ctx, v1125);
-                                                            let v1140 = &C::constant(ctx, 0x0, v1139);
-                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1212.
-                                                            return Some(v1140.clone());
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    &SimpleAst::Or([v1175, v1176]) => {
-                        let v1177 = &C::lookup_value(ctx, v1175);
-                        if let Some(v1178) = v1177 {
-                            if let &SimpleAst::Xor([v1179, v1180]) = v1178 {
-                                if v178 == v1179 {
-                                    let v1181 = &C::lookup_value(ctx, v1176);
-                                    if let Some(v1182) = v1181 {
-                                        if let &SimpleAst::And([v1183, v1184]) = v1182 {
-                                            if v178 == v1183 {
-                                                let v1185 = &C::any(ctx, v1180);
-                                                let v1186 = C::lookup_id(ctx, v1185);
-                                                let v1187 = &C::any(ctx, v1184);
-                                                let v1188 = C::lookup_id(ctx, v1187);
-                                                let v1189 = &C::any(ctx, v1179);
-                                                let v1190 = C::lookup_id(ctx, v1189);
-                                                let v1191 = &C::and(ctx, v1188, v1190);
-                                                let v1192 = C::lookup_id(ctx, v1191);
-                                                let v1193 = &C::neg(ctx, v1192);
-                                                let v1194 = C::lookup_id(ctx, v1193);
-                                                let v1195 = &C::and(ctx, v1186, v1194);
-                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1243.
-                                                return Some(v1195.clone());
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if let Some(v202) = v201 {
-                if let &SimpleAst::Or([v907, v908]) = v202 {
-                    if v177 == v907 {
-                        let v207 = &C::any(ctx, v177);
-                        let v208 = C::lookup_id(ctx, v207);
-                        let v909 = &C::neg(ctx, v208);
-                        let v910 = C::lookup_id(ctx, v909);
-                        let v911 = &C::any(ctx, v908);
-                        let v912 = C::lookup_id(ctx, v911);
-                        let v913 = &C::and(ctx, v910, v912);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1020.
-                        return Some(v913.clone());
-                    }
-                }
-            }
-            if let Some(v187) = v186 {
-                if let &SimpleAst::Add([v414, v415]) = v187 {
-                    let v416 = &C::lookup_value(ctx, v415);
-                    if let Some(v417) = v416 {
-                        if let &SimpleAst::Mul([v418, v419]) = v417 {
-                            if v414 == v418 {
-                                let v420 = C::rule_xor_bitwise_negation_precondition(ctx, v414);
-                                if let Some(v421) = v420 {
-                                    let v422 = &C::any(ctx, v419);
-                                    let v423 = C::lookup_id(ctx, v422);
-                                    let v424 = &C::neg(ctx, v423);
-                                    let v425 = C::lookup_id(ctx, v424);
-                                    let v196 = &C::any(ctx, v178);
-                                    let v197 = C::lookup_id(ctx, v196);
-                                    let v426 = &C::xor(ctx, v425, v197);
-                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 697.
-                                    return Some(v426.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            if v177 == v178 {
-                let v330 = C::get_width(ctx, v177);
-                let v331 = &C::constant(ctx, 0x0, v330);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 584.
+            if v112 == v113 {
+                let v331 = &C::any(ctx, v112);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 484.
                 return Some(v331.clone());
             }
-            let v326 = C::rule_xor_maxint_precondition(ctx, v177);
-            if let Some(v327) = v326 {
-                let v181 = &C::any(ctx, v178);
-                let v182 = C::lookup_id(ctx, v181);
-                let v328 = &C::neg(ctx, v182);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 577.
-                return Some(v328.clone());
+            let v327 = C::rule_or_maxint_precondition(ctx, v112);
+            if let Some(v328) = v327 {
+                let v329 = C::get_width(ctx, v112);
+                let v330 = &C::constant(ctx, 0xFFFFFFFFFFFFFFFF, v329);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 477.
+                return Some(v330.clone());
             }
-            let v324 = C::rule_xor_zero_precondition(ctx, v177);
+            let v324 = C::rule_or_zero_precondition(ctx, v112);
             if let Some(v325) = v324 {
-                let v181 = &C::any(ctx, v178);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 570.
-                return Some(v181.clone());
+                let v326 = &C::any(ctx, v113);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 470.
+                return Some(v326.clone());
             }
-            let v216 = C::rule_xor_constant_to_left_4_precondition(ctx, v177, v178);
-            if let Some(v217) = v216 {
-                let v207 = &C::any(ctx, v177);
-                let v208 = C::lookup_id(ctx, v207);
-                let v218 = &C::any(ctx, v178);
-                let v219 = C::lookup_id(ctx, v218);
-                let v220 = &C::xor(ctx, v208, v219);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 483.
-                return Some(v220.clone());
-            }
-            if let Some(v202) = v201 {
-                if let &SimpleAst::Xor([v203, v204]) = v202 {
-                    let v205 = C::rule_xor_constant_to_left_3_precondition(ctx, v177, v203);
-                    if let Some(v206) = v205 {
-                        let v207 = &C::any(ctx, v177);
-                        let v208 = C::lookup_id(ctx, v207);
-                        let v209 = &C::any(ctx, v203);
-                        let v210 = C::lookup_id(ctx, v209);
-                        let v211 = &C::xor(ctx, v208, v210);
-                        let v212 = C::lookup_id(ctx, v211);
-                        let v213 = &C::any(ctx, v204);
-                        let v214 = C::lookup_id(ctx, v213);
-                        let v215 = &C::xor(ctx, v212, v214);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 476.
-                        return Some(v215.clone());
+            if let Some(v115) = v114 {
+                if let &SimpleAst::And([v116, v117]) = v115 {
+                    if let Some(v119) = v118 {
+                        if let &SimpleAst::And([v120, v121]) = v119 {
+                            if v116 == v120 {
+                                let v122 = &C::any(ctx, v116);
+                                let v123 = C::lookup_id(ctx, v122);
+                                let v124 = &C::any(ctx, v117);
+                                let v125 = C::lookup_id(ctx, v124);
+                                let v126 = &C::any(ctx, v121);
+                                let v127 = C::lookup_id(ctx, v126);
+                                let v128 = &C::or(ctx, v125, v127);
+                                let v129 = C::lookup_id(ctx, v128);
+                                let v130 = &C::and(ctx, v123, v129);
+                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 381.
+                                return Some(v130.clone());
+                            }
+                        }
                     }
                 }
-            }
-            if let Some(v187) = v186 {
-                if let &SimpleAst::Xor([v188, v189]) = v187 {
-                    let v190 = C::rule_xor_constant_to_left_2_precondition(ctx, v188);
-                    if let Some(v191) = v190 {
-                        let v192 = &C::any(ctx, v188);
-                        let v193 = C::lookup_id(ctx, v192);
-                        let v194 = &C::any(ctx, v189);
-                        let v195 = C::lookup_id(ctx, v194);
-                        let v196 = &C::any(ctx, v178);
-                        let v197 = C::lookup_id(ctx, v196);
-                        let v198 = &C::xor(ctx, v195, v197);
-                        let v199 = C::lookup_id(ctx, v198);
-                        let v200 = &C::xor(ctx, v193, v199);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 469.
-                        return Some(v200.clone());
-                    }
-                }
-            }
-            let v179 = C::rule_xor_constant_to_left_1_precondition(ctx, v178);
-            if let Some(v180) = v179 {
-                let v181 = &C::any(ctx, v178);
-                let v182 = C::lookup_id(ctx, v181);
-                let v183 = &C::any(ctx, v177);
-                let v184 = C::lookup_id(ctx, v183);
-                let v185 = &C::xor(ctx, v182, v184);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 462.
-                return Some(v185.clone());
             }
         }
-        &SimpleAst::Neg([v221]) => {
-            let v384 = &C::lookup_value(ctx, v221);
-            if let Some(v385) = v384 {
-                match v385 {
-                    &SimpleAst::And([v492, v493]) => {
-                        let v494 = &C::lookup_value(ctx, v492);
-                        if let Some(v495) = v494 {
-                            if let &SimpleAst::Neg([v496]) = v495 {
-                                let v939 = &C::lookup_value(ctx, v493);
-                                if let Some(v940) = v939 {
-                                    if let &SimpleAst::Neg([v941]) = v940 {
-                                        let v942 = &C::any(ctx, v941);
-                                        let v943 = C::lookup_id(ctx, v942);
-                                        let v944 = &C::any(ctx, v496);
-                                        let v945 = C::lookup_id(ctx, v944);
-                                        let v946 = &C::or(ctx, v943, v945);
-                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1045.
-                                        return Some(v946.clone());
+        &SimpleAst::Xor([v1, v2]) => {
+            let v3 = &C::lookup_value(ctx, v2);
+            if let Some(v4) = v3 {
+                if let &SimpleAst::Or([v87, v88]) = v4 {
+                    let v186 = &C::lookup_value(ctx, v88);
+                    if let Some(v187) = v186 {
+                        if let &SimpleAst::Neg([v1316]) = v187 {
+                            let v1317 = &C::lookup_value(ctx, v1316);
+                            if let Some(v1318) = v1317 {
+                                if let &SimpleAst::And([v1319, v1320]) = v1318 {
+                                    if v1 == v1320 {
+                                        let v8 = &C::any(ctx, v1);
+                                        let v9 = C::lookup_id(ctx, v8);
+                                        let v192 = &C::any(ctx, v87);
+                                        let v193 = C::lookup_id(ctx, v192);
+                                        let v1321 = &C::any(ctx, v1319);
+                                        let v1322 = C::lookup_id(ctx, v1321);
+                                        let v1323 = &C::neg(ctx, v1322);
+                                        let v1324 = C::lookup_id(ctx, v1323);
+                                        let v1325 = &C::or(ctx, v193, v1324);
+                                        let v1326 = C::lookup_id(ctx, v1325);
+                                        let v1327 = &C::and(ctx, v9, v1326);
+                                        let v1328 = C::lookup_id(ctx, v1327);
+                                        let v1329 = &C::neg(ctx, v1328);
+                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1213.
+                                        return Some(v1329.clone());
                                     }
                                 }
-                                let v497 = &C::any(ctx, v496);
-                                let v498 = C::lookup_id(ctx, v497);
-                                let v499 = &C::any(ctx, v493);
-                                let v500 = C::lookup_id(ctx, v499);
-                                let v501 = &C::neg(ctx, v500);
-                                let v502 = C::lookup_id(ctx, v501);
-                                let v503 = &C::or(ctx, v498, v502);
-                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 743.
-                                return Some(v503.clone());
                             }
                         }
                     }
-                    &SimpleAst::Or([v504, v505]) => {
-                        let v506 = &C::lookup_value(ctx, v504);
-                        if let Some(v507) = v506 {
-                            if let &SimpleAst::Neg([v508]) = v507 {
-                                let v509 = &C::any(ctx, v508);
-                                let v510 = C::lookup_id(ctx, v509);
-                                let v511 = &C::any(ctx, v505);
-                                let v512 = C::lookup_id(ctx, v511);
-                                let v513 = &C::neg(ctx, v512);
-                                let v514 = C::lookup_id(ctx, v513);
-                                let v515 = &C::and(ctx, v510, v514);
-                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 749.
-                                return Some(v515.clone());
+                }
+            }
+            let v83 = &C::lookup_value(ctx, v1);
+            if let Some(v84) = v83 {
+                match v84 {
+                    &SimpleAst::And([v164, v165]) => {
+                        if let Some(v4) = v3 {
+                            if let &SimpleAst::And([v43, v44]) = v4 {
+                                if v43 == v164 {
+                                    let v166 = &C::lookup_value(ctx, v165);
+                                    if let Some(v167) = v166 {
+                                        if let &SimpleAst::Xor([v1159, v1160]) = v167 {
+                                            let v1161 = &C::any(ctx, v164);
+                                            let v1162 = C::lookup_id(ctx, v1161);
+                                            let v48 = &C::any(ctx, v44);
+                                            let v49 = C::lookup_id(ctx, v48);
+                                            let v1163 = &C::any(ctx, v1159);
+                                            let v1164 = C::lookup_id(ctx, v1163);
+                                            let v1165 = &C::any(ctx, v1160);
+                                            let v1166 = C::lookup_id(ctx, v1165);
+                                            let v1167 = &C::xor(ctx, v1164, v1166);
+                                            let v1168 = C::lookup_id(ctx, v1167);
+                                            let v1169 = &C::xor(ctx, v49, v1168);
+                                            let v1170 = C::lookup_id(ctx, v1169);
+                                            let v1171 = &C::and(ctx, v1162, v1170);
+                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1157.
+                                            return Some(v1171.clone());
+                                        }
+                                    }
+                                    let v1130 = &C::lookup_value(ctx, v44);
+                                    if let Some(v1131) = v1130 {
+                                        if let &SimpleAst::Add([v1132, v1133]) = v1131 {
+                                            if v165 == v1132 {
+                                                let v1134 = &C::lookup_value(ctx, v1133);
+                                                if let Some(v1135) = v1134 {
+                                                    if let &SimpleAst::Mul([v1136, v1137]) = v1135 {
+                                                        let v1138 = C::rule_opaque_constant_two_precondition(ctx, v164, v1136, v1137);
+                                                        if let Some(v1139) = v1138 {
+                                                            let v1140 = C::get_width(ctx, v164);
+                                                            let v1141 = &C::constant(ctx, 0x0, v1140);
+                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1132.
+                                                            return Some(v1141.clone());
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-                    &SimpleAst::Xor([v516, v517]) => {
-                        let v518 = &C::lookup_value(ctx, v516);
-                        if let Some(v519) = v518 {
-                            if let &SimpleAst::Neg([v520]) = v519 {
-                                let v521 = &C::any(ctx, v520);
-                                let v522 = C::lookup_id(ctx, v521);
-                                let v523 = &C::any(ctx, v517);
-                                let v524 = C::lookup_id(ctx, v523);
-                                let v525 = &C::xor(ctx, v522, v524);
-                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 755.
-                                return Some(v525.clone());
+                    &SimpleAst::Or([v85, v86]) => {
+                        let v1172 = &C::lookup_value(ctx, v85);
+                        if let Some(v1173) = v1172 {
+                            if let &SimpleAst::Xor([v1174, v1175]) = v1173 {
+                                if v2 == v1174 {
+                                    let v1176 = &C::lookup_value(ctx, v86);
+                                    if let Some(v1177) = v1176 {
+                                        if let &SimpleAst::And([v1178, v1179]) = v1177 {
+                                            if v2 == v1178 {
+                                                let v1180 = &C::any(ctx, v1175);
+                                                let v1181 = C::lookup_id(ctx, v1180);
+                                                let v1182 = &C::any(ctx, v1179);
+                                                let v1183 = C::lookup_id(ctx, v1182);
+                                                let v1184 = &C::any(ctx, v1174);
+                                                let v1185 = C::lookup_id(ctx, v1184);
+                                                let v1186 = &C::and(ctx, v1183, v1185);
+                                                let v1187 = C::lookup_id(ctx, v1186);
+                                                let v1188 = &C::neg(ctx, v1187);
+                                                let v1189 = C::lookup_id(ctx, v1188);
+                                                let v1190 = &C::and(ctx, v1181, v1189);
+                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 1163.
+                                                return Some(v1190.clone());
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
-                    &SimpleAst::Neg([v386]) => {
-                        let v387 = &C::any(ctx, v386);
-                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 677.
-                        return Some(v387.clone());
                     }
                     _ => {}
                 }
             }
-            let v222 = C::rule_neg_constant_to_left_1_precondition(ctx, v221);
-            if let Some(v223) = v222 {
-                let v224 = &C::any(ctx, v221);
-                let v225 = C::lookup_id(ctx, v224);
-                let v226 = &C::neg(ctx, v225);
-                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 490.
-                return Some(v226.clone());
+            if let Some(v4) = v3 {
+                if let &SimpleAst::Or([v87, v88]) = v4 {
+                    if v1 == v87 {
+                        let v8 = &C::any(ctx, v1);
+                        let v9 = C::lookup_id(ctx, v8);
+                        let v10 = &C::neg(ctx, v9);
+                        let v11 = C::lookup_id(ctx, v10);
+                        let v908 = &C::any(ctx, v88);
+                        let v909 = C::lookup_id(ctx, v908);
+                        let v910 = &C::and(ctx, v11, v909);
+                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 940.
+                        return Some(v910.clone());
+                    }
+                }
+            }
+            if let Some(v84) = v83 {
+                if let &SimpleAst::Add([v430, v431]) = v84 {
+                    let v432 = &C::lookup_value(ctx, v431);
+                    if let Some(v433) = v432 {
+                        if let &SimpleAst::Mul([v434, v435]) = v433 {
+                            if v430 == v434 {
+                                let v436 = C::rule_xor_bitwise_negation_precondition(ctx, v430);
+                                if let Some(v437) = v436 {
+                                    let v438 = &C::any(ctx, v435);
+                                    let v439 = C::lookup_id(ctx, v438);
+                                    let v440 = &C::neg(ctx, v439);
+                                    let v441 = C::lookup_id(ctx, v440);
+                                    let v442 = &C::any(ctx, v2);
+                                    let v443 = C::lookup_id(ctx, v442);
+                                    let v444 = &C::xor(ctx, v441, v443);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 623.
+                                    return Some(v444.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if v1 == v2 {
+                let v341 = C::get_width(ctx, v1);
+                let v342 = &C::constant(ctx, 0x0, v341);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 510.
+                return Some(v342.clone());
+            }
+            let v336 = C::rule_xor_maxint_precondition(ctx, v1);
+            if let Some(v337) = v336 {
+                let v335 = &C::any(ctx, v2);
+                let v338 = C::lookup_id(ctx, v335);
+                let v339 = &C::neg(ctx, v338);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 503.
+                return Some(v339.clone());
+            }
+            let v333 = C::rule_xor_zero_precondition(ctx, v1);
+            if let Some(v334) = v333 {
+                let v335 = &C::any(ctx, v2);
+                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 496.
+                return Some(v335.clone());
+            }
+            if let Some(v84) = v83 {
+                match v84 {
+                    &SimpleAst::And([v164, v165]) => {
+                        let v166 = &C::lookup_value(ctx, v165);
+                        if let Some(v167) = v166 {
+                            if let &SimpleAst::Or([v168, v169]) = v167 {
+                                if v2 == v168 {
+                                    let v170 = &C::lookup_value(ctx, v169);
+                                    if let Some(v171) = v170 {
+                                        if let &SimpleAst::Neg([v172]) = v171 {
+                                            let v173 = &C::any(ctx, v168);
+                                            let v174 = C::lookup_id(ctx, v173);
+                                            let v175 = &C::any(ctx, v164);
+                                            let v176 = C::lookup_id(ctx, v175);
+                                            let v177 = &C::any(ctx, v172);
+                                            let v178 = C::lookup_id(ctx, v177);
+                                            let v179 = &C::and(ctx, v176, v178);
+                                            let v180 = C::lookup_id(ctx, v179);
+                                            let v181 = &C::or(ctx, v174, v180);
+                                            let v182 = C::lookup_id(ctx, v181);
+                                            let v183 = &C::any(ctx, v164);
+                                            let v184 = C::lookup_id(ctx, v183);
+                                            let v185 = &C::xor(ctx, v182, v184);
+                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 405.
+                                            return Some(v185.clone());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    &SimpleAst::Or([v85, v86]) => {
+                        if let Some(v4) = v3 {
+                            if let &SimpleAst::Or([v87, v88]) = v4 {
+                                let v186 = &C::lookup_value(ctx, v88);
+                                if let Some(v187) = v186 {
+                                    if let &SimpleAst::Xor([v188, v189]) = v187 {
+                                        if v85 == v188 {
+                                            if v86 == v189 {
+                                                let v190 = &C::any(ctx, v85);
+                                                let v191 = C::lookup_id(ctx, v190);
+                                                let v192 = &C::any(ctx, v87);
+                                                let v193 = C::lookup_id(ctx, v192);
+                                                let v194 = &C::xor(ctx, v191, v193);
+                                                let v195 = C::lookup_id(ctx, v194);
+                                                let v196 = &C::any(ctx, v86);
+                                                let v197 = C::lookup_id(ctx, v196);
+                                                let v198 = &C::any(ctx, v87);
+                                                let v199 = C::lookup_id(ctx, v198);
+                                                let v200 = &C::xor(ctx, v197, v199);
+                                                let v201 = C::lookup_id(ctx, v200);
+                                                let v202 = &C::and(ctx, v195, v201);
+                                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 411.
+                                                return Some(v202.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                                if v86 == v88 {
+                                    let v89 = &C::any(ctx, v86);
+                                    let v90 = C::lookup_id(ctx, v89);
+                                    let v91 = &C::neg(ctx, v90);
+                                    let v92 = C::lookup_id(ctx, v91);
+                                    let v93 = &C::any(ctx, v85);
+                                    let v94 = C::lookup_id(ctx, v93);
+                                    let v95 = &C::any(ctx, v87);
+                                    let v96 = C::lookup_id(ctx, v95);
+                                    let v97 = &C::xor(ctx, v94, v96);
+                                    let v98 = C::lookup_id(ctx, v97);
+                                    let v99 = &C::and(ctx, v92, v98);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 369.
+                                    return Some(v99.clone());
+                                }
+                            }
+                        }
+                    }
+                    &SimpleAst::Neg([v144]) => {
+                        if let Some(v4) = v3 {
+                            match v4 {
+                                &SimpleAst::Xor([v15, v16]) => {
+                                    let v203 = &C::lookup_value(ctx, v144);
+                                    if let Some(v204) = v203 {
+                                        if let &SimpleAst::Or([v205, v206]) = v204 {
+                                            let v207 = &C::lookup_value(ctx, v206);
+                                            if let Some(v208) = v207 {
+                                                if let &SimpleAst::Or([v209, v210]) = v208 {
+                                                    if v15 == v209 {
+                                                        if v16 == v210 {
+                                                            let v211 = &C::any(ctx, v209);
+                                                            let v212 = C::lookup_id(ctx, v211);
+                                                            let v213 = &C::any(ctx, v205);
+                                                            let v214 = C::lookup_id(ctx, v213);
+                                                            let v215 = &C::or(ctx, v212, v214);
+                                                            let v216 = C::lookup_id(ctx, v215);
+                                                            let v217 = &C::any(ctx, v210);
+                                                            let v218 = C::lookup_id(ctx, v217);
+                                                            let v219 = &C::neg(ctx, v218);
+                                                            let v220 = C::lookup_id(ctx, v219);
+                                                            let v221 = &C::and(ctx, v216, v220);
+                                                            let v222 = C::lookup_id(ctx, v221);
+                                                            let v223 = &C::any(ctx, v209);
+                                                            let v224 = C::lookup_id(ctx, v223);
+                                                            let v225 = &C::xor(ctx, v222, v224);
+                                                            let v226 = C::lookup_id(ctx, v225);
+                                                            let v227 = &C::neg(ctx, v226);
+                                                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 417.
+                                                            return Some(v227.clone());
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                &SimpleAst::Neg([v5]) => {
+                                    let v145 = &C::any(ctx, v144);
+                                    let v146 = C::lookup_id(ctx, v145);
+                                    let v147 = &C::any(ctx, v5);
+                                    let v148 = C::lookup_id(ctx, v147);
+                                    let v149 = &C::xor(ctx, v146, v148);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 393.
+                                    return Some(v149.clone());
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(v4) = v3 {
+                match v4 {
+                    &SimpleAst::And([v43, v44]) => {
+                        let v54 = C::rule_fold_const_or_precondition(ctx, v1, v43);
+                        if let Some(v55) = v54 {
+                            let v8 = &C::any(ctx, v1);
+                            let v9 = C::lookup_id(ctx, v8);
+                            let v48 = &C::any(ctx, v44);
+                            let v49 = C::lookup_id(ctx, v48);
+                            let v50 = &C::or(ctx, v9, v49);
+                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 350.
+                            return Some(v50.clone());
+                        }
+                        if v1 == v43 {
+                            let v8 = &C::any(ctx, v1);
+                            let v9 = C::lookup_id(ctx, v8);
+                            let v48 = &C::any(ctx, v44);
+                            let v49 = C::lookup_id(ctx, v48);
+                            let v51 = &C::neg(ctx, v49);
+                            let v52 = C::lookup_id(ctx, v51);
+                            let v53 = &C::and(ctx, v9, v52);
+                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 344.
+                            return Some(v53.clone());
+                        }
+                        let v45 = &C::lookup_value(ctx, v43);
+                        if let Some(v46) = v45 {
+                            if let &SimpleAst::Neg([v47]) = v46 {
+                                if v1 == v47 {
+                                    let v8 = &C::any(ctx, v1);
+                                    let v9 = C::lookup_id(ctx, v8);
+                                    let v48 = &C::any(ctx, v44);
+                                    let v49 = C::lookup_id(ctx, v48);
+                                    let v50 = &C::or(ctx, v9, v49);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 338.
+                                    return Some(v50.clone());
+                                }
+                            }
+                        }
+                    }
+                    &SimpleAst::Xor([v15, v16]) => {
+                        let v17 = &C::lookup_value(ctx, v15);
+                        if let Some(v18) = v17 {
+                            if let &SimpleAst::Neg([v19]) = v18 {
+                                let v20 = C::rule_fold_nested_neg_xor_precondition(ctx, v1);
+                                if let Some(v21) = v20 {
+                                    let v8 = &C::any(ctx, v1);
+                                    let v9 = C::lookup_id(ctx, v8);
+                                    let v10 = &C::neg(ctx, v9);
+                                    let v11 = C::lookup_id(ctx, v10);
+                                    let v22 = &C::any(ctx, v19);
+                                    let v23 = C::lookup_id(ctx, v22);
+                                    let v24 = &C::any(ctx, v16);
+                                    let v25 = C::lookup_id(ctx, v24);
+                                    let v26 = &C::xor(ctx, v23, v25);
+                                    let v27 = C::lookup_id(ctx, v26);
+                                    let v28 = &C::xor(ctx, v11, v27);
+                                    // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 324.
+                                    return Some(v28.clone());
+                                }
+                            }
+                        }
+                    }
+                    &SimpleAst::Neg([v5]) => {
+                        let v6 = C::rule_fold_neg_xor_precondition(ctx, v1);
+                        if let Some(v7) = v6 {
+                            let v8 = &C::any(ctx, v1);
+                            let v9 = C::lookup_id(ctx, v8);
+                            let v10 = &C::neg(ctx, v9);
+                            let v11 = C::lookup_id(ctx, v10);
+                            let v12 = &C::any(ctx, v5);
+                            let v13 = C::lookup_id(ctx, v12);
+                            let v14 = &C::xor(ctx, v11, v13);
+                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 317.
+                            return Some(v14.clone());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        &SimpleAst::Neg([v29]) => {
+            let v30 = &C::lookup_value(ctx, v29);
+            if let Some(v31) = v30 {
+                match v31 {
+                    &SimpleAst::And([v100, v101]) => {
+                        let v102 = &C::lookup_value(ctx, v100);
+                        if let Some(v103) = v102 {
+                            if let &SimpleAst::Neg([v104]) = v103 {
+                                let v938 = &C::lookup_value(ctx, v101);
+                                if let Some(v939) = v938 {
+                                    if let &SimpleAst::Neg([v940]) = v939 {
+                                        let v941 = &C::any(ctx, v940);
+                                        let v942 = C::lookup_id(ctx, v941);
+                                        let v943 = &C::any(ctx, v104);
+                                        let v944 = C::lookup_id(ctx, v943);
+                                        let v945 = &C::or(ctx, v942, v944);
+                                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 965.
+                                        return Some(v945.clone());
+                                    }
+                                }
+                                let v105 = &C::any(ctx, v104);
+                                let v106 = C::lookup_id(ctx, v105);
+                                let v107 = &C::any(ctx, v101);
+                                let v108 = C::lookup_id(ctx, v107);
+                                let v109 = &C::neg(ctx, v108);
+                                let v110 = C::lookup_id(ctx, v109);
+                                let v111 = &C::or(ctx, v106, v110);
+                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 375.
+                                return Some(v111.clone());
+                            }
+                        }
+                    }
+                    &SimpleAst::Or([v71, v72]) => {
+                        let v510 = &C::lookup_value(ctx, v71);
+                        if let Some(v511) = v510 {
+                            if let &SimpleAst::Neg([v512]) = v511 {
+                                let v513 = &C::any(ctx, v512);
+                                let v514 = C::lookup_id(ctx, v513);
+                                let v515 = &C::any(ctx, v72);
+                                let v516 = C::lookup_id(ctx, v515);
+                                let v517 = &C::neg(ctx, v516);
+                                let v518 = C::lookup_id(ctx, v517);
+                                let v519 = &C::and(ctx, v514, v518);
+                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 669.
+                                return Some(v519.clone());
+                            }
+                        }
+                        let v73 = &C::lookup_value(ctx, v72);
+                        if let Some(v74) = v73 {
+                            if let &SimpleAst::Neg([v75]) = v74 {
+                                let v76 = &C::any(ctx, v71);
+                                let v77 = C::lookup_id(ctx, v76);
+                                let v78 = &C::neg(ctx, v77);
+                                let v79 = C::lookup_id(ctx, v78);
+                                let v80 = &C::any(ctx, v75);
+                                let v81 = C::lookup_id(ctx, v80);
+                                let v82 = &C::and(ctx, v79, v81);
+                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 363.
+                                return Some(v82.clone());
+                            }
+                        }
+                    }
+                    &SimpleAst::Xor([v32, v33]) => {
+                        let v520 = &C::lookup_value(ctx, v32);
+                        if let Some(v521) = v520 {
+                            if let &SimpleAst::Neg([v522]) = v521 {
+                                let v523 = &C::any(ctx, v522);
+                                let v524 = C::lookup_id(ctx, v523);
+                                let v525 = &C::any(ctx, v33);
+                                let v526 = C::lookup_id(ctx, v525);
+                                let v527 = &C::xor(ctx, v524, v526);
+                                // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 675.
+                                return Some(v527.clone());
+                            }
+                        }
+                        let v34 = C::rule_fold_neg_xor_xor_precondition(ctx, v32);
+                        if let Some(v35) = v34 {
+                            let v36 = &C::any(ctx, v32);
+                            let v37 = C::lookup_id(ctx, v36);
+                            let v38 = &C::neg(ctx, v37);
+                            let v39 = C::lookup_id(ctx, v38);
+                            let v40 = &C::any(ctx, v33);
+                            let v41 = C::lookup_id(ctx, v40);
+                            let v42 = &C::xor(ctx, v39, v41);
+                            // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 331.
+                            return Some(v42.clone());
+                        }
+                    }
+                    &SimpleAst::Neg([v398]) => {
+                        let v399 = &C::any(ctx, v398);
+                        // Rule at C:\Users\colton\source\repos\Simplifier\EqSat\src\dsl\rules.isle line 603.
+                        return Some(v399.clone());
+                    }
+                    _ => {}
+                }
             }
         }
         _ => {}

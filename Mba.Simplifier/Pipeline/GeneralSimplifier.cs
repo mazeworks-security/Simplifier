@@ -94,7 +94,7 @@ namespace Mba.Simplifier.Pipeline
             {
                 // Bail out if there are too many variables.
                 var vars = ctx.CollectVariables(id);
-                if(vars.Count > 11 || vars.Count == 0)
+                if(vars.Count > 13 || vars.Count == 0)
                 {
                     var simplified = SimplifyViaTermRewriting(id);
                     simbaCache.TryAdd(id, simplified);
