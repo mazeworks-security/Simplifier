@@ -91,6 +91,8 @@ namespace Mba.Simplifier.Synth
 
     public class SynthLine
     {
+        public Term WidthOpcode { get; set; }
+
         // Gets or sets whether the line is a symbol or instruction
         public bool IsSymbol { get; set; }
 
@@ -134,7 +136,13 @@ namespace Mba.Simplifier.Synth
 
         private readonly uint w;
 
+        private readonly uint widthOpcodeSize;
+
+        private readonly List<byte> widths;
+
         private readonly uint componentOpcodeSize;
+
+        private readonly byte maxWidth;
 
         public LineSynth(SynthConfig config, AstCtx mbaCtx, AstIdx mbaIdx)
         {
@@ -160,6 +168,22 @@ namespace Mba.Simplifier.Synth
 
             // Get the minimum size bitvector needed to store the component index and component opcode
             componentOpcodeSize = (uint)BvWidth(Opcodes.Count - 1);
+
+            HashSet<AstIdx> unrolled = new();
+            Unroll(mbaIdx, unrolled);
+            widths = unrolled.Select(x => mbaCtx.GetWidth(x)).Distinct().OrderBy(x => x).ToList();
+            widthOpcodeSize = (uint)BvWidth(Opcodes.Count - 1);
+            maxWidth = widths.Last();
+        }
+
+        void Unroll(AstIdx id, HashSet<AstIdx> seen)
+        {
+            if (seen.Contains(id))
+                return;
+
+            seen.Add(id);
+            for (uint i = 0; i < mbaCtx.GetOpCount(id); i++)
+                Unroll(mbaCtx.GetOp(id, i), seen);
         }
 
         public void Run()
@@ -187,7 +211,7 @@ namespace Mba.Simplifier.Synth
 
             // Each variable gets a dedicated line
             for (int i = 0; i < symbols.Length; i++)
-                lines.Add(new() { IsSymbol = true });
+                lines.Add(new() { IsSymbol = true, WidthOpcode = ctx.MkBvValue(widths.IndexOf((byte)symbols[i].Sort.BvSize), widthOpcodeSize)});
 
             var maxOperandSize = BvWidth(Math.Max(config.NumInstructions - 2, config.MaxConstants - 1));
 
@@ -195,6 +219,7 @@ namespace Mba.Simplifier.Synth
             {
                 var line = new SynthLine();
                 line.IsSymbol = false;
+                line.WidthOpcode = ctx.MkBvConst($"compWidth{lineIndex}", widthOpcodeSize);
                 line.ComponentOpcode = ctx.MkBvConst($"compCode{lineIndex}", componentOpcodeSize);
                 line.Operands = new SynthOperand[MaxArity];
                 var operandBitsize = BvWidth(Math.Max(lineIndex - 1, config.MaxConstants - 1));
@@ -225,7 +250,10 @@ namespace Mba.Simplifier.Synth
                 var line = lines[lineIndex];
                 if (line.IsSymbol)
                 {
-                    exprs.Add(symbols[lineIndex]);
+                    // Zero extend the symbol to the max width
+                    var symbol = symbols[lineIndex];
+                    var zext = ctx.MkZext(widths.Last() - (uint)symbol.Sort.BvSize, symbol);
+                    exprs.Add(zext);
                     continue;
                 }
 
@@ -239,7 +267,7 @@ namespace Mba.Simplifier.Synth
                 var terms = new List<Term>();
                 foreach (var opcode in Opcodes)
                 {
-                    var term = ApplyOperator(opcode, operands.Select(x => x.expr).ToList());
+                    var term = ApplyOperator(opcode, line.WidthOpcode, operands.Select(x => x.expr).ToList());
 
                     terms.Add(term);
                 }
@@ -251,12 +279,13 @@ namespace Mba.Simplifier.Synth
             return exprs.Last();
         }
 
-        private Term ApplyOperator(SynthOpc opcode, List<Term> operands)
+        private Term ApplyOperator(SynthOpc opcode, Term width, List<Term> operands)
         {
             var op0 = () => operands[0];
             var op1 = () => operands[1];
             var op2 = () => operands[2];
 
+            Console.WriteLine($"Applying opcode {opcode}");
             var term = opcode switch
             {
                 SynthOpc.Not => ~op0(),
@@ -273,10 +302,25 @@ namespace Mba.Simplifier.Synth
                 SynthOpc.Ult => ToBv(op0() < op1(), w),
                 SynthOpc.Select => ctx.MkIte(ToBool(op0()), op1(), op2()),
 
+                // Zero extension is a no-op
+                SynthOpc.Zext => op0(),
+                // SynthOpc is also technically a a no-op
+                SynthOpc.Trunc => Trunc(op0(), width),
+
                 _ => throw new InvalidOperationException()
             };
+            Console.WriteLine("Done");
 
             return term;
+        }
+
+        private Term Trunc(Term op0, Term width)
+        {
+            List<Term> masks = new();
+            foreach (var w in widths)
+                masks.Add(ctx.MkBvValue(ModuloReducer.GetMask(w), maxWidth));
+            var mask = LinearSelect(width, masks);
+            return op0 & mask;
         }
 
         private (Term expr, Term justOperands, Term justConstants) SelectOperand(SynthOperand operand, List<Term> prev)
@@ -804,7 +848,7 @@ namespace Mba.Simplifier.Synth
                     Debugger.Break();
                 }
 
-                bool generalize = true;
+                bool generalize = false;
                 if (generalize)
                 {
                     Log("Beginning generalization...");
@@ -949,7 +993,7 @@ namespace Mba.Simplifier.Synth
 
                 Log($"%{li} = {opc}({String.Join(", ", operandStrs)})\n");
 
-                Term cegisNode = ApplyOperator(opc, cegisOperands);
+                Term cegisNode = ApplyOperator(opc, line.WidthOpcode, cegisOperands);
                 cegisNodes.Add(cegisNode);
             }
 

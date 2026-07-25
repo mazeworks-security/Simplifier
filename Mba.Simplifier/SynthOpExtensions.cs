@@ -32,6 +32,9 @@ namespace Mba.Simplifier
 
         Select,
 
+        Zext,
+        Trunc,
+
         // Special
         TruthTable,
 

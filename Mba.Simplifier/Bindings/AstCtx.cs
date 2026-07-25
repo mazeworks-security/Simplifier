@@ -189,6 +189,32 @@ namespace Mba.Simplifier.Bindings
         public unsafe KnownBits GetKnownBits(AstIdx id) => Api.ContextGetKnownBits(this, id);
         public unsafe ulong GetImutData(AstIdx id) => Api.ContextGetImutData(this, id);
         public unsafe void SetImutData(AstIdx id, ulong imut) => Api.ContextSetImutData(this, id, imut);
+
+        public unsafe uint GetOpCount(AstIdx id)
+        {
+            return GetOpcode(id) switch
+            {
+                AstOp.None => throw new NotImplementedException(),
+                AstOp.Add => 2,
+                AstOp.Mul => 2,
+                AstOp.Pow => 2,
+                AstOp.And => 2,
+                AstOp.Or => 2,
+                AstOp.Xor => 2,
+                AstOp.Neg => 2,
+                AstOp.Lshr => 2,
+                AstOp.Constant => 0,
+                AstOp.Symbol => 0,
+                AstOp.Zext => 2,
+                AstOp.Trunc => 2,
+                AstOp.ICmp => 2,
+                AstOp.Select => 3,
+                AstOp.Extract => throw new NotImplementedException(),
+                AstOp.Concat => throw new NotImplementedException(),
+                AstOp.Carry => throw new NotImplementedException(),
+            };
+        }
+
         public unsafe AstIdx GetOp(AstIdx id, uint operand)
         {
             return operand switch

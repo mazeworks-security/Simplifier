@@ -70,6 +70,7 @@ namespace Mba.Simplifier.Utility
                 AstOp.Select => z3Ctx.MkIte(ToBool(op0()), op1(), op2()),
                 AstOp.ICmp => ToBv(z3Ctx.MkTerm(icmp(ctx.GetPredicate(idx)), op0(), op1())),
                 AstOp.Zext => z3Ctx.MkZext((uint)ctx.GetWidth(idx) - ctx.GetWidth(ctx.GetOp0(idx)), op0()),
+                AstOp.Trunc => z3Ctx.MkExtract((uint)ctx.GetWidth(idx) - 1, 0, op0()),
                 _ => throw new InvalidOperationException(),
             };
 
