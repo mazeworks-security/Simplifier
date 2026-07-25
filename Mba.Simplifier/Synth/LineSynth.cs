@@ -75,6 +75,9 @@ namespace Mba.Simplifier.Synth
         // The chain of ITEs corresponding to this operand's value
         public Term ConstValue { get; set; }
 
+        // The chain of ITEs corresponding to this operand's value
+        public Term WidthValue { get; set; }
+
         public Term ActualValue { get; set; }
 
         public SynthOperand(Term isConstant, Term index)
@@ -138,7 +141,7 @@ namespace Mba.Simplifier.Synth
 
         private readonly uint widthOpcodeSize;
 
-        private readonly List<byte> widths;
+        private readonly List<byte> Widths;
 
         private readonly uint componentOpcodeSize;
 
@@ -164,6 +167,9 @@ namespace Mba.Simplifier.Synth
             var translator = new BitwuzlaTranslator(mbaCtx, ctx);
 
             groundTruth = translator.Translate(mbaIdx);
+
+ 
+
             symbols = mbaCtx.CollectVariables(mbaIdx).Select(x => translator.Translate(x)).ToArray();
 
             // Get the minimum size bitvector needed to store the component index and component opcode
@@ -171,9 +177,18 @@ namespace Mba.Simplifier.Synth
 
             HashSet<AstIdx> unrolled = new();
             Unroll(mbaIdx, unrolled);
-            widths = unrolled.Select(x => mbaCtx.GetWidth(x)).Distinct().OrderBy(x => x).ToList();
+            Widths = unrolled.Select(x => mbaCtx.GetWidth(x)).Distinct().OrderBy(x => x).ToList();
+
+            if (Widths[0] != 1)
+                Widths.Insert(0, 1);
+
             widthOpcodeSize = (uint)BvWidth(Opcodes.Count - 1);
-            maxWidth = widths.Last();
+            maxWidth = Widths.Last();
+
+            if (groundTruth.Sort.BvSize < maxWidth)
+            {
+                Debugger.Break();
+            }
         }
 
         void Unroll(AstIdx id, HashSet<AstIdx> seen)
@@ -211,7 +226,7 @@ namespace Mba.Simplifier.Synth
 
             // Each variable gets a dedicated line
             for (int i = 0; i < symbols.Length; i++)
-                lines.Add(new() { IsSymbol = true, WidthOpcode = ctx.MkBvValue(widths.IndexOf((byte)symbols[i].Sort.BvSize), widthOpcodeSize)});
+                lines.Add(new() { IsSymbol = true, WidthOpcode = ctx.MkBvValue(Widths.IndexOf((byte)symbols[i].Sort.BvSize), widthOpcodeSize)});
 
             var maxOperandSize = BvWidth(Math.Max(config.NumInstructions - 2, config.MaxConstants - 1));
 
@@ -244,6 +259,7 @@ namespace Mba.Simplifier.Synth
         private Term GetSkeleton()
         {
             var exprs = new List<Term>();
+            var availableWidths = new List<Term>();
             for (int lineIndex = 0; lineIndex < lines.Count; lineIndex++)
             {
                 // The first N lines are symbols
@@ -252,8 +268,9 @@ namespace Mba.Simplifier.Synth
                 {
                     // Zero extend the symbol to the max width
                     var symbol = symbols[lineIndex];
-                    var zext = ctx.MkZext(widths.Last() - (uint)symbol.Sort.BvSize, symbol);
+                    var zext = ctx.MkZext(Widths.Last() - (uint)symbol.Sort.BvSize, symbol);
                     exprs.Add(zext);
+                    availableWidths.Add(line.WidthOpcode);
                     continue;
                 }
 
@@ -262,7 +279,14 @@ namespace Mba.Simplifier.Synth
 
                 // Provide the concrete value just for lazy editing.
                 for (int i = 0; i < line.Operands.Length; i++)
+                {
+                    var operand = line.Operands[i];
                     line.Operands[i].ConstValue = operands[i].justConstants;
+                    line.Operands[i].WidthValue = LinearSelect(operand.Index, availableWidths);
+                }
+
+                // Push the width corresponding to this line
+                availableWidths.Add(line.WidthOpcode);
 
                 var terms = new List<Term>();
                 foreach (var opcode in Opcodes)
@@ -273,6 +297,10 @@ namespace Mba.Simplifier.Synth
                 }
 
                 var select = LinearSelect(line.ComponentOpcode, terms);
+
+                // Truncate the result of the expression based on the width.
+                select = Trunc(select, line.WidthOpcode);
+
                 exprs.Add(select);
             }
 
@@ -298,14 +326,15 @@ namespace Mba.Simplifier.Synth
                 SynthOpc.Lshr => (op0() >> (op1() & (op1().Sort.BvSize - 1))), // Truncate the shift width
                 SynthOpc.Ashr => (op0() >>> (op1() & (op1().Sort.BvSize - 1))), // Truncate the shift width
                 SynthOpc.Shl => (op0() << (op1() & (op1().Sort.BvSize - 1))),
-                SynthOpc.Eq => ToBv(op0() == op1(), w),
-                SynthOpc.Ult => ToBv(op0() < op1(), w),
+                SynthOpc.Eq => ToBv(op0() == op1(), maxWidth),
+                SynthOpc.Ult => ToBv(op0() < op1(), maxWidth),
                 SynthOpc.Select => ctx.MkIte(ToBool(op0()), op1(), op2()),
 
                 // Zero extension is a no-op
-                SynthOpc.Zext => op0(),
+                SynthOpc.Bitcast => op0(),
                 // SynthOpc is also technically a a no-op
-                SynthOpc.Trunc => Trunc(op0(), width),
+               // SynthOpc.Trunc => Trunc(op0(), width),
+               //SynthOpc.Trunc => op0(),
 
                 _ => throw new InvalidOperationException()
             };
@@ -317,11 +346,23 @@ namespace Mba.Simplifier.Synth
         private Term Trunc(Term op0, Term width)
         {
             List<Term> masks = new();
-            foreach (var w in widths)
+            foreach (var w in Widths)
                 masks.Add(ctx.MkBvValue(ModuloReducer.GetMask(w), maxWidth));
             var mask = LinearSelect(width, masks);
             return op0 & mask;
         }
+
+        /*
+        private Term TruncConcrete(Term op0, byte width)
+        {
+            List<Term> masks = new();
+            foreach (var w in Widths)
+                masks.Add(ctx.MkBvValue(ModuloReducer.GetMask(w), maxWidth));
+            var mask = LinearSelect(width, masks);
+            return op0 & mask;
+        }
+        */
+
 
         private (Term expr, Term justOperands, Term justConstants) SelectOperand(SynthOperand operand, List<Term> prev)
         {
@@ -403,8 +444,60 @@ namespace Mba.Simplifier.Synth
                     constraints.Add(opConstraint);
                     constraints.Add(constConstraint);
                 }
+
+                foreach (var component in components)
+                {
+                    for (int opcodeIndex = 0; opcodeIndex < component.Opcodes.Length; opcodeIndex++)
+                    {
+                        var opc = component.Opcodes[opcodeIndex];
+                        var matches = IsComponent(line, opc);
+
+                        // Enforce the correct widths of operands
+                        switch (opc)
+                        {
+                            case SynthOpc.And:
+                            case SynthOpc.Or:
+                            case SynthOpc.Xor:
+                            case SynthOpc.Add:
+                            case SynthOpc.Sub:
+                            case SynthOpc.Mul:
+                            case SynthOpc.Lshr:
+                            case SynthOpc.Ashr:
+                            case SynthOpc.Shl:
+
+                                constraints.Add(Implies(matches, line.WidthOpcode == line.Operands[0].WidthValue));
+                                constraints.Add(Implies(matches, line.WidthOpcode == line.Operands[1].WidthValue));
+                                break;
+                            case SynthOpc.Not:
+                                constraints.Add(Implies(matches, line.WidthOpcode == line.Operands[0].WidthValue));
+                                break;
+                            case SynthOpc.Eq:
+                            case SynthOpc.Ult:
+                                Debug.Assert(Widths.Contains(1));
+                                constraints.Add(Implies(matches, line.WidthOpcode == 0));
+                                constraints.Add(Implies(matches, line.Operands[0].WidthValue == line.Operands[1].WidthValue));
+                                break;
+                            case SynthOpc.Select:
+                                Debug.Assert(Widths.Contains(1));
+                                constraints.Add(Implies(matches, line.Operands[0].WidthValue == 0));
+                                constraints.Add(Implies(matches, line.WidthOpcode == line.Operands[1].WidthValue));
+                                constraints.Add(Implies(matches, line.WidthOpcode == line.Operands[2].WidthValue));
+                                break;
+                            // Zext / trunc are no-ops
+                            case SynthOpc.Bitcast:
+                                break;
+                            case SynthOpc.TruthTable:
+                                break;
+                            case SynthOpc.Constant:
+                                break;
+                        }
+                    }
+                }
+
             }
 
+            // The output expression must have the desired width
+            constraints.Add(lines.Last().WidthOpcode == Widths.Count - 1);
         }
 
         // Assert that the first constant must be used before the second constant.
@@ -520,6 +613,8 @@ namespace Mba.Simplifier.Synth
 
                 // The opcode must be valid
                 constraints.Add(line.ComponentOpcode <= (uint)(Opcodes.Count - 1));
+                // The width must be valid
+                constraints.Add(line.WidthOpcode <= (uint)(Widths.Count - 1));
 
                 bool limitConstantIndex = true;
                 if (limitConstantIndex && constants.Count > 0)
@@ -828,7 +923,8 @@ namespace Mba.Simplifier.Synth
                 var (ourSolution, cegisSolution, cegisConstants) = SolutionToExpr(s);
 
                 Log($"Found solution. Took {curr.ElapsedMilliseconds}ms with global time {totalTime.ElapsedMilliseconds}\n\n{ourSolution}\n\n\n");
-
+                if (ourSolution.ToString().Contains("((uns2:i8^(uns2:i8+(255:i8*(124:i8^(124:i8+(255:i8*uns2:i8))))))+(255:i8*(124:i8+(255:i8*uns2:i"))
+                    Debugger.Break();
                 if (curr.ElapsedMilliseconds > 75000)
                     Debugger.Break();
 
@@ -840,6 +936,10 @@ namespace Mba.Simplifier.Synth
                 if (mba)
                     temp.Assert(symbols[0] >= 50);
 
+                
+
+                // Problem here w/ not computing right size
+                Console.WriteLine($"\n{groundTruth} with size {groundTruth.Sort.BvSize}\n\nVS\n{cegisSolution} with sort {cegisSolution.Sort.BvSize}\n\n");
                 temp.Assert(~(groundTruth == cegisSolution));
                 var isEquiv = temp.CheckSat() == Result.Unsat;
                 if (isEquiv)
@@ -918,12 +1018,18 @@ namespace Mba.Simplifier.Synth
             List<AstIdx> ourNodes = new();
             for (int li = 0; li < lines.Count; li++)
             {
+
                 var line = lines[li];
+                var resultWidthOpcode = (int)ctx.GetIntegerValue(s.GetValue(line.WidthOpcode));
+                var resultWidth = Widths[resultWidthOpcode];
                 if (line.IsSymbol)
                 {
-                    cegisNodes.Add(symbols[li]);
+                    var symbol = symbols[li];
+                    var zext = ctx.MkZext(Widths.Last() - (uint)symbol.Sort.BvSize, symbol);
+                    //cegisNodes.Add(symbols[li]);
+                    cegisNodes.Add(zext);
                     ourNodes.Add(mbaVariables[li]);
-                    Log($"%{li} = {mbaCtx.GetSymbolName(mbaVariables[li])}\n");
+                    Log($"%{li} = {mbaCtx.GetSymbolName(mbaVariables[li])}:i{resultWidth}\n");
                     continue;
                 }
 
@@ -938,10 +1044,23 @@ namespace Mba.Simplifier.Synth
                     var isConstant = ctx.GetBoolValue(s.GetValue(operand.IsConstant));
                     var operandIndex = (int)ctx.GetIntegerValue(s.GetValue(operand.Index));
 
+                    var opWidth = Widths[(int)ctx.GetIntegerValue(s.GetValue(operand.WidthValue))];
                     var cegisOperand = isConstant ? cegisConstants[operandIndex] : cegisNodes[operandIndex];
+                    if (isConstant)
+                    {
+                        Console.WriteLine("Constant cegis operand");
+                        // You run into issues if you don't
+                        cegisOperand = ctx.MkBvValue(ctx.GetIntegerValue(cegisOperand) & ModuloReducer.GetMask((uint)opWidth), opWidth);
+                    }
                     cegisOperands.Add(cegisOperand);
 
                     var ourOperand = isConstant ? ourConstants[operandIndex] : ourNodes[operandIndex];
+                    if (isConstant)
+                    {
+                        ourOperand = mbaCtx.Constant(mbaCtx.GetConstantValue(ourOperand), (byte)resultWidth);
+                    }
+                    
+
                     ourOperands.Add(ourOperand);
                 }
 
@@ -949,6 +1068,10 @@ namespace Mba.Simplifier.Synth
                 var op1 = () => ourOperands[1];
                 var op2 = () => ourOperands[2];
 
+
+                var operandWidths = line.Operands.Select(x => (int)ctx.GetIntegerValue(s.GetValue(x.WidthValue))).ToArray();
+
+              
 
 
                 var opc = Opcodes[(int)opcode];
@@ -959,6 +1082,7 @@ namespace Mba.Simplifier.Synth
                     foreach (var operand in ourOperands)
                         Console.WriteLine(mbaCtx.GetAstString(operand));
                 }
+
 
                 AstIdx ourNode = opc switch
                 {
@@ -973,9 +1097,13 @@ namespace Mba.Simplifier.Synth
                     SynthOpc.Lshr => mbaCtx.Lshr(op0(), op1()),
                     SynthOpc.Ashr => mbaCtx.Symbol("ASHR_PLACEHOLDER", mbaCtx.GetWidth(op0())),
                     SynthOpc.Shl => mbaCtx.Symbol("SHL_PLACEHOLDER", mbaCtx.GetWidth(op0())),
-                    SynthOpc.Eq => mbaCtx.Zext(mbaCtx.ICmp(Predicate.Eq, op0(), op1()), (byte)w),
-                    SynthOpc.Ult => mbaCtx.Zext(mbaCtx.ICmp(Predicate.Ult, op0(), op1()), (byte)w),
+                    //SynthOpc.Eq => mbaCtx.Zext(mbaCtx.ICmp(Predicate.Eq, op0(), op1()), (byte)w),
+                    SynthOpc.Eq => mbaCtx.ICmp(Predicate.Eq, op0(), op1()),
+                    SynthOpc.Ult => mbaCtx.ICmp(Predicate.Ult, op0(), op1()),
+                    //SynthOpc.Ult => mbaCtx.Zext(mbaCtx.ICmp(Predicate.Ult, op0(), op1()), (byte)w),
                     SynthOpc.Select => mbaCtx.Select(mbaCtx.Trunc(op0(), 1), op1(), op2()),
+                    SynthOpc.Trunc => mbaCtx.Trunc(op0(), Widths[resultWidthOpcode]),
+                    SynthOpc.Bitcast => resultWidth > mbaCtx.GetWidth(op0()) ? mbaCtx.Zext(op0(), resultWidth) : mbaCtx.Trunc(op0(), resultWidth),
 
                     _ => throw new NotImplementedException(),
                 };
@@ -994,6 +1122,8 @@ namespace Mba.Simplifier.Synth
                 Log($"%{li} = {opc}({String.Join(", ", operandStrs)})\n");
 
                 Term cegisNode = ApplyOperator(opc, line.WidthOpcode, cegisOperands);
+                // Truncate the result of the expression based on the width.
+                //cegisNode = Trunc(cegisNode, line.WidthOpcode);
                 cegisNodes.Add(cegisNode);
             }
 

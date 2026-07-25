@@ -48,7 +48,7 @@ namespace Mba.Simplifier.Utility
                     Predicate.Uge => BitwuzlaKind.BITWUZLA_KIND_BV_UGE,
                     Predicate.Ult => BitwuzlaKind.BITWUZLA_KIND_BV_ULT,
                     Predicate.Ule => BitwuzlaKind.BITWUZLA_KIND_BV_ULE,
-                    Predicate.Sgt => throw new NotImplementedException(),
+                    Predicate.Sgt => BitwuzlaKind.BITWUZLA_KIND_BV_SGT,
                     Predicate.Sge => throw new NotImplementedException(),
                     Predicate.Slt => throw new NotImplementedException(),
                     Predicate.Sle => throw new NotImplementedException(),

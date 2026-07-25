@@ -32,7 +32,7 @@ namespace Mba.Simplifier
 
         Select,
 
-        Zext,
+        Bitcast,
         Trunc,
 
         // Special
@@ -48,7 +48,7 @@ namespace Mba.Simplifier
             return opc switch
             {
                 SynthOpc.And or SynthOpc.Or or SynthOpc.Xor or SynthOpc.Add or SynthOpc.Mul or SynthOpc.Eq => true,
-                SynthOpc.Not or SynthOpc.Sub or SynthOpc.Lshr or SynthOpc.Ashr or SynthOpc.Shl or SynthOpc.Ult or SynthOpc.Select or SynthOpc.TruthTable or SynthOpc.Constant => false,
+                SynthOpc.Not or SynthOpc.Sub or SynthOpc.Lshr or SynthOpc.Ashr or SynthOpc.Shl or SynthOpc.Ult or SynthOpc.Select or SynthOpc.Bitcast or SynthOpc.Trunc or SynthOpc.TruthTable or SynthOpc.Constant => false,
                 _ => throw new NotImplementedException(),
             };
         }
@@ -68,7 +68,7 @@ namespace Mba.Simplifier
             return opc switch
             {
                 SynthOpc.And or SynthOpc.Or or SynthOpc.Xor or SynthOpc.Add or SynthOpc.Sub or SynthOpc.Mul or SynthOpc.Eq or SynthOpc.Ult => 2,
-                SynthOpc.Not => 1,
+                SynthOpc.Not or SynthOpc.Bitcast or SynthOpc.Trunc => 1,
                 SynthOpc.Lshr or SynthOpc.Ashr or SynthOpc.Shl => 2, 
                 SynthOpc.TruthTable => 2,
                 SynthOpc.Select => 3,
